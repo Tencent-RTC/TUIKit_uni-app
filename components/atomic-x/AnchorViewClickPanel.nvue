@@ -1,0 +1,366 @@
+<template>
+  <view class="bottom-drawer-container" v-if="modelValue">
+    <view class="drawer-overlay" @tap="close"></view>
+    
+    <view class="bottom-drawer" :class="{ 'drawer-open': modelValue }" @click.stop>
+      <view class="drawer-header" >
+        <view class="user-info-section">
+          <view class="avatar-container">
+            <image class="user-avatar" :src="userInfo?.avatar || defaultAvatarUrl" mode="aspectFill"></image>
+          </view>
+          <view class="user-details">
+            <text class="username">{{ userInfo?.userName || '' }}</text>
+            <text class="user-id">ID: {{ userInfo?.userId || '' }}</text>
+          </view>
+        </view>
+        
+<!--        <view class="follow-btn" :class="{ 'focus-active': isFocus }" @tap="handleFollow"
+          v-if="userId != userInfo.userId">
+          <text class="follow-text">{{ isFocus ? '√' : '关注' }}</text>
+        </view> -->
+      </view>
+      
+			<view class="drawer-content">
+        <view class="drawer-actions" >
+          <view class="action-btn" @tap.stop="micphoneOperataion" v-if="isAnchorSelf">
+            <view class="action-btn-image-container">
+							<image class="action-btn-image" v-if="microphoneStatus !== 'OFF'" src="/static/images/mute-mic.png" mode="aspectFit" />
+							<image class="action-btn-image" v-else src="/static/images/unmute-mic.png" mode="aspectFit" />
+            </view>
+            <text class="action-btn-content" v-if="microphoneStatus !== 'OFF'">{{ isAnchorSelf ? '静音' : '禁用音频' }}</text>
+						<text class="action-btn-content" v-else>{{ isAnchorSelf ? '解除静音' : '启用音频' }}</text>
+          </view>
+          <view class="action-btn" @tap="cameraOperataion" v-if="isAnchorSelf">
+            <view class="action-btn-image-container">
+							<image class="action-btn-image" v-if="cameraStatus !== 'OFF'" src="/static/images/end-camera.png" mode="aspectFit" />
+							<image class="action-btn-image" v-else src="/static/images/start-camera.png" mode="aspectFit" />
+            </view>
+						<text class="action-btn-content" v-if="cameraStatus !== 'OFF'">{{ isAnchorSelf ? '关闭' : '禁用' }}视频</text>
+						<text class="action-btn-content" v-else>{{ isAnchorSelf ? '打开' : '启用' }}视频</text>
+          </view>
+          <view class="action-btn" @tap="flipCamera" v-if="cameraStatus === 'ON' && isAnchorSelf">
+            <view class="action-btn-image-container">
+              <image class="action-btn-image" src="/static/images/flip.png" mode="aspectFit" />
+            </view>
+            <text class="action-btn-content">翻转</text>
+          </view>
+          <view class="action-btn" @tap="handleHangUp" v-if="!isAnchorSelf">
+            <view class="action-btn-image-container">
+              <image class="action-btn-image" src="/static/images/hangup.png" mode="aspectFit" />
+            </view>
+            <text class="action-btn-content">挂断</text>
+          </view>
+        </view>
+      </view>
+    </view>
+  </view>
+</template>
+
+<script setup>
+import { ref, watch } from 'vue';
+
+import { useDeviceState } from "@/uni_modules/ui-component/state/devicestate";
+import { useCoGuestState } from "@/uni_modules/ui-component/state/cogueststate";
+import { useLoginState } from "@/uni_modules/ui-component/state/loginstate";
+import { useCoHostState } from "@/uni_modules/ui-component/state/cohoststate";
+import { useLiveSeatState } from "@/uni_modules/ui-component/state/liveseatstate";
+const { loginUserInfo } = useLoginState()
+const { localStatus, exitCoHost } = useCoHostState(uni?.$liveId)
+const {
+	microphoneStatus, cameraStatus, isFrontCamera, isLocalMirror,
+	openLocalMicrophone, closeLocalMicrophone, muteLocalAudio, unmuteLocalAudio,
+	openLocalCamera, closeLocalCamera, switchCamera,
+} = useDeviceState(uni?.$liveId);
+const { disconnect } = useCoGuestState(uni?.$liveId);
+const { seatList } = useLiveSeatState(uni?.$liveId)
+const defaultAvatarUrl = 'https://web.sdk.qcloud.com/component/TUIKit/assets/avatar_01.png';
+const props = defineProps({
+  modelValue: {
+    type: Boolean,
+    default: false
+  },
+  userInfo: {
+    type: Object,
+    default: {},
+  },
+	liveId: {
+		type: String,
+	},
+  userId: {
+    type: String,
+    default: '',
+  },
+  isAnchorSelf: {
+    type: Boolean,
+    default: false,
+  },
+});
+const emit = defineEmits(['update:modelValue']);
+const close = () => {
+	emit('update:modelValue', false);
+};
+
+const isFocus = ref(false);
+const handleFollow = () => {
+	isFocus.value = !isFocus.value;
+};
+
+watch(seatList, (newVal, oldVal) => {
+  if(newVal.length === oldVal.length) return
+  console.log('miles-test-seatList', newVal, oldVal)
+  
+  // 如果新值长度小于旧值，找出少的元素
+  if (newVal.length < oldVal.length) {
+    const missingElement = oldVal.find(oldItem => 
+      !newVal.some(newItem => newItem.userInfo.userId === oldItem.userInfo.userId)
+    );
+    if(missingElement.userInfo.userId === props?.userInfo?.userId) {
+      close();
+    }
+  }
+}, {
+  deep: true,
+  immediate: true,
+})
+
+const handleHangUp = () => {
+  if(localStatus.value === 'CONNECTED') {
+	  uni.showModal({
+		  content: '确定要断开与其他主播的连线吗？',
+      confirmText: '断开',
+		  success: (res) => {
+			  if (res.confirm) {
+				  exitCoHost({
+					  liveId: uni?.$liveId,
+				  })
+			  }
+		  }
+	  });
+	  close();
+  } else {
+	  uni.showModal({
+	  	content: '确定要断开与其他观众的连麦吗？',
+      confirmText: '断开',
+	  	success: (res) => {
+	  		if (res.confirm) {
+          disconnect({
+          	liveId: uni?.$liveId,
+          	userId: props?.userInfo?.userId,
+            seatIndex: props?.userInfo?.seatIndex,
+          	success: () => {
+          		console.log('disconnect success.');
+          	},
+          	fail: (errCode, errMsg) => {
+          		console.error(`disconnect fail errCode: ${errCode}, errMsg: ${errMsg}`);
+          	},
+          });
+	  			// 执行挂断逻辑
+	  			close();
+	  		}
+	  	}
+	  });
+  }
+
+};
+
+const micphoneOperataion = () => {
+  if (props.isAnchorSelf) {
+    if (microphoneStatus.value === 'OFF') {
+    	unmuteLocalAudio();
+      close();
+    	return;
+    }
+    if (microphoneStatus.value === 'ON') {
+    	muteLocalAudio();
+      close();
+    	return;
+    }
+  } else {
+    // TODO: 目前没有 “禁用音频”、“禁用视频” 接口, 待底层实现
+  }
+};
+const cameraOperataion = () => {
+  if (props.isAnchorSelf) {
+    if (cameraStatus.value === 'OFF') {
+    	openLocalCamera({isFront: isFrontCamera.value});
+      close();
+    	return;
+    }
+    if (cameraStatus.value === 'ON') {
+    	closeLocalCamera();
+      close();
+    	return;
+    }
+  } else {
+    // TODO: 目前没有 “禁用音频”、“禁用视频” 接口, 待底层实现
+  }
+};
+const flipCamera = () => {
+	if (cameraStatus.value !== 'ON') return;
+	
+	switchCamera({ isFront: !isFrontCamera.value });
+  close();
+};
+
+</script>
+
+<style>
+.bottom-drawer-container {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  top: 0;
+  z-index: 1000;
+}
+
+.drawer-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.4);
+}
+
+.bottom-drawer {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: rgba(34, 38, 46, 1);
+  border-top-left-radius: 32rpx;
+  border-top-right-radius: 32rpx;
+  transform: translateY(100%);
+  transition-property: transform;
+  transition-duration: 0.3s;
+  transition-timing-function: ease;
+  height: 400rpx;
+  flex-direction: column;
+}
+
+.drawer-open {
+  transform: translateY(0);
+}
+
+.drawer-header {
+  padding: 40rpx 48rpx;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.user-info-section {
+  flex-direction: row;
+  align-items: center;
+  flex: 1;
+}
+
+.avatar-container {
+  width: 80rpx;
+  height: 80rpx;
+  margin-right: 24rpx;
+}
+
+.user-avatar {
+  width: 80rpx;
+  height: 80rpx;
+  border-radius: 40rpx;
+}
+
+.user-details {
+  flex: 1;
+  flex-direction: column;
+}
+
+.username {
+  font-size: 32rpx;
+  color: #C5CCDB;
+  font-weight: 500;
+  margin-bottom: 8rpx;
+}
+
+.user-id {
+  font-size: 28rpx;
+  color: #7C85A6;
+}
+
+.follow-btn {
+  background-color: #007AFF;
+  padding: 16rpx 32rpx;
+  border-radius: 100rpx;
+  justify-content: center;
+  align-items: center;
+  width: 120rpx;
+}
+
+.follow-text {
+  color: #ffffff;
+  font-size: 28rpx;
+  font-weight: 500;
+}
+
+.focus-active {
+  background: #4F586B;
+}
+
+.drawer-content {
+  height: 400rpx;
+  justify-content: flex-start;
+  padding: 0 48rpx;
+}
+
+.drawer-actions {
+	display: flex;
+  flex-direction: row;
+  /* padding: 0 20rpx; */
+}
+
+.action-btn {
+  flex-direction: column;
+  align-items: center;
+	height: 160rpx;
+  margin-left: 20rpx;
+}
+
+.action-btn-image-container {
+  width: 100rpx;
+  height: 100rpx;
+  background-color: rgba(79, 88, 107, 1);
+  margin-bottom: 16rpx;
+  border-radius: 20rpx;
+  justify-content: center;
+  align-items: center;
+}
+
+.action-btn-image {
+  width: 50rpx;
+  height: 50rpx;
+}
+
+.action-btn-content {
+  font-size: 26rpx;
+  color: #ffffff;
+  text-align: center;
+}
+
+.divider-line-container {
+  height: 68rpx;
+  justify-content: center;
+  position: relative;
+}
+
+.divider-line {
+  width: 268rpx;
+  height: 10rpx;
+  border-radius: 200rpx;
+  background-color: #ffffff;
+  position: absolute;
+  bottom: 16rpx;
+}
+
+.camera-mic-setting {
+  flex: 1;
+  background-color: #1f1024;
+}
+</style> 

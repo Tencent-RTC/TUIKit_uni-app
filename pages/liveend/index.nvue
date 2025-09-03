@@ -1,0 +1,171 @@
+<template>
+  <view class="container" :style="{ height: safeArea.height + 'px'}">
+    <image @tap="handleToLive" class="back-btn" src="/static/images/close.png" mode="aspectFit"/>
+    <view class="header">
+      <text class="title">直播已结束</text>
+    </view>
+    <!-- <view class="stats-card">
+      <view class="stats-row">
+        <view class="stats-item">
+          <text class="stats-value">{{ formattedDuration }}</text>
+          <text class="stats-label">直播时长</text>
+        </view>
+        <view class="stats-item">
+          <text class="stats-value">{{ summaryData.totalViewers }}</text>
+          <text class="stats-label">累计观看</text>
+        </view>
+        <view class="stats-item">
+          <text class="stats-value">{{ summaryData.totalMessageSent }}</text>
+          <text class="stats-label">消息数量</text>
+        </view>
+      </view>
+      <view class="stats-row">
+        <view class="stats-item">
+          <text class="stats-value">{{ summaryData.totalGiftCoins }}</text>
+          <text class="stats-label">礼物收入</text>
+        </view>
+        <view class="stats-item">
+          <text class="stats-value">{{ summaryData.totalGiftUniqueSenders }}</text>
+          <text class="stats-label">送礼人数</text>
+        </view>
+        <view class="stats-item">
+          <text class="stats-value">{{ summaryData.totalLikesReceived }}</text>
+          <text class="stats-label">点赞数量</text>
+        </view>
+      </view>
+    </view> -->
+  </view>
+</template>
+
+<script setup>
+import { ref, onMounted, computed } from 'vue';
+import { useSummaryState } from '@/uni_modules/ui-component/state/summaryState'
+const safeArea = ref({
+  left: 0,
+  right: 0,
+  top: 0,
+  bottom: 0,
+  width: 375,
+  height: 750,
+});
+
+const { summaryData } = useSummaryState(uni.$liveId)
+
+// 计算属性：格式化后的直播时长
+const formattedDuration = computed(() => {
+  return formatDuration(summaryData.value?.totalDuration);
+});
+
+onMounted(() => {
+  uni.getSystemInfo({
+    success: (res) => {
+      safeArea.value = res.safeArea;
+    }
+  });
+});
+
+const handleToLive = () => {
+  console.log('jump');
+  uni.switchTab({
+		url: '/pages/livelist/index',
+		success() {
+			console.log('跳转成功');
+		},
+		fail(err) {
+			console.error('跳转失败:', err);
+		}
+	});
+}
+
+// 格式化直播时长
+const formatDuration = (seconds) => {
+  // 处理无效输入
+  if (!seconds || seconds <= 0 || isNaN(seconds)) {
+    return '00:00:00';
+  }
+  
+  // 确保是整数
+  seconds = Math.floor(seconds);
+  
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const remainingSeconds = seconds % 60;
+  
+  // 始终显示 HH:MM:SS 格式
+  return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
+};
+
+</script>
+
+<style scoped>
+.container {
+  flex: 1;
+  background-color: rgba(19, 20, 23, 1);
+  align-items: center;
+  justify-content: flex-start; /* 顶部对齐 */
+  position: relative;
+  flex-direction: column;
+}
+.header {
+  margin-top: 300rpx;
+}
+.back-btn {
+  width: 48rpx;
+  height: 48rpx;
+  position: absolute;
+  top: 100rpx;
+  right: 80rpx;
+  z-index: 99;
+}
+.title {
+  color: #fff;
+  font-size: 36rpx;
+  font-weight: bold;
+}
+.time {
+  color: #bdbdbd;
+  font-size: 26rpx;
+  margin-bottom: 40rpx;
+  margin-left: 32rpx;
+  width: 100%;
+}
+.stats-card {
+  /* position: absolute; */
+  /* top: 450rpx; */
+  left: 0;
+  right: 0;
+  background-color: rgba(43, 44, 48, 1);
+  border-radius: 24rpx;
+  padding: 40rpx 0;
+  width: 700rpx;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4rpx 24rpx rgba(0,0,0,0.2);
+  margin-top: 80rpx; /* 与header间距 */
+}
+.stats-row {
+  width: 700rpx;
+  flex-direction: row;
+  justify-content: space-around;
+  margin: 24rpx;
+}
+.stats-row:last-child {
+  margin-bottom: 0;
+}
+.stats-item {
+  flex: 1;
+  align-items: center;
+}
+.stats-value {
+  color: #fff;
+  font-size: 36rpx;
+  font-weight: bold;
+  text-align: center;
+}
+.stats-label {
+  color: #bdbdbd;
+  font-size: 22rpx;
+  margin-top: 8rpx;
+  text-align: center;
+}
+</style>

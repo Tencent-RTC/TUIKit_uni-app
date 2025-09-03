@@ -1,0 +1,597 @@
+// ============== 基础枚举类型 ==============
+
+/**
+ * 设备状态枚举
+ */
+export type DeviceStatus = {
+  OFF: "Off",
+  ON: "On",
+  OF_ADMIN_INVITING: "AdminInviting",
+  OFF_USER_APPLYING: "UserApplying"
+}
+
+/**
+ * 设备错误枚举
+ */
+export type DeviceError = {
+  NO_ERROR : "NoError",
+  NO_DEVICE_DETECTED : "NoDeviceDetected",
+  NO_SYSTEM_PERMISSION : "NoSystemPermission",
+  NOT_SUPPORT_CAPTURE : "NotSupportCapture"
+}
+
+/**
+ * 设备状态原因枚举
+ */
+export type DeviceStatusReason = {
+  CHANGED_BY_SELF : 0,
+  CHANGED_BY_ADMIN : 1
+}
+
+/**
+ * 音频输出枚举
+ */
+export type AudioOutput = 'EARPIECE' | 'SPEAKER' | 'HEADPHONE' | 'BLUETOOTH';
+
+/**
+ * 视频质量枚举
+ */
+export type VideoQuality = 'VIDEOQUALITY_360P' | 'VIDEOQUALITY_540P' | 'VIDEOQUALITY_720P' | 'VIDEOQUALITY_1080P'
+
+// ============== 基础字符串联合类型 ==============
+
+export type LoginStatus = 'LOGGED_IN' | 'LOGGED_OUT' | 'USER_SIG_EXPIRED' | 'KICKED_OFFLINE';
+
+export type LocalLiveStatus = 'IDLE' | 'NOT_STARTED' | 'LIVE' | 'PAUSED' | 'ENDED';
+
+export type DeviceStatusParam = 'OFF' | 'ON' | 'ADMININVITING' | 'USERAPPLYING';
+
+export type NetworkQuality = 'UNKNOWN' | 'EXCELLENT' | 'GOOD' | 'POOR' | 'BAD' | 'VBAD' | 'DOWN';
+
+export type ConnectMode = 'VIDEO' | 'AUDIO';
+
+export type UserRole = 'ROOM_OWNER' | 'MANAGER' | 'GENERAL_USER';
+
+export type CoHostStatus = 'CONNECTED' | 'DISCONNECTED' | 'INVITED' | 'REQUESTING';
+
+export type CoGuestStatus = 'CONNECTED' | 'DISCONNECTED' | 'ADMIN_INVITING' | 'USER_APPLYING';
+
+export type DeviceTypeParam = 'CAMERA' | 'MICROPHONE' | 'SCREEN_SHARE';
+
+export type MessageType = 'TEXT' | 'CUSTOM';
+
+// ============== 基础数据结构类型 ==============
+
+export type SeatLockParams = {
+    lockSeat: boolean;
+    lockVideo: boolean;
+    lockAudio: boolean;
+}
+
+export type LoginUserInfoParam = {
+    userId ?: string;
+    userName ?: string;
+    avatarUrl ?: string;
+}
+
+export type NetworkInfoParam = {
+    userId?: string;
+    quality : NetworkQuality;
+    upLoss? : number;
+    downLoss? : number;
+    delay? : number;
+}
+
+export type SeatUserInfoParam = {
+    roomId?: string;
+    userId: string;
+    userName?: string;
+    avatarUrl?: string;
+    microphoneStatus: DeviceStatusParam;
+    cameraStatus: DeviceStatusParam;
+    onSeatTimestamp: number;
+}
+
+export type RegionInfoParams = {
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+    zorder: number;
+}
+
+export type SeatInfo = {
+    index: number;
+    isLocked: boolean;
+    userInfo?: SeatUserInfoParam;
+    region?: RegionInfoParams;
+}
+
+export type LiveCanvasParams = {
+    w: number;
+    h: number;
+    background?: string;
+}
+
+export type LiveInfoParam = {
+  liveId: string;
+  liveName?: string;
+  liveDescription?: string;
+  categoryList?: number[];
+  coverUrl?: string;
+  backgroundUrl?: string;
+  liveOwner?: LoginUserInfoParam;
+  currentViewerCount: number;
+  totalViewerCount: number;
+  createTime?: number;
+  isMessageDisable?: boolean;
+  isGiftEnabled?: boolean;
+  isPublicVisible?: boolean;
+  isSeatEnabled: boolean;
+  keepOwnerOnSeat: boolean;
+  seatMode: number; // TUIRoomDefine.SeatMode: FREE_TO_TAKE=1 自由上麦； APPLY_TO_TAKE=2 申请上麦
+  maxSeatCount: number;
+  layoutTemplate?: number;
+  customInfo?: Map<string, string>;
+}
+
+export type AudienceInfo = {
+  userId: string;
+  userName?: string;
+  nameCard?: string;
+  avatarUrl?: string;
+  customInfo?: Map<string, any>;
+  userRole?: UserRole;
+  isMessageDisabled: boolean;
+  joinedTimestamp: number;
+}
+
+export type CoHostRequestInfo = {
+  inviter?: SeatUserInfoParam;
+  inviteeList: SeatUserInfoParam[];
+  extensionInfo: string;
+  timestamp: number;
+  success?: () => void;
+  fail?: (errCode: number, errMsg: string) => void;
+}
+
+export type CoGuestRequestInfo = {
+  timestamp: number;
+  requestId: string;
+  userId: string;
+  userName: string;
+  nameCard: string;
+  avatarUrl: string;
+  success?: () => void;
+  fail?: (errCode: number, errMsg: string) => void;
+}
+
+export type MessageInfo = {
+  roomId: string;
+  sender: LoginUserInfoParam;
+  sequence: number;
+  timestampInSecond: number;
+  messageType: MessageType;
+  
+  // 文本消息字段
+  textContent?: string;
+  extensionInfo?: Map<string, string>;
+  
+  // 自定义消息字段
+  businessId?: string;
+  data?: string;
+}
+
+export type GiftInfoParam = {
+  giftId: string;
+  name: string;
+  desc: string;
+  iconUrl: string;
+  resourceUrl: string;
+  level: number;
+  coins: number;
+  extensionInfo?: Map<String, String>;
+}
+
+export type GiftMessageParam = {
+  roomId?: string;
+  giftCount?: number;
+  sender?: LoginUserInfoParam;
+  giftInfo?: GiftInfoParam;
+}
+
+/**
+ * 设备信息数据类型
+ */
+export type TUIDeviceInfo = {
+  deviceId: string;
+  deviceName: string;
+  isDefault: boolean;
+  success?: () => void;
+  fail?: (errCode: number, errMsg: string) => void;
+}
+
+// ============== Options 接口类型 ==============
+
+export type LoginOptions = {
+  sdkAppID : number;
+  userID : string;
+  userSig : string;
+  success?: () => void;
+  fail?: (errCode: number, errMsg: string) => void;
+}
+
+export type LogoutOptions = {
+  success?: () => void;
+  fail?: (errCode: number, errMsg: string) => void;
+}
+
+export type SetSelfInfoOptions = {
+  userInfo : LoginUserInfoParam;
+  success?: () => void;
+  fail?: (errCode: number, errMsg: string) => void;
+}
+// ================= LiveStore 相关 =================
+export type FetchLiveListOptions = {
+  cursor: string;
+  count: number;
+  success?: () => void;
+  fail?: (errCode: number, errMsg: string) => void;
+}
+
+export type CreateLiveOptions = {
+  liveInfo: LiveInfoParam;
+  success?: () => void;
+  fail?: (errCode: number, errMsg: string) => void;
+}
+
+export type JoinLiveOptions = {
+  liveId: string;
+  success?: () => void;
+  fail?: (errCode: number, errMsg: string) => void;
+}
+
+export type LeaveLiveOptions = {
+  success?: () => void;
+  fail?: (errCode: number, errMsg: string) => void;
+}
+
+export type EndLiveOptions = {
+  success?: () => void;
+  fail?: (errCode: number, errMsg: string) => void;
+}
+
+export type UpdateLiveInfoOptions =  {
+  liveInfo: LiveInfoParam;
+  success?: () => void;
+  fail?: (errCode: number, errMsg: string) => void;
+}
+// TODO 确认是否可删除
+export type BindVideoViewOptions = {
+  view: any; // TUIVideoView 不确定具体的类型到底是什么
+  success?: () => void;
+  fail?: (errCode: number, errMsg: string) => void;
+}
+
+// ================= LiveSeat 相关 =================
+export type LockSeatOptions = {
+  liveId: string
+  seatIndex: number;
+  lockMode: SeatLockParams;
+  success?: () => void;
+  fail?: (errCode: number, errMsg: string) => void;
+}
+
+export type MoveToSeatOptions = {
+  liveId: string
+  targetIndex: number;
+  success?: () => void;
+  fail?: (errCode: number, errMsg: string) => void;
+}
+
+// ================= LiveAudience 相关 =================
+export type FetchAudienceListOptions = {
+  liveId: string
+  cursor: number;
+  success?: () => void;
+  fail?: (errCode: number, errMsg: string) => void;
+}
+
+export type SetAdministratorOptions = {
+  liveId: string;
+  userId: string;
+  success?: () => void;
+  fail?: (errCode: number, errMsg: string) => void;
+}
+
+export type RevokeAdministratorOptions = {
+  liveId: string;
+  userId: string;
+  success?: () => void;
+  fail?: (errCode: number, errMsg: string) => void;
+}
+
+export type KickUserOutOfRoomOptions = {
+  liveId: string;
+  userId: string;
+  success?: () => void;
+  fail?: (errCode: number, errMsg: string) => void;
+}
+
+export type DisableSendMessageOptions = {
+  liveId: string;
+  userId: string;
+  isDisable: boolean;
+  success?: () => void;
+  fail?: (errCode: number, errMsg: string) => void;
+}
+
+// ================= Device 相关 =================
+export type OpenLocalMicrophoneOptions = {
+  success?: () => void;
+  fail?: (errCode: number, errMsg: string) => void;
+}
+
+export type UnmuteLocalAudioOptions = {
+  success?: () => void;
+  fail?: (errCode: number, errMsg: string) => void;
+}
+
+export type SetAudioRouteOptions = {
+  route: AudioOutput;
+}
+
+export type OpenLocalCameraOptions = {
+  isFront: boolean;
+  success?: () => void;
+  fail?: (errCode: number, errMsg: string) => void;
+}
+
+export type SwitchCameraOptions = {
+  isFront: boolean;
+}
+
+export type SwitchMirrorOptions = {
+  isMirror: boolean;
+}
+
+export type UpdateVideoQualityOptions = {
+  quality: VideoQuality;
+}
+
+// only for iOS
+export type startScreenShareOptions = {
+  appGroup: string;
+}
+
+// ================= CoHost 相关 =================
+export type SendCoHostRequestOptions = {
+  liveId: string;
+  seatUserInfo: SeatUserInfoParam;
+  timeout: number;
+  extensionInfo?: string;
+  success?: () => void;
+  fail?: (errCode: number, errMsg: string) => void;
+}
+
+export type CancelCoHostRequestOptions = {
+  liveId: string;
+  seatUserInfo: SeatUserInfoParam;
+  success?: () => void;
+  fail?: (errCode: number, errMsg: string) => void;
+}
+
+export type AcceptCoHostRequestOptions = {
+  liveId: string;
+  userInfo: SeatUserInfoParam;
+  success?: () => void;
+  fail?: (errCode: number, errMsg: string) => void;
+}
+
+export type RejectCoHostRequestOptions = {
+  liveId: string;
+  userInfo: SeatUserInfoParam;
+  success?: () => void;
+  fail?: (errCode: number, errMsg: string) => void;
+}
+
+export type ExitCoHostOptions = {
+  liveId: string;
+  success?: () => void;
+  fail?: (errCode: number, errMsg: string) => void;
+}
+
+// ================= CoGuest 相关 =================
+export type SendCoGuestRequestOptions = {
+    liveId: string
+    seatIndex: number;
+    timeout: number;
+    userId?: string;
+    extraInfo?: string;
+    onAccepted?: (requestId:string, userId: string) => void;
+    onRejected?: (requestId:string, userId: string, msg: string) => void;
+    onCancelled?: (requestId:string, userId: string) => void;
+    onTimeout?: (requestId:string, userId: string) => void;
+    onError?: (requestId:string, userId: string, errCode: number, errMsg: string) => void;
+}
+
+export type CancelCoGuestRequestOptions = {
+  liveId : string;
+  userId?: string;
+  success?: () => void;
+  fail?: (errCode: number, errMsg: string) => void;
+}
+
+export type AcceptCoGuestRequestOptions = {
+  liveId : string;
+  userId: string;
+  success?: () => void;
+  fail?: (errCode: number, errMsg: string) => void;
+}
+
+export type RejectCoGuestRequestOptions = {
+  liveId : string;
+  userId: string;
+  success?: () => void;
+  fail?: (errCode: number, errMsg: string) => void;
+}
+
+export type DisconnectOptions = {
+  liveId : string;
+  userId?: string;
+  success?: () => void;
+  fail?: (errCode: number, errMsg: string) => void;
+}
+
+export type SendOpenDeviceRequestOptions = {
+  liveId : string;
+  deviceType: DeviceTypeParam;
+  timeout: number;
+  userId?: string;
+  onAccepted?: (requestId:string, userId: string) => void;
+  onRejected?: (requestId:string, userId: string, msg: string) => void;
+  onCancelled?: (requestId:string, userId: string) => void;
+  onTimeout?: (requestId:string, userId: string) => void;
+  onError?: (requestId:string, userId: string, errCode: number, errMsg: string) => void;
+}
+
+export type CancelOpenDeviceRequestOptions = {
+  liveId : string;
+  deviceType: DeviceTypeParam;
+  userId?: string;
+  success?: () => void;
+  fail?: (errCode: number, errMsg: string) => void;
+}
+
+export type AcceptOpenDeviceRequestOptions = {
+  liveId : string;
+  deviceType: DeviceTypeParam;
+  userId: string;
+  success?: () => void;
+  fail?: (errCode: number, errMsg: string) => void;
+}
+
+export type RejectOpenDeviceRequestOptions = {
+  liveId : string;
+  deviceType: DeviceTypeParam;
+  userId: string;
+  success?: () => void;
+  fail?: (errCode: number, errMsg: string) => void;
+}
+
+export type CloseRemoteDeviceOptions = {
+  liveId : string;
+  deviceType: DeviceTypeParam;
+  userId: string;
+  success?: () => void;
+  fail?: (errCode: number, errMsg: string) => void;
+}
+
+// ================= Barrage 相关 =================
+export type SendTextMessageOptions = {
+  liveId : string;
+  text: string;
+  extensionInfo?: Map<string, string>;
+  success?: () => void;
+  fail?: (errCode: number, errMsg: string) => void;
+}
+
+export type SendCustomMessageOptions = {
+  liveId : string;
+  businessId: string;
+  data: string;
+  success?: () => void;
+  fail?: (errCode: number, errMsg: string) => void;
+}
+
+// ================= Gift 相关接口 =================
+export type GetGiftListOptions =  {
+  liveId: string;
+  success?: () => void;
+  fail?: (errCode: number, errMsg: string) => void;
+}
+
+export type SendGiftOptions = {
+  liveId: string;
+  giftId: string;
+  count: number;
+  success?: () => void;
+  fail?: (errCode: number, errMsg: string) => void;
+}
+
+// ================= Beauty 相关 =================
+export type SetSmoothLevelOptions =  {
+  smoothLevel: number;
+}
+
+export type SetWhitenessLevelOptions =  {
+  whitenessLevel: number;
+}
+
+export type SetRuddyLevelOptions =  {
+  ruddyLevel: number;
+}
+
+// ================= V2AudioEffect 相关 =================
+//UTS 字面量联合类型,传统枚举定义转swift异常
+export type AudioChangerTypeParam = 
+    | 'NONE'
+    | 'CHILD'
+    | 'LITTLE_GIRL'
+    | 'MAN'
+    | 'HEAVY_METAL'
+    | 'COLD'
+    | 'FOREIGNER'
+    | 'TRAPPED_BEAST'
+    | 'FATSO'
+    | 'STRONG_CURRENT'
+    | 'HEAVY_MACHINERY'
+    | 'ETHEREAL';   
+
+export type AudioReverbTypeParam = 
+    | 'NONE' 
+    | 'KTV' 
+    | 'SMALL_ROOM' 
+    | 'AUDITORIUM' 
+    | 'DEEP' 
+    | 'LOUD' 
+    | 'METALLIC' 
+    | 'MAGNETIC';
+
+export type SetVoiceEarMonitorEnableOptions = {
+    enable: boolean;
+}
+
+export type SetVoiceEarMonitorVolumeOptions = {
+    volume: number;
+}
+
+export type SetMicrophoneVolumeOptions  = {
+    volume: number; //Int
+}
+
+export type SetChangerTypeOptions  = {
+    changerType: AudioChangerTypeParam;
+}
+
+export type SetReverbTypeOptions  = {
+    reverbType: AudioReverbTypeParam;
+}
+
+// ================= V2LikeStore 相关 =================
+export type SendLikeOptions = {
+  liveId: string;
+  success?: () => void;
+  fail?: (errCode: number, errMsg: string) => void;
+}
+
+// ================= 实验性接口 相关 =================
+export type CallExperimentalAPIOptions = {
+  jsonData: string;
+  onResponse?: (jsonData: string) => void;
+}
+
+// ================= Extension 接口 =================
+export type fetchLogfileListOptions = {
+  result: (jsonData?: string) => void;
+}

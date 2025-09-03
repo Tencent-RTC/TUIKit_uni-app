@@ -1,0 +1,204 @@
+<template>
+  <view class="like-container">
+    <!-- 点赞动画容器 -->
+    <view 
+      class="like-animations-container"
+      :style="{ 
+        width: likeAnimations.length > 0 ? '400rpx' : '0',
+        height: likeAnimations.length > 0 ? '600rpx' : '0'
+      }"
+    >
+      <view 
+        v-for="(like, index) in likeAnimations" 
+        :key="like.id"
+        class="like-animation"
+        :style="{ 
+          left: like.left + 'rpx',
+          bottom: like.bottom + 'rpx',
+          transform: like.transform,
+          opacity: like.opacity
+        }"
+      >
+        <image class="heart-icon" :src="like.imageSrc" mode="aspectFit" />
+      </view>
+    </view>
+  </view>
+</template>
+
+<script setup lang="ts">
+import { computed, ref, watch } from 'vue';
+import { useLikeState } from "@/uni_modules/ui-component/state/likeState";
+import { useLiveState } from '@/uni_modules/ui-component/state/livestate';
+const { sendLike, latestSender, totalLikeCount } = useLikeState(uni.$liveId)
+// 点赞动画相关状态
+const likeAnimations = ref([]);
+let likeAnimationId = 0;
+
+// 心形图片数组
+const heartImages = [
+  '/static/images/gift_heart0.png',
+  '/static/images/gift_heart1.png',
+  '/static/images/gift_heart2.png',
+  '/static/images/gift_heart3.png',
+  '/static/images/gift_heart4.png',
+  '/static/images/gift_heart5.png',
+  '/static/images/gift_heart6.png',
+  '/static/images/gift_heart7.png',
+  '/static/images/gift_heart8.png'
+];
+
+const currentLikeCount = ref(0)
+
+// 随机选择心形图片
+const getRandomHeartImage = () => {
+  const randomIndex = Math.floor(Math.random() * heartImages.length);
+  return heartImages[randomIndex];
+};
+
+// 创建点赞动画
+const createLikeAnimation = (count: number) => {
+  console.log('=== createLikeAnimation 开始 ===');
+  console.log('传入的count参数:', count);
+  console.log('当前动画数组长度:', likeAnimations.value.length);
+  
+  console.log('创建点赞动画，数量:', count);
+  
+  // 确保每次只创建一个动画，忽略count参数
+  const newLike = {
+    id: ++likeAnimationId,
+    show: true,
+    imageSrc: getRandomHeartImage(),
+    left: Math.random() * 120 + 40, // 随机水平位置
+    bottom: 200, // 垂直位置
+    transform: 'scale(0.8)',
+    opacity: 1
+  };
+  
+  console.log('添加动画元素:', newLike);
+  likeAnimations.value.push(newLike);
+  console.log('添加后动画数组长度:', likeAnimations.value.length);
+  
+  // 使用 setTimeout 来模拟动画
+  setTimeout(() => {
+    const index = likeAnimations.value.findIndex(item => item.id === newLike.id);
+    if (index > -1) {
+      const like = likeAnimations.value[index];
+      like.transform = 'scale(1.2)';
+      like.bottom = like.bottom + 40;
+      console.log('动画阶段1:', like.id);
+    }
+  }, 100);
+  
+  setTimeout(() => {
+    const index = likeAnimations.value.findIndex(item => item.id === newLike.id);
+    if (index > -1) {
+      const like = likeAnimations.value[index];
+      like.transform = 'scale(1)';
+      like.bottom = like.bottom + 40;
+      console.log('动画阶段2:', like.id);
+    }
+  }, 200);
+  
+  setTimeout(() => {
+    const index = likeAnimations.value.findIndex(item => item.id === newLike.id);
+    if (index > -1) {
+      const like = likeAnimations.value[index];
+      like.transform = 'scale(0.9)';
+      like.bottom = like.bottom + 40;
+      like.opacity = 0.9;
+      console.log('动画阶段3:', like.id);
+    }
+  }, 400);
+  
+  setTimeout(() => {
+    const index = likeAnimations.value.findIndex(item => item.id === newLike.id);
+    if (index > -1) {
+      const like = likeAnimations.value[index];
+      like.transform = 'scale(0.7)';
+      like.bottom = like.bottom + 40;
+      like.opacity = 0.7;
+      console.log('动画阶段4:', like.id);
+    }
+  }, 600);
+  
+  setTimeout(() => {
+    const index = likeAnimations.value.findIndex(item => item.id === newLike.id);
+    if (index > -1) {
+      const like = likeAnimations.value[index];
+      like.transform = 'scale(0.5)';
+      like.bottom = like.bottom + 40;
+      like.opacity = 0.3;
+      console.log('动画阶段5:', like.id);
+    }
+  }, 800);
+  
+  // 动画结束后移除
+  setTimeout(() => {
+    const index = likeAnimations.value.findIndex(item => item.id === newLike.id);
+    if (index > -1) {
+      likeAnimations.value.splice(index, 1);
+      console.log('移除动画元素:', newLike.id);
+      console.log('移除后动画数组长度:', likeAnimations.value.length);
+    }
+  }, 1500);
+  
+  console.log('=== createLikeAnimation 结束 ===');
+};
+
+watch(latestSender,(newVal, oldVal) => {
+  // 检查是否有新数据且 userId 不等于本地
+  if (newVal && newVal.userId && newVal.userId !== uni.$userId) {
+    console.log('收到其他用户的点赞，播放动画:', newVal.userId);
+    console.log('当前动画数量:', likeAnimations.value.length);
+    
+    // 按照真实收到的数据进行播放
+    console.log('开始播放其他用户点赞动画');
+    createLikeAnimation(1);
+  }
+}, {
+  deep: true,
+  immediate: true,
+})
+
+watch(totalLikeCount, (newVal, oldVal) => {
+  if(oldVal) {
+    currentLikeCount.value = newVal - oldVal
+    console.log('点赞数量变化:', oldVal, '->', newVal, '差值:', currentLikeCount.value);
+  }
+}, {
+  deep: true,
+  immediate: true,
+})
+
+</script>
+
+<style>
+.like-container {
+  position: relative;
+  pointer-events: none;
+}
+
+/* 点赞动画样式 */
+.like-animations-container {
+  position: fixed;
+  bottom: 40rpx;
+  right: 40rpx;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+  z-index: 0;
+  overflow: hidden;
+  transition: all 0.3s ease;
+}
+
+.like-animation {
+  position: absolute;
+  transition: all 0.1s ease-out;
+  pointer-events: none;
+}
+
+.heart-icon {
+  width: 60rpx;
+  height: 60rpx;
+}
+</style> 

@@ -1,0 +1,469 @@
+<template>
+  <view class="live-info-card">
+    <view class="cover-section"  @tap="onEditCover">
+      <image class="cover-image" style="position: relative;" :src="localCoverUrl" mode="aspectFill" />
+      <view style="display: flex; flex-direction: column; justify-content: center; align-items: center; width: 140rpx; position: absolute; bottom: 0; padding: 5rpx 0;border-bottom-left-radius: 24rpx; border-bottom-right-radius: 24rpx; background-color: rgba(0, 0, 0, 0.5); ">
+      <text class="live-detail" style="margin-left: 0;">
+        修改封面</text>        
+      </view>
+    </view>
+    <view class="info-section">
+      <view class="title-row">
+        <input 
+          class="live-title" 
+          v-model="localLiveTitle" 
+          @input="onInputTitle" 
+          @blur="onInputBlur"
+          :focus="isInputFocused"
+          placeholder="请输入直播标题"
+        />
+        <view class="edit-icon-container" @tap="onEditTitle">
+          <image class="edit-icon" src="/static/images/edit.png" />
+        </view>
+      </view>
+      <view class="underline"></view>
+      <view class="info-row" @tap="onChooseMode" >
+        <image class="info-icon" src="/static/images/mode.png" />
+        <text class="live-detail" style="margin-left: 10rpx;">直播模式：</text>
+        <text class="live-detail">{{ localLiveMode }}</text>
+        <image class="arrow-icon" src="/static/images/right-arrow.png" />
+      </view>
+<!--      <view class="info-row" @tap="onChooseTemplate">
+        <image class="info-icon" src="/static/images/category.png" />
+        <text class="live-detail" style="margin-left: 10rpx;">模版选择：</text>
+        <text class="live-detail">{{ templateList[localTemplateIndex].title }}</text>
+        <image class="arrow-icon" src="/static/images/right-arrow.png" />
+      </view> -->
+    </view>
+  <view class="bottom-drawer-container" v-if="isShowOverDialog">
+    <view class="drawer-overlay" @tap="close"></view>
+    <view class="bottom-drawer" :class="{ 'drawer-open': isShowOverDialog }">
+    <text class="list-title ">封面</text>      
+      <list 
+        class="audience-content" 
+        :show-scrollbar="false"
+      > 
+        <cell class="tab-item">
+          <view v-for="(url, idx) in avatarList" :key="url" class="cover-dialog-item"  @tap="selectAvatar(idx)">
+            <image :src="url" :class="{selected: idx === selectedAvatarIndex}" class="cover-dialog-img" />
+          </view>
+        </cell>
+    
+      </list>
+        <view class="home-footer">
+          <view class="create-btn" @click="setCover">
+            <text class="btn-text">设为封面</text>
+          </view>
+        </view>  
+  </view>
+    </view>
+  </view>
+</template>
+
+<script setup lang="ts">
+import { defineProps, defineEmits, ref, watch, computed } from 'vue';
+import { useLoginState } from "@/uni_modules/ui-component/state/loginstate";
+
+const { loginUserInfo } = useLoginState()
+
+
+const props = defineProps({
+  coverUrl: { type: String, default: 'https://liteav-test-1252463788.cos.ap-guangzhou.myqcloud.com/voice_room/voice_room_cover1.png' },
+  liveCategory: { type: String, default: '日常聊天' },
+  liveMode: { type: String, default: '公开' }
+});
+
+// 计算字节长度
+const getByteLength = (str: string): number => {
+  let len = 0;
+  for (let i = 0; i < str.length; i++) {
+    const charCode = str.charCodeAt(i);
+    if (charCode <= 0x7f) {
+      len += 1; // ASCII字符，1字节
+    } else if (charCode <= 0x7ff) {
+      len += 2; // 2字节字符
+    } else if (charCode <= 0xffff) {
+      len += 3; // 3字节字符（包括中文）
+    } else {
+      len += 4; // 4字节字符
+    }
+  }
+  return len;
+};
+
+// 截取指定字节长度的字符串
+const truncateByByteLength = (str: string, maxBytes: number): string => {
+  let result = '';
+  let currentBytes = 0;
+  
+  for (let i = 0; i < str.length; i++) {
+    const charCode = str.charCodeAt(i);
+    let charBytes = 1;
+    
+    if (charCode <= 0x7f) {
+      charBytes = 1;
+    } else if (charCode <= 0x7ff) {
+      charBytes = 2;
+    } else if (charCode <= 0xffff) {
+      charBytes = 3;
+    } else {
+      charBytes = 4;
+    }
+    
+    if (currentBytes + charBytes <= maxBytes) {
+      result += str[i];
+      currentBytes += charBytes;
+    } else {
+      break;
+    }
+  }
+  
+  return result;
+};
+
+// 计算默认标题
+const defaultLiveTitle = computed(() => {
+  const userName = loginUserInfo.value?.userName;
+  return userName || loginUserInfo.value?.userId; // 直接返回用户名，如果没有则使用默认值
+});
+
+
+// 本地 state
+const localCoverUrl = ref(props.coverUrl);
+const localLiveTitle = ref(''); // 初始化为空字符串，不自动设置用户名
+const localLiveCategory = ref(props.liveCategory);
+const localLiveMode = ref(props.liveMode);
+
+// 新增：存储上一次有效的100字节内容
+const lastValidTitle = ref('');
+
+// 新增：标记是否需要恢复内容
+
+// 监听默认标题变化，只在组件初始化且标题为空时设置默认值
+watch(defaultLiveTitle, (newDefaultTitle) => {
+  // 只在组件初始化时设置默认值，后续用户手动清空后不再自动设置
+  if (!localLiveTitle.value && !hasUserInteracted.value) {
+    localLiveTitle.value = newDefaultTitle;
+  }
+});
+
+// 添加用户交互标记
+const hasUserInteracted = ref(false);
+
+// 监听用户名变化，更新标题
+watch(() => loginUserInfo.value?.userName, (newUserName, oldUserName) => {
+  console.log('用户名变化:', { newUserName, oldUserName });
+  // 只在组件初始化且标题为空时设置默认值
+  if (newUserName && !localLiveTitle.value && !hasUserInteracted.value) {
+    localLiveTitle.value = newUserName;
+  }
+}, {immediate: true, deep: true});
+
+const templateList = [
+  {title: '竖屏动态九宫格', mode: 600 },
+  {title: '竖屏动态浮动1v6布局', mode: 601},
+  {title: '竖屏静态九宫格', mode: 800 },
+  {title: '竖屏静态 1v6', mode: 801},
+  // {title: '竖屏静态 6v6', mode: 802}
+];
+const localTemplateIndex = ref(0);
+
+// 同步 props 变化
+watch(() => props.coverUrl, (val) => { localCoverUrl.value = val; });
+watch(() => props.liveCategory, (val) => { localLiveCategory.value = val; });
+watch(() => props.liveMode, (val) => { localLiveMode.value = val; });
+
+const avatarList = [
+  "https://liteav-test-1252463788.cos.ap-guangzhou.myqcloud.com/voice_room/voice_room_cover1.png",
+  "https://liteav-test-1252463788.cos.ap-guangzhou.myqcloud.com/voice_room/voice_room_cover2.png",
+  "https://liteav-test-1252463788.cos.ap-guangzhou.myqcloud.com/voice_room/voice_room_cover3.png",
+  "https://liteav-test-1252463788.cos.ap-guangzhou.myqcloud.com/voice_room/voice_room_cover4.png",
+  "https://liteav-test-1252463788.cos.ap-guangzhou.myqcloud.com/voice_room/voice_room_cover5.png",
+  "https://liteav-test-1252463788.cos.ap-guangzhou.myqcloud.com/voice_room/voice_room_cover6.png",
+  "https://liteav-test-1252463788.cos.ap-guangzhou.myqcloud.com/voice_room/voice_room_cover7.png",
+  "https://liteav-test-1252463788.cos.ap-guangzhou.myqcloud.com/voice_room/voice_room_cover8.png",
+  "https://liteav-test-1252463788.cos.ap-guangzhou.myqcloud.com/voice_room/voice_room_cover9.png",
+  "https://liteav-test-1252463788.cos.ap-guangzhou.myqcloud.com/voice_room/voice_room_cover10.png",
+  "https://liteav-test-1252463788.cos.ap-guangzhou.myqcloud.com/voice_room/voice_room_cover11.png",
+  "https://liteav-test-1252463788.cos.ap-guangzhou.myqcloud.com/voice_room/voice_room_cover12.png",
+];
+const selectedAvatarIndex = ref(0);
+const emits = defineEmits(['editCover', 'editTitle', 'chooseCategory', 'chooseMode']);
+
+const isShowOverDialog = ref(false)
+const isInputFocused = ref(false)
+
+// 监听本地标题变化，通知父组件
+watch(localLiveTitle, (val) => {
+  emits('editTitle', val);
+});
+
+// 新增 input 事件处理，防止多次 watch 触发
+const onInputTitle = (e: any) => {
+  const inputValue = e.detail.value;
+  // 标记用户已交互
+  hasUserInteracted.value = true;
+  // 检查输入字节长度
+  const byteLength = getByteLength(inputValue);
+  localLiveTitle.value = inputValue;
+  if (byteLength <= 100) {
+    lastValidTitle.value = inputValue;
+  }
+  // 如果超过100字节，阻止输入并恢复到上次有效内容
+  else if (byteLength > 100) {
+    setTimeout(() => {
+    		localLiveTitle.value = lastValidTitle.value || loginUserInfo.value?.userName;
+    	}, 0)
+    uni.showToast({
+      title: '标题最多100字节，已恢复到上次有效内容',
+      icon: 'none',
+      duration: 2000
+    });
+    
+  }
+  
+  emits('editTitle', localLiveTitle.value);
+};
+
+
+const close = () => {
+  isShowOverDialog.value = false
+}
+const onEditCover = () => {
+  isShowOverDialog.value = true
+  emits('editCover');
+} 
+
+const onChooseCategory = () => emits('chooseCategory');
+const onChooseMode = () => {
+  uni.showActionSheet({
+    itemList: ['公开','隐私'],
+    success: function (res) {
+      if(res.tapIndex === 0) {
+        localLiveMode.value = '公开';
+      } else {
+        localLiveMode.value = '隐私';
+      }
+      emits('chooseMode', localLiveMode.value);
+    },
+    fail: function (res) {
+      console.log(res.errMsg);
+    }
+  });
+}
+
+const onEditTitle = (e) => {
+  // 设置输入框聚焦状态
+  isInputFocused.value = true;
+}
+
+// 输入框失去焦点时的处理
+const onInputBlur = () => {
+  isInputFocused.value = false;
+}
+
+const onChooseTemplate = () => {
+  uni.showActionSheet({
+    itemList: templateList.map(item => item.title),
+    success: function (res) {
+      localTemplateIndex.value = res.tapIndex;
+      emits('chooseTemplate', templateList[res.tapIndex].mode);
+    },
+    fail: function (res) {
+      console.log(res.errMsg);
+    }
+  });
+};
+const selectAvatar = (idx:number) => {
+  selectedAvatarIndex.value = idx;
+};
+const setCover = () => {
+  localCoverUrl.value = avatarList[selectedAvatarIndex.value];
+  emits('editCover', localCoverUrl.value);
+  isShowOverDialog.value = false;
+};
+</script>
+
+<style>
+.live-info-card {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 32rpx;
+  margin: 48rpx 32rpx 32rpx 32rpx;
+  padding: 16rpx;
+  position: fixed;
+  top: 200rpx;
+  left: 0;
+  right: 0;
+}
+.cover-section {
+  position: relative;
+}
+.cover-image {
+  width: 140rpx;
+  height: 188rpx;
+  border-radius: 24rpx;
+}
+.info-section {
+  flex: 1;
+  margin-left: 24rpx;
+  padding-top: 20rpx;
+}
+.title-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  margin-bottom: 0rpx;
+}
+.underline {
+  flex: 1;
+  height: 2rpx;
+  background: #fff;
+  opacity: 0.2;
+  margin-top: 10rpx;
+}
+.live-title {
+  color: #fff;
+  font-size: 32rpx;
+  font-weight: 500;
+  flex: 1;
+}
+.edit-icon-container {
+  width: 80rpx;
+  height: 40rpx;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+.edit-icon {
+  width: 32rpx;
+  height: 32rpx;
+  margin-left: 8rpx;
+}
+.info-row {
+  display: flex;
+  align-items: center;
+  flex-direction: row;
+  padding-top: 20rpx;
+}
+.info-icon {
+  width: 32rpx;
+  height: 32rpx;
+}
+.arrow-icon {
+  width: 28rpx;
+  height: 28rpx;
+}
+.live-detail{
+  color: #fff;
+  font-size: 28rpx;
+  font-weight: 400;
+  margin-left: 4rpx;
+}
+.bottom-drawer-container {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  top: 0;
+  z-index: 1000;
+}
+.drawer-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.4);
+}
+
+
+.bottom-drawer {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: rgba(34, 38, 46, 1);
+  border-top-left-radius: 32rpx;
+  border-top-right-radius: 32rpx;
+  transform: translateY(100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  height: 1400rpx;
+}
+
+.drawer-open {
+  transform: translateY(0);
+}
+.audience-content {
+  background-color: rgba(34, 38, 46, 1);
+  padding-left: 15rpx;
+}
+.cover-dialog-item {
+  position: relative;
+  width: 200rpx;
+  height: 230rpx;
+  border-radius: 24rpx;
+  margin-bottom: 32rpx;
+  margin-right: 20rpx;
+  overflow: hidden;
+  background: #23242a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* box-sizing: border-box; */
+}
+.cover-dialog-img.selected {
+  width: 200rpx;
+  height: 230rpx;
+  border-radius: 24rpx;
+  border: 6rpx solid #238CFE;
+}
+
+.cover-dialog-img {
+  width: 200rpx;
+  height: 230rpx;
+  border-radius: 24rpx;
+}
+.tab-item {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  box-sizing: border-box;
+}
+.list-title{
+  color: #fff;
+  font-size: 32rpx;
+  font-weight: 500;
+  padding: 40rpx
+}
+
+  .home-footer {
+    position: absolute;
+    bottom: 60rpx;
+    width: 750rpx;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    height: 104rpx;
+  }
+	.create-btn {
+    background-color: #0468FC;
+    border-radius: 50rpx;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    padding: 25rpx 80rpx;
+	}
+	.btn-text {
+		color: #fff;
+		font-size: 32rpx;
+		font-weight: 700;
+	}
+</style> 

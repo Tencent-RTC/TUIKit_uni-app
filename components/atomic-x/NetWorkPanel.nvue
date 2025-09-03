@@ -1,0 +1,271 @@
+<template>
+  <!-- 仪表盘面板组件 -->
+  <!-- 使用方式: <NetWorkPanel v-model="showDashboardPanel" /> -->
+  <view class="bottom-drawer-container" v-if="modelValue">
+    <view class="drawer-overlay" @tap="close"></view>
+    <view class="bottom-drawer" :class="{ 'drawer-open': modelValue }">
+      <!-- 标题区域 -->
+      <view class="panel-header">
+        <text class="panel-title">仪表盘</text>
+      </view>
+
+      <!-- 内容区域 -->
+      <view class="panel-content">
+        <!-- 网络指标区域 -->
+        <view class="metrics-section">
+          <view class="metrics-grid">
+            <view class="metric-item">
+              <text class="metric-value" :class="{ red: netWorkInfo.delay > 100, green: netWorkInfo.delay <= 100 }">{{ netWorkInfo.delay }}ms</text>
+              <text class="metric-label">往返延时</text>
+            </view>
+            <view class="metric-item">
+              <text class="metric-value" :class="{ red: netWorkInfo.downLoss > 0.1, green: netWorkInfo.downLoss <= 0.1 }">{{ netWorkInfo.downLoss }}%</text>
+              <text class="metric-label">下行丢包率</text>
+            </view>
+            <view class="metric-item">
+              <text class="metric-value" :class="{ red: netWorkInfo.upLoss > 0.1, green: netWorkInfo.upLoss <= 0.1 }">{{ netWorkInfo.upLoss }}%</text>
+              <text class="metric-label">上行丢包率</text>
+            </view>
+          </view>
+        </view>
+
+        <!-- 视频和音频信息区域 -->
+        <!-- <view class="info-section"> -->
+          <!-- 视频信息 -->
+<!--          <view class="info-card">
+            <text class="info-title">视频信息</text>
+            <view class="info-list">
+              <view class="info-item">
+                <text class="info-label">分辨率</text>
+                <text class="info-value">{{ videoInfo.resolution }}</text>
+              </view>
+              <view class="info-item">
+                <text class="info-label">码率</text>
+                <text class="info-value">{{ videoInfo.bitrate }}</text>
+              </view>
+              <view class="info-item">
+                <text class="info-label">帧率</text>
+                <text class="info-value">{{ videoInfo.frameRate }}</text>
+              </view>
+            </view>
+          </view> -->
+
+          <!-- 音频信息 -->
+<!--          <view class="info-card">
+            <text class="info-title">音频信息</text>
+            <view class="info-list">
+              <view class="info-item">
+                <text class="info-label">采样率</text>
+                <text class="info-value">{{ audioInfo.sampleRate }}</text>
+              </view>
+              <view class="info-item">
+                <text class="info-label">码率</text>
+                <text class="info-value">{{ audioInfo.bitrate }}</text>
+              </view>
+            </view>
+          </view>
+        </view> -->
+      </view>
+    </view>
+  </view>
+</template>
+
+<script setup>
+import { reactive } from 'vue'
+import { useDeviceState } from "@/uni_modules/ui-component/state/devicestate";
+
+const { netWorkInfo } = useDeviceState()
+
+/**
+ * 仪表盘面板组件
+ * 
+ * Props:
+ * - modelValue: Boolean - 控制面板显示/隐藏
+ * 
+ * Events:
+ * - update:modelValue - 更新面板显示状态
+ */
+
+// 定义 props
+const props = defineProps({
+  modelValue: {
+    type: Boolean,
+    default: false
+  }
+})
+
+// 定义 emits
+const emit = defineEmits(['update:modelValue'])
+
+// 响应式数据
+const networkMetrics = reactive({
+  roundTripDelay: 45,
+  downlinkPacketLoss: 0,
+  uplinkPacketLoss: 2
+})
+
+const videoInfo = reactive({
+  resolution: '1080*1920',
+  bitrate: '6015 kbps',
+  frameRate: '31 FPS'
+})
+
+const audioInfo = reactive({
+  sampleRate: '48000 HZ',
+  bitrate: '6015 kbps'
+})
+
+// 方法
+/**
+ * 关闭面板
+ */
+const close = () => {
+  emit('update:modelValue', false)
+}
+</script>
+
+<style>
+.bottom-drawer-container {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  top: 0;
+  z-index: 1000;
+}
+
+.drawer-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.4);
+}
+
+.bottom-drawer {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: rgba(34, 38, 46, 1);
+  border-top-left-radius: 32rpx;
+  border-top-right-radius: 32rpx;
+  transform: translateY(100%);
+  transition-property: transform;
+  transition-duration: 0.3s;
+  transition-timing-function: ease;
+  flex-direction: column;
+}
+
+.drawer-open {
+  transform: translateY(0);
+}
+
+/* 标题区域 */
+.panel-header {
+  padding: 40rpx 0 20rpx;
+  background: rgba(34, 38, 46, 1);
+  align-items: center;
+}
+
+.panel-title {
+  font-size: 32rpx;
+  color: #ffffff;
+  font-weight: 500;
+}
+
+/* 内容区域 */
+.panel-content {
+  flex: 1;
+  padding: 0 48rpx;
+  margin-bottom: 40rpx;
+}
+
+/* 网络指标区域 */
+.metrics-section {
+  margin-bottom: 40rpx;
+}
+
+.metrics-grid {
+  flex-direction: row;
+  justify-content: space-between;
+  border-radius: 16rpx;
+  padding: 32rpx 24rpx;
+  background-color: rgba(43, 44, 48, 1);
+}
+
+.metric-item {
+  flex: 1;
+  align-items: center;
+}
+
+.metric-value {
+  font-size: 32rpx;
+  color: #4CAF50;
+  font-weight: 500;
+  margin-bottom: 12rpx;
+}
+
+.metric-value.red {
+  color: rgba(230, 89, 76, 1); /* 红色 */
+}
+
+.metric-value.green {
+  color: rgba(56, 166, 115, 1); /* 绿色 */
+}
+
+.metric-label {
+  font-size: 26rpx;
+  color: rgba(255, 255, 255, 0.8);
+  text-align: center;
+}
+
+/* 信息区域 */
+.info-section {
+  flex-direction: row;
+  justify-content: space-between;
+}
+
+.info-card {
+  flex: 1;
+  background-color: rgba(255, 255, 255, 0.05);
+  border-radius: 16rpx;
+  padding: 24rpx;
+  margin: 0 8rpx;
+}
+
+.info-title {
+  font-size: 30rpx;
+  color: #ffffff;
+  font-weight: 600;
+  margin-bottom: 20rpx;
+  text-align: center;
+}
+
+.info-list {
+  flex-direction: column;
+}
+
+.info-item {
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16rpx;
+}
+
+.info-item:last-child {
+  margin-bottom: 0;
+}
+
+.info-label {
+  font-size: 26rpx;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.info-value {
+  font-size: 26rpx;
+  color: #ffffff;
+  font-weight: 500;
+}
+</style>

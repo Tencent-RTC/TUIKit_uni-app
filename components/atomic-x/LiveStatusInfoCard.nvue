@@ -1,0 +1,288 @@
+<template>
+  <view v-if="modelValue" class="bottom-drawer-container">
+    <view class="drawer-overlay" @tap="close"></view>
+    <view class="bottom-drawer" :class="{ 'drawer-open': modelValue }">
+      <!-- 标题区域 -->
+      <view class="panel-header">
+        <text class="panel-title">网络信息</text>
+      </view>
+
+      <!-- 内容区域 -->
+      <view class="panel-content">
+        <!-- 视频状态 -->
+        <!--        <view class="row">
+        <image class="icon" src="/static/images/network-good.png" />
+        <view class="row-content">
+          <text class="row-title">视频状态正常</text>
+          <text class="row-desc">开播画面流畅 | 清晰度：{{ videoQuality }}</text>
+        </view>
+        </view>
+        <!-- 音频状态 -->
+        <!--        <view class="row">
+        <image class="icon" src="/static/images/beauty.png" />
+        <view class="row-content">
+          <text class="row-title">音频状态正常</text>
+          <text class="row-desc">适当音量保障观看体验 | 音质模式：{{ audioMode }}</text>
+        </view>
+        <slider class="audio-slider" :value="audioVolume" min="0" max="100" disabled />
+        <text class="audio-value">{{ audioVolume }}</text>
+        </view>
+        <!-- 设备温度 -->
+        <!--        <view class="row">
+        <image class="icon" src="/static/images/temperature.png" />
+        <view class="row-content">
+          <text class="row-title">设备温度正常</text>
+          <text class="row-desc">建议适时检查，保障观看体验</text>
+        </view>
+        </view> -->
+        <!-- 网络状态 -->
+        <!--        <view class="row">
+        <image class="icon" src="/static/images/network.png" />
+        <view class="row-content">
+          <text class="row-title">Wi-Fi/移动网络正常</text>
+          <text class="row-desc">建议不要频繁切换网络</text>
+        </view>
+        </view> -->
+        
+        <!-- 网络指标区域 -->
+        <view class="metrics-section">
+          <view class="metrics-grid">
+            <view class="metric-item">
+              <text class="metric-value" :class="{ red: netWorkInfo.delay > 100, green: netWorkInfo.delay <= 100 }">{{ netWorkInfo.delay }}ms</text>
+              <text class="metric-label">往返延时</text>
+            </view>
+            <view class="metric-item">
+              <text class="metric-value" :class="{ red: netWorkInfo.downLoss > 0.1, green: netWorkInfo.downLoss <= 0.1 }">{{ netWorkInfo.downLoss }}%</text>
+              <text class="metric-label">下行丢包率</text>
+            </view>
+            <view class="metric-item">
+              <text class="metric-value" :class="{ red: netWorkInfo.upLoss > 0.1, green: netWorkInfo.upLoss <= 0.1 }">{{ netWorkInfo.upLoss }}%</text>
+              <text class="metric-label">上行丢包率</text>
+            </view>
+          </view>
+        </view>
+      </view>
+    </view>
+  </view>
+</template>
+
+<script setup lang="ts">
+  import { defineEmits } from 'vue';
+  import { useDeviceState } from "@/uni_modules/ui-component/state/devicestate";
+
+  const { netWorkInfo } = useDeviceState()
+  const props = defineProps({
+    modelValue: {
+      type: Boolean,
+      default: false
+    }
+  })
+
+  const emit = defineEmits(['update:modelValue'])
+
+  function close() {
+    emit('update:modelValue', false);
+  }
+</script>
+
+<style>
+.bottom-drawer-container {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  top: 0;
+  z-index: 1000;
+}
+
+.drawer-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.4);
+}
+
+.bottom-drawer {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: rgba(34, 38, 46, 1);
+  border-top-left-radius: 32rpx;
+  border-top-right-radius: 32rpx;
+  overflow: hidden; /* 添加这行 */
+  transform: translateY(100%);
+  transition-property: transform;
+  transition-duration: 0.3s;
+  transition-timing-function: ease;
+  flex-direction: column;
+}
+
+.drawer-open {
+  transform: translateY(0);
+}
+
+/* 标题区域 */
+.panel-header {
+  padding: 40rpx 0 20rpx;
+  background: rgba(34, 38, 46, 1);
+  align-items: center;
+}
+
+.panel-title {
+  font-size: 32rpx;
+  color: #ffffff;
+  font-weight: 500;
+}
+
+/* 内容区域 */
+.panel-content {
+  flex: 1;
+  padding: 0 48rpx;
+  margin-bottom: 40rpx;
+}
+
+/* 网络指标区域 */
+.metrics-section {
+  margin-bottom: 40rpx;
+}
+
+.metrics-grid {
+  flex-direction: row;
+  justify-content: space-between;
+  border-radius: 16rpx;
+  padding: 32rpx 24rpx;
+  background-color: rgba(43, 44, 48, 1);
+}
+
+.metric-item {
+  flex: 1;
+  align-items: center;
+}
+
+.metric-value {
+  font-size: 32rpx;
+  color: #4CAF50;
+  font-weight: 500;
+  margin-bottom: 12rpx;
+}
+
+.metric-value.red {
+  color: rgba(230, 89, 76, 1); /* 红色 */
+}
+
+.metric-value.green {
+  color: rgba(56, 166, 115, 1); /* 绿色 */
+}
+
+.metric-label {
+  font-size: 26rpx;
+  color: rgba(255, 255, 255, 0.8);
+  text-align: center;
+}
+
+/* 保留原有样式，以备将来使用 */
+.live-status-info-mask {
+  position: fixed;
+  left: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.3);
+  z-index: 999;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.title {
+  color: #fff;
+  font-size: 32rpx;
+  font-weight: 500;
+  text-align: center;
+  padding-top: 20rpx
+}
+
+.row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  margin-bottom: 40rpx;
+  margin-right: 40rpx
+}
+
+.icon {
+  width: 40rpx;
+  height: 40rpx;
+  margin-right: 16rpx;
+}
+
+.row-content {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.row-title {
+  font-size: 28rpx;
+  font-weight: bold;
+  color: #fff;
+}
+
+.row-desc {
+  font-size: 24rpx;
+  color: #888;
+  margin-top: 4rpx;
+}
+
+.audio-slider {
+  flex: 1;
+  margin: 0 8rpx;
+}
+
+.audio-value {
+  font-size: 24rpx;
+  color: #222;
+  width: 40rpx;
+  text-align: right;
+}
+
+.network-info {
+  margin-bottom: 40rpx;
+}
+
+.network-grid{
+  flex-direction: row;
+  justify-content: space-between;
+  border-radius: 16rpx;
+  padding: 32rpx 24rpx;
+  background-color: rgba(43, 44, 48, 1);    
+}
+
+.item {
+  flex: 1;
+  align-items: center;
+}
+
+.value {
+  font-size: 32rpx;
+  font-weight: 500;
+  color: white;
+}
+
+.value.red {
+  color:rgba(230, 89, 76, 1); /* 红色 */
+}
+
+.value.green {
+  color: rgba(56, 166, 115, 1); /* 绿色 */
+}
+
+.label {
+  font-size: 24rpx;
+  color: #888;
+  margin-top: 4rpx;
+}
+</style>

@@ -1,0 +1,12 @@
+{
+    "minSdkVersion": "21",
+    "dependencies": [
+        "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3",
+        "com.tencent.liteav:LiteAVSDK_Professional:12.7+",
+        "com.tencent.imsdk:imsdk-plus:8.6.+",
+        "com.tencent.liteav.tuikit:tuicore:8.6.7020",
+        "com.google.code.gson:gson:2.10.1",
+        "com.github.yyued:SVGAPlayer-Android:2.6.1",
+        "androidx.constraintlayout:constraintlayout:2.0.1"
+    ]
+}
