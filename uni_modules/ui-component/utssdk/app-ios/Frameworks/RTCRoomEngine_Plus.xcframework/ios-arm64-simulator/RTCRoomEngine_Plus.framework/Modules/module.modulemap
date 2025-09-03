@@ -1,0 +1,11 @@
+framework module RTCRoomEngine_Plus {
+  umbrella header "RTCRoomEngine_Plus-umbrella.h"
+
+  export *
+  module * { export * }
+}
+
+module RTCRoomEngine_Plus.Swift {
+  header "RTCRoomEngine_Plus-Swift.h"
+  requires objc
+}

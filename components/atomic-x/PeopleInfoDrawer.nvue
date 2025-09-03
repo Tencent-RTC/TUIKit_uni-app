@@ -1,0 +1,178 @@
+<template>
+  <view class="bottom-drawer-container" v-if="modelValue">
+    <view class="drawer-overlay" @tap="close"></view>
+    <view class="bottom-drawer" :class="{ 'drawer-open': modelValue }">
+      <view class="avatar-container">
+        <image class="avatar" :src="userInfo?.avatarUrl || defaultAvatarUrl" mode="aspectFill" />
+      </view>
+
+      <view class="user-info-container" v-if="isShowAnchor">
+        <text class="user-name">{{ userInfo?.userName || userInfo?.userId || '' }}</text>
+        <text class="user-roomid">直播房间ID：{{ userInfo?.liveId || userInfo?.roomId }}</text>
+        <!-- <text class="follower-content">{{ userInfo?.userId || 0 }} 粉丝</text> -->
+      </view>
+      <view class="user-info-container" v-if="!isShowAnchor">
+        <text class="user-name">{{ userInfo?.userName || userInfo?.userId || '' }}</text>
+        <text class="user-roomid">UserId：{{ userInfo?.userId  }}</text>
+        <!-- <text class="follower-content">{{ userInfo?.userId || 0 }} 粉丝</text> -->
+      </view>
+      <!-- <view
+        class="drawer-btn-container"
+        :class="userInfo?.isMessageDisabled ? 'enable' : 'disable'"
+        @tap="handleFollow"
+      >
+        <text class="btn-text">{{ userInfo?.isMessageDisabled ? 'Follow' : 'Unfollow' }}</text>
+      </view> -->
+    </view>
+  </view>
+</template>
+
+<script setup>
+const defaultAvatarUrl = 'https://web.sdk.qcloud.com/component/TUIKit/assets/avatar_01.png';
+
+const props = defineProps({
+  modelValue: {
+    type: Boolean,
+    default: false
+  },
+  userInfo: {
+    type: Object,
+    default: () => ({})
+  },
+  isShowAnchor: {
+    type: Boolean,
+    default: true
+  }
+});
+
+const emit = defineEmits(['update:modelValue']);
+
+const close = () => {
+  emit('update:modelValue', false);
+};
+
+const handleFollow = () => {
+  // TODO: 实现关注/取消关注逻辑
+};
+</script>
+
+<style>
+.bottom-drawer-container {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  top: 0;
+  z-index: 1000;
+}
+
+.drawer-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  /* background-color: rgba(0, 0, 0, 0.4); */
+	background: rgba(15, 16, 20, 0.8);
+}
+
+.bottom-drawer {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: rgba(34, 38, 46, 1);
+/*  border-top-left-radius: 32rpx;
+  border-top-right-radius: 32rpx; */
+  /* transform: translateY(100%); */
+  transition-property: transform;
+  transition-duration: 0.3s;
+  transition-timing-function: ease;
+  flex-direction: column;
+  align-items: center;
+  height: 400rpx;
+  padding: 20rpx 0 ;
+}
+
+.drawer-open {
+  transform: translateY(0);
+}
+
+.avatar-container {
+  width: 200rpx;
+  height: 120rpx;
+  justify-content: center;
+  align-items: center;
+  position: absolute;
+}
+
+.avatar {
+  width: 112rpx;
+  height: 112rpx;
+  border-radius: 56rpx;
+}
+
+.user-info-container {
+  flex: 1;
+  padding-top: 120rpx;
+  align-items: center;
+}
+
+.user-name {
+  font-size: 32rpx;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.user-roomid {
+  font-size: 24rpx;
+  color: rgba(255, 255, 255, 0.55);
+  margin: 20rpx 0;
+}
+
+.follower-content {
+  font-size: 24rpx;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.drawer-btn-container {
+  width: 550rpx;
+  height: 80rpx;
+  background-color: rgba(43, 106, 214, 1);
+  border-radius: 200rpx;
+  justify-content: center;
+  align-items: center;
+  margin-bottom: 36rpx;
+}
+
+.drawer-btn-container.disable {
+  background-color: rgba(58, 60, 66, 1);
+}
+
+.btn-text {
+  color: #ffffff;
+  font-weight: bold;
+}
+
+.drawer-content {
+  flex: 1;
+  padding: 0 48rpx;
+  width: 750rpx;
+  height: 68rpx;
+}
+
+.divider-line-container {
+  height: 68rpx;
+  justify-content: center;
+  position: relative;
+  align-items: center;
+}
+
+.divider-line {
+  width: 268rpx;
+  height: 10rpx;
+  border-radius: 200rpx;
+  background-color: rgba(255, 255, 255, 1);
+  position: absolute;
+  bottom: 16rpx;
+}
+</style> 

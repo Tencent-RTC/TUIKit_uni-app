@@ -1,0 +1,320 @@
+<template>
+  <!-- 礼物面板组件 -->
+  <!-- 使用方式: <GiftPanel v-model="showGiftPanel" @send-gift="handleSendGift" @recharge="handleRecharge" /> -->
+  <view class="bottom-drawer-container" v-if="modelValue">
+    <view class="drawer-overlay" @tap="close"></view>
+    <view class="bottom-drawer" :class="{ 'drawer-open': modelValue }">
+      <view class="gift-header">
+        <view class="header-content">
+          <text class="gift-title">礼物</text>
+          <!-- <view class="recharge-btn" @tap="handleRecharge">
+            <image class="wallet-icon" src="/static/images/gift.png" mode="aspectFit" />
+            <text class="recharge-text">充值({{ balance }})</text>
+          </view> -->
+        </view>
+      </view>
+			
+			<swiper 
+				class="gift-content" 
+				:current="currentPage"
+				@change="handleSwiperChange"
+        style="height: 710rpx;"
+			>
+				<swiper-item 
+					v-for="(page, pageIndex) in giftPages" 
+					:key="pageIndex"
+					class="gift-page"
+				>
+					<view class="gift-container">
+						<view 
+							class="gift-item" 
+							v-for="(giftInfo, index) in page" 
+							:key="giftInfo.gitfId"
+							:class="{ 'selected': selectedGiftIndex === (pageIndex * itemsPerPage + index) }"
+							@tap="selectGift(pageIndex * itemsPerPage + index)"
+						>
+							<view class="gift-image-container">
+								<image class="gift-image" :src="giftInfo.iconUrl" mode="aspectFit" />
+							</view>
+							<!-- <text class="gift-name">{{ giftInfo.name }}</text> -->
+							<view class="gift-action">
+								<view 
+									class="send-btn"
+									:class="{ 'selected-btn': selectedGiftIndex === (pageIndex * itemsPerPage + index) }"
+									@tap.stop="handleSendGift(pageIndex * itemsPerPage + index)"
+								>
+									<text class="send-text">赠送</text>
+								</view>
+							</view>
+							<text class="gift-price">{{ giftInfo.coins }}</text>
+						</view>
+					</view>
+				</swiper-item>
+			</swiper>
+    </view>
+  </view>
+</template>
+
+<script>
+import { ref, onBeforeMount, onMounted, watch } from 'vue';
+import { downloadAndSaveToPath } from './utils/downloadImage';
+
+import { useGiftState } from "@/uni_modules/ui-component/state/giftstate";
+const { giftList, latestGift, giftStatics, getGiftList, sendGift } = useGiftState(uni?.$liveId);
+
+export default {
+  name: 'GiftPanel',
+  props: {
+    modelValue: {
+      type: Boolean,
+      default: false
+    },
+    onGiftSelect: {
+      type: Function,
+      default: null
+    },
+  },
+  data() {
+    return {
+      scrollTop: 0,
+			selectedGiftIndex: 0,
+			giftLists: giftList,
+			currentPage: 0,
+			itemsPerPage: 8, // 每页显示的礼物数量
+    };
+  },
+  methods: {
+    close() {
+      this.$emit('update:modelValue', false);
+    },
+    handleSwiperChange(e) {
+      this.currentPage = e.detail.current;
+    },
+    selectGift(index) {
+      this.selectedGiftIndex = index;
+    },
+    handleSendGift(index) {
+      const gift = this.giftLists[index];
+			console.warn('gift = ', gift);
+			if (this.selectedGiftIndex !== index) return;
+			
+			// 调用父组件的回调函数
+			if (this.onGiftSelect) {
+				this.onGiftSelect(gift);
+			}
+      this.selectedGiftIndex = -1;
+    },
+    handleRecharge() {
+      console.warn('充值功能');
+      this.$emit('recharge');
+    }
+  },
+  computed: {
+    giftPages() {
+      const pages = [];
+      console.warn(`gift length = ${this.giftLists.length}`);
+      
+      for (let i = 0; i < this.giftLists.length; i += this.itemsPerPage) {
+        pages.push(this.giftLists.slice(i, i + this.itemsPerPage));
+      }
+      
+      console.warn(`pages value = ${JSON.stringify(pages)}, pages.length = ${pages.length}`);
+      
+      return pages;
+    }
+  },
+  watch: {
+      async giftLists(newVal) {
+        if (!newVal || (newVal || []).length === 0) return;
+        
+        for (let i = 0; i < newVal.length; i++) {
+          const giftData = newVal[i];
+          
+          if (giftData.resourceUrl) {
+            const giftKey = `${giftData.name.split(' ').join('')}-${giftData.giftId}`;
+            if (plus.storage.getAllKeys().includes(giftKey)) continue;
+            
+            const svgaGiftSourceUrl = plus.storage.getItem(giftKey);
+            if (!svgaGiftSourceUrl) {
+              console.log(`svgaGiftSourceUrl not exist giftKey: ${giftKey}`);
+              const filePath = await downloadAndSaveToPath(`${giftData.resourceUrl}`);
+              plus.storage.setItem(giftKey, filePath);
+            }
+          }
+        }
+      }
+    },
+  mounted() {
+		console.warn(`giftPanel mounted liveId = ${uni?.$liveId}`);
+		if (!uni?.$liveId) {
+			return;
+		}
+		
+		getGiftList({ liveId: uni?.$liveId, roomId: uni?.$liveId });
+		console.warn('GiftPanel mounted, giftLists:', this.giftLists);
+	},
+};
+</script>
+
+<style>
+.bottom-drawer-container {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  top: 0;
+  z-index: 1000;
+}
+
+.drawer-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.4);
+}
+
+.bottom-drawer {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+	background: rgba(34, 38, 46, 1);
+  border-top-left-radius: 32rpx;
+  border-top-right-radius: 32rpx;
+  transform: translateY(100%);
+  transition-property: transform;
+  transition-duration: 0.3s;
+  transition-timing-function: ease;
+  flex-direction: column;
+  height: 710rpx;
+}
+
+.drawer-open {
+  transform: translateY(0);
+}
+
+.gift-header {
+  padding: 40rpx 48rpx;
+	border-top-left-radius: 32rpx;
+	border-top-right-radius: 32rpx;
+  /* background: rgba(31, 32, 36, 1); */
+  position: relative;
+  z-index: 1;
+}
+
+.header-content {
+  flex-direction: row;
+  justify-content: center;
+  align-items: center;
+}
+
+.gift-title {
+  font-size: 36rpx;
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.recharge-btn {
+	position: absolute;
+  flex-direction: row;
+  align-items: center;
+  background-color: #ffffff;
+  padding: 16rpx 24rpx;
+  border-radius: 100rpx;
+	right: 10rpx;
+}
+
+.wallet-icon {
+  width: 32rpx;
+  height: 32rpx;
+  margin-right: 8rpx;
+}
+
+.recharge-text {
+  font-size: 28rpx;
+  color: #333333;
+}
+
+.gift-content {
+  flex: 1;
+	height: 710rpx;
+}
+
+.gift-page {
+  flex: 1;
+  height: 710rpx;
+}
+
+.gift-container {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+	padding: 0 20rpx;
+  flex: 1;
+  height: 710rpx;
+}
+
+.gift-item {
+  width: 168rpx;
+  margin-bottom: 14rpx;
+  align-items: center;
+  border-radius: 16rpx;
+	padding-top: 6rpx;
+	padding-bottom: 6rpx;
+  border: 1rpx solid transparent;
+}
+
+.gift-item.selected {
+  border-color: #2b6ad6;
+  background-color: rgba(43, 106, 214, 0.1);
+  max-height: 260rpx;
+}
+
+.gift-image-container {
+  width: 120rpx;
+  height: 120rpx;
+  margin-bottom: 16rpx;
+  justify-content: center;
+  align-items: center;
+}
+
+.gift-image {
+  width: 120rpx;
+  height: 120rpx;
+}
+
+.gift-name {
+  font-size: 24rpx;
+  color: #ffffff;
+  margin-bottom: 12rpx;
+  text-align: center;
+}
+
+.gift-action {
+  margin-bottom: 8rpx;
+}
+
+.send-btn {
+  padding: 8rpx 24rpx;
+  border-radius: 100rpx;
+  background-color: rgba(58, 60, 66, 1);
+  justify-content: center;
+  align-items: center;
+}
+
+.send-btn.selected-btn {
+  background-color: #2b6ad6;
+}
+
+.send-text {
+  color: #ffffff;
+  font-size: 24rpx;
+}
+
+.gift-price {
+  font-size: 20rpx;
+  color: rgba(255, 255, 255, 0.7);
+}
+</style> 

@@ -1,0 +1,557 @@
+<template>
+  <!-- 美颜面板组件 -->
+  <!-- 使用方式: <BeautyPanel v-model="showBeautyPanel" @adjust-beauty="handleAdjustBeauty" @reset="handleReset" /> -->
+  <view class="bottom-drawer-container" v-if="modelValue">
+    <view class="drawer-overlay"  @tap="close"></view>
+    <view class="bottom-drawer" :class="{ 'drawer-open': modelValue }" @click.stop>
+      <!-- 程度控制区域 -->
+      <view class="slider-section" v-if="currentOptionName !== '关闭'">
+        <view class="control-container">
+          <view class="custom-slider">
+            <!-- 减号按钮 -->
+            <view style="width: 40rpx; height: 40rpx;" @tap="decreaseValue">
+              <text class="btn-text">-</text>
+            </view>
+            
+            <!-- 进度条区域 -->
+            <view class="progress-section">
+              <!-- 进度条背景 -->
+              <view class="progress-bar">
+                <view 
+                  class="progress-fill" 
+                  :style="{ width: (currentRealValue / 100 * 400) + 'rpx' }"
+                ></view>
+              </view>
+              <!-- 当前数值显示 - 定位在进度条右侧 -->
+              <text class="current-value">{{ currentRealValue }}</text>
+            </view>
+            
+            <!-- 加号按钮 -->
+            <view style="width: 40rpx; height: 40rpx;" @tap="increaseValue">
+              <text class="btn-text">+</text>
+            </view>
+          </view>
+        </view>
+      </view>
+
+      <!-- 功能标签页 -->
+<!--      <view class="feature-tabs">
+        <view 
+          v-for="(tab, index) in featureTabs" 
+          :key="index"
+          class="tab-item"
+          :class="{ 'active': activeTabIndex === index }"
+          @tap="switchTab(index)"
+        >
+          <text class="tab-text" :class="{ 'active-text': activeTabIndex === index }">{{ tab.name }}</text>
+          <view v-if="tab.icon" class="tab-icon">
+            <image :src="tab.icon" mode="aspectFit" class="icon-image" />
+          </view>
+        </view>
+      </view> -->
+
+      <!-- 详细选项区域 -->
+      <view class="options-section">
+        <view class="options-grid">
+          <view 
+            v-for="(option, index) in currentOptions" 
+            :key="index"
+            class="option-item"
+            :class="{ 'selected': selectedOptionIndex === index }"
+            @tap="selectOption(index)"
+          >
+            <view class="option-icon-container">
+              <image :src="option.icon" mode="aspectFit" class="option-icon" />
+            </view>
+            <text class="option-name">{{ option.name }}</text>
+          </view>
+        </view>
+      </view>
+    </view>
+  </view>
+</template>
+
+<script setup>
+import { ref, computed, watch } from 'vue'
+import { useBeautyState } from '@/uni_modules/ui-component/state/beautyState'
+
+const { 
+  setSmoothLevel, 
+  setWhitenessLevel, 
+  setRuddyLevel, 
+  whitenessLevel, 
+  ruddyLevel, 
+  smoothLevel,
+  realUiValues,
+  setRealUiValue,
+  getRealUiValue,
+  resetRealUiValues
+} = useBeautyState(uni.$liveId) 
+
+/**
+ * 美颜面板组件
+ * 
+ * Props:
+ * - modelValue: Boolean - 控制面板显示/隐藏
+ * 
+ * Events:
+ * - update:modelValue - 更新面板显示状态
+ * - adjust-beauty - 调整美颜参数事件
+ * - reset - 重置事件
+ */
+
+// Props 定义
+const props = defineProps({
+  modelValue: {
+    type: Boolean,
+    default: false
+  }
+})
+
+// Emits 定义
+const emit = defineEmits(['update:modelValue', 'adjust-beauty', 'reset'])
+
+// 响应式数据
+const activeTabIndex = ref(0)
+const selectedOptionIndex = ref(0) // 默认选中"关闭"
+
+const featureTabs = ref([
+  { name: '美颜', icon: null },
+  // { name: '美体', icon: null },
+  // { name: '滤镜', icon: null },
+  // { name: '贴纸', icon: null },
+  // { name: '风格整妆', icon: null },
+  // { name: '重置', icon: '/static/images/edit.png' }
+])
+
+const beautyOptions = ref([
+  { name: '关闭', icon: '/static/images/beauty-close.png' },
+  { name: '美白', icon: '/static/images/whiteness.png' },
+  { name: '磨皮', icon: '/static/images/smooth.png' },
+  { name: '红润', icon: '/static/images/live-ruddy.png' },
+  // { name: '对比度', icon: '/static/images/setting.png' },
+  // { name: '饱和', icon: '/static/images/setting.png' }
+])
+
+const bodyOptions = ref([
+  { name: '瘦脸', icon: '/static/images/beauty.png' },
+  { name: '大眼', icon: '/static/images/beauty.png' },
+  { name: '瘦身', icon: '/static/images/beauty.png' },
+  { name: '长腿', icon: '/static/images/beauty.png' }
+])
+
+const filterOptions = ref([
+  { name: '原图', icon: '/static/images/beauty.png' },
+  { name: '暖色', icon: '/static/images/beauty.png' },
+  { name: '冷色', icon: '/static/images/beauty.png' },
+  { name: '黑白', icon: '/static/images/beauty.png' }
+])
+
+const stickerOptions = ref([
+  { name: '无', icon: '/static/images/close.png' },
+  { name: '帽子', icon: '/static/images/gift.png' },
+  { name: '眼镜', icon: '/static/images/gift.png' },
+  { name: '胡子', icon: '/static/images/gift.png' }
+])
+
+const styleOptions = ref([
+  { name: '自然', icon: '/static/images/beauty.png' },
+  { name: '清新', icon: '/static/images/beauty.png' },
+  { name: '复古', icon: '/static/images/beauty.png' },
+  { name: '时尚', icon: '/static/images/beauty.png' }
+])
+
+// 计算属性
+const currentOptions = computed(() => {
+  const optionsMap = {
+    0: beautyOptions.value,
+    1: bodyOptions.value,
+    2: filterOptions.value,
+    3: stickerOptions.value,
+    4: styleOptions.value
+  }
+  return optionsMap[activeTabIndex.value] || beautyOptions.value
+})
+
+// 获取当前选项名称
+const currentOptionName = computed(() => {
+  return currentOptions.value[selectedOptionIndex.value]?.name || '关闭'
+})
+
+// 获取当前激活的美颜效果名称（排除"关闭"选项）
+const activeBeautyOption = computed(() => {
+  const options = currentOptions.value
+  for (let i = 0; i < options.length; i++) {
+    const option = options[i]
+    if (option.name !== '关闭') {
+      // 检查这个美颜效果是否有值
+      let hasValue = false
+      switch (option.name) {
+        case '美白':
+          hasValue = getRealUiValue('whiteness') > 0
+          break
+        case '红润':
+          hasValue = getRealUiValue('ruddy') > 0
+          break
+        case '磨皮':
+          hasValue = getRealUiValue('smooth') > 0
+          break
+      }
+      if (hasValue) {
+        return option.name
+      }
+    }
+  }
+  return null
+})
+
+// 获取当前选项对应的真实UI显示值（显示用户拖动的真实数据）
+const currentRealValue = computed(() => {
+  switch (currentOptionName.value) {
+    case '美白':
+      return getRealUiValue('whiteness')
+    case '红润':
+      return getRealUiValue('ruddy')
+    case '磨皮':
+      return getRealUiValue('smooth')
+    case '关闭':
+    default:
+      return 0
+  }
+})
+
+// 监听外部状态变化，只在初始化时设置真实的UI值
+watch([smoothLevel, whitenessLevel, ruddyLevel], () => {
+  // 只在组件初始化时，如果真实UI值未设置过，才从API状态初始化
+  // 这样可以保持用户拖动的真实数据不被覆盖
+  if (getRealUiValue('whiteness') === 0 && whitenessLevel.value > 0) {
+    setRealUiValue('whiteness', Math.round(whitenessLevel.value * 10))
+  }
+  if (getRealUiValue('ruddy') === 0 && ruddyLevel.value > 0) {
+    setRealUiValue('ruddy', Math.round(ruddyLevel.value * 10))
+  }
+  if (getRealUiValue('smooth') === 0 && smoothLevel.value > 0) {
+    setRealUiValue('smooth', Math.round(smoothLevel.value * 10))
+  }
+}, { immediate: true })
+
+// 监听面板显示状态，当面板打开时初始化UI值
+watch(() => props.modelValue, (newValue) => {
+  if (newValue) {
+    // 面板打开时，只有在真实UI值未设置过的情况下才从API状态初始化
+    // 这样可以保持用户上次拖动的真实数据
+    if (getRealUiValue('whiteness') === 0 && whitenessLevel.value > 0) {
+      setRealUiValue('whiteness', Math.round((whitenessLevel.value || 0) * 10))
+    }
+    if (getRealUiValue('ruddy') === 0 && ruddyLevel.value > 0) {
+      setRealUiValue('ruddy', Math.round((ruddyLevel.value || 0) * 10))
+    }
+    if (getRealUiValue('smooth') === 0 && smoothLevel.value > 0) {
+      setRealUiValue('smooth', Math.round((smoothLevel.value || 0) * 10))
+    }
+  }
+})
+
+// 方法
+/**
+ * 关闭面板
+ */
+const close = () => {
+  emit('update:modelValue', false)
+}
+
+/**
+ * 减少数值
+ */
+const decreaseValue = () => {
+  const newValue = Math.max(0, currentRealValue.value - 10)
+  updateBeautyValue(newValue)
+}
+
+/**
+ * 增加数值
+ */
+const increaseValue = () => {
+  const newValue = Math.min(100, currentRealValue.value + 10)
+  updateBeautyValue(newValue)
+}
+
+/**
+ * 更新美颜数值
+ */
+const updateBeautyValue = (uiValue) => {
+  const currentOption = currentOptions.value[selectedOptionIndex.value]
+  
+  // 保存真实的UI拖动值到全局状态
+  switch (currentOption.name) {
+    case '美白':
+      setRealUiValue('whiteness', uiValue)
+      break
+    case '红润':
+      setRealUiValue('ruddy', uiValue)
+      break
+    case '磨皮':
+      setRealUiValue('smooth', uiValue)
+      break
+    case '关闭':
+      return
+  }
+  
+  // 如果UI值超过90，API调用时限制为90
+  const limitedUiValue = uiValue > 90 ? 90 : uiValue
+  const apiValue = limitedUiValue / 10 // 转换为接口值：0-9
+  
+  // 调用对应的设置方法，传入转换后的参数值
+  switch (currentOption.name) {
+    case '美白':
+      setWhitenessLevel({ whitenessLevel: apiValue })
+      break
+    case '红润':
+      setRuddyLevel({ ruddyLevel: apiValue })
+      break
+    case '磨皮':
+      setSmoothLevel({ smoothLevel: apiValue })
+      break
+  }
+  
+  emit('adjust-beauty', {
+    type: featureTabs.value[activeTabIndex.value].name,
+    option: currentOption.name,
+    value: uiValue
+  })
+}
+
+/**
+ * 切换标签页
+ */
+const switchTab = (index) => {
+  activeTabIndex.value = index
+  selectedOptionIndex.value = 0
+  
+  // 如果是重置标签，触发重置事件
+  if (index === 5) {
+    emit('reset')
+    // 重置所有美颜参数
+    setSmoothLevel({ smoothLevel: 0 })
+    setWhitenessLevel({ whitenessLevel: 0 })
+    setRuddyLevel({ ruddyLevel: 0 })
+    selectedOptionIndex.value = 0
+    activeTabIndex.value = 0
+  }
+}
+
+/**
+ * 选择选项
+ */
+const selectOption = (index) => {
+  const currentOption = currentOptions.value[index]
+  
+  // 如果选择"关闭"，重置当前选中的美颜效果
+  if (currentOption.name === '关闭') {
+    // 获取当前选中的美颜效果（在更新selectedOptionIndex之前）
+    const currentSelectedOption = currentOptions.value[selectedOptionIndex.value]
+    
+    // 根据当前选中的美颜效果来重置对应的参数
+    switch (currentSelectedOption?.name) {
+      case '美白':
+        setWhitenessLevel({ whitenessLevel: 0 })
+        setRealUiValue('whiteness', 0)
+        break
+      case '红润':
+        setRuddyLevel({ ruddyLevel: 0 })
+        setRealUiValue('ruddy', 0)
+        break
+      case '磨皮':
+        setSmoothLevel({ smoothLevel: 0 })
+        setRealUiValue('smooth', 0)
+        break
+      default:
+        // 如果当前选中的不是具体的美颜选项，则重置所有
+        setSmoothLevel({ smoothLevel: 0 })
+        setWhitenessLevel({ whitenessLevel: 0 })
+        setRuddyLevel({ ruddyLevel: 0 })
+        resetRealUiValues()
+        break
+    }
+  }
+  
+  selectedOptionIndex.value = index
+  
+  emit('adjust-beauty', {
+    type: featureTabs.value[activeTabIndex.value].name,
+    option: currentOption.name,
+    value: currentRealValue.value // 使用UI显示值（0-100）
+  })
+}
+</script>
+
+<style>
+.bottom-drawer-container {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  top: 0;
+  z-index: 1000;
+}
+
+.drawer-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.4);
+}
+
+.bottom-drawer {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: rgba(34, 38, 46, 1);
+  border-top-left-radius: 32rpx;
+  border-top-right-radius: 32rpx;
+  transform: translateY(100%);
+  transition-property: transform;
+  transition-duration: 0.3s;
+  transition-timing-function: ease;
+  flex-direction: column;
+}
+
+.drawer-open {
+  transform: translateY(0);
+}
+
+/* 滑块区域 */
+.slider-section {
+  padding: 40rpx 48rpx 20rpx;
+  background-color: rgba(34, 38, 46, 1);
+}
+
+/* 自定义控制区域样式 */
+.control-container {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.custom-slider {
+  flex: 1;
+  flex-direction: row;
+  align-items: center;
+  margin: 0 20rpx;
+}
+
+.control-btn {
+  width: 60rpx;
+  height: 60rpx;
+  border-radius: 30rpx;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  border: 2rpx solid #2b6ad6;
+}
+
+.minus-btn {
+  display: flex;
+  justify-self: center;
+  align-items: center;
+  background-color: rgba(43, 106, 214, 0.1);
+}
+
+.plus-btn {
+  display: flex;
+  align-items: center;
+  justify-self: center;
+  background-color: #2b6ad6;
+}
+
+.btn-text {
+  font-size: 32rpx;
+  font-weight: bold;
+  color: #ffffff;
+}
+
+.plus-btn .btn-text {
+  color: #ffffff;
+}
+
+.progress-section {
+  flex: 1;
+  margin: 0 20rpx;
+  align-items: center;
+  flex-direction: row;
+  justify-content: center;
+}
+
+.progress-bar {
+  width: 400rpx;
+  height: 8rpx;
+  background-color: rgba(255, 255, 255, 0.3);
+  border-radius: 4rpx;
+  position: relative;
+  overflow: hidden;
+  margin-right: 16rpx;
+}
+
+.progress-fill {
+  height: 8rpx;
+  background-color: #2b6ad6;
+  border-radius: 4rpx;
+}
+
+.current-value {
+  font-size: 24rpx;
+  color: #ffffff;
+  font-weight: 600;
+  text-align: center;
+  z-index: 10;
+}
+
+/* 详细选项区域 */
+.options-section {
+  flex: 1;
+  background-color: rgba(34, 38, 46, 1);
+  padding: 20rpx 48rpx;
+}
+
+.options-grid {
+  flex-direction: row;
+  flex-wrap: wrap;
+  justify-content: space-between;
+}
+
+.option-item {
+  width: 120rpx;
+  margin-bottom: 30rpx;
+  align-items: center;
+  padding: 16rpx 12rpx;
+  border-radius: 12rpx;
+  border: 2rpx solid transparent;
+}
+
+.option-item.selected {
+  border-color: #2b6ad6;
+  background-color: #2b6ad6;
+}
+
+.option-icon-container {
+  width: 60rpx;
+  height: 60rpx;
+  margin-bottom: 12rpx;
+  justify-content: center;
+  align-items: center;
+}
+
+.option-icon {
+  width: 60rpx;
+  height: 60rpx;
+}
+
+.option-name {
+  font-size: 22rpx;
+  color: #ffffff;
+  text-align: center;
+}
+</style>

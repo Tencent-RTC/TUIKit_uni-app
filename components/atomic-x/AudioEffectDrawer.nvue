@@ -1,0 +1,583 @@
+<template>
+  <view class="bottom-drawer-container" v-if="modelValue">
+    <view class="drawer-overlay" @tap="close"></view>
+    <view
+			class="bottom-drawer"
+			:class="{ 'drawer-open': modelValue }"
+      @click.stop
+		>
+      <view class="drawer-header">
+        <text class="drawer-title">音效设置</text>
+        <text class="drawer-done" @tap="close">完成</text>
+      </view>
+
+      <!-- 耳返开关 -->
+      <view class="setting-item">
+        <text class="setting-label">耳返</text>
+        <switch
+          :checked="earMonitor"
+          @change="handleEarMonitorChange"
+          class="setting-switch"
+          color="#2B65FB"
+          style="transform:scale(0.7)"
+        />
+      </view>
+
+      <!-- 背景音乐 -->
+<!--      <view class="setting-item">
+        <text class="setting-label">背景音乐</text>
+        <view class="setting-value" @tap="handleSelectMusic">
+          <text class="setting-text">选择音乐</text>
+          <image class="setting-arrow" src="/static/images/right-arrow.png" mode="aspectFit" />
+        </view>
+      </view> -->
+
+      <!-- 音频设置 -->
+      <view class="volume-settings">
+        <text class="section-title">音频设置</text>
+        
+        <view class="slider-item">
+          <text class="slider-label">耳返音量</text>
+          <view class="custom-slider">
+            <!-- 减号按钮 -->
+            <view class="control-btn minus-btn" @tap="decreaseMusicVolume">
+              <text class="btn-text">-</text>
+            </view>
+            
+            <!-- 进度条区域 -->
+            <view class="progress-section">
+              <!-- 进度条背景 -->
+              <view class="progress-bar">
+                <view 
+                  class="progress-fill" 
+                  :style="{ width: (musicVolume / 100 * 400) + 'rpx' }"
+                ></view>
+              </view>
+              <!-- 当前数值显示 -->
+              <text class="current-value">{{ musicVolume }}</text>
+            </view>
+            
+            <!-- 加号按钮 -->
+            <view class="control-btn plus-btn" @tap="increaseMusicVolume">
+              <text class="btn-text">+</text>
+            </view>
+          </view>
+        </view>
+
+        <view class="slider-item">
+          <text class="slider-label">人声音量</text>
+          <view class="custom-slider">
+            <!-- 减号按钮 -->
+            <view class="control-btn minus-btn" @tap="decreaseVoiceVolume">
+              <text class="btn-text">-</text>
+            </view>
+            
+            <!-- 进度条区域 -->
+            <view class="progress-section">
+              <!-- 进度条背景 -->
+              <view class="progress-bar">
+                <view 
+                  class="progress-fill" 
+                  :style="{ width: (voiceVolume / 100 * 400) + 'rpx' }"
+                ></view>
+              </view>
+              <!-- 当前数值显示 -->
+              <text class="current-value">{{ voiceVolume }}</text>
+            </view>
+            
+            <!-- 加号按钮 -->
+            <view class="control-btn plus-btn" @tap="increaseVoiceVolume">
+              <text class="btn-text">+</text>
+            </view>
+          </view>
+        </view>
+
+<!--        <view class="slider-item">
+          <text class="slider-label">音乐升降调</text>
+          <text class="slider-value">{{ pitchValue }}</text>
+          <slider
+            :value="pitchValue"
+            @change="handlePitchChange"
+            min="-12"
+            max="12"
+            show-value
+            activeColor="#2B65FB"
+            backgroundColor="rgba(255, 255, 255, 0.1)"
+            block-color="#FFFFFF"
+            block-size="24"
+          />
+        </view> -->
+      </view>
+
+      <!-- 变声效果 -->
+      <view class="voice-effects">
+        <text class="section-title">变声</text>
+        <view class="effects-grid">
+          <view 
+            v-for="(effect, index) in voiceEffects" 
+            :key="index"
+            class="effect-item"
+            @tap="handleEffectChange(effect.key)"
+          >
+            <view class="effect-icon-container" :class="{ 'effect-active': currentEffect === effect.key }">
+							<image class="effect-icon" :src="effect.icon" mode="aspectFit" />
+						</view>
+            <text class="effect-name">{{ effect.name }}</text>
+          </view>
+        </view>
+      </view>
+
+      <!-- 混响效果 -->
+      <view class="reverb-effects">
+        <text class="section-title">混响</text>
+        <view class="effects-grid">
+          <view 
+            v-for="(effect, index) in reverbEffects" 
+            :key="index"
+            class="effect-item"
+            @tap="handleReverbChange(effect.key)"
+          >
+						<view class="effect-icon-container" :class="{ 'effect-active': currentReverb === effect.key }">
+							<image class="effect-icon" :src="effect.icon" mode="aspectFit" />
+						</view>
+            <text class="effect-name">{{ effect.name }}</text>
+          </view>
+        </view>
+      </view>
+    </view>
+  </view>
+</template>
+
+<script setup>
+import { ref, onMounted, watch } from 'vue';
+import { useAudioEffectState } from '@/uni_modules/ui-component/state/audioEffectState'
+
+const { setVoiceEarMonitorEnable,
+        setVoiceEarMonitorVolume,
+        setMicrophoneVolume,
+        setChangerType,
+        setReverbType,
+        isEarMonitorOpened,
+        earMonitorVolume,
+        microphoneVolume,
+        changerType,
+        reverbType } = useAudioEffectState(uni.$liveId)
+
+const props = defineProps({
+  modelValue: {
+    type: Boolean,
+    default: false
+  }
+});
+
+const emit = defineEmits(['update:modelValue']);
+
+const earMonitor = ref(false);
+const musicVolume = ref(0);
+const voiceVolume = ref(0);
+const pitchValue = ref(0);
+const safeArea = ref({
+  left: 0,
+  right: 0,
+  top: 0,
+  bottom: 0,
+  width: 375,
+  height: 750,
+});
+const currentEffect = ref('NONE');
+const currentReverb = ref('NONE');
+
+const voiceEffects = [
+  { key: 'NONE', name: '原声', icon: '/static/images/no-effect.png' },
+  { key: 'CHILD', name: '熊孩子', icon: '/static/images/voice-wild.png' },
+  { key: 'LITTLE_GIRL', name: '萝莉', icon: '/static/images/voice-loli.png' },
+  { key: 'MAN', name: '大叔', icon: '/static/images/voice-uncle.png' },
+  { key: 'ETHEREAL', name: '空灵', icon: '/static/images/voice-ghost.png' }
+];
+
+const reverbEffects = [
+  { key: 'NONE', name: '无效果', icon: '/static/images/no-effect.png' },
+  { key: 'KTV', name: 'Karaoke', icon: '/static/images/reverb-ktv.png' },
+  { key: 'METALLIC', name: '金属声', icon: '/static/images/reverb-metal.png' },
+  { key: 'DEEP', name: '低沉', icon: '/static/images/reverb-bass.png' },
+  { key: 'LOUD', name: '洪亮', icon: '/static/images/reverb-bright.png' }
+];
+
+const close = () => {
+  emit('update:modelValue', false);
+};
+
+// 同步状态数据到UI
+const syncStateToUI = () => {
+  try {
+    console.log('开始同步状态数据...');
+    console.log('状态管理器中的值:', {
+      isEarMonitorOpened: isEarMonitorOpened.value,
+      earMonitorVolume: earMonitorVolume.value,
+      microphoneVolume: microphoneVolume.value,
+      changerType: changerType.value,
+      reverbType: reverbType.value
+    });
+    
+    // 同步耳返状态
+    earMonitor.value = isEarMonitorOpened.value;
+    
+    // 同步耳返音量
+    musicVolume.value = earMonitorVolume.value;
+    
+    // 同步麦克风音量
+    voiceVolume.value = microphoneVolume.value;
+    
+    // 同步变声类型 - 确保值有效
+    if (changerType.value && typeof changerType.value === 'string') {
+      currentEffect.value = changerType.value;
+      console.log('变声类型同步:', changerType.value);
+    } else {
+      console.warn('变声类型无效:', changerType.value);
+      currentEffect.value = 'NONE';
+    }
+    
+    // 同步混响类型 - 确保值有效
+    if (reverbType.value && typeof reverbType.value === 'string') {
+      currentReverb.value = reverbType.value;
+      console.log('混响类型同步:', reverbType.value);
+    } else {
+      console.warn('混响类型无效:', reverbType.value);
+      currentReverb.value = 'NONE';
+    }
+    
+    console.log('同步后的本地状态:', {
+      earMonitor: earMonitor.value,
+      musicVolume: musicVolume.value,
+      voiceVolume: voiceVolume.value,
+      currentEffect: currentEffect.value,
+      currentReverb: currentReverb.value
+    });
+  } catch (error) {
+    console.error('同步状态数据失败:', error);
+  }
+};
+
+onMounted(() => {
+  console.log('AudioEffectDrawer mounted');
+  
+  uni.getSystemInfo({
+    success: (res) => {
+      safeArea.value = res.safeArea;
+    }
+  });
+  
+  // 延迟同步状态数据，确保状态管理器已初始化
+  setTimeout(() => {
+    syncStateToUI();
+  }, 100);
+});
+
+// 监听抽屉打开状态，每次打开时同步数据
+watch(() => props.modelValue, (newVal) => {
+  if (newVal) {
+    console.log('抽屉打开，同步状态数据');
+    // 抽屉打开时同步状态数据
+    setTimeout(() => {
+      syncStateToUI();
+    }, 50);
+  }
+});
+
+const handleEarMonitorChange = (e) => {
+  earMonitor.value = e.detail.value;
+  setVoiceEarMonitorEnable({
+    enable: earMonitor.value
+  })
+};
+
+const handleSelectMusic = () => {
+  // TODO: 实现选择音乐逻辑
+  console.log('选择音乐');
+};
+
+const handleMusicVolumeChange = (e) => {
+  musicVolume.value = e.detail.value;
+  setVoiceEarMonitorVolume({
+    volume: musicVolume.value
+  })
+};
+
+const handleVoiceVolumeChange = (e) => {
+  voiceVolume.value = e.detail.value;
+  setMicrophoneVolume({
+    volume: voiceVolume.value
+  })
+};
+
+const handlePitchChange = (e) => {
+  pitchValue.value = e.detail.value;
+};
+
+const handleEffectChange = (effect) => {
+  console.log('选择效果:', effect, '当前效果:', currentEffect.value);
+  currentEffect.value = effect;
+  setChangerType({
+    changerType: currentEffect.value
+  })
+};
+
+const handleReverbChange = (reverb) => {
+  console.log('选择混响:', reverb, '当前混响:', currentReverb.value);
+  currentReverb.value = reverb;
+  setReverbType({
+    reverbType: currentReverb.value
+  })
+};
+
+// 音量控制方法
+const decreaseMusicVolume = () => {
+  const newValue = Math.max(0, musicVolume.value - 10)
+  handleMusicVolumeChange({ detail: { value: newValue } })
+}
+
+const increaseMusicVolume = () => {
+  const newValue = Math.min(100, musicVolume.value + 10)
+  handleMusicVolumeChange({ detail: { value: newValue } })
+}
+
+const decreaseVoiceVolume = () => {
+  const newValue = Math.max(0, voiceVolume.value - 10)
+  handleVoiceVolumeChange({ detail: { value: newValue } })
+}
+
+const increaseVoiceVolume = () => {
+  const newValue = Math.min(100, voiceVolume.value + 10)
+  handleVoiceVolumeChange({ detail: { value: newValue } })
+}
+</script>
+
+<style>
+.bottom-drawer-container {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  top: 0;
+  z-index: 1000;
+}
+
+.drawer-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.4);
+}
+
+.bottom-drawer {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: rgba(34, 38, 46, 1);
+  border-top-left-radius: 32rpx;
+  border-top-right-radius: 32rpx;
+  transform: translateY(100%);
+  transition-property: transform;
+  transition-duration: 0.3s;
+  transition-timing-function: ease;
+  padding: 32rpx;
+}
+
+.drawer-open {
+  transform: translateY(0);
+}
+
+.drawer-header {
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 32rpx;
+}
+
+.drawer-title {
+  font-size: 32rpx;
+  color: #FFFFFF;
+  font-weight: 500;
+}
+
+.drawer-done {
+  font-size: 32rpx;
+  color: #2B65FB;
+}
+
+.setting-item {
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+  height: 88rpx;
+  border-bottom-width: 1px;
+  border-bottom-color: rgba(255, 255, 255, 0.1);
+}
+
+.setting-label {
+  font-size: 28rpx;
+  color: #FFFFFF;
+}
+
+.setting-value {
+  flex-direction: row;
+  align-items: center;
+}
+
+.setting-text {
+  font-size: 28rpx;
+  color: rgba(255, 255, 255, 0.5);
+  margin-right: 8rpx;
+}
+
+.setting-arrow {
+  width: 24rpx;
+  height: 24rpx;
+}
+
+.volume-settings {
+  margin-top: 32rpx;
+}
+
+.section-title {
+  font-size: 28rpx;
+  color: rgba(255, 255, 255, 0.5);
+  margin-bottom: 24rpx;
+}
+
+.slider-item {
+  margin-bottom: 24rpx;
+	display: flex;
+	flex-direction: column;
+}
+
+.slider-label {
+  font-size: 28rpx;
+  color: #FFFFFF;
+  margin-bottom: 16rpx;
+}
+
+/* 自定义控制区域样式 */
+.custom-slider {
+  flex: 1;
+  flex-direction: row;
+  align-items: center;
+  margin: 0 20rpx;
+}
+
+.control-btn {
+  width: 60rpx;
+  height: 60rpx;
+  border-radius: 30rpx;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  border: 2rpx solid #2b6ad6;
+}
+
+.minus-btn {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background-color: rgba(43, 106, 214, 0.1);
+}
+
+.plus-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #2b6ad6;
+}
+
+.btn-text {
+  font-size: 32rpx;
+  font-weight: bold;
+  color: #ffffff;
+}
+
+.plus-btn .btn-text {
+  color: #ffffff;
+}
+
+.progress-section {
+  flex: 1;
+  margin: 0 20rpx;
+  align-items: center;
+  flex-direction: row;
+  justify-content: center;
+}
+
+.progress-bar {
+  width: 400rpx;
+  height: 8rpx;
+  background-color: rgba(255, 255, 255, 0.3);
+  border-radius: 4rpx;
+  position: relative;
+  overflow: hidden;
+  margin-right: 16rpx;
+}
+
+.progress-fill {
+  height: 8rpx;
+  background-color: #2b6ad6;
+  border-radius: 4rpx;
+}
+
+.current-value {
+  font-size: 24rpx;
+  color: #ffffff;
+  font-weight: 600;
+  text-align: center;
+  z-index: 10;
+}
+
+.voice-effects, .reverb-effects {
+  margin-top: 32rpx;
+}
+
+.effects-grid {
+  flex-direction: row;
+  flex-wrap: wrap;
+  margin: 0 -8rpx;
+}
+
+.effect-item {
+  
+  margin: 8rpx;
+  /* background-color: rgba(255, 255, 255, 0.1); */
+  
+  justify-content: center;
+  align-items: center;
+}
+
+.effect-active {
+  background-color: rgba(43, 101, 251, 0.2);
+  border-width: 2rpx;
+  border-color: #2B65FB;
+}
+
+.effect-icon-container {
+	width: 112rpx;
+	height: 112rpx;
+	display: flex;
+	justify-content: center;
+	align-items: center;
+	border-radius: 16rpx;
+	background-color: rgba(255, 255, 255, 0.1);
+	margin-bottom: 12rpx;
+}
+
+.effect-icon {
+  width: 48rpx;
+  height: 48rpx;
+  margin-bottom: 8rpx;
+}
+
+.effect-name {
+  font-size: 24rpx;
+  color: #FFFFFF;
+}
+</style> 

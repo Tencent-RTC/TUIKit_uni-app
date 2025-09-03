@@ -1,0 +1,1001 @@
+<template>
+  <view class="live-container" @click="handleHideInput" :style="{
+                                          height: systemInfo?.windowHeight + 'px',
+                                          width: systemInfo?.safeArea?.width + 'px',
+                                       }"
+  >
+    <!-- 主播画面区域 -->
+    <view class="live-content" >
+			<AudienceStreamView
+        v-if="liveId.length > 0"
+        :liveId="liveId"
+        :isAnchor="false"
+        :templateLayout="templateLayout"
+        :currentLoginUserId="currentLoginUserId"
+        :onAudienceStreamViewClick="ShowAudienceViewClickPanel"
+      ></AudienceStreamView>
+			
+      <!-- 顶部信息栏 -->
+      <view class="live-header">
+        <view class="header-left" @click="showAnchorInfoDrawer">
+          <view class="stream-info">
+            <image class="avatar" :src="currentLive?.liveOwner?.avatarUrl || defaultAvatarUrl" mode="aspectFill" />
+            <view class="stream-details">
+              <text class="stream-title" :numberOfLines="1">{{ currentLive?.liveOwner?.userName || currentLive?.liveOwner?.userId}}</text>
+            </view>
+						<!-- <view
+              class="follow-btn"
+              :class="{ 'followed': isFollowed }"
+              @click.stop="handleFollowClick"
+            >
+              <text :style="isFollowed ? 'color: #338aff; font-size: 28rpx;' : 'color: #fff; font-size: 28rpx;'">
+                {{ isFollowed ? '已关注' : '关注' }}
+              </text>
+            </view> -->
+          </view>
+        </view>
+        <view class="header-right">
+          <view class="participants" @click="showAudienceList">
+						<view v-for="(user, index) in audienceList.slice(0, 2)">
+							<image class="participant-avatar" :src="user?.avatarUrl || defaultAvatarUrl" mode="aspectFill" />
+						</view>
+						<view class="participant-count">
+							<text class="count-text">{{ audienceList.length }}</text>
+						</view>
+          </view>
+          <view class="control-icons" @click.stop="navigateBack()">
+            <!-- <image class="control-icon" src="/static/images/live-share.png" /> -->
+            <image class="control-icon" src="/static/images/close.png" />
+          </view>
+        </view>
+      </view>
+      
+			<view class="live-network-container" @tap="isShowLiveStatusInfoCard = true">
+          <image class="live-network" src="/static/images/network-good.png" alt="" />
+          <text class="live-timer">{{ liveDurationText }}</text>
+      </view>
+			
+      <!-- 聊天消息列表 -->
+      <list class="chat-list" scroll-y :show-scrollbar="false"
+        :style="{ bottom: safeArea.height * 1/8 + 'px' }"
+      >
+        <!-- 带标签的消息 -->
+        <cell 
+          class="chat-item" 
+          v-if="mixMessageList .length > 0" 
+          v-for="(message) in mixMessageList" 
+          :key="message?.sequence"
+          @tap="audienceOperator(message)"
+        >
+          <view class="message-content-wrapper">
+            <view class="nickname-content-gift" v-if="message?.giftInfo">
+              <text class="chat-nickname" numberOfLines="1">{{ message?.sender?.userName || message?.sender?.userId }}：</text>
+              <view class="gift-right-container">
+                <text class="gift-chat-content-2">送给</text>
+                <text
+                  class="gift-chat-content-1"
+                >{{ currentLive?.liveOwner?.userName || currentLive?.liveOwner?.userId || '' }}</text>
+                <text class="gift-chat-content-1">{{ message?.textContent || '' }}</text>
+                <image class="chat-icon" :src="message?.giftInfo?.iconUrl || ''" alt="" />
+                <text class="gift-chat-content-2" style="font-size: 26rpx;">x{{ message?.giftCount || '1' }}</text>
+              </view>
+            </view>
+            <view class="nickname-content-wrapper" v-else>
+              <view class="message-right" v-if="message?.sender?.userRole === 'ROOM_OWNER'">
+                <text class="message-role">主播</text>
+              </view>
+              <view class="nickname-content-wrapper">
+                <text class="chat-nickname" numberOfLines="1">{{ message?.sender?.userName || message?.sender?.userId }}：</text>
+                <text class="chat-content">{{ message?.textContent || '' }}</text>
+              </view>
+            </view>
+
+          </view>
+        </cell>
+        <cell ref="ListBottom" style="height: 50rpx;"></cell>
+      </list>
+
+      <!-- 底部互动区域 -->
+      <view class="footer">
+        <input class="input-wrapper" v-model="inputValue" placeholder="说点什么…" confirm-type="send" @confirm="sendMessage">
+ 					<!-- <view class="input-prefix">
+						<image class="input-emoji" src="/static/images/live-emoji.png" />
+					</view> -->
+        </input>
+        <view class="action-buttons">
+					<image class="action-btn" @click="showNetWorkPanel()" src="/static/images/network.png" />
+					<image class="action-btn" @click="showGiftPanel()" src="/static/images/live-gift.png" />
+					<image class="action-btn"
+            v-if="templateLayout !== 200"
+            @click="ShowAudienceConnectCall()"
+            :src="currentCoGuestStatusIcon"
+          />
+					<LikeAnimation />
+        </view>
+      </view>
+			
+			<PeopleInfoDrawer v-model="isShowPeopleInfoDrawer" :userInfo="clickUserInfo" :isShowAnchor="isShowAnchorInfo"></PeopleInfoDrawer>
+			<AudienceList v-model="isShowAudienceList"></AudienceList>
+			<AudienceConnectCall
+        v-model="isShowAudienceConnectCall"
+        :liveId="currentLive.liveId"
+        :userId="currentLoginUserId"
+        :seatIndex="seatIndex"
+      ></AudienceConnectCall>
+      
+      <AudienceViewClickPanel
+        v-model="isShowAudienceViewClickPanel"
+        :liveId="currentLive?.liveId || ''"
+        :userId="currentLoginUserId || ''"
+        :userInfo="clickUserInfo"
+      ></AudienceViewClickPanel>
+			<GiftPanel v-model="isShowGiftPanel" :onGiftSelect="showGiftToast"></GiftPanel>
+      <GiftToast ref="giftToastRefs"></GiftToast>
+			
+			<svga-player
+				ref="svgaPlayer"
+				:url="giftInfo?.resourceUrl"
+				style="position: absolute; z-index: -1;"
+        @onFinished="svgaPlayerFinished"
+        :style="isLargeSizeGiftPlayer ? {
+                  top: safeArea.top + 'px',
+                  left: safeArea.left + 'px',
+                  width: safeArea.width + 'px',
+                  height: safeArea.height + 'px',
+                } : {
+                  width: 0 + 'rpx',
+                  height: 0 + 'rpx',
+                }"
+			></svga-player>
+			
+      <NetWorkPanel v-model="isShowNewWorkPanel" ></NetWorkPanel>
+		</view>
+  </view>
+  <LiveStatusInfoCard
+    v-model="isShowLiveStatusInfoCard"
+    videoQuality="4K"
+    audioMode="高保真人声"
+    :audioVolume="70"
+    :latency="45"
+    :downLoss="0"
+    :upLoss="2"
+  />
+</template>
+
+<script setup lang="ts">
+import { onLoad } from '@dcloudio/uni-app';
+import { ref, onMounted, computed, onUnmounted, watch, nextTick } from 'vue';
+import PeopleInfoDrawer from '../../components/atomic-x/PeopleInfoDrawer.nvue';
+import AudienceList from '../../components/atomic-x/AudienceList.nvue';
+import AudienceConnectCall from '../../components/atomic-x/AudienceConnectCall.nvue';
+import GiftPanel from '../../components/atomic-x/GiftPanel.nvue';
+import GiftToast from '../../components/atomic-x/GiftToast.nvue';
+import NetWorkPanel from '../../components/atomic-x/NetWorkPanel.nvue'
+import LiveStatusInfoCard from '../../components/atomic-x/LiveStatusInfoCard.nvue';
+import LikeAnimation from '../../components/atomic-x/LikeAnimation.nvue';
+import AudienceStreamView from '../../components/atomic-x/AudienceStreamView.nvue';
+import AudienceViewClickPanel from '../../components/atomic-x/AudienceViewClickPanel.nvue';
+
+import { useBarrageState } from "@/uni_modules/ui-component/state/barragestate";
+import { useLiveState } from "@/uni_modules/ui-component/state/livestate";
+import { useLiveSeatState } from "@/uni_modules/ui-component/state/liveseatstate";
+import {useLiveAudienceState} from '@/uni_modules/ui-component/state/liveaudiencestate';
+import {useCoGuestState} from '@/uni_modules/ui-component/state/cogueststate';
+import { useLoginState } from "@/uni_modules/ui-component/state/loginstate";
+import { useGiftState } from "@/uni_modules/ui-component/state/giftstate";
+import { downloadAndSaveToPath } from '../../components/atomic-x/utils/downloadImage';
+const { loginUserInfo } = useLoginState()
+const { messageList, sendTextMessage, sendCustomMessage } = useBarrageState(uni?.$liveId);
+const { joinLive, createLive, fetchLiveList, liveList, leaveLive, currentLive, localLiveStatus } = useLiveState(uni?.$liveId);
+const { seatList, canvas, bindVideoView, lockSeat, moveToSeat } = useLiveSeatState(uni?.$liveId);
+const { audienceList } = useLiveAudienceState(uni?.$liveId) ;
+const { localStatus, disconnect, CoGuestStatus, cancelCoGuestRequest } = useCoGuestState(uni?.$liveId)
+const { sendGift, latestGift } = useGiftState(uni?.$liveId);
+const dom = uni.requireNativePlugin('dom')
+const ListBottom = ref('ListBottom')
+const mixMessageList = ref(messageList.value || []);
+
+const systemInfo = ref({});
+const safeArea = ref({
+  left: 0,
+  right: 0,
+  top: 0,
+  bottom: 0,
+  width: 375,
+  height: 750,
+});
+const isShowPeopleInfoDrawer = ref(false);
+const isShowAudienceList = ref(false);
+const isShowAudienceConnectCall = ref(false);
+const isShowGiftPanel = ref(false);
+const isShowLiveStatusInfoCard = ref(false);
+const isShowAudienceViewClickPanel = ref(false);
+const isShowLiveEnded  = ref(false);
+const isLargeSizeGiftPlayer = ref(false);
+const giftInfo = ref({});
+const isShowNewWorkPanel = ref(false)
+const selectedAudience = ref({});
+const isDisableSendMessage = ref(false);
+const defaultCoverUrl = '/static/images/default-background.jpg';
+const defaultAvatarUrl = 'https://web.sdk.qcloud.com/component/TUIKit/assets/avatar_01.png';
+
+const liveId = ref('');
+const isFollowed = ref(false);
+const inputValue = ref("");
+const isExitBySelf = ref(false)
+const svgaPlayer = ref(null);
+const liveDuration = ref(0); // 秒
+const liveDurationText = ref('00:00:00');
+let timer: any = null;
+const currentLoginUserId = ref();
+const clickUserInfo = ref({});
+const templateLayout = ref(600);
+const seatIndex = ref(-1);
+const giftToastRefs = ref();
+const isShowAnchorInfo = ref(true)
+
+const currentCoGuestStatusIcon = computed(() => {
+  let currentApplyStatus = ''
+  if(localStatus.value === 'CONNECTED') {
+    currentApplyStatus = '/static/images/live-disconnect.png'
+  } else if (localStatus.value === 'USER_APPLYING') {
+    currentApplyStatus = '/static/images/live-request.png'
+  }else {
+    currentApplyStatus = '/static/images/live-call.png'
+  }
+  return currentApplyStatus
+})
+
+watch(() => loginUserInfo.value?.userId, (newUserId, oldUserId) => {
+  console.log('用户Id变化:', { newUserId });
+  if (newUserId) {
+      currentLoginUserId.value = newUserId;
+  }
+}, {immediate: true, deep: true});
+
+// 监听 localLiveStatus 变化，LIVE->ENDED 跳转首页
+let prevLiveStatus = localLiveStatus.value;
+watch(() => localLiveStatus.value, (newVal, oldVal) => {
+  if (oldVal === 'LIVE' && newVal === 'ENDED') {
+    uni.showToast({
+      icon: 'none',
+      title: '直播已结束'
+    })
+    uni.reLaunch({ url: '/pages/livelist/index' });
+  }
+  if (oldVal === 'LIVE' && newVal === 'IDLE' && !isExitBySelf.value) {
+    uni.showToast({
+      icon: 'none',
+      title: '被踢出直播间'
+    })
+    uni.reLaunch({ url: '/pages/livelist/index' });
+  }
+  prevLiveStatus = newVal;
+}, 
+  {immediate: true, deep: true}
+);
+
+// 页面加载
+onLoad((options) => {
+	console.warn('Live page onLoad = ', options);
+	liveId.value = options?.liveId;
+	
+	if (liveId.value) {
+		joinLive({
+		  liveId: liveId.value,
+		  success: () => {
+        liveDuration.value = 0;
+        updateLiveDurationText();
+        timer = setInterval(() => {
+          liveDuration.value++;
+          updateLiveDurationText();
+        }, 1000);
+        
+        templateLayout.value = currentLive.value?.layoutTemplate || templateLayout.value;
+        console.log('joinLive success templateLayout: ', templateLayout.value);
+		  },
+		  fail: () => {
+		    uni.showToast({ icon: 'none', title: "直播已结束"});
+        setTimeout(() => uni.switchTab({ url: `/pages/livelist/index` }), 500);
+		  },
+		});
+		return;
+	}
+	uni.showToast({ title: 'liveId 为空', icon: 'none' });
+});
+
+watch(currentLive, (newVal, oldVal) => {
+  if (newVal) {
+    templateLayout.value = newVal.layoutTemplate || templateLayout.value;
+    console.log(`currentLive change: ${JSON.stringify(newVal)}`);
+  }
+});
+
+function updateLiveDurationText() {
+  const h = String(Math.floor(liveDuration.value / 3600)).padStart(2, '0');
+  const m = String(Math.floor((liveDuration.value % 3600) / 60)).padStart(2, '0');
+  const s = String(liveDuration.value % 60).padStart(2, '0');
+  liveDurationText.value = `${h}:${m}:${s}`;
+}
+
+onUnmounted(() => {
+  if (timer) clearInterval(timer);
+});
+
+onMounted(() => {
+  uni.setKeepScreenOn({
+  	keepScreenOn: true,
+  });
+  uni.getSystemInfo({
+    success: (res) => {
+      systemInfo.value = res;
+      safeArea.value = res.safeArea;
+    }
+  });
+});
+
+const audienceCount = computed(() => audienceList.value?.length);
+
+watch(liveList, (newValue, oldValue) => {
+	for (let i = 0; i < (oldValue || []).length; i++) {
+		const liveNewInfo = (newValue || [])[i];
+		const liveOldInfo = (oldValue || [])[i];
+		if (!liveNewInfo || !liveOldInfo) continue;
+		
+		if (!liveOldInfo?.isMessageDisable && liveNewInfo?.isMessageDisable) {
+			uni.showToast({
+				title: `${liveNewInfo?.liveOwner?.userName}被禁言`,
+				icon: 'none',
+				duration: 2000,
+				position: 'center',
+			});
+		}
+	}
+}, { immediate: true, deep: true });
+
+watch(messageList, (newVal,oldVal) => {
+  if(newVal) {
+    // 将新增的消息追加到 mixMessageList 中
+    if (newVal) {
+      const value = newVal.slice((oldVal || []).length, (newVal || []).length);
+      mixMessageList.value = [...mixMessageList.value, ...value];
+      
+      console.log(`mixMessageList length: ${(mixMessageList.value || []).length}, newVal length: ${(newVal || []).length},
+                   oldVal lenght: ${(oldVal || []).length}`);
+    }
+    dom.scrollToElement(ListBottom.value);
+  }
+});
+
+watch(latestGift, (newVal, oldVal) => {
+  console.log(`latestGift change: ${JSON.stringify(newVal)}`);
+  if (newVal && newVal?.roomId && newVal?.sender?.userId) {
+    const value = {
+      ...newVal,
+      textContent: `${newVal?.giftInfo?.name || ''}`
+    };
+    
+    mixMessageList.value = [...mixMessageList.value, value];
+    console.log(`latestGift mixMessageList: ${JSON.stringify(mixMessageList.value)}`);
+  }
+  dom.scrollToElement(ListBottom.value);
+  
+  // 别人送出礼物要进行展示
+  if (newVal?.roomId && newVal?.sender?.userId && newVal?.sender?.userId !== loginUserInfo.value?.userId) {
+    showGiftToast(newVal?.giftInfo || {}, true);
+  }
+});
+
+watch(audienceList, (newValue, oldValue) => {
+  (newValue || []).forEach((obj, index) => {
+    if (obj?.userId === currentLoginUserId.value) {
+      const oldUserInfo = (oldValue || [])[index] || {};
+      if (obj.isMessageDisabled && !oldUserInfo?.isMessageDisabled) {
+        isDisableSendMessage.value = true;
+        uni.showToast({
+        	title: '当前房间内\n您已被禁言',
+        	icon: 'none',
+        	duration: 2000,
+        	position: 'center',
+        });
+      }
+      if (!obj.isMessageDisabled && oldUserInfo?.isMessageDisabled) {
+        isDisableSendMessage.value = false;
+        uni.showToast({
+        	title: '当前房间内\n您已被解除禁言',
+        	icon: 'none',
+        	duration: 2000,
+        	position: 'center',
+        });
+      }
+    }
+  });
+}, { immediate: true, deep: true });
+
+const audienceOperator = (message: any) => {
+	console.warn(`click message: ${JSON.stringify(message)}`);
+  if (message?.sender?.userId === loginUserInfo.value.userId) {
+    return;
+  }
+  
+  clickUserInfo.value = { ...message?.sender || {}, liveId: uni?.$liveId };
+  console.warn(`click message clickUserInfo: ${JSON.stringify(clickUserInfo.value)}`);
+  isShowAnchorInfo.value = false
+  showPeopleInfoDrawer();
+};
+
+const sendMessage = (event: any) => {
+  if(isDisableSendMessage.value) {
+    uni.showToast({ title: '当前直播间内,您已被禁言', icon: 'none' });
+	  inputValue.value = '';
+    return;
+  }
+  const value = event.detail.value;
+  sendTextMessage({
+    liveId : currentLive.value?.liveId,
+    text: value,
+    success: () => {
+      console.log('sendTextMessage success');
+      dom.scrollToElement(ListBottom.value)
+      inputValue.value = '';
+    },
+    fail: (code, msg) => {
+      console.error(`sendTextMessage failed, code: ${code}, msg: ${msg}`);
+    },
+  })
+	inputValue.value = '';
+};
+ 
+const handleHideInput = () => {
+  uni.hideKeyboard()
+} 
+
+const navigateBack = () => {
+  const currentItemLit = ['离开直播间']
+  if (localStatus.value === 'CONNECTED') {
+    currentItemLit.push('断开连麦')
+  }
+  uni.showActionSheet({
+  	itemList: currentItemLit,
+  	success: function (res) {
+      if(res.tapIndex + 1 === 1) {
+	      leaveLive({
+          success: () => {
+            uni.$liveId = ''
+            isExitBySelf.value = true
+            uni.switchTab({
+              url: `/pages/livelist/index`,
+              delta: 1,
+              animationType: 'pop-out',
+              animationDuration: 300,
+              success: () => {
+                console.log('返回成功');
+              },
+              fail: (err) => {
+                console.error('返回失败', err);
+              }
+            });
+          }
+        });
+
+      } else {
+				disconnect({
+					liveId: uni?.$liveId,
+          userId: currentLoginUserId.value
+				})
+      }
+  	},
+  	fail: function (res) {
+  		console.log(res.errMsg);
+  	}
+  });
+};
+
+const ShowAudienceViewClickPanel = (userInfo) => {
+  if (!userInfo) return;
+  
+  console.warn(`ShowAudienceViewClickPanel userId: ${userInfo?.userId}, currentLoginUserId: ${currentLoginUserId?.value}`);
+  
+  if ((templateLayout.value === 800 || templateLayout.value === 801) && !userInfo.userId) {
+    clickUserInfo.value = userInfo;
+    seatIndex.value = userInfo.seatIndex;
+    ShowAudienceConnectCall();
+    
+    return;
+  } else if (currentLoginUserId.value === userInfo?.userId) {
+    isShowAudienceViewClickPanel.value = true;
+    clickUserInfo.value = userInfo;
+    return;
+  }
+  clickUserInfo.value = userInfo;
+  isShowAnchorInfo.value = false
+  showPeopleInfoDrawer();
+};
+
+const showAnchorInfoDrawer = () => {
+  isShowAnchorInfo.value = true
+  clickUserInfo.value = { ...(currentLive?.value.liveOwner || {}), liveId: currentLive?.value.liveId || '' }
+  showPeopleInfoDrawer()
+}
+
+const showPeopleInfoDrawer = () => {
+	isShowPeopleInfoDrawer.value = true;
+};
+
+const showAudienceList = () => {
+	isShowAudienceList.value = true;
+};
+
+const ShowAudienceConnectCall = () => {
+  if(localStatus.value === 'CONNECTED') {
+    uni.showActionSheet({
+      itemList: ['结束连麦'],
+        	success: function (res) {
+            if(res.tapIndex + 1 === 1) {
+              disconnect({
+                liveId: uni?.$liveId,
+                userId: currentLoginUserId.value
+              })
+            } 
+        	},
+        	fail: function (res) {
+        		console.log(res.errMsg);
+        	}
+    })
+  }else if(localStatus.value === 'USER_APPLYING') {
+    uni.showActionSheet({
+      itemList: ['取消连麦'],
+        	success: function (res) {
+            if(res.tapIndex + 1 === 1) {
+              cancelCoGuestRequest ({
+                liveId: uni?.$liveId,
+                userId: currentLoginUserId.value
+              })
+            } 
+        	},
+        	fail: function (res) {
+        		console.log(res.errMsg);
+        	}
+    })
+  } else {
+    isShowAudienceConnectCall.value = true;
+  }
+};
+
+const selectParticipant = (participant) => {
+	console.warn('选择参与者:', participant);
+	selectedAudience.value = participant;
+	// 可以在这里添加更多逻辑，比如显示参与者详情
+};
+
+const showGiftPanel = () => {
+	isShowGiftPanel.value = true;
+};
+
+const showNetWorkPanel = () => {
+  isShowNewWorkPanel.value = true;
+}
+
+const handleFollowClick = () => {
+  isFollowed.value = !isFollowed.value;
+  uni.showToast({
+    title: isFollowed.value ? '已关注' : '已取消关注',
+    icon: 'success',
+    duration: 1500
+  });
+};
+
+// 显示礼物提示
+const showGiftToast = async (giftData?: any, isOnlyDisplay: boolean = false) => {
+  if (!giftData) return;
+  console.log('send gift data:', JSON.stringify(giftData));
+  
+	if (giftData.resourceUrl) {
+    const giftKey = `${giftData.name.split(' ').join('')}-${giftData.giftId}`;
+    let svgaGiftSourceUrl = plus.storage.getItem(giftKey);
+    
+    if (!svgaGiftSourceUrl) {
+      console.log(`svgaGiftSourceUrl not exist`);
+      const filePath = await downloadAndSaveToPath(`${giftData.resourceUrl}`);
+      plus.storage.setItem(giftKey, filePath as string);
+    }
+    svgaGiftSourceUrl = plus.storage.getItem(giftKey);
+    
+		isLargeSizeGiftPlayer.value = true;
+    giftInfo.value = { ...giftData, resourceUrl: svgaGiftSourceUrl };
+    console.log(`svgaPlayer giftInfo: ${JSON.stringify(giftInfo.value)}`);
+    
+		if (svgaPlayer.value) {
+			svgaPlayer.value.startPlay(giftInfo.value?.resourceUrl);
+		}
+	} else {
+    if (!giftToastRefs.value) return;
+    
+    giftToastRefs.value?.showToast({
+      ...giftData,
+      duration: 1500,
+    });
+	}
+  // 10s 后如果 giftPlayer 没有抛出结束回调, 自动隐藏 giftPlayer 展示
+  setTimeout(() => isLargeSizeGiftPlayer.value = false, 10000);
+	
+  if (!isOnlyDisplay) {
+    sendGift({
+    	liveId: uni?.$liveId,
+    	giftId: giftData.giftId,
+    	count: 1,
+    	success: () => {
+    		console.log('sendGift success.');
+    	},
+    	fail: (errCode, errMsg) => {
+    		console.error(`sendGift fail errCode: ${errCode}, errMsg: ${errMsg}`);
+    	},
+    });
+  }
+};
+
+const svgaPlayerFinished = () => {
+  isLargeSizeGiftPlayer.value = false;
+}
+</script>
+
+<style>
+.live-container {
+  flex: 1;
+  position: relative;
+  width: 750rpx;
+	background: rgba(15, 16, 20, 1);
+}
+
+.live-content {
+  flex: 1;
+  position: relative;
+  width: 750rpx;
+}
+
+.live-background {
+	position: relative;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: -1;
+}
+
+.live-header {
+  position: absolute;
+	display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20rpx 32rpx;
+  margin-top: 80rpx;
+  width: 750rpx;
+	z-index: 1000;
+}
+
+.header-left {
+	display: flex;
+  flex-direction: row;
+  align-items: center;
+	flex: 1;
+}
+
+.stream-info {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  background-color: rgba(0, 0, 0, 0.3);
+  padding: 12rpx 20rpx;
+  border-radius: 40rpx;
+}
+
+.avatar {
+  width: 60rpx;
+  height: 60rpx;
+  border-radius: 30rpx;
+  border-width: 2rpx;
+  border-color: #ffffff;
+  margin-right: 16rpx;
+}
+
+.stream-details {
+  display: flex;
+  flex-direction: column;
+}
+
+.stream-title {
+  color: #ffffff;
+  font-size: 28rpx;
+  font-weight: 500;
+  margin-bottom: 4rpx;
+	width: 120rpx;
+	height: 40rpx;
+	lines: 1;
+}
+
+.like-count {
+  color: #ffffff;
+  font-size: 24rpx;
+  opacity: 0.8;
+}
+
+.header-right {
+	display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-end;
+  width: 300rpx;
+	padding-left: 40rpx;
+}
+
+.participants {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+}
+
+.participant-avatar {
+  width: 48rpx;
+  height: 48rpx;
+  border-radius: 24rpx;
+  border-width: 2rpx;
+  border-color: #ffffff;
+  margin-right: 8rpx;
+}
+
+.participant-count {
+  width: 48rpx;
+  height: 48rpx;
+  border-radius: 24rpx;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.count-text {
+  color: #ffffff;
+  font-size: 24rpx;
+  font-weight: 500;
+}
+
+.control-icons {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+}
+
+.control-icon {
+  width: 48rpx;
+  height: 48rpx;
+  margin-left: 16rpx;
+}
+
+.chat-list {
+  position: fixed;
+  left: 32rpx;
+  right: 32rpx;
+  bottom: 800rpx;
+  height: 380rpx;
+  width: 500rpx;
+}
+
+.chat-item {
+  flex-direction: row;
+  align-items: flex-start;
+  border-radius: 32rpx;
+  padding: 6rpx;
+  width: 500rpx;
+}
+
+.message-content-wrapper {
+  flex: 1;
+  flex-direction: row;
+  align-items: flex-start;
+  min-width: 0;
+  max-width: 500rpx;
+}
+
+.nickname-content-wrapper {
+  flex: 1;
+  flex-direction: row;
+  align-items: flex-start;
+  justify-content: center;
+  min-width: 0;
+}
+
+.nickname-content-gift {
+  flex-direction: row;
+  align-items: flex-start;
+  min-width: 0;
+  max-width: 500rpx;
+}
+
+.message-role{
+  background-color: #0468FC;
+  border-radius: 999px;
+  margin-right: 5rpx;
+  color: #fff;
+  padding: 5rpx 15rpx ;
+  font-size: 20rpx;
+}
+
+.chat-nickname {
+  color: #80BEF6;
+  font-size: 24rpx;
+  line-height: 24rpx;
+  margin-right: 8rpx;
+  padding: 5rpx 0;
+  flex-shrink: 0;
+  max-width: 200rpx;
+  lines: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.gift-right-container {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  max-width: 300rpx;
+  flex: 1;
+  justify-content: flex-start;
+  word-wrap: break-word;
+  word-break: break-all;
+  white-space: normal;
+  flex-wrap: wrap; /* 允许换行 */
+  padding-top: 2rpx;
+}
+
+.chat-icon {
+  width: 24rpx;
+  height: 24rpx;
+  flex-shrink: 0; /* 图标不收缩 */
+  margin: 0; /* 移除原有margin */
+}
+
+.gift-chat-content-1 {
+  color: #ffffff;
+  font-size: 24rpx;
+  line-height: 24rpx;
+  font-weight: 500;
+  z-index: 999;
+  padding: 2rpx 0;
+  max-width: 300rpx;
+  word-wrap: break-word;
+  word-break: break-all;
+  white-space: normal;
+  text-align: left; /* 左对齐 */
+  min-width: 0; /* 确保可以收缩到最小宽度 */
+}
+
+.gift-chat-content-2 {
+  color: #ffffff;
+  font-size: 24rpx;
+  line-height: 24rpx;
+  font-weight: 500;
+  z-index: 999;
+}
+
+.chat-content {
+  color: #ffffff;
+  font-size: 24rpx;
+  line-height: 24rpx;
+  font-weight: 500;
+  z-index: 999;
+  padding: 5rpx 0;
+  word-wrap: break-word;
+  word-break: break-all;
+  white-space: normal;
+  flex: 1;
+  min-width: 0;
+  text-indent: 0;
+  padding-left: 0;
+}
+
+/* .chat-icon {
+  width: 32rpx;
+  height: 32rpx;
+  margin-left: 12rpx;
+} */
+
+.footer {
+  flex: 1;
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 80rpx;
+  padding-left: 32rpx;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+	width: 686rpx;
+
+}
+
+.input-wrapper {
+	position: relative;
+	background: rgba(34, 38, 46, 0.5);
+  border-radius: 50%;
+  display: flex;
+	flex-direction: row;
+	align-items: center;
+	height: 72rpx;
+	padding-left: 40rpx;
+	color: #ffffff;
+  font-size: 28rpx;
+  width: 260rpx;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+.input-prefix {
+	position: absolute;
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	top: 50rpx;
+	left: 230rpx;
+	flex: 1;
+}
+
+.input-emoji {
+	width: 36rpx;
+	height: 36rpx;
+}
+
+.action-buttons {
+  position: fixed;
+  right: 40rpx;
+  bottom: 80rpx;
+  flex-direction: row;
+  align-items: center;
+}
+
+.action-btn {
+  width: 64rpx;
+  height: 64rpx;
+	margin-left: 16rpx;
+}
+
+.follow-btn {
+  padding: 0 16rpx;
+  height: 56rpx;
+  background: #338aff;
+  color: #fff;
+  border-radius: 32rpx;
+  font-size: 28rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+	/* width: 88rpx; */
+}
+.follow-btn.followed {
+  background: #fff;
+  color: #338aff;
+  border: 2rpx solid #338aff;
+}
+
+.live-network{
+  width: 36rpx;
+  height: 36rpx;
+}
+.live-network-container {
+  position: fixed;
+  top: 200rpx;
+  right: 30rpx;
+  width: 200rpx;
+  height: 60rpx;
+  background-color: rgba(0, 0, 0, 0.3);
+  border-radius: 45rpx;
+  flex-direction: row;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+.live-timer {
+  color: #fff;
+  font-size: 24rpx;
+  margin-left: 12rpx;
+}
+</style>

@@ -1,0 +1,611 @@
+<template>
+  <view class="bottom-drawer-container" v-if="modelValue">
+    <view class="drawer-overlay" @tap="close"></view>
+    <view class="bottom-drawer" :class="{ 'drawer-open': modelValue }">
+      <view class="audience-header">
+        <view class="tab-container">
+          <view class="tab-item">
+            <text class="active-text">发起连线</text>
+            <view class="end-right" @tap.stop="hadleExitCoHost" v-if="connectedHosts?.length > 0">
+              <image class="end-connect" src="/static/images/logout.png"></image>
+              <text style="color: #E6594C; padding-left: 10rpx;">断开</text>
+            </view>
+          </view>
+        </view>
+      </view>
+
+      <view v-if="connectedHosts?.length > 0"
+        style="display: flex; width: 800rpx; padding-left: 80rpx; margin-bottom: 40rpx;">
+        <text class="title-text">连线中</text>
+        <view v-for="connect in connectedHosts" :key="connect.userId" class="audience-item" >
+          <view class="audience-info">
+            <view class="audience-avatar-container">
+              <image class="audience-avatar" mode="aspectFill" :src="connect.avatarUrl || defaultAvatarUrl" />
+            </view>
+            <view class="audience-item-right">
+              <view class="audience-detail">
+                <text class="audience-name" :numberOfLines="1">{{ connect.userName || connect.userId}}</text>
+              </view>
+            </view>
+          </view>
+        </view>
+      </view>
+      <view v-if="invitableHosts?.length > 0" class="audience-grid">
+
+      </view>
+      <view style="display: flex; width: 800rpx; flex-direction: row; padding-left: 80rpx; padding-right: 80rpx;margin-bottom: 40rpx; justify-content:space-between; " @click.stop>
+        <text class="title-text" >推荐列表</text>
+        <text class="title-text" @click="handleRefresh">刷新</text>
+      </view>
+
+      <list class="audience-content"  @loadmore="loadMore" :show-scrollbar="false" >
+              <!-- 邀请中的用户列表 -->
+        <cell v-for="invitee in invitees" :key="invitee.userId">
+          <view class="audience-info">
+            <view class="audience-avatar-container">
+              <image class="audience-avatar" mode="aspectFill" :src="invitee.avatarUrl || defaultAvatarUrl" />
+            </view>
+            <view class="audience-item-right">
+              <view class="audience-detail">
+                <text class="audience-name" :numberOfLines="1">{{ invitee.userName || invitee.userId}}</text>
+              </view>
+              <view class="start-link waiting">
+                <text class="start-link-text">邀请中</text>
+              </view>
+            </view>
+          </view>
+          <view class="audience-item-bottom-line"></view>
+        </cell>
+        <cell v-for="host in currentInviteHosts" :key="host.userId">
+          <view class="audience-info">
+            <view class="audience-avatar-container">
+              <image class="audience-avatar" mode="aspectFill" :src="host.avatarUrl || defaultAvatarUrl" />
+            </view>
+            <view class="audience-item-right">
+              <view class="audience-detail">
+                <text class="audience-name" :numberOfLines="1">{{ host.userName || host.userId}}</text>
+              </view>
+              <view class="start-link" @tap="startLink(host)">
+                <text class="start-link-text">邀请</text>
+              </view>
+            </view>
+          </view>
+          <view class="audience-item-bottom-line"></view>
+        </cell>
+
+
+      </list>
+    </view>
+  </view>
+</template>
+
+<script setup lang="ts">
+  import {
+    ref,
+    reactive,
+    onMounted,
+    computed,
+    watch,
+    nextTick
+  } from 'vue'
+  import {
+    useCoHostState
+  } from "@/uni_modules/ui-component/state/cohoststate"
+  import {
+    useLiveState
+  } from "@/uni_modules/ui-component/state/livestate";
+  import {
+    useLoginState
+  } from "@/uni_modules/ui-component/state/loginstate";
+  import { useCoGuestState } from "@/uni_modules/ui-component/state/cogueststate";
+  const { applicants, rejectCoGuestRequest } = useCoGuestState(uni?.$liveId);
+
+  const defaultAvatarUrl = 'https://web.sdk.qcloud.com/component/TUIKit/assets/avatar_01.png';
+  const props = defineProps({
+    modelValue: {
+      type: Boolean,
+      default: false
+    }
+  })
+  const emit = defineEmits(['update:modelValue'])
+  const refreshing = ref('hide')
+  const isLoading = ref(false)
+  const audienceList = ref([])
+  const scrollTop = ref(0)
+  const activeTab = ref('pk')
+  const showDrawer = ref(false)
+  const selectedAudience = ref(null)
+  const screenWidth = ref(350)
+  const {
+    localStatus,
+    invitableHosts,
+    connectedHosts,
+    invitees,
+    sendCoHostRequest,
+    exitCoHost,
+    latestCancelledRequest,
+    latestRejectedRequest,
+    latestTimeoutRequest,
+    latestAcceptedRequest
+  } = useCoHostState(uni?.$liveId)
+  const {
+    // 响应式状态
+    liveList,
+    localLiveStatus,
+    liveListCursor,
+    joinLive,
+    // 操作方法 - callback在params中
+    fetchLiveList,
+    schedule,
+    cancelSchedule,
+    createLive,
+    updateLiveInfo,
+  } = useLiveState();
+  const {
+    loginUserInfo
+  } = useLoginState()
+  const currentCursor = ref('')
+  const currentUserId = ref(loginUserInfo.value?.userId);
+  const currentInviteHosts = ref(invitableHosts?.value)
+  const isRefreshEnd = ref(false)
+
+  watch(() => loginUserInfo.value?.userId, (newUserId, oldUserId) => {
+    console.log('用户ID变化:', {
+      newUserId
+    });
+    if (newUserId) {
+      // 如果当前标题是默认值或者为空，则更新为新的用户名
+      currentUserId.value = newUserId;
+    }
+  }, {
+    immediate: true,
+    deep: true
+  });
+  
+  watch(invitableHosts , (newHostsList, olderHostList) => {
+    if(newHostsList) {
+      currentInviteHosts.value = newHostsList
+    }
+    nextTick()
+  }, {
+    immediate: true,
+    deep: true
+  },
+)
+  
+  watch(applicants, (newVal, oldVal) => {
+    if(newVal && localStatus.value === 'REQUESTING') {
+      newVal.forEach(applicant => {
+        rejectCoGuestRequest({
+          liveId: uni?.$liveId,
+          userId: applicant.userId,
+        });
+      });
+    }
+  }, {
+    immediate: true,
+    deep: true
+  },)
+  
+  watch(liveListCursor, (newCursor, oldCursor) => {
+    isRefreshEnd.value = newCursor === ''
+  })
+  
+  
+  // watch(() => latestTimeoutRequest.value?.inviter, (newInviter, olderInviter) => {
+  //   if(newInviter?.userId === olderInviter?.userId) return
+  //   if(newInviter?.userId === currentUserId.value) {
+  //     uni.showToast({
+  //       icon: 'none',
+  //       title: '连线请求超时'
+  //     })
+  //   }
+  // },{ immediate: true , deep: true })
+
+  // watch(() => latestAcceptedRequest.value?.inviter, (newInviter, olderInviter) => {
+  //   if(newInviter?.userId === olderInviter?.userId) return
+  //   if(newInviter?.userId === currentUserId.value) {
+  //     uni.showToast({
+  //       icon: 'none',
+  //       title: '连线被同意'
+  //     })
+  //   }
+  // },{ immediate: true , deep: true })
+
+  // watch(() => latestRejectedRequest.value?.inviter, (newInviter, olderInviter) => {
+  //   if(newInviter?.userId === olderInviter?.userId) return
+  //   if(newInviter?.userId === currentUserId.value) {
+  //     uni.showToast({
+  //       icon: 'none',
+  //       title: '连线被拒绝'
+  //     })
+  //   }
+  // },{ immediate: true , deep: true })
+
+  const handleRefresh = () =>  {
+    const params = {
+  	  cursor: '', // 首次拉起传空（不能是null),然后根据回调数据的cursor确认是否拉完
+  	  count: 20,   // 分页拉取的个数
+      success: () => {
+        fetchLiveListRecursively(liveListCursor.value); // 最多尝试3次
+      }
+    };
+    fetchLiveList(params);
+  }
+
+// 递归拉取直播列表
+const fetchLiveListRecursively = (cursor) => {
+  const params = {
+    cursor: cursor,
+    count: 20,
+    success: (res) => {
+      if (liveListCursor.value) {
+        fetchLiveListRecursively(liveListCursor.value);
+      } else {
+        uni.showToast({
+          title: '刷新完成',
+        });
+        console.log('没有更多数据，递归结束');
+      }
+    },
+    fail: (err) => {
+      console.error(`fetchLiveListRecursively failed, err: ${JSON.stringify(err)}`);
+    }
+  };
+  fetchLiveList(params);
+}
+
+  const loadMore = () => {
+    if (!liveListCursor.value) {
+      uni.showToast({
+        title: "没有更多了",
+        icon: "none"
+      });
+      return;
+    }
+    const params = {
+      cursor: liveListCursor.value,
+      count: 20,
+    };
+    fetchLiveList(params);
+  };
+
+  // Helper: 判断 host 是否在 invitees 中
+  function isInviting(host) {
+    if (!invitees.value || !Array.isArray(invitees.value)) return false;
+    return invitees.value.some(item => item.userId === host.userId);
+  }
+
+  function close() {
+    emit('update:modelValue', false)
+  }
+
+  function startLink(host) {
+
+    sendCoHostRequest({
+      liveId: uni?.$liveId,
+      seatUserInfo: host,
+      timeout: 30,
+      extensionInfo: "",
+      success: (res) => {
+        console.log(res)
+      },
+      fail: (errorCode) => {
+        if(errorCode === 3) {
+          uni.showToast({
+            icon: 'none',
+            title: '主播连线中，无法发起连线'
+          })
+        } else {
+          uni.showToast({
+            icon: 'none',
+            title: '连线失败'
+          })
+        }
+
+      }
+    }, )
+  }
+
+
+  const hadleExitCoHost = () => {
+    uni.showModal({
+      content: '确定要退出连线吗？',
+      confirmText: '退出连线',
+      cancelText: '取消',
+      success: (res) => {
+        if (res.confirm) {
+          exitCoHost({
+            liveId: uni?.$liveId,
+            success: () => {
+              close()
+            },
+            fail: (error) => {
+              console.log(error)
+            }
+          })
+        }
+      }
+    })
+
+  }
+
+
+  onMounted(() => {
+
+  })
+</script>
+
+<style>
+  .refresh-icon-container {
+    margin-left: 16rpx;
+    width: 40rpx;
+    height: 40rpx;
+    justify-content: center;
+    align-items: center;
+    border-radius: 8rpx;
+    background-color: #ffffff;
+  }
+
+  .refresh-icon {
+    width: 32rpx;
+    height: 32rpx;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .refresh-image {
+    width: 32rpx;
+    height: 32rpx;
+  }
+
+  .refresh-icon.refreshing {
+    animation: rotate 1s linear infinite;
+  }
+
+  .bottom-drawer-container {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    top: 0;
+    z-index: 1000;
+  }
+
+  .drawer-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.4);
+  }
+
+  .bottom-drawer {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: rgba(34, 38, 46, 1);
+    border-top-left-radius: 32rpx;
+    border-top-right-radius: 32rpx;
+    transform: translateY(100%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    height: 1000rpx;
+  }
+
+  .drawer-open {
+    transform: translateY(0);
+  }
+
+  .audience-header {
+    padding: 20rpx 0;
+    background-color: rgba(34, 38, 46, 1);
+    z-index: 1;
+    flex-direction: column;
+    align-items: center;
+    width: 800rpx;
+  }
+
+  .tab-container {
+    flex-direction: row;
+    justify-content: center;
+    margin-top: 20rpx;
+    width: 800rpx;
+  }
+
+  .tab-item {
+    padding: 20rpx 40rpx;
+    margin: 0 20rpx;
+    border-radius: 8rpx;
+    display: flex;
+    justify-content: center;
+    flex-direction: row;
+    width: 800rpx;
+  }
+
+  .end-right {
+    position: absolute;
+    right: 80rpx;
+    display: flex;
+    flex-direction: row;
+  }
+
+  .end-connect {
+    width: 40rpx;
+    height: 40rpx;
+
+  }
+
+  .tab-text {
+    font-size: 32rpx;
+  }
+
+  .active-text {
+    color: rgba(255, 255, 255, 0.9);
+  }
+
+  .title-text {
+    font-size: 28rpx;
+    color: rgba(255, 255, 255, 0.9);
+  }
+
+  .active-line-container {
+    margin-top: 4rpx;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 128rpx;
+  }
+
+  .active-line {
+    border-bottom: 4rpx solid rgba(255, 255, 255, 0.9);
+    width: 80rpx;
+  }
+
+  .inactive-text {
+    color: rgba(255, 255, 255, 0.3);
+  }
+
+  .audience-return-arrow-container {
+    position: absolute;
+    top: 40rpx;
+    left: 48rpx;
+    width: 48rpx;
+    height: 48rpx;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .audience-return-arrow {
+    height: 28rpx;
+    width: 16rpx;
+  }
+
+  .audience-content {
+    flex: 1;
+    width: 750rpx;
+    padding: 0 48rpx;
+    background-color: rgba(34, 38, 46, 1);
+  }
+
+  .audience-grid {
+    flex-direction: column;
+  }
+
+  .audience-item {
+    border-radius: 16rpx;
+    height: 100rpx;
+    color: #ffffff;
+    position: relative;
+    margin-bottom: 32rpx;
+    padding-top: 10rpx;
+  }
+
+  .audience-info {
+    flex-direction: row;
+    align-items: center;
+    margin-bottom: 24rpx;
+  }
+
+  .audience-avatar-container {
+    width: 80rpx;
+    height: 80rpx;
+    border-radius: 40rpx;
+    margin-right: 24rpx;
+    overflow: hidden;
+  }
+
+  .audience-avatar {
+    width: 80rpx;
+    height: 80rpx;
+    border-radius: 40rpx;
+  }
+
+  .audience-item-right {
+    flex: 1;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .audience-detail {
+    flex-direction: row;
+  }
+
+  .audience-name {
+    font-size: 32rpx;
+    font-weight: 500;
+    color: #ffffff;
+    width: 300rpx;
+    lines: 1;
+  }
+
+  .start-link {
+    width: 160rpx;
+    height: 60rpx;
+    border-radius: 30rpx;
+    justify-content: center;
+    align-items: center;
+    background-color: rgba(28, 102, 229, 1);
+  }
+
+  .start-link.waiting {
+    background-color: transparent;
+    border-width: 2rpx;
+    border-style: solid;
+    border-color: rgba(28, 102, 229, 1);
+  }
+
+  .start-link-text {
+    font-size: 24rpx;
+    color: #ffffff;
+  }
+
+  .start-link.waiting .start-link-text {
+    color: rgba(28, 102, 229, 1);
+  }
+
+  .audience-item-bottom-line {
+    position: absolute;
+    border-bottom-width: 2rpx;
+    border-bottom-style: solid;
+    border-bottom-color: rgba(79, 88, 107, 0.3);
+    width: 550rpx;
+    height: 2rpx;
+    bottom: 0;
+    right: 0;
+  }
+
+  .empty-state,
+  .loading-state {
+    padding: 64rpx;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .drawer-content {
+    padding: 0 48rpx;
+    height: 68rpx;
+    width: 750rpx;
+  }
+
+  .divider-line-container {
+    height: 68rpx;
+    justify-content: center;
+    align-items: center;
+    position: relative;
+  }
+
+  .divider-line {
+    width: 268rpx;
+    height: 10rpx;
+    border-radius: 200rpx;
+    background-color: #ffffff;
+    position: absolute;
+    bottom: 16rpx;
+  }
+</style>

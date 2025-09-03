@@ -1,0 +1,463 @@
+<template>
+  <view class="container">
+    <!-- 用户信息区域 -->
+    <view class="user-info" >
+      <view class="avatar"  @click="showEditAvatar">
+        <image class="user-avatar" :src="currentAvatar" @error="handleCoverError" />
+      </view>
+      <view class="user-details">
+        <view class="nickname-container" @click="showFullNickname">
+          <text class="nickname-label">昵称:</text>
+          <text class="nickname-value">{{ displayUserName }}</text>
+        </view>
+        <text class="user-id-label">用户ID:{{ loginUserInfo.userId }}</text>
+      </view>
+    </view>
+
+    <!-- 修改昵称功能 -->
+    <view class="nickname-section">
+      <text class="nickname-btn" @click="showEditNickname">修改昵称</text>
+    </view>
+
+    <!-- 退出登录按钮 -->
+    <view class="nickname-section">
+      <text class="logout-btn" @click="handleLogout">退出登录</text>
+    </view>
+  
+  </view>
+    <view class="bottom-drawer-container" v-if="isShowOverDialog">
+    <view class="drawer-overlay" @tap="close"></view>
+    <view class="bottom-drawer" :class="{ 'drawer-open': isShowOverDialog }">
+      <text class="list-title ">系统图库</text>      
+      <scroll-view 
+        class="audience-content" 
+        scroll-y="true"
+      > 
+        <view class="tab-item">
+          <view v-for="(url, idx) in AVATAR_LIST" :key="url" class="cover-dialog-item"  @tap="selectAvatar(idx)">
+            <image :src="url" :class="{selected: idx === selectedAvatarIndex}" class="cover-dialog-img" />
+          </view>
+        </view> 
+      </scroll-view>
+        <view class="home-footer">
+          <view class="create-btn" @click="setCover">
+            <text class="btn-text">设为头像</text>
+          </view>
+        </view>  
+    </view>
+    </view>
+</template>
+
+<script setup>
+import { ref, watch, computed } from 'vue'
+import { useLoginState } from "@/uni_modules/ui-component/state/loginstate";
+
+// ===== 状态管理 =====
+const { loginUserInfo, setSelfInfo, logout } = useLoginState();
+
+// ===== 常量定义 =====
+const DEFAULT_AVATAR_URL = 'https://web.sdk.qcloud.com/component/TUIKit/assets/avatar_01.png';
+
+const AVATAR_LIST = [
+  'https://web.sdk.qcloud.com/component/TUIKit/assets/avatar_01.png',
+  'https://web.sdk.qcloud.com/component/TUIKit/assets/avatar_02.png',
+  'https://web.sdk.qcloud.com/component/TUIKit/assets/avatar_03.png',
+  'https://web.sdk.qcloud.com/component/TUIKit/assets/avatar_04.png',
+  'https://web.sdk.qcloud.com/component/TUIKit/assets/avatar_05.png',
+  'https://web.sdk.qcloud.com/component/TUIKit/assets/avatar_06.png',
+  'https://web.sdk.qcloud.com/component/TUIKit/assets/avatar_07.png',
+  'https://web.sdk.qcloud.com/component/TUIKit/assets/avatar_08.png',
+  'https://web.sdk.qcloud.com/component/TUIKit/assets/avatar_09.png',
+  'https://web.sdk.qcloud.com/component/TUIKit/assets/avatar_10.png',
+  'https://web.sdk.qcloud.com/component/TUIKit/assets/avatar_11.png',
+  'https://web.sdk.qcloud.com/component/TUIKit/assets/avatar_12.png',
+  'https://web.sdk.qcloud.com/component/TUIKit/assets/avatar_13.png',
+  'https://web.sdk.qcloud.com/component/TUIKit/assets/avatar_14.png',
+  'https://web.sdk.qcloud.com/component/TUIKit/assets/avatar_15.png',
+  'https://web.sdk.qcloud.com/component/TUIKit/assets/avatar_16.png',
+  'https://web.sdk.qcloud.com/component/TUIKit/assets/avatar_17.png',
+  'https://web.sdk.qcloud.com/component/TUIKit/assets/avatar_18.png',
+  'https://web.sdk.qcloud.com/component/TUIKit/assets/avatar_19.png',
+  'https://web.sdk.qcloud.com/component/TUIKit/assets/avatar_20.png',
+];
+
+// ===== 响应式数据 =====
+const selectedAvatarIndex = ref(0);
+const isShowOverDialog = ref(false);
+
+// ===== 计算属性 =====
+const currentAvatar = computed(() => {
+  return loginUserInfo.value?.avatarUrl || DEFAULT_AVATAR_URL;
+});
+
+const currentUserName = computed(() => {
+  return loginUserInfo.value?.userName || loginUserInfo.value?.userId || '';
+});
+
+// 显示用的昵称（带省略号处理）
+const displayUserName = computed(() => {
+  const name = currentUserName.value;
+  if (name.length > 12) {
+    return name.substring(0, 12) + '...';
+  }
+  return name;
+});
+
+// ===== 监听器 =====
+watch(() => loginUserInfo.value?.avatarUrl, (newAvatar, oldAvatar) => {
+  console.log('头像更新:', oldAvatar, '->', newAvatar);
+  // 当头像更新时，如果弹窗是打开状态，更新选中状态
+  if (isShowOverDialog.value && newAvatar) {
+    const currentAvatarIndex = avatarList.findIndex(avatar => avatar === newAvatar);
+    if (currentAvatarIndex !== -1) {
+      selectedAvatarIndex.value = currentAvatarIndex;
+    }
+  }
+}, { immediate: true });
+
+watch(() => loginUserInfo.value?.userName, (newUserName, oldUserName) => {
+  console.log('昵称更新:', oldUserName, '->', newUserName);
+}, { immediate: true });
+
+// ===== 方法定义 =====
+// 统一的用户信息更新方法
+const updateUserInfo = async (updates) => {
+  try {
+    if (!loginUserInfo.value) {
+      throw new Error('用户信息不存在');
+    }
+
+    // 构建完整的用户信息对象
+    const userInfo = {
+      userId: loginUserInfo.value.userId,
+      userName: loginUserInfo.value.userName || loginUserInfo.value.userId,
+      avatarUrl: loginUserInfo.value.avatarUrl || DEFAULT_AVATAR_URL,
+      ...updates // 覆盖需要更新的字段
+    };
+
+    // 更新本地用户信息
+    Object.assign(loginUserInfo.value, updates);
+    
+    // 同步到服务器
+    await setSelfInfo({userInfo});
+    
+    return true;
+  } catch (error) {
+    console.error('更新用户信息失败:', error);
+    throw error;
+  }
+};
+
+const showEditNickname = () => {
+  uni.showModal({
+    title: '修改昵称',
+    content: '请输入新的昵称',
+    editable: true,
+    placeholderText: loginUserInfo.value?.userName || loginUserInfo.value?.userId || '请输入昵称',
+    success: (res) => {
+      if (res.confirm && res.content) {
+        const newNickname = res.content.trim();
+        if (newNickname && newNickname !== loginUserInfo.value?.userName) {
+          updateNickname(newNickname);
+        } else if (!newNickname) {
+          uni.showToast({
+            title: '昵称不能为空',
+            icon: 'none'
+          });
+        }
+      }
+    }
+  });
+};
+
+const updateNickname = async (newNickname) => {
+  try {
+    await updateUserInfo({ userName: newNickname });
+    
+    uni.showToast({
+      title: '昵称修改成功',
+      icon: 'success'
+    });
+  } catch (error) {
+    uni.showToast({
+      title: '修改失败，请重试',
+      icon: 'none'
+    });
+  }
+};
+
+const handleLogout = () => {
+  // 处理退出登录逻辑
+  uni.showModal({
+    title: '提示',
+    content: '确定要退出登录吗？',
+    success: (res) => {
+      if (res.confirm) {
+        // 执行退出登录
+        logout()
+        uni.redirectTo({
+          url: '/pages/login/index'
+        })
+        console.log('用户确认退出登录')
+        // 这里可以添加实际的退出登录逻辑
+        // 比如清除本地存储、跳转到登录页等
+      }
+    }
+  })
+}
+
+const handleCoverError = () => {
+  if (loginUserInfo.value) {
+    loginUserInfo.value.avatarUrl = DEFAULT_AVATAR_URL;
+  }
+};
+const selectAvatar = (idx) => {
+  selectedAvatarIndex.value = idx;
+};
+
+const showEditAvatar = () => {
+  // 检查当前用户头像是否在头像列表中，如果匹配则设置选中索引
+  const currentAvatarIndex = AVATAR_LIST.findIndex(avatar => avatar === loginUserInfo.value?.avatarUrl);
+  selectedAvatarIndex.value = currentAvatarIndex !== -1 ? currentAvatarIndex : 0;
+  isShowOverDialog.value = true;
+};
+
+const setCover = async () => {
+  try {
+    const selectedAvatar = AVATAR_LIST[selectedAvatarIndex.value];
+    
+    await updateUserInfo({ avatarUrl: selectedAvatar });
+    
+    uni.showToast({
+      title: '头像设置成功',
+      icon: 'success'
+    });
+    
+    isShowOverDialog.value = false;
+  } catch (error) {
+    uni.showToast({
+      title: '设置失败，请重试',
+      icon: 'none'
+    });
+  }
+};
+
+const close = () => {
+  isShowOverDialog.value = false;
+};
+
+const showFullNickname = () => {
+  const fullNickname = currentUserName.value;
+  if (fullNickname && fullNickname.length > 12) {
+    // 当昵称被截断时，点击显示完整昵称
+    uni.showModal({
+      title: '完整昵称',
+      content: fullNickname,
+      showCancel: false,
+      confirmText: '确定'
+    });
+  } else {
+    // 昵称未被截断时，点击可以修改昵称
+    showEditNickname();
+  }
+};
+
+</script>
+
+<style>
+.container {
+  flex: 1;
+  background-color: #f5f5f5;
+}
+
+/* 用户信息区域 */
+.user-info {
+  flex-direction: row;
+  align-items: center;
+  padding: 40rpx 32rpx;
+  background-color: #ffffff;
+  margin-bottom: 20rpx;
+}
+
+.avatar {
+  width: 120rpx;
+  height: 120rpx;
+  border-radius: 16rpx;
+  background-color: #e0e0e0;
+  justify-content: center;
+  align-items: center;
+  margin-right: 32rpx;
+}
+
+.user-details {
+  flex: 1;
+}
+
+/* 昵称容器 */
+.nickname-container {
+  flex-direction: row;
+  align-items: center;
+  margin-bottom: 8rpx;
+}
+
+/* 昵称标签 */
+.nickname-label {
+  font-size: 36rpx;
+  color: #000000;
+  font-weight: 600;
+}
+
+/* 昵称值 */
+.nickname-value {
+  font-size: 36rpx;
+  color: #000000;
+  font-weight: 600;
+  flex: 1;
+  lines: 1;
+  /* max-width: 320rpx; */
+}
+
+.user-avatar {
+  width: 120rpx;
+  height: 120rpx;
+  border-radius: 16rpx;
+}
+
+.user-id-label {
+  font-size: 28rpx;
+  color: #999999;
+}
+
+/* 修改昵称按钮 */
+.nickname-section {
+  background-color: #ffffff;
+  margin-bottom: 20rpx;
+}
+
+.nickname-btn {
+  text-align: center;
+  font-size: 32rpx;
+  color: #007aff;
+  padding: 24rpx;
+}
+
+/* 退出登录按钮 */
+.logout-section {
+  padding: 40rpx 32rpx;
+  background-color: #ffffff;
+  margin-bottom: 20rpx;
+}
+
+.logout-btn {
+  text-align: center;
+  font-size: 32rpx;
+  color: #ff4444;
+  padding: 24rpx;
+}
+.bottom-drawer-container {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  top: 0;
+  z-index: 1000;
+}
+.drawer-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.4);
+}
+
+
+.bottom-drawer {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background-color: rgba(34, 38, 46, 1);
+  border-top-left-radius: 32rpx;
+  border-top-right-radius: 32rpx;
+  transform: translateY(100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  height: 1000rpx;
+}
+
+.drawer-open {
+  transform: translateY(0);
+}
+.audience-content {
+  flex: 1;
+  background-color: rgba(34, 38, 46, 1);
+  width: 750rpx;
+}
+.cover-dialog-item {
+  position: relative;
+  width: 200rpx;
+  height: 230rpx;
+  border-radius: 24rpx;
+  margin-bottom: 32rpx;
+  overflow: hidden;
+  background: #23242a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* box-sizing: border-box; */
+}
+.cover-dialog-img.selected {
+  width: 200rpx;
+  height: 230rpx;
+  border-radius: 24rpx;
+  border: 6rpx solid #238CFE;
+}
+
+.cover-dialog-img {
+  width: 200rpx;
+  height: 230rpx;
+  border-radius: 24rpx;
+}
+.tab-item {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  padding: 0 40rpx;
+  width: 750rpx;
+}
+.list-title{
+  color: #fff;
+  font-size: 32rpx;
+  font-weight: 500;
+  padding: 40rpx
+}
+
+  .home-footer {
+    position: absolute;
+    bottom: 60rpx;
+    width: 750rpx;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    height: 104rpx;
+  }
+  .create-btn {
+    background-color: #0468FC;
+    width: 288rpx;
+    border-radius: 50rpx;
+    display: flex;
+    height: 104rpx;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+  }
+  .btn-text {
+    color: #fff;
+    font-size: 32rpx;
+    font-weight: 700;
+  }
+</style>

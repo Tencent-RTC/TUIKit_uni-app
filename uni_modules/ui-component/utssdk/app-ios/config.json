@@ -1,0 +1,21 @@
+{
+    "deploymentTarget": "13",
+    "dependencies-pods": [
+        {
+            "name": "TXLiteAVSDK_Professional",
+            "version": "12.7.19324"
+        },
+        {
+            "name": "TXIMSDK_Plus_iOS_XCFramework",
+            "version": "8.6.7020"
+        },
+        {
+            "name": "SVGAPlayer",
+            "version": "2.5.7"
+        },
+        {
+            "name": "Protobuf",
+            "version": "3.22.1"
+        }
+    ]
+}

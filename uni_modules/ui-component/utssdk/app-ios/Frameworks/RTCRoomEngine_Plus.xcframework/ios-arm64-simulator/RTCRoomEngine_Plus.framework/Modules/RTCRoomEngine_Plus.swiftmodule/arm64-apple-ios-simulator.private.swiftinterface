@@ -1,0 +1,643 @@
+// swift-interface-format-version: 1.0
+// swift-compiler-version: Apple Swift version 6.0.3 effective-5.10 (swiftlang-6.0.3.1.10 clang-1600.0.30.1)
+// swift-module-flags: -target arm64-apple-ios13.0-simulator -enable-objc-interop -enable-library-evolution -swift-version 5 -enforce-exclusivity=checked -O -enable-bare-slash-regex -module-name RTCRoomEngine_Plus
+// swift-module-flags-ignorable: -no-verify-emitted-module-interface
+import Combine
+import Foundation
+import ImSDK_Plus
+@_exported import RTCRoomEngine_Plus
+import Swift
+import SwiftUI
+import TXLiteAVSDK_Professional
+import UIKit
+import _Concurrency
+import _StringProcessing
+import _SwiftConcurrencyShims
+public protocol PropetrySelector {
+  associatedtype State
+  associatedtype Value
+  func map(_ state: Self.State) -> Self.Value
+}
+public class StateSelector<State, Value> : RTCRoomEngine_Plus.PropetrySelector {
+  convenience public init(keyPath: Swift.KeyPath<State, Value>)
+  public init(projector: @escaping (State) -> Value)
+  public func map(_ state: State) -> Value
+  @objc deinit
+}
+extension RTCRoomEngine_Plus.StateSelector {
+  public func setResult(value: Value, forStateHash stateHash: Foundation.UUID)
+  public func map(_ state: State, stateHash: Foundation.UUID) -> Value
+}
+public class ObservableState<State> : Combine.ObservableObject {
+  public typealias StateUpdateClosure = (inout State) -> Swift.Void
+  @Combine.Published @_projectedValueProperty($state) public var state: State {
+    get
+  }
+  public var $state: Combine.Published<State>.Publisher {
+    get
+  }
+  public init(initialState: State)
+  public func subscribe<Value>(_ selector: RTCRoomEngine_Plus.StateSelector<State, Value>, removeDuplicates: Swift.Bool = true) -> Combine.AnyPublisher<Value, Swift.Never> where Value : Swift.Equatable
+  public func subscribe<Value>(_ selector: RTCRoomEngine_Plus.StateSelector<State, Value>) -> Combine.AnyPublisher<Value, Swift.Never>
+  public func subscribe() -> Combine.AnyPublisher<State, Swift.Never>
+  public typealias ObjectWillChangePublisher = Combine.ObservableObjectPublisher
+  @objc deinit
+}
+public class StateExtension<Base> {
+  final public let base: Base
+  public init(_ base: Base)
+  @objc deinit
+}
+public protocol StateWrapper {
+  associatedtype WrapperType
+  var coreExt: Self.WrapperType { get }
+}
+extension RTCRoomEngine_Plus.StateWrapper {
+  public var coreExt: RTCRoomEngine_Plus.StateExtension<Self> {
+    get
+  }
+}
+extension Swift.Array : RTCRoomEngine_Plus.StateWrapper {
+  public typealias WrapperType = RTCRoomEngine_Plus.StateExtension<Swift.Array<Element>>
+}
+extension RTCRoomEngine_Plus.TUISeatInfo : RTCRoomEngine_Plus.StateWrapper {
+  public typealias WrapperType = RTCRoomEngine_Plus.StateExtension<RTCRoomEngine_Plus.TUISeatInfo>
+}
+extension RTCRoomEngine_Plus.TUISeatLayout : RTCRoomEngine_Plus.StateWrapper {
+  public typealias WrapperType = RTCRoomEngine_Plus.StateExtension<RTCRoomEngine_Plus.TUISeatLayout>
+}
+extension RTCRoomEngine_Plus.TUISeatFullInfo : RTCRoomEngine_Plus.StateWrapper {
+  public typealias WrapperType = RTCRoomEngine_Plus.StateExtension<RTCRoomEngine_Plus.TUISeatFullInfo>
+}
+extension RTCRoomEngine_Plus.TUIConnectionUser : RTCRoomEngine_Plus.StateWrapper {
+  public typealias WrapperType = RTCRoomEngine_Plus.StateExtension<RTCRoomEngine_Plus.TUIConnectionUser>
+}
+extension RTCRoomEngine_Plus.TUIRequest : RTCRoomEngine_Plus.StateWrapper {
+  public typealias WrapperType = RTCRoomEngine_Plus.StateExtension<RTCRoomEngine_Plus.TUIRequest>
+}
+extension RTCRoomEngine_Plus.TUILoginUserInfo : RTCRoomEngine_Plus.StateWrapper {
+  public typealias WrapperType = RTCRoomEngine_Plus.StateExtension<RTCRoomEngine_Plus.TUILoginUserInfo>
+}
+extension RTCRoomEngine_Plus.TUIUserInfo : RTCRoomEngine_Plus.StateWrapper {
+  public typealias WrapperType = RTCRoomEngine_Plus.StateExtension<RTCRoomEngine_Plus.TUIUserInfo>
+}
+extension RTCRoomEngine_Plus.TUIRoomInfo : RTCRoomEngine_Plus.StateWrapper {
+  public typealias WrapperType = RTCRoomEngine_Plus.StateExtension<RTCRoomEngine_Plus.TUIRoomInfo>
+}
+extension RTCRoomEngine_Plus.TUISeatLockParams : RTCRoomEngine_Plus.StateWrapper {
+  public typealias WrapperType = RTCRoomEngine_Plus.StateExtension<RTCRoomEngine_Plus.TUISeatLockParams>
+}
+extension RTCRoomEngine_Plus.TUIRoomTextMessage : RTCRoomEngine_Plus.StateWrapper {
+  public typealias WrapperType = RTCRoomEngine_Plus.StateExtension<RTCRoomEngine_Plus.TUIRoomTextMessage>
+}
+extension RTCRoomEngine_Plus.TUIRoomCustomMessage : RTCRoomEngine_Plus.StateWrapper {
+  public typealias WrapperType = RTCRoomEngine_Plus.StateExtension<RTCRoomEngine_Plus.TUIRoomCustomMessage>
+}
+extension RTCRoomEngine_Plus.TUIConferenceInfo : RTCRoomEngine_Plus.StateWrapper {
+  public typealias WrapperType = RTCRoomEngine_Plus.StateExtension<RTCRoomEngine_Plus.TUIConferenceInfo>
+}
+extension RTCRoomEngine_Plus.TUIRoomType : RTCRoomEngine_Plus.StateWrapper {
+  public typealias WrapperType = RTCRoomEngine_Plus.StateExtension<RTCRoomEngine_Plus.TUIRoomType>
+}
+extension RTCRoomEngine_Plus.TUISeatMode : RTCRoomEngine_Plus.StateWrapper {
+  public typealias WrapperType = RTCRoomEngine_Plus.StateExtension<RTCRoomEngine_Plus.TUISeatMode>
+}
+extension RTCRoomEngine_Plus.TUIVideoQuality : RTCRoomEngine_Plus.StateWrapper {
+  public typealias WrapperType = RTCRoomEngine_Plus.StateExtension<RTCRoomEngine_Plus.TUIVideoQuality>
+}
+extension RTCRoomEngine_Plus.TUIRoomDismissedReason : RTCRoomEngine_Plus.StateWrapper {
+  public typealias WrapperType = RTCRoomEngine_Plus.StateExtension<RTCRoomEngine_Plus.TUIRoomDismissedReason>
+}
+extension RTCRoomEngine_Plus.TUIKickedOutOfRoomReason : RTCRoomEngine_Plus.StateWrapper {
+  public typealias WrapperType = RTCRoomEngine_Plus.StateExtension<RTCRoomEngine_Plus.TUIKickedOutOfRoomReason>
+}
+extension RTCRoomEngine_Plus.TUIChangeReason : RTCRoomEngine_Plus.StateWrapper {
+  public typealias WrapperType = RTCRoomEngine_Plus.StateExtension<RTCRoomEngine_Plus.TUIChangeReason>
+}
+extension RTCRoomEngine_Plus.TUIVideoStreamType : RTCRoomEngine_Plus.StateWrapper {
+  public typealias WrapperType = RTCRoomEngine_Plus.StateExtension<RTCRoomEngine_Plus.TUIVideoStreamType>
+}
+extension RTCRoomEngine_Plus.TUIRole : RTCRoomEngine_Plus.StateWrapper {
+  public typealias WrapperType = RTCRoomEngine_Plus.StateExtension<RTCRoomEngine_Plus.TUIRole>
+}
+extension RTCRoomEngine_Plus.TUIRequestAction : RTCRoomEngine_Plus.StateWrapper {
+  public typealias WrapperType = RTCRoomEngine_Plus.StateExtension<RTCRoomEngine_Plus.TUIRequestAction>
+}
+extension RTCRoomEngine_Plus.TUIConferenceCancelReason : RTCRoomEngine_Plus.StateWrapper {
+  public typealias WrapperType = RTCRoomEngine_Plus.StateExtension<RTCRoomEngine_Plus.TUIConferenceCancelReason>
+}
+extension RTCRoomEngine_Plus.TUIConferenceStatus : RTCRoomEngine_Plus.StateWrapper {
+  public typealias WrapperType = RTCRoomEngine_Plus.StateExtension<RTCRoomEngine_Plus.TUIConferenceStatus>
+}
+extension RTCRoomEngine_Plus.SeatUserInfo : RTCRoomEngine_Plus.StateWrapper {
+  public typealias WrapperType = RTCRoomEngine_Plus.StateExtension<RTCRoomEngine_Plus.SeatUserInfo>
+}
+public struct UserInfo : Swift.Equatable {
+  public var microphoneStatus: RTCRoomEngine_Plus.DeviceStatus
+  public var cameraStatus: RTCRoomEngine_Plus.DeviceStatus
+  public var screenStatus: RTCRoomEngine_Plus.DeviceStatus
+  public static func == (a: RTCRoomEngine_Plus.UserInfo, b: RTCRoomEngine_Plus.UserInfo) -> Swift.Bool
+}
+public enum AudioChangerType : Swift.Int {
+  case none
+  case child
+  case littleGirl
+  case man
+  case heavyMetal
+  case cold
+  case foreigner
+  case trappedBeast
+  case fatso
+  case strongCurrent
+  case heavyMachinery
+  case ethereal
+  public init?(rawValue: Swift.Int)
+  public typealias RawValue = Swift.Int
+  public var rawValue: Swift.Int {
+    get
+  }
+}
+public enum AudioReverbType : Swift.Int {
+  case none
+  case ktv
+  case smallRoom
+  case auditorium
+  case deep
+  case loud
+  case metallic
+  case magnetic
+  public init?(rawValue: Swift.Int)
+  public typealias RawValue = Swift.Int
+  public var rawValue: Swift.Int {
+    get
+  }
+}
+public struct V2AudioEffectState {
+  public var isEarMonitorOpened: Swift.Bool
+  public var earMonitorVolume: Swift.Int
+  public var microphoneVolume: Swift.Int
+  public var changerType: RTCRoomEngine_Plus.AudioChangerType
+  public var reverbType: RTCRoomEngine_Plus.AudioReverbType
+  public init()
+}
+public protocol V2AudioEffectStore {
+  var state: RTCRoomEngine_Plus.ObservableState<RTCRoomEngine_Plus.V2AudioEffectState> { get }
+  var audioEffectState: RTCRoomEngine_Plus.V2AudioEffectState { get }
+  func setVoiceEarMonitorEnable(enable: Swift.Bool)
+  func setVoiceEarMonitorVolume(volume: Swift.Int)
+  func setMicrophoneVolume(volume: Swift.Int)
+  func setChangerType(type: RTCRoomEngine_Plus.AudioChangerType)
+  func setReverbType(type: RTCRoomEngine_Plus.AudioReverbType)
+}
+public enum MessageType : Swift.Int {
+  case text
+  case custom
+  public init?(rawValue: Swift.Int)
+  public typealias RawValue = Swift.Int
+  public var rawValue: Swift.Int {
+    get
+  }
+}
+public struct MessageInfo : Swift.Equatable {
+  public var roomId: Swift.String
+  public var sender: RTCRoomEngine_Plus.TUIUserInfo
+  public var sequence: Swift.Int
+  public var timestampInSecond: Swift.Double
+  public var messageType: RTCRoomEngine_Plus.MessageType
+  public var textContent: Swift.String
+  public var extensionInfo: [Swift.String : Swift.String]?
+  public var businessId: Swift.String
+  public var data: Swift.String
+  public init()
+  public static func == (a: RTCRoomEngine_Plus.MessageInfo, b: RTCRoomEngine_Plus.MessageInfo) -> Swift.Bool
+}
+public struct V2BarrageState {
+  public var messageList: [RTCRoomEngine_Plus.MessageInfo]
+  public init()
+}
+public protocol V2BarrageStore {
+  var state: RTCRoomEngine_Plus.ObservableState<RTCRoomEngine_Plus.V2BarrageState> { get }
+  var barrageState: RTCRoomEngine_Plus.V2BarrageState { get }
+  func sendTextMessage(text: Swift.String, extensionInfo: [Swift.String : Swift.String]?, onSuccess: RTCRoomEngine_Plus.TUISuccessBlock?, onError: RTCRoomEngine_Plus.TUIErrorBlock?)
+  func sendCustomMessage(businessId: Swift.String, data: Swift.String, onSuccess: RTCRoomEngine_Plus.TUISuccessBlock?, onError: RTCRoomEngine_Plus.TUIErrorBlock?)
+}
+public struct V2BaseBeautyState {
+  public var smoothLevel: Swift.Float
+  public var whitenessLevel: Swift.Float
+  public var ruddyLevel: Swift.Float
+  public init()
+}
+public protocol V2BaseBeautyStore {
+  var state: RTCRoomEngine_Plus.ObservableState<RTCRoomEngine_Plus.V2BaseBeautyState> { get }
+  var beautyState: RTCRoomEngine_Plus.V2BaseBeautyState { get }
+  func setSmoothLevel(smoothLevel: Swift.Float)
+  func setWhitenessLevel(whitenessLevel: Swift.Float)
+  func setRuddyLevel(ruddyLevel: Swift.Float)
+}
+public struct CoGuestRequestInfo : Swift.Equatable {
+  public var requestId: Swift.String
+  public var userId: Swift.String
+  public var userName: Swift.String?
+  public var nameCard: Swift.String?
+  public var avatarUrl: Swift.String?
+  public var timestamp: Swift.Double
+  public init()
+  public static func == (a: RTCRoomEngine_Plus.CoGuestRequestInfo, b: RTCRoomEngine_Plus.CoGuestRequestInfo) -> Swift.Bool
+}
+public enum CoGuestStatus : Swift.Int {
+  case connected
+  case disconnected
+  case adminInviting
+  case userApplying
+  public init?(rawValue: Swift.Int)
+  public typealias RawValue = Swift.Int
+  public var rawValue: Swift.Int {
+    get
+  }
+}
+public struct V2CoGuestState {
+  public var localStatus: RTCRoomEngine_Plus.CoGuestStatus
+  public var invitees: [RTCRoomEngine_Plus.SeatUserInfo]
+  public var applicants: [RTCRoomEngine_Plus.SeatUserInfo]
+  public var connectedGuests: [RTCRoomEngine_Plus.SeatUserInfo]
+  public var invitableGuests: [RTCRoomEngine_Plus.SeatUserInfo]
+  public var latestReceivedRequest: RTCRoomEngine_Plus.CoGuestRequestInfo?
+  public var latestCancelledRequest: RTCRoomEngine_Plus.CoGuestRequestInfo?
+  public var latestAcceptedRequest: RTCRoomEngine_Plus.CoGuestRequestInfo?
+  public var latestRejectedRequest: RTCRoomEngine_Plus.CoGuestRequestInfo?
+  public var latestTimeoutRequest: RTCRoomEngine_Plus.CoGuestRequestInfo?
+  public init()
+}
+public protocol V2CoGuestStore {
+  var state: RTCRoomEngine_Plus.ObservableState<RTCRoomEngine_Plus.V2CoGuestState> { get }
+  var coGuestState: RTCRoomEngine_Plus.V2CoGuestState { get }
+  func sendCoGuestRequest(seatIndex: Swift.Int, timeout: Foundation.TimeInterval, userId: Swift.String?, extraInfo: Swift.String?, onAccepted: RTCRoomEngine_Plus.TUIRequestAcceptedBlock?, onRejected: RTCRoomEngine_Plus.TUIRequestRejectedBlock?, onCancelled: RTCRoomEngine_Plus.TUIRequestCancelledBlock?, onTimeout: RTCRoomEngine_Plus.TUIRequestTimeoutBlock?, onError: RTCRoomEngine_Plus.TUIRequestErrorBlock?)
+  func cancelCoGuestRequest(userId: Swift.String?, onSuccess: RTCRoomEngine_Plus.TUISuccessBlock?, onError: RTCRoomEngine_Plus.TUIErrorBlock?)
+  func acceptCoGuestRequest(userId: Swift.String, onSuccess: RTCRoomEngine_Plus.TUISuccessBlock?, onError: RTCRoomEngine_Plus.TUIErrorBlock?)
+  func rejectCoGuestRequest(userId: Swift.String, onSuccess: RTCRoomEngine_Plus.TUISuccessBlock?, onError: RTCRoomEngine_Plus.TUIErrorBlock?)
+  func disconnect(userId: Swift.String?, onSuccess: RTCRoomEngine_Plus.TUISuccessBlock?, onError: RTCRoomEngine_Plus.TUIErrorBlock?)
+}
+public struct CoHostRequestInfo : Swift.Equatable {
+  public var inviter: RTCRoomEngine_Plus.SeatUserInfo?
+  public var inviteeList: [RTCRoomEngine_Plus.SeatUserInfo]
+  public var extensionInfo: Swift.String
+  public init()
+  public static func == (a: RTCRoomEngine_Plus.CoHostRequestInfo, b: RTCRoomEngine_Plus.CoHostRequestInfo) -> Swift.Bool
+}
+public enum CoHostStatus : Swift.Int {
+  case connected
+  case disconnected
+  case invited
+  case requesting
+  public init?(rawValue: Swift.Int)
+  public typealias RawValue = Swift.Int
+  public var rawValue: Swift.Int {
+    get
+  }
+}
+public struct V2CoHostState {
+  public var localStatus: RTCRoomEngine_Plus.CoHostStatus
+  public var invitees: [RTCRoomEngine_Plus.SeatUserInfo]
+  public var applicants: [RTCRoomEngine_Plus.SeatUserInfo]
+  public var connectedHosts: [RTCRoomEngine_Plus.SeatUserInfo]
+  public var invitableHosts: [RTCRoomEngine_Plus.SeatUserInfo]
+  public init()
+}
+public typealias CoHostRequestErrorBlock = (Swift.Int, Swift.String) -> Swift.Void
+public protocol V2CoHostStore {
+  var state: RTCRoomEngine_Plus.ObservableState<RTCRoomEngine_Plus.V2CoHostState> { get }
+  var coHostState: RTCRoomEngine_Plus.V2CoHostState { get }
+  var latestReceivedRequest: Combine.PassthroughSubject<RTCRoomEngine_Plus.CoHostRequestInfo, Swift.Never> { get }
+  var latestCancelledRequest: Combine.PassthroughSubject<RTCRoomEngine_Plus.CoHostRequestInfo, Swift.Never> { get }
+  var latestAcceptedRequest: Combine.PassthroughSubject<RTCRoomEngine_Plus.CoHostRequestInfo, Swift.Never> { get }
+  var latestRejectedRequest: Combine.PassthroughSubject<RTCRoomEngine_Plus.CoHostRequestInfo, Swift.Never> { get }
+  var latestTimeoutRequest: Combine.PassthroughSubject<RTCRoomEngine_Plus.CoHostRequestInfo, Swift.Never> { get }
+  func sendCoHostRequest(user: RTCRoomEngine_Plus.SeatUserInfo, timeout: Swift.UInt, extensionInfo: Swift.String, onSuccess: RTCRoomEngine_Plus.TUISuccessBlock?, onError: RTCRoomEngine_Plus.CoHostRequestErrorBlock?)
+  func cancelCoHostRequest(user: RTCRoomEngine_Plus.SeatUserInfo, onSuccess: RTCRoomEngine_Plus.TUISuccessBlock?, onError: RTCRoomEngine_Plus.TUIErrorBlock?)
+  func acceptCoHostRequest(userInfo: RTCRoomEngine_Plus.SeatUserInfo, onSuccess: RTCRoomEngine_Plus.TUISuccessBlock?, onError: RTCRoomEngine_Plus.TUIErrorBlock?)
+  func rejectCoHostRequest(userInfo: RTCRoomEngine_Plus.SeatUserInfo, onSuccess: RTCRoomEngine_Plus.TUISuccessBlock?, onError: RTCRoomEngine_Plus.TUIErrorBlock?)
+  func exitCoHost(onSuccess: RTCRoomEngine_Plus.TUISuccessBlock?, onError: RTCRoomEngine_Plus.TUIErrorBlock?)
+}
+public enum DeviceError : Swift.Int {
+  case noError
+  case noDeviceDetected
+  case noSystemPermission
+  case notSupportCapture
+  public init?(rawValue: Swift.Int)
+  public typealias RawValue = Swift.Int
+  public var rawValue: Swift.Int {
+    get
+  }
+}
+public enum DeviceStatus : Swift.Int {
+  case off
+  case on
+  case AdminInviting
+  case UserApplying
+  public init?(rawValue: Swift.Int)
+  public typealias RawValue = Swift.Int
+  public var rawValue: Swift.Int {
+    get
+  }
+}
+public enum DeviceStatusReason : Swift.Int {
+  case changedBySelf
+  case changedByAdmin
+  public init?(rawValue: Swift.Int)
+  public typealias RawValue = Swift.Int
+  public var rawValue: Swift.Int {
+    get
+  }
+}
+public struct V2DeviceState {
+  public var microphoneStatus: RTCRoomEngine_Plus.DeviceStatus
+  public var microphoneStatusReason: RTCRoomEngine_Plus.DeviceStatusReason
+  public var microphoneLastError: RTCRoomEngine_Plus.DeviceError
+  public var captureVolume: Swift.Int
+  public var cameraStatus: RTCRoomEngine_Plus.DeviceStatus
+  public var cameraStatusReason: RTCRoomEngine_Plus.DeviceStatusReason
+  public var isFrontCamera: Swift.Bool
+  public var isLocalMirror: Swift.Bool
+  public var localVideoQuality: RTCRoomEngine_Plus.TUIVideoQuality?
+  public var cameraLastError: RTCRoomEngine_Plus.DeviceError
+  public var currentAudioRoute: RTCRoomEngine_Plus.TUIAudioRoute
+  public var screenStatus: RTCRoomEngine_Plus.DeviceStatus
+  public var screenStatusReason: RTCRoomEngine_Plus.DeviceStatusReason
+  public var networkInfo: RTCRoomEngine_Plus.TUINetworkInfo
+  public init()
+}
+public protocol V2DeviceStore {
+  var state: RTCRoomEngine_Plus.ObservableState<RTCRoomEngine_Plus.V2DeviceState> { get }
+  var deviceState: RTCRoomEngine_Plus.V2DeviceState { get }
+  func openLocalMicrophone(onSuccess: RTCRoomEngine_Plus.TUISuccessBlock?, onError: RTCRoomEngine_Plus.TUIErrorBlock?)
+  func closeLocalMicrophone()
+  func muteLocalAudio()
+  func unmuteLocalAudio(onSuccess: RTCRoomEngine_Plus.TUISuccessBlock?, onError: RTCRoomEngine_Plus.TUIErrorBlock?)
+  func setAudioRoute(_ route: RTCRoomEngine_Plus.TUIAudioRoute)
+  func openLocalCamera(isFront: Swift.Bool, onSuccess: RTCRoomEngine_Plus.TUISuccessBlock?, onError: RTCRoomEngine_Plus.TUIErrorBlock?)
+  func closeLocalCamera()
+  func switchCamera(isFront: Swift.Bool)
+  func switchMirror(isMirror: Swift.Bool)
+  func updateVideoQuality(_ quality: RTCRoomEngine_Plus.TUIVideoQuality)
+  func startScreenShare(appGroup: Swift.String)
+  func stopScreenShare()
+}
+public struct GiftMessage : Swift.Equatable, Swift.Hashable {
+  public var roomId: Swift.String
+  public var giftCount: Swift.UInt
+  public var sender: RTCRoomEngine_Plus.TUIUserInfo
+  public var giftInfo: RTCRoomEngine_Plus.TUIGiftInfo
+  public init()
+  public static func == (a: RTCRoomEngine_Plus.GiftMessage, b: RTCRoomEngine_Plus.GiftMessage) -> Swift.Bool
+  public func hash(into hasher: inout Swift.Hasher)
+  public var hashValue: Swift.Int {
+    get
+  }
+}
+public struct GiftStaticsInfo : Swift.Equatable {
+  public var totalGiftsReceived: Swift.UInt
+  public var totalGiftCoins: Swift.UInt
+  public var totalUniqueGiftSenders: Swift.UInt
+  public init()
+  public static func == (a: RTCRoomEngine_Plus.GiftStaticsInfo, b: RTCRoomEngine_Plus.GiftStaticsInfo) -> Swift.Bool
+}
+public struct V2GiftState {
+  public var giftInfoList: [RTCRoomEngine_Plus.TUIGiftInfo]
+  public var latestGift: RTCRoomEngine_Plus.GiftMessage?
+  public var giftStatics: RTCRoomEngine_Plus.GiftStaticsInfo
+  public init()
+}
+public protocol V2GiftStore {
+  var state: RTCRoomEngine_Plus.ObservableState<RTCRoomEngine_Plus.V2GiftState> { get }
+  var giftState: RTCRoomEngine_Plus.V2GiftState { get }
+  func getGiftList(onSuccess: RTCRoomEngine_Plus.TUISuccessBlock?, onError: RTCRoomEngine_Plus.TUIErrorBlock?)
+  func sendGift(giftId: Swift.String, count: Swift.UInt, onSuccess: RTCRoomEngine_Plus.TUISuccessBlock?, onError: RTCRoomEngine_Plus.TUIErrorBlock?)
+}
+public struct V2LikeState {
+  public var totalLikeCount: Swift.UInt
+  public var latestSender: RTCRoomEngine_Plus.TUIUserInfo?
+  public init()
+}
+public protocol V2LikeStore {
+  var state: RTCRoomEngine_Plus.ObservableState<RTCRoomEngine_Plus.V2LikeState> { get }
+  var likeState: RTCRoomEngine_Plus.V2LikeState { get }
+  func sendLike(onSuccess: RTCRoomEngine_Plus.TUISuccessBlock?, onError: RTCRoomEngine_Plus.TUIErrorBlock?)
+}
+public struct AudienceInfo : Swift.Equatable {
+  public var userId: Swift.String
+  public var userName: Swift.String?
+  public var avatarUrl: Swift.String?
+  public var customInfo: [Swift.String : Foundation.Data]
+  public var userRole: RTCRoomEngine_Plus.TUIRole?
+  public var isMessageDisabled: Swift.Bool
+  public var joinedTimestamp: Swift.Double
+  public init()
+  public static func == (a: RTCRoomEngine_Plus.AudienceInfo, b: RTCRoomEngine_Plus.AudienceInfo) -> Swift.Bool
+}
+public struct V2LiveAudienceState {
+  public var audienceList: [RTCRoomEngine_Plus.AudienceInfo]
+  public var audienceListCursor: Swift.UInt?
+  public init()
+}
+public protocol V2LiveAudienceStore {
+  var state: RTCRoomEngine_Plus.ObservableState<RTCRoomEngine_Plus.V2LiveAudienceState> { get }
+  var liveAudienceState: RTCRoomEngine_Plus.V2LiveAudienceState { get }
+  func fetchAudienceList(cursor: Swift.UInt, onSuccess: RTCRoomEngine_Plus.TUISuccessBlock?, onError: RTCRoomEngine_Plus.TUIErrorBlock?)
+  func setAdministrator(userId: Swift.String, onSuccess: RTCRoomEngine_Plus.TUISuccessBlock?, onError: RTCRoomEngine_Plus.TUIErrorBlock?)
+  func revokeAdministrator(userId: Swift.String, onSuccess: RTCRoomEngine_Plus.TUISuccessBlock?, onError: RTCRoomEngine_Plus.TUIErrorBlock?)
+  func kickUserOutOfRoom(userId: Swift.String, onSuccess: RTCRoomEngine_Plus.TUISuccessBlock?, onError: RTCRoomEngine_Plus.TUIErrorBlock?)
+  func disableSendMessage(userId: Swift.String, isDisable: Swift.Bool, onSuccess: RTCRoomEngine_Plus.TUISuccessBlock?, onError: RTCRoomEngine_Plus.TUIErrorBlock?)
+}
+@objc @_hasMissingDesignatedInitializers @_Concurrency.MainActor @preconcurrency public class V2LiveRenderView : UIKit.UIView {
+  @_Concurrency.MainActor @preconcurrency public init(liveId: Swift.String)
+  @objc deinit
+}
+public struct SeatUserInfo : Swift.Equatable {
+  public var userId: Swift.String
+  public var roomId: Swift.String?
+  public var userName: Swift.String?
+  public var avatarUrl: Swift.String?
+  public var microphoneStatus: RTCRoomEngine_Plus.DeviceStatus
+  public var cameraStatus: RTCRoomEngine_Plus.DeviceStatus
+  public var onSeatTimestamp: Swift.Double
+  public init()
+  public static func == (a: RTCRoomEngine_Plus.SeatUserInfo, b: RTCRoomEngine_Plus.SeatUserInfo) -> Swift.Bool
+}
+public struct RegionInfo : Swift.Equatable {
+  public var x: CoreFoundation.CGFloat
+  public var y: CoreFoundation.CGFloat
+  public var w: CoreFoundation.CGFloat
+  public var h: CoreFoundation.CGFloat
+  public var zorder: Swift.Int
+  public init()
+  public static func == (a: RTCRoomEngine_Plus.RegionInfo, b: RTCRoomEngine_Plus.RegionInfo) -> Swift.Bool
+}
+public struct SeatInfo : Swift.Equatable {
+  public var index: Swift.Int
+  public var isLocked: Swift.Bool
+  public var userInfo: RTCRoomEngine_Plus.SeatUserInfo?
+  public var region: RTCRoomEngine_Plus.RegionInfo?
+  public init()
+  public static func == (a: RTCRoomEngine_Plus.SeatInfo, b: RTCRoomEngine_Plus.SeatInfo) -> Swift.Bool
+}
+public struct LiveCanvas : Swift.Equatable, Swift.Codable {
+  public var w: CoreFoundation.CGFloat
+  public var h: CoreFoundation.CGFloat
+  public var background: Swift.String?
+  public init()
+  public static func == (a: RTCRoomEngine_Plus.LiveCanvas, b: RTCRoomEngine_Plus.LiveCanvas) -> Swift.Bool
+  public func encode(to encoder: any Swift.Encoder) throws
+  public init(from decoder: any Swift.Decoder) throws
+}
+public struct V2LiveSeatState {
+  public var seatList: [RTCRoomEngine_Plus.SeatInfo]
+  public var canvas: RTCRoomEngine_Plus.LiveCanvas
+  public var speakingUsers: [Swift.String : Swift.Int]
+  public init()
+}
+public protocol V2LiveSeatStore {
+  var state: RTCRoomEngine_Plus.ObservableState<RTCRoomEngine_Plus.V2LiveSeatState> { get }
+  var liveSeatState: RTCRoomEngine_Plus.V2LiveSeatState { get }
+  func lockSeat(seatIndex: Swift.Int, lockMode: RTCRoomEngine_Plus.TUISeatLockParams, onSuccess: RTCRoomEngine_Plus.TUISuccessBlock?, onError: RTCRoomEngine_Plus.TUIErrorBlock?)
+  func moveToSeat(targetIndex: Swift.Int, onSuccess: RTCRoomEngine_Plus.TUISuccessBlock?, onError: RTCRoomEngine_Plus.TUIErrorBlock?)
+}
+public enum LocalLiveStatus : Swift.Int {
+  case idle
+  case notStarted
+  case live
+  case paused
+  case ended
+  public init?(rawValue: Swift.Int)
+  public typealias RawValue = Swift.Int
+  public var rawValue: Swift.Int {
+    get
+  }
+}
+public struct LiveInfo : Swift.Equatable {
+  public var liveId: Swift.String
+  public var liveName: Swift.String?
+  public var liveDescription: Swift.String?
+  public var categoryList: [Foundation.NSNumber]?
+  public var coverUrl: Swift.String?
+  public var backgroundUrl: Swift.String?
+  public var liveOwner: RTCRoomEngine_Plus.TUILoginUserInfo?
+  public var currentViewerCount: Swift.Int
+  public var totalViewerCount: Swift.Int
+  public var createTime: Swift.Int
+  public var isMessageDisable: Swift.Bool?
+  public var isGiftEnabled: Swift.Bool?
+  public var isPublicVisible: Swift.Bool?
+  public var isSeatEnabled: Swift.Bool
+  public var seatMode: RTCRoomEngine_Plus.TUISeatMode
+  public var maxSeatCount: Swift.Int
+  public var layoutTemplate: Swift.UInt?
+  public var customInfo: [Swift.String : Swift.String]
+  public var keepOwnerOnSeat: Swift.Bool
+  public init()
+  public static func == (a: RTCRoomEngine_Plus.LiveInfo, b: RTCRoomEngine_Plus.LiveInfo) -> Swift.Bool
+}
+public struct V2LiveState {
+  public var liveList: [RTCRoomEngine_Plus.LiveInfo]
+  public var liveListCursor: Swift.String
+  public var currentLive: RTCRoomEngine_Plus.LiveInfo?
+  public var localLiveStatus: RTCRoomEngine_Plus.LocalLiveStatus
+  public init()
+}
+public protocol V2LiveStore {
+  var state: RTCRoomEngine_Plus.ObservableState<RTCRoomEngine_Plus.V2LiveState> { get }
+  var liveState: RTCRoomEngine_Plus.V2LiveState { get }
+  func fetchLiveList(cursor: Swift.String, count: Swift.UInt, onSuccess: RTCRoomEngine_Plus.TUISuccessBlock?, onError: RTCRoomEngine_Plus.TUIErrorBlock?)
+  func createLive(_ liveInfo: RTCRoomEngine_Plus.LiveInfo, onSuccess: RTCRoomEngine_Plus.TUISuccessBlock?, onError: RTCRoomEngine_Plus.TUIErrorBlock?)
+  func joinLive(liveId: Swift.String, onSuccess: RTCRoomEngine_Plus.TUISuccessBlock?, onError: RTCRoomEngine_Plus.TUIErrorBlock?)
+  func leaveLive(onSuccess: RTCRoomEngine_Plus.TUISuccessBlock?, onError: RTCRoomEngine_Plus.TUIErrorBlock?)
+  func endLive(onSuccess: RTCRoomEngine_Plus.TUISuccessBlock?, onError: RTCRoomEngine_Plus.TUIErrorBlock?)
+  func updateLiveInfo(_ liveInfo: RTCRoomEngine_Plus.LiveInfo, onSuccess: RTCRoomEngine_Plus.TUISuccessBlock?, onError: RTCRoomEngine_Plus.TUIErrorBlock?)
+}
+public struct LiveSummaryData {
+  public var totalDuration: Swift.UInt
+  public var totalViewers: Swift.UInt
+  public var totalGiftsSent: Swift.UInt
+  public var totalGiftUniqueSenders: Swift.UInt
+  public var totalGiftCoins: Swift.UInt
+  public var totalLikesReceived: Swift.UInt
+  public var totalMessageSent: Swift.UInt
+  public init()
+}
+public struct V2LiveSummaryState {
+  public var summaryData: RTCRoomEngine_Plus.LiveSummaryData
+  public init()
+}
+public protocol V2LiveSummaryStore {
+  var state: RTCRoomEngine_Plus.ObservableState<RTCRoomEngine_Plus.V2LiveSummaryState> { get }
+  var summaryState: RTCRoomEngine_Plus.V2LiveSummaryState { get }
+}
+public enum LoginStatus : Swift.Int {
+  case loggedIn
+  case loggedOut
+  case userSigExpired
+  case kickedOffLine
+  public init?(rawValue: Swift.Int)
+  public typealias RawValue = Swift.Int
+  public var rawValue: Swift.Int {
+    get
+  }
+}
+public struct LoginState {
+  public var loginUserInfo: RTCRoomEngine_Plus.TUILoginUserInfo?
+  public var loginStatus: RTCRoomEngine_Plus.LoginStatus
+  public init()
+}
+@_hasMissingDesignatedInitializers public class V2RTCRoomEngine {
+  public static let shared: RTCRoomEngine_Plus.V2RTCRoomEngine
+  final public let observerState: RTCRoomEngine_Plus.ObservableState<RTCRoomEngine_Plus.LoginState>
+  public func subscribeLoginState<Value>(_ selector: RTCRoomEngine_Plus.StateSelector<RTCRoomEngine_Plus.LoginState, Value>) -> Combine.AnyPublisher<Value, Swift.Never>
+  public var loginState: RTCRoomEngine_Plus.LoginState {
+    get
+  }
+  public func login(sdkAppId: Swift.Int, userId: Swift.String, userSig: Swift.String, onSuccess: RTCRoomEngine_Plus.TUISuccessBlock? = nil, onError: RTCRoomEngine_Plus.TUIErrorBlock? = nil)
+  public func logout(onSuccess: RTCRoomEngine_Plus.TUISuccessBlock? = nil, onError: RTCRoomEngine_Plus.TUIErrorBlock? = nil)
+  public func setSelfInfo(userInfo: RTCRoomEngine_Plus.TUILoginUserInfo, onSuccess: RTCRoomEngine_Plus.TUISuccessBlock? = nil, onError: RTCRoomEngine_Plus.TUIErrorBlock? = nil)
+  public func getLiveStore() -> any RTCRoomEngine_Plus.V2LiveStore
+  public func getLiveSeatStore(liveId: Swift.String) -> any RTCRoomEngine_Plus.V2LiveSeatStore
+  public func getLiveAudienceStore(liveId: Swift.String) -> any RTCRoomEngine_Plus.V2LiveAudienceStore
+  public func getLiveSummaryStore(liveId: Swift.String) -> any RTCRoomEngine_Plus.V2LiveSummaryStore
+  public func getCoGuestStore(liveId: Swift.String) -> any RTCRoomEngine_Plus.V2CoGuestStore
+  public func getCoHostStore(liveId: Swift.String) -> any RTCRoomEngine_Plus.V2CoHostStore
+  public func getBarrageStore(liveId: Swift.String) -> any RTCRoomEngine_Plus.V2BarrageStore
+  public func getGiftStore(liveId: Swift.String) -> any RTCRoomEngine_Plus.V2GiftStore
+  public func getLikeStore(liveId: Swift.String) -> any RTCRoomEngine_Plus.V2LikeStore
+  public func getDeviceStore() -> any RTCRoomEngine_Plus.V2DeviceStore
+  public func getBaseBeautyStore() -> any RTCRoomEngine_Plus.V2BaseBeautyStore
+  public func getAudioEffectStore() -> any RTCRoomEngine_Plus.V2AudioEffectStore
+  @objc deinit
+}
+extension RTCRoomEngine_Plus.AudioChangerType : Swift.Equatable {}
+extension RTCRoomEngine_Plus.AudioChangerType : Swift.Hashable {}
+extension RTCRoomEngine_Plus.AudioChangerType : Swift.RawRepresentable {}
+extension RTCRoomEngine_Plus.AudioReverbType : Swift.Equatable {}
+extension RTCRoomEngine_Plus.AudioReverbType : Swift.Hashable {}
+extension RTCRoomEngine_Plus.AudioReverbType : Swift.RawRepresentable {}
+extension RTCRoomEngine_Plus.MessageType : Swift.Equatable {}
+extension RTCRoomEngine_Plus.MessageType : Swift.Hashable {}
+extension RTCRoomEngine_Plus.MessageType : Swift.RawRepresentable {}
+extension RTCRoomEngine_Plus.CoGuestStatus : Swift.Equatable {}
+extension RTCRoomEngine_Plus.CoGuestStatus : Swift.Hashable {}
+extension RTCRoomEngine_Plus.CoGuestStatus : Swift.RawRepresentable {}
+extension RTCRoomEngine_Plus.CoHostStatus : Swift.Equatable {}
+extension RTCRoomEngine_Plus.CoHostStatus : Swift.Hashable {}
+extension RTCRoomEngine_Plus.CoHostStatus : Swift.RawRepresentable {}
+extension RTCRoomEngine_Plus.DeviceError : Swift.Equatable {}
+extension RTCRoomEngine_Plus.DeviceError : Swift.Hashable {}
+extension RTCRoomEngine_Plus.DeviceError : Swift.RawRepresentable {}
+extension RTCRoomEngine_Plus.DeviceStatus : Swift.Equatable {}
+extension RTCRoomEngine_Plus.DeviceStatus : Swift.Hashable {}
+extension RTCRoomEngine_Plus.DeviceStatus : Swift.RawRepresentable {}
+extension RTCRoomEngine_Plus.DeviceStatusReason : Swift.Equatable {}
+extension RTCRoomEngine_Plus.DeviceStatusReason : Swift.Hashable {}
+extension RTCRoomEngine_Plus.DeviceStatusReason : Swift.RawRepresentable {}
+extension RTCRoomEngine_Plus.LocalLiveStatus : Swift.Equatable {}
+extension RTCRoomEngine_Plus.LocalLiveStatus : Swift.Hashable {}
+extension RTCRoomEngine_Plus.LocalLiveStatus : Swift.RawRepresentable {}
+extension RTCRoomEngine_Plus.LoginStatus : Swift.Equatable {}
+extension RTCRoomEngine_Plus.LoginStatus : Swift.Hashable {}
+extension RTCRoomEngine_Plus.LoginStatus : Swift.RawRepresentable {}

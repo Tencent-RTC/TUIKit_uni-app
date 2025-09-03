@@ -1,0 +1,294 @@
+<template>
+  <view class="bottom-drawer-container" v-if="modelValue">
+    <view class="drawer-overlay" @tap="close"></view>
+    <view class="bottom-drawer" :class="{ 'drawer-open': modelValue }">
+      <view class="live-audience-list">
+        <view class="audience-header">
+          <view class="audience-return-arrow-container" @tap="close">
+            <image class="audience-return-arrow" src="/static/images/left-arrow.png" mode="aspectFit" />
+          </view>
+						<text class="audience-title">在线观众</text>
+        </view>
+        
+        <scroll-view 
+          class="audience-content" 
+          scroll-y
+          @scroll="handleScroll"
+          :scroll-top="scrollTop"
+        >
+          <view v-if="audienceList.length > 0" class="audience-grid">
+            <view
+              v-for="audience in audienceList"
+              :key="audience.userId"
+              class="audience-item"
+            >
+              <view class="audience-info">
+                <view class="audience-avatar-container">
+                  <image class="audience-avatar" :src="audience.avatarUrl || defaultAvatarUrl" mode="aspectFill" />
+                </view>
+                <view class="audience-item-right">
+                  <view class="audience-detail">
+                    <text class="audience-name" :numberOfLines="1">{{ audience.userName || audience.userId }}</text>
+                    <view v-if="audience.tag" class="audience-tag">
+                      <text class="tag-text">{{ audience.tag }}</text>
+                    </view>
+                  </view>
+                  <view class="audience-more" v-if="loginUserInfo?.userId === currentLive.liveOwner.userId" @tap="audienceOperator(audience)">
+                    <text class="more-text">···</text>
+                  </view>
+                </view>
+              </view>
+            </view>
+          </view>
+      
+          <view v-if="isLoading" class="loading-state">
+            <image src="/static/images/loading.png" mode="aspectFit" class="loading-image" />
+          </view>
+        </scroll-view>
+      </view>
+    </view>
+		
+		<AudienceManagerDrawer v-model="isShowAudienceManagerDrawer" :userInfo="selectedAudience" :liveId="liveId"></AudienceManagerDrawer>
+		
+		<PeopleInfoDrawer v-model="isShowPeopleInfoDrawer" :userInfo="selectedAudience"></PeopleInfoDrawer>
+  </view>
+</template>
+
+<script setup>
+import { ref, onMounted } from 'vue';
+import PeopleInfoDrawer from './PeopleInfoDrawer.nvue';
+import AudienceManagerDrawer from './AudienceManagerDrawer.nvue';
+
+import { useLiveAudienceState } from "@/uni_modules/ui-component/state/liveaudiencestate";
+import { useLoginState } from "@/uni_modules/ui-component/state/loginstate";
+import { useLiveState } from "@/uni_modules/ui-component/state/livestate";
+const { currentLive } = useLiveState();
+const { loginUserInfo } = useLoginState();
+
+const { audienceList, audienceListCursor } = useLiveAudienceState(uni?.$liveId);
+
+const defaultAvatarUrl = 'https://web.sdk.qcloud.com/component/TUIKit/assets/avatar_01.png';
+const isLoading = ref(false);
+const currentCursor = ref(0);
+const scrollTop = ref(0);
+const isShowPeopleInfoDrawer = ref(false);
+const isShowAudienceManagerDrawer = ref(false);
+const selectedAudience = ref(null);
+const safeArea = ref({
+  left: 0,
+  right: 0,
+  top: 0,
+  bottom: 0,
+  width: 375,
+  height: 750,
+});
+
+const props = defineProps({
+  modelValue: {
+    type: Boolean,
+    default: false
+  },
+	currentViewerCount: {
+		type: Number,
+		default: 0,
+	},
+	liveId: {
+		type: String,
+	}
+});
+
+const emit = defineEmits(['update:modelValue']);
+const close = () => {
+  emit('update:modelValue', false);
+};
+
+// 初始化加载
+onMounted(() => {
+  uni.getSystemInfo({
+    success: (res) => {
+      safeArea.value = res.safeArea;
+    }
+  });
+});
+
+const handleScroll = (e) => {
+  if (currentCursor.value === 0) return;
+  
+  const { scrollHeight, scrollTop: currentScrollTop } = e.detail;
+  scrollTop.value = currentScrollTop;
+  
+  if (scrollHeight - currentScrollTop < 100) {
+    // loadAudiences(currentCursor.value);
+  }
+};
+
+const audienceOperator = (audience) => {
+  selectedAudience.value = audience;
+  isShowAudienceManagerDrawer.value = true;
+};
+
+</script>
+
+<style>
+.bottom-drawer-container {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  top: 0;
+  z-index: 1000;
+}
+
+.drawer-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.4);
+}
+
+.bottom-drawer {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: #1F2024;
+  border-top-left-radius: 32rpx;
+  border-top-right-radius: 32rpx;
+  transform: translateY(100%);
+  transition-property: transform;
+  transition-duration: 0.3s;
+  transition-timing-function: ease; 
+  height: 1000rpx;
+}
+
+.drawer-open {
+  transform: translateY(0);
+}
+
+.live-audience-list {
+  flex: 1;
+}
+
+.audience-header {
+  padding: 32rpx;
+  flex-direction: row;
+  align-items: center;
+  display: flex;
+  height: 100rpx;
+  position: relative;
+}
+
+.audience-return-arrow-container {
+  width: 48rpx;
+  height: 48rpx;
+  justify-content: center;
+  align-items: center;
+  margin-right: 24rpx;
+}
+
+.audience-return-arrow {
+  height: 36rpx;
+  width: 36rpx;
+}
+
+.audience-title {
+  font-size: 32rpx;
+  color: #ffffff;
+  font-weight: 400;
+  flex: 1;
+  text-align: center;
+  line-height: 100rpx;
+}
+
+.audience-content {
+  flex: 1;
+  padding: 0 32rpx;
+}
+
+.audience-grid {
+  flex-direction: column;
+}
+
+.audience-item {
+  padding: 16rpx 0;
+}
+
+.audience-info {
+  flex-direction: row;
+  align-items: center;
+}
+
+.audience-avatar-container {
+  width: 80rpx;
+  height: 80rpx;
+  margin-right: 20rpx;
+}
+
+.audience-avatar {
+  width: 80rpx;
+  height: 80rpx;
+  border-radius: 40rpx;
+}
+
+.audience-item-right {
+  flex: 1;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.audience-detail {
+  flex-direction: row;
+  align-items: center;
+}
+
+.audience-name {
+  font-size: 28rpx;
+  color: #ffffff;
+  margin-right: 12rpx;
+	max-width: 300rpx;
+	lines: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.audience-tag {
+  background-color: #007AFF;
+  border-radius: 6rpx;
+  padding: 4rpx 12rpx;
+}
+
+.tag-text {
+  color: #ffffff;
+  font-size: 24rpx;
+}
+
+.audience-more {
+  padding: 0 20rpx;
+}
+
+.more-text {
+  font-size: 40rpx;
+  color: #ffffff;
+  font-weight: bold;
+}
+
+.empty-state,
+.loading-state {
+  padding: 32rpx;
+  justify-content: center;
+  align-items: center;
+}
+
+.empty-text {
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 28rpx;
+}
+
+.loading-image {
+  width: 48rpx;
+  height: 48rpx;
+}
+</style> 

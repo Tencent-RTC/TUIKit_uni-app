@@ -1,0 +1,76 @@
+{
+  "pages": [
+		{
+		  "path": "pages/login/index",
+		  "style": {
+		    "navigationBarTitleText": "登录"
+		  }
+		},
+		{
+		  "path": "pages/livelist/index",
+		  "style": {
+		    "navigationBarTitleText": "在线直播"
+		  }
+		},
+    {
+      "path": "pages/audience/index",
+      "style": {
+        "navigationBarTextStyle": "white",
+				"app-plus":{"titleNView":false}
+      }
+    },
+		{
+		  "path": "pages/anchor/index",
+			"disableSwipeBack": true,
+		  "style": {
+        "backgroundColor": "#000000",
+        "navigationBarTextStyle": "white",
+		    "app-plus": {
+					"titleNView": false
+				}
+		  }
+		},
+		{
+		  "path": "pages/liveend/index",
+			"disableSwipeBack": true,
+		  "style": {
+        "navigationBarTextStyle": "white",
+		    "app-plus": {
+					"titleNView": false
+				}
+		  }
+		},
+		{
+		  "path" : "pages/mine/mine",
+		  "style" : {
+		    "navigationBarTitleText" : "个人中心"
+		  }
+		}
+  ],
+	"tabBar": {
+		"color": "#999",
+		"selectedColor": "#007AFF",
+		"backgroundColor": "#FFFFFF",
+		"fontSize": "14px",
+		"list": [{
+			"pagePath": "pages/livelist/index",
+			"text": "直播",
+      "iconPath": "/static/images/mode.png",
+      "selectedIconPath": "/static/images/mode.png"
+		},{
+			"pagePath": "pages/mine/mine",
+			"text": "我的",
+      "iconPath": "/static/images/mine-normal.png",
+      "selectedIconPath": "/static/images/mine-hover.png"
+		}]
+	},
+	"globalStyle": {
+		"navigationBarTextStyle": "black",
+		"navigationBarTitleText": "uni-app",
+		"navigationBarBackgroundColor": "#F8F8F8",
+		"backgroundColor": "#F8F8F8",
+		"app-plus": {
+		}		
+	},
+	"uniIdRouter": {}
+}

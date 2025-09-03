@@ -1,0 +1,431 @@
+<template>
+  <view class="bottom-drawer-container" v-if="modelValue">
+    <view class="drawer-overlay" @tap="close"></view>
+    <view class="bottom-drawer" :class="{ 'drawer-open': modelValue }">
+      <view class="audience-header">
+        <view class="tab-container">
+          <!-- <view 
+            class="tab-item" 
+            :class="activeTab === 'invite' ? 'active' : 'inactive'"
+            @tap="activeTab = 'invite'"
+          >
+            <text :class="activeTab === 'invite' ? 'active-text' : 'inactive-text'">邀请连麦</text>
+						<view class="active-line-container" v-if="activeTab === 'invite'">
+							<view class="active-line"></view>
+						</view>
+          </view> -->
+          <view 
+            class="tab-item" 
+            :class="activeTab === 'requests' ? 'active' : 'inactive'"
+            @tap="activeTab = 'requests'"
+          >
+            <text :class="activeTab === 'requests' ? 'active-text' : 'inactive-text'">连麦申请</text>
+						<view class="active-line-container" v-if="activeTab === 'requests'">
+							<view class="active-line"></view>
+						</view>
+          </view>
+        </view>
+      </view>
+      
+      <scroll-view 
+        class="audience-content" 
+        scroll-y
+        @scroll="handleScroll"
+        :scroll-top="scrollTop"
+      >
+        <!-- 连麦申请列表 -->
+        <view v-if="activeTab === 'requests'">
+          <view v-if="(applicants || []).length > 0" class="audience-grid">
+            <view
+              v-for="audience in applicants || []"
+              :key="audience?.userId"
+              class="audience-item"
+              :class="{ 'is-admin': audience?.userRole === 'administrator' }"
+            >
+							<view class="audience-info">
+							  <view class="audience-avatar-container">
+							    <image class="audience-avatar" :src="audience?.avatarUrl || defaultAvatarUrl" mode="aspectFill" />
+							  </view>
+							  <view class="audience-item-right">
+							    <view class="audience-detail">
+							      <text class="audience-name" :numberOfLines="1">{{ audience?.userName || audience?.userId}}</text>
+							    </view>
+							    <view class="request-actions">
+							      <view class="action-btn accept" @tap="handleRequest(audience, 'accept')">
+							        <text class="btn-text">同意</text>
+							      </view>
+							      <view class="action-btn reject" @tap="handleRequest(audience, 'reject')">
+							        <text class="btn-text">拒绝</text>
+							      </view>
+							    </view>
+							  </view>
+							</view>
+							
+              <!-- <view class="audience-info">
+                <view class="audience-avatar-container">
+                  <image class="audience-avatar" :src="audience.avatarUrl || defaultAvatarUrl" mode="aspectFill" />
+                </view>
+                <view class="audience-item-right">
+                  <view class="audience-detail">
+                    <text class="audience-name" :numberOfLines="1">{{ audience.userName }}</text>
+                  </view>
+                  <view
+                    class="start-link"
+                    :class="audience?.isMessageDisabled ? 'start' : 'waiting'"
+                    @tap="startLink(audience)"
+                  >
+                    <text class="link-text">{{ audience?.isMessageDisabled ? '发起连线' : '邀请中(30)s' }}</text>
+                  </view>
+                </view> 
+              </view>-->
+              <view class="audience-item-bottom-line"></view>
+            </view>
+          </view>
+          <view v-else class="empty-state">
+            <text class="empty-text">暂无观众申请连麦</text>
+						<view></view>
+          </view>
+        </view>
+
+        <!-- 邀请连麦列表 -->
+        <view v-if="activeTab === 'invite'">
+          <view v-if="(invitableGuests || []).length > 0" class="audience-grid">
+            <view
+              v-for="request in invitableGuests || []"
+              :key="request.userId"
+              class="audience-item"
+            >
+              <view class="audience-info">
+                <view class="audience-avatar-container">
+                  <image class="audience-avatar" src="https://sdk-web-1252463788.cos.ap-hongkong.myqcloud.com/trtc/live/assets/Icon/defaultAvatar.png" mode="aspectFill" />
+                </view>
+                <view class="audience-item-right">
+                  <view class="audience-detail">
+                    <text class="audience-name" :numberOfLines="1">{{ request.userName || request.userId}}</text>
+                  </view>
+                  <view class="request-actions">
+                    <view class="action-btn accept" @tap="handleRequest(request, 'accept')">
+                      <text class="btn-text">同意</text>
+                    </view>
+                    <view class="action-btn reject" @tap="handleRequest(request, 'reject')">
+                      <text class="btn-text">拒绝</text>
+                    </view>
+                  </view>
+                </view>
+              </view>
+              <view class="audience-item-bottom-line"></view>
+            </view>
+          </view>
+          <view v-else class="empty-state">
+            <text class="empty-text">暂无邀请连麦</text>
+          </view>
+        </view>
+        
+        <view v-if="isLoading" class="loading-state">
+          <image src="/static/images/more.png" mode="aspectFit" class="loading-image" />
+        </view>
+      </scroll-view>
+
+      <!-- <view class="drawer-content">
+        <view class="divider-line-container">
+          <view class="divider-line"></view>
+        </view>
+      </view> -->
+    </view>
+  </view>
+</template>
+
+<script setup>
+import { ref, reactive, onMounted, computed } from 'vue'
+
+import { useCoGuestState } from "@/uni_modules/ui-component/state/cogueststate";
+const { sendCoGuestRequest, applicants, invitableGuests, acceptCoGuestRequest, rejectCoGuestRequest } = useCoGuestState(uni?.$liveId);
+
+const defaultAvatarUrl = 'https://web.sdk.qcloud.com/component/TUIKit/assets/avatar_01.png';
+
+
+const props = defineProps({
+  modelValue: {
+    type: Boolean,
+    default: false
+  },
+	activeTab: {
+		type: String,
+		default: 'invite',
+	},
+})
+
+const isLoading = ref(false);
+const currentCursor = ref(0);
+const scrollTop = ref(0);
+
+const emit = defineEmits(['update:modelValue'])
+function close() {
+  emit('update:modelValue', false);
+}
+
+const handleScroll = (e) => {
+	if (this.currentCursor.value === 0) return;
+	
+	const { scrollHeight, scrollTop } = e.detail;
+	scrollTop.value = scrollTop;
+	
+	if (scrollHeight - scrollTop.value < 100) {
+		// this.loadAudiences(this.currentCursor);
+	}
+};
+
+const handleRequest = (audience, action) => {
+	console.warn(`${action} request from ${JSON.stringify(audience)}`);
+	
+	if (action === 'accept') {
+		acceptCoGuestRequest({
+			liveId: uni?.$liveId,
+			userId: audience?.userId,
+			success: () => {
+				console.log('acceptCoGuestRequest success.');
+			},
+			fail: (errCode, errMsg) => {
+				console.error(`acceptCoGuestRequest fail errCode: ${errCode}, errMsg: ${errMsg}`);
+			},
+		});
+		
+		return;
+	}
+	if (action === 'reject') {
+		rejectCoGuestRequest({
+			liveId: uni?.$liveId,
+			userId: audience?.userId,
+			success: () => {
+				console.log('rejectCoGuestRequest success.');
+			},
+			fail: (errCode, errMsg) => {
+				console.error(`rejectCoGuestRequest fail errCode: ${errCode}, errMsg: ${errMsg}`);
+			},
+		});
+	}
+};
+
+const startLink = (audience) => {
+	console.warn('发起连线');
+};
+
+</script>
+
+<style>
+.bottom-drawer-container {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  top: 0;
+  z-index: 1000;
+}
+
+.drawer-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.4);
+}
+
+.bottom-drawer {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: rgba(34, 38, 46, 1);
+  border-top-left-radius: 32rpx;
+  border-top-right-radius: 32rpx;
+  transform: translateY(100%);
+  transition-property: transform;
+  transition-duration: 0.3s;
+  transition-timing-function: ease;
+  flex-direction: column;
+	height: 1000rpx;
+}
+
+.drawer-open {
+  transform: translateY(0);
+}
+
+.audience-header {
+  padding: 40rpx 0;
+  background-color: rgba(34, 38, 46, 1);
+  position: relative;
+  z-index: 1;
+  flex-direction: column;
+  align-items: center;
+}
+
+.tab-container {
+  flex-direction: row;
+  justify-content: center;
+  margin-top: 20rpx;
+}
+
+.tab-item {
+  padding: 20rpx 40rpx;
+  margin: 0 20rpx;
+  border-radius: 8rpx;
+}
+
+.tab-text {
+  font-size: 32rpx;
+}
+
+.active-text {
+	color: rgba(255, 255, 255, 0.9);
+}
+
+.active-line-container {
+	margin-top: 4rpx;
+	display: flex;
+	justify-content: center;
+	align-items: center;
+	width: 128rpx;
+}
+
+.active-line {
+	border-bottom: 4rpx solid rgba(255, 255, 255, 0.9);
+	width: 80rpx;
+}
+
+.inactive-text {
+	color: rgba(255, 255, 255, 0.3);
+}
+
+.audience-content {
+  flex: 1;
+  padding: 0 48rpx;
+}
+
+.audience-grid {
+  flex-direction: column;
+}
+
+.audience-item {
+  padding: 24rpx 0;
+  position: relative;
+}
+
+.audience-info {
+  flex-direction: row;
+  align-items: center;
+}
+
+.audience-avatar-container {
+  width: 80rpx;
+  height: 80rpx;
+  border-radius: 40rpx;
+  margin-right: 24rpx;
+}
+
+.audience-avatar {
+  width: 80rpx;
+  height: 80rpx;
+  border-radius: 40rpx;
+}
+
+.audience-item-right {
+  flex: 1;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.audience-name {
+  font-size: 32rpx;
+  color: #ffffff;
+  max-width: 200rpx;
+	lines: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.start-link {
+  padding: 12rpx 32rpx;
+  border-radius: 100rpx;
+  background-color: rgba(43, 106, 214, 1);
+}
+
+.start-link.waiting {
+  background-color: rgba(58, 60, 66, 1);
+}
+
+.link-text {
+  color: #ffffff;
+  font-size: 28rpx;
+}
+
+.request-actions {
+  flex-direction: row;
+}
+
+.action-btn {
+  padding: 12rpx 32rpx;
+  border-radius: 100rpx;
+  margin-left: 16rpx;
+}
+
+.action-btn.accept {
+  background-color: rgba(43, 106, 214, 1);
+}
+
+.action-btn.reject {
+  background-color: rgba(58, 60, 66, 1);
+}
+
+.btn-text {
+  color: #ffffff;
+  font-size: 28rpx;
+}
+
+.audience-item-bottom-line {
+  position: absolute;
+  border-bottom-width: 1rpx;
+  border-bottom-color: rgba(79, 88, 107, 0.3);
+  width: 550rpx;
+  height: 2rpx;
+  bottom: 0;
+  right: 0;
+}
+
+.empty-state,
+.loading-state {
+  padding: 64rpx;
+  justify-content: center;
+  align-items: center;
+}
+
+.empty-text {
+  color: #999999;
+  font-size: 28rpx;
+}
+
+.loading-image {
+  width: 48rpx;
+  height: 48rpx;
+}
+
+.drawer-content {
+  padding: 24rpx 0;
+}
+
+.divider-line-container {
+  height: 68rpx;
+  justify-content: center;
+  position: relative;
+}
+
+.divider-line {
+  width: 268rpx;
+  height: 10rpx;
+  border-radius: 200rpx;
+  background-color: #ffffff;
+  position: absolute;
+  bottom: 16rpx;
+}
+</style> 

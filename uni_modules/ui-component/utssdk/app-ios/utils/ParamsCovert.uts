@@ -1,0 +1,199 @@
+import {
+    SeatUserInfoParam, LiveInfoParam, DeviceTypeParam,
+    LoginUserInfoParam, DeviceStatusParam, SeatLockParams, VideoQuality, NetworkQuality, NetworkInfoParam, AudioOutput,
+    AudioChangerTypeParam, AudioReverbTypeParam
+} from '../../interface.uts';
+
+import {
+    TUIVideoQuality, TUILoginUserInfo, TUISeatMode, TUISeatLockParams, SeatUserInfo,
+    DeviceType, DeviceStatus, LiveInfo, TUINetworkInfo, TUINetworkQuality,
+    TUIAudioRoute, AudioChangerType, AudioReverbType
+} from 'RTCRoomEngine_Plus';
+
+export class ParamsCovert {
+    // TODO：暂时保留，后续禁音、禁画还需要
+    // public static covertDeviceType(deviceType : DeviceTypeParam) : DeviceType {
+    //     switch (deviceType) {
+    //         case 'CAMERA':
+    //             return DeviceType.camera;
+    //         case 'SCREEN_SHARE':
+    //             return DeviceType.screenShare;
+    //         default:
+    //             return DeviceType.microphone; 
+    //     }
+    // }
+
+    public static covertVideoQuality(quality: VideoQuality): TUIVideoQuality {
+        switch (quality) {
+            case 'VIDEOQUALITY_540P':
+                return TUIVideoQuality.quality540P;     // 标清540P
+            case 'VIDEOQUALITY_720P':
+                return TUIVideoQuality.quality720P;     // 高清720P
+            case 'VIDEOQUALITY_1080P':
+                return TUIVideoQuality.quality1080P;    // 超清1080P
+            default:
+                return TUIVideoQuality.quality360P;     // value = 1 低清360P
+        }
+    }
+
+    public static convertDeviceStatus(deviceStatus : DeviceStatusParam) : DeviceStatus {
+        switch (deviceStatus) {
+            case 'ON':
+                return DeviceStatus.on;
+            case 'ADMININVITING':
+                return DeviceStatus.AdminInviting;
+            case 'USERAPPLYING':
+                return DeviceStatus.UserApplying;
+            default:
+                return DeviceStatus.off;
+        }
+    }
+
+    public static convertNetworkQuality(quality? : NetworkQuality) : TUINetworkQuality {
+        switch (quality) {
+            case 'VBAD':
+                return TUINetworkQuality.veryBad;
+            case 'BAD':
+                return TUINetworkQuality.bad;
+            case 'DOWN':
+                return TUINetworkQuality.down;
+            case 'POOR':
+                return TUINetworkQuality.poor;
+            case 'GOOD':
+                return TUINetworkQuality.good;
+            case 'EXCELLENT':
+                return TUINetworkQuality.excellent;
+            default:
+                return TUINetworkQuality.unknown;
+        }
+    }
+
+    public static covertSeatMode(seatMode : number) : TUISeatMode {
+        switch (seatMode) {
+            case 2:
+                return TUISeatMode.applyToTake;
+            default:
+                return TUISeatMode.freeToTake; // value = 1
+        }
+    }
+    public static convertAudioOutput(audioOutput : AudioOutput) : TUIAudioRoute {
+        switch (audioOutput) {
+            case 'EARPIECE':
+                return TUIAudioRoute.earpiece;
+            default:
+                return TUIAudioRoute.speakerphone;
+        }
+    }
+
+    public static convertAudioChangerType(changerType : AudioChangerTypeParam) : AudioChangerType {
+        switch (changerType) {
+            case 'CHILD':
+                return AudioChangerType.child;
+            case 'LITTLE_GIRL':
+                return AudioChangerType.littleGirl;
+            case 'MAN':
+                return AudioChangerType.man;
+            case 'HEAVY_METAL':
+                return AudioChangerType.heavyMetal;
+            case 'COLD':
+                return AudioChangerType.cold;
+            case 'FOREIGNER':
+                return AudioChangerType.foreigner;
+            case 'TRAPPED_BEAST':
+                return AudioChangerType.trappedBeast;
+            case 'FATSO':
+                return AudioChangerType.fatso;
+            case 'STRONG_CURRENT':
+                return AudioChangerType.strongCurrent;
+            case 'HEAVY_MACHINERY':
+                return AudioChangerType.heavyMachinery;
+            case 'ETHEREAL':
+                return AudioChangerType.ethereal;
+            default:
+                return AudioChangerType.none;
+        }
+    }
+
+    public static convertAudioReverbType(reverbType : AudioReverbTypeParam) : AudioReverbType {
+        switch (reverbType) {
+            case 'KTV':
+                return AudioReverbType.ktv;
+            case 'SMALL_ROOM':
+                return AudioReverbType.smallRoom;
+            case 'AUDITORIUM':
+                return AudioReverbType.auditorium;
+            case 'DEEP':
+                return AudioReverbType.deep;
+            case 'LOUD':
+                return AudioReverbType.loud;
+            case 'METALLIC':
+                return AudioReverbType.metallic;
+            case 'MAGNETIC':
+                return AudioReverbType.magnetic;
+            default:
+                return AudioReverbType.none;
+        }
+    }
+
+    public static covertLockMode(lockMode : SeatLockParams) : TUISeatLockParams {
+        let nativeLockMode : TUISeatLockParams = new TUISeatLockParams()
+        nativeLockMode.lockSeat = lockMode.lockSeat
+        nativeLockMode.lockVideo = lockMode.lockVideo
+        nativeLockMode.lockAudio = lockMode.lockAudio
+        return nativeLockMode
+    }
+
+    public static convertLoginUserInfo(userInfo? : LoginUserInfoParam) : TUILoginUserInfo {
+        let nativeUserInfo : TUILoginUserInfo = new TUILoginUserInfo()
+        nativeUserInfo.userId = userInfo?.userId ?? ""
+        nativeUserInfo.userName = userInfo?.userName ?? ""
+        nativeUserInfo.avatarUrl = userInfo?.avatarUrl ?? ""
+        return nativeUserInfo
+    }
+
+    public static convertLiveInfo(liveInfo : LiveInfoParam) : LiveInfo {
+        let nativeLiveInfo = new LiveInfo();
+        nativeLiveInfo.liveId = liveInfo.liveId ?? "";
+        nativeLiveInfo.liveName = liveInfo.liveName;
+        nativeLiveInfo.liveDescription = liveInfo.liveDescription;
+        nativeLiveInfo.categoryList = liveInfo.categoryList;
+        nativeLiveInfo.coverUrl = liveInfo.coverUrl;
+        nativeLiveInfo.backgroundUrl = liveInfo.backgroundUrl;
+        nativeLiveInfo.liveOwner = ParamsCovert.convertLoginUserInfo(liveInfo.liveOwner);
+        nativeLiveInfo.currentViewerCount = liveInfo.currentViewerCount?.toInt() ?? 0;
+        nativeLiveInfo.totalViewerCount = liveInfo.totalViewerCount?.toInt() ?? 0;
+        nativeLiveInfo.createTime = liveInfo.createTime?.toInt() ?? 0;
+        nativeLiveInfo.isMessageDisable = liveInfo.isMessageDisable;
+        nativeLiveInfo.isGiftEnabled = liveInfo.isGiftEnabled;
+        nativeLiveInfo.isPublicVisible = liveInfo.isPublicVisible;
+        nativeLiveInfo.isSeatEnabled = liveInfo.isSeatEnabled ?? true;
+        nativeLiveInfo.seatMode = ParamsCovert.covertSeatMode(liveInfo.seatMode)
+        nativeLiveInfo.keepOwnerOnSeat = liveInfo.keepOwnerOnSeat ?? true
+        nativeLiveInfo.maxSeatCount = liveInfo.maxSeatCount?.toInt() ?? 0;
+        nativeLiveInfo.layoutTemplate = liveInfo.layoutTemplate?.toUInt() ?? 0;
+        nativeLiveInfo.customInfo = liveInfo.customInfo ?? Map<string, string>();
+        return nativeLiveInfo
+    }
+
+    public static convertSeatUserInfo(seatUserInfo : SeatUserInfoParam) : SeatUserInfo {
+        let nativeSeatInfo : SeatUserInfo = new SeatUserInfo()
+        nativeSeatInfo.roomId = seatUserInfo.roomId
+        nativeSeatInfo.userId = seatUserInfo.userId
+        nativeSeatInfo.userName = seatUserInfo.userName
+        nativeSeatInfo.avatarUrl = seatUserInfo.avatarUrl
+        nativeSeatInfo.microphoneStatus = ParamsCovert.convertDeviceStatus(seatUserInfo.microphoneStatus)
+        nativeSeatInfo.cameraStatus = ParamsCovert.convertDeviceStatus(seatUserInfo.cameraStatus)
+        nativeSeatInfo.onSeatTimestamp = seatUserInfo.onSeatTimestamp.toDouble()
+        return nativeSeatInfo;
+    }
+
+    public static convertNetworkInfo(networkInfo ?: NetworkInfoParam) : TUINetworkInfo {
+        let nativeNetworkInfo = new TUINetworkInfo()
+        nativeNetworkInfo.userId = networkInfo?.userId ?? "";
+        nativeNetworkInfo.quality = ParamsCovert.convertNetworkQuality(networkInfo?.quality)
+        nativeNetworkInfo.upLoss = networkInfo?.upLoss?.toUInt32() ?? 0;
+        nativeNetworkInfo.downLoss = networkInfo?.downLoss?.toUInt32() ?? 0;
+        nativeNetworkInfo.delay = networkInfo?.delay?.toUInt32() ?? 0;
+        return nativeNetworkInfo;
+    }
+}

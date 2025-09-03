@@ -1,0 +1,249 @@
+<template>
+  <view class="bottom-drawer-container" v-if="modelValue">
+    <view class="drawer-overlay" @tap="close"></view>
+    <view class="bottom-drawer" :class="{ 'drawer-open': modelValue }">
+        <text class="title">更多功能</text>
+      
+			<view class="drawer-content">
+        <view class="drawer-actions">
+          <view class="action-btn" @tap="handleBeauty">
+            <view class="action-btn-image-container">
+              <image class="action-btn-image" src="/static/images/live-beauty.png" mode="aspectFit" />
+            </view>
+            <text class="action-btn-content">美颜</text>
+          </view>
+          <view class="action-btn" @tap="handleAudioEffect">
+            <view class="action-btn-image-container">
+              <image class="action-btn-image" src="/static/images/live-effects.png" mode="aspectFit" />
+            </view>
+            <text class="action-btn-content">音效</text>
+          </view>
+          <view class="action-btn" @tap="handleCamera" >
+            <view class="action-btn-image-container">
+              <image class="action-btn-image" src="/static/images/live-flip.png" mode="aspectFit" />
+            </view>
+            <text class="action-btn-content">翻转</text>
+          </view>
+          <view class="action-btn"  @tap="handleSwitchMirror">
+            <view class="action-btn-image-container">
+              <image class="action-btn-image" src="/static/images/mirror.png" mode="aspectFit" />
+            </view>
+            <text class="action-btn-content">镜像</text>
+          </view>
+					
+					<view class="action-btn" @tap="openNetWorkPanel">
+					  <view class="action-btn-image-container">
+					    <image class="action-btn-image"  src="/static/images/live-dashboard.png" mode="aspectFit" />
+					  </view>
+					  <text class="action-btn-content">仪表盘</text>
+					</view>
+        </view>
+      </view>
+    </view>
+		
+		<NetWorkPanel v-model="isShowNetWorkPanel"></NetWorkPanel>
+    <BeautyPanel v-model="isShowBeautyPanel"></BeautyPanel>
+    <AudioEffectDrawer v-model="isShowAudioEffect"></AudioEffectDrawer>
+  </view>
+</template>
+
+<script setup>
+import { ref, onMounted } from 'vue';
+import NetWorkPanel from './NetWorkPanel.nvue';
+import BeautyPanel from './BeautyPanel.nvue';
+import AudioEffectDrawer from './AudioEffectDrawer.nvue';
+import { useDeviceState } from "@/uni_modules/ui-component/state/devicestate";
+
+const { isFrontCamera, switchCamera, switchMirror, isLocalMirror } = useDeviceState(uni?.$liveId);
+
+const defaultAvatarUrl = 'https://web.sdk.qcloud.com/component/TUIKit/assets/avatar_01.png';
+
+const props = defineProps({
+  modelValue: {
+    type: Boolean,
+    default: false
+  },
+	userInfo: {
+	  type: Object,
+	  default: () => ({
+	    userName: '',
+	    userId: '',
+	    avatarUrl: '',
+	    isMessageDisabled: false,
+	    userRole: 1
+	  })
+	},
+});
+
+const isShowNetWorkPanel = ref(false);
+const isShowBeautyPanel = ref(false);
+const isShowAudioEffect = ref(false);
+
+const handleBeauty = () => {
+	isShowBeautyPanel.value = true;
+};
+const openNetWorkPanel = () => {
+  isShowNetWorkPanel.value = true
+}
+const handleAudioEffect = () => {
+  isShowAudioEffect.value = true;
+};
+const handleCamera = () => {
+	switchCamera({isFront: !isFrontCamera.value})
+};
+const handleSwitchMirror = () => {
+  switchMirror({isMirror: !isLocalMirror.value})
+}
+const emit = defineEmits(['update:modelValue']);
+const close = () => {
+	emit('update:modelValue', false);
+};
+
+</script>
+
+<style>
+.bottom-drawer-container {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  top: 0;
+  z-index: 1000;
+}
+
+.drawer-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.4);
+}
+
+.bottom-drawer {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: rgba(34, 38, 46, 1);
+  border-top-left-radius: 32rpx;
+  border-top-right-radius: 32rpx;
+  transform: translateY(100%);
+  transition-property: transform;
+  transition-duration: 0.3s;
+  transition-timing-function: ease;
+  flex-direction: column;
+}
+
+.drawer-open {
+  transform: translateY(0);
+}
+
+.drawer-header {
+  padding: 48rpx;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.drawer-header-left-container {
+  flex-direction: row;
+  align-items: center;
+}
+
+.drawer-header-avatar-container {
+  width: 80rpx;
+  height: 80rpx;
+  border-radius: 40rpx;
+  margin-right: 24rpx;
+}
+.title { 
+  color: #fff;
+  font-size: 32rpx;
+  font-weight: 500;
+  text-align: center;
+  padding-top: 20rpx
+}
+.drawer-header-avatar {
+  width: 80rpx;
+  height: 80rpx;
+  border-radius: 40rpx;
+}
+
+.drawer-header-content-container {
+  flex-direction: column;
+}
+
+.drawer-name {
+  font-size: 32rpx;
+  color: rgba(255, 255, 255, 0.9);
+  margin-bottom: 12rpx;
+}
+
+.drawer-id {
+  font-size: 24rpx;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.drawer-content {
+  flex: 1;
+  padding: 0 48rpx;
+  margin-bottom: 40rpx;
+	/* height: 300rpx; */
+}
+
+.drawer-actions {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  justify-content: space-between;
+  align-items: center;
+  padding: 24rpx 0;
+}
+
+.action-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 1;
+}
+
+.action-btn-image-container {
+  width: 100rpx;
+  height: 100rpx;
+  margin-bottom: 12rpx;
+  border-radius: 25rpx;
+  justify-content: center;
+  align-items: center;
+}
+
+.action-btn-image {
+  width: 60rpx;
+  height: 60rpx;
+}
+
+.action-btn-content {
+  font-size: 24rpx;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.divider-line-container {
+  height: 68rpx;
+  justify-content: center;
+  position: relative;
+}
+
+.divider-line {
+  width: 268rpx;
+  height: 10rpx;
+  border-radius: 200rpx;
+  background-color: #ffffff;
+  position: absolute;
+  bottom: 16rpx;
+}
+
+.camera-mic-setting {
+  flex: 1;
+  background-color: #1f1024;
+}
+</style> 

@@ -1,0 +1,364 @@
+<template>
+	<view class="live-stream-view-container">
+		<view
+      class="live-stream-view-content"
+      style="background-color: #000;"
+      :style="{
+                top: 0 + 'px',
+                left: systemInfo.safeArea.left + 'px',
+                width: systemInfo.safeArea.width + 'px',
+                height: systemInfo.windowHeight + 'px',
+              }"
+    >
+      <stream-view
+        class="live-stream-view-background"
+        :liveId="liveId"
+        :style="{
+                  top: 0 + 'px',
+                  width: systemInfo.safeArea.width + 'px',
+                  height: streamViewHeight + 'px',
+                }"
+      >
+      </stream-view>
+  <view
+        v-if="seatList?.length === 1"
+        @touchend.stop=""
+        class="grid-content-cell"
+        v-for="(participant, colIndex) in seatList"
+        :key="`${colIndex}`"
+        @tap="streamViewClick(participant)"
+                        :style="{
+                  left: participant?.region?.x * scale.scaleX + 'px',
+                  top: (calculateTopValue(participant) - 2) + 'px',
+                  'background-color': participant?.userInfo?.cameraStatus === 'OFF' ? '#000' : 'transparent',
+                }"
+      >
+        <view 
+          style="display: flex; flex-direction: row; width: 120rpx; justify-content: center; align-items: center;"
+          :style="{
+                    width: participant?.region?.w * scale.scaleX + 'px',
+                    height: streamViewHeight + 'px',
+                  }"
+        >
+          <view
+            v-if="participant?.userInfo?.cameraStatus === 'OFF'"
+            class="video-container"
+          >
+          	<image class="participant-video" :src="participant?.userInfo?.avatarUrl || defaultAvatarUrl" mode="aspectFill" />
+          </view>
+
+        </view>
+      </view>
+			
+      <view
+        v-if="seatList.length > 1 && (templateLayout !== 801 && templateLayout !== 800)"
+        @touchend.stop=""
+        class="grid-content-cell"
+        v-for="(participant, colIndex) in seatList"
+        :key="`${colIndex}`"
+        @tap="streamViewClick(participant)"
+        :style="{
+                  left: participant?.region?.x * scale.scaleX + 'px',
+                  top: (calculateTopValue(participant) - 2) + 'px',
+                  'background-color': participant?.userInfo?.cameraStatus === 'OFF' ? '#000' : 'transparent',
+                }"
+      >
+        <view 
+          style="display: flex; flex-direction: row; width: 120rpx; justify-content: center; align-items: center;"
+          :style="{
+                    width: participant?.region?.w * scale.scaleX + 'px',
+                    height: (participant?.region?.h * scale.scaleY + 2)+ 'px',
+                  }"
+        >
+          <view
+            v-if="participant?.userInfo?.cameraStatus === 'OFF'"
+            class="video-container"
+          >
+          	<image class="participant-video" :src="participant?.userInfo?.avatarUrl || defaultAvatarUrl" mode="aspectFill" />
+          </view>
+          
+          <view class="participant-info-container">
+            <image
+              v-if="participant?.userInfo?.microphoneStatus === 'OFF'"
+              class="mic-icon"
+              src="/static/images/unmute-mic.png"
+              mode="aspectFit"
+            />
+            <text class="participant-name" :style="{ 'max-width': participant.region.w * scale.scaleX * 0.85 + 'px' }">
+              {{ participant?.userInfo?.userName || participant?.userInfo?.userId }}
+            </text>
+          </view>
+        </view>
+      </view>
+      
+      <view
+      	v-if="seatList.length > 1 && (templateLayout === 801 || templateLayout === 800)"
+        @touchend.stop=""
+      	class="grid-content-cell" 
+      	v-for="(participant, colIndex) in seatList"
+      	:key="`${participant.index}`"
+        @tap="streamViewClick(participant)"
+        style="border-radius: 0rpx;"
+        :style="{
+                  left: participant?.region?.x * scale.scaleX + 'px',
+                  top: (calculateTopValue(participant) - 2) + 'px',
+                  'background-color': participant?.userInfo?.cameraStatus === 'OFF' ? '#000' : 'transparent',
+                }"
+      >
+        <view
+          v-if="participant?.userInfo.userId"
+          style="display: flex; flex-direction: row; width: 120rpx; justify-content: center; align-items: center;"
+          :style="{
+                    width: participant?.region?.w * scale.scaleX + 'px',
+                    height: (participant?.region?.h * scale.scaleY + 2)+ 'px',
+                  }"
+        >
+          <view
+            v-if="participant?.userInfo?.cameraStatus === 'OFF'"
+            class="video-container"
+          >
+          	<image class="participant-video" :src="participant?.userInfo?.avatarUrl || defaultAvatarUrl" mode="aspectFill" />
+          </view>
+          
+          <view class="participant-info-container" v-else>
+          	<image
+          		v-if="participant?.userInfo?.microphoneStatus === 'OFF'"
+          		class="mic-icon"
+          		src="/static/images/unmute-mic.png"
+          		mode="aspectFit"
+          	/>
+            <text class="participant-name" :style="{ 'max-width': participant.region.w * scale.scaleX * 0.85 + 'px' }">
+              {{ participant?.userInfo?.userName || participant?.userInfo?.userId }}
+            </text>
+          </view>
+        </view>
+        
+        <view class="participant-wait-container" v-else
+          style="border-bottom: 1rpx solid #000; background-color: #1F2024;"
+          :style="{
+                    width: participant?.region?.w * scale.scaleX + 'px',
+                    height: participant?.region?.h * scale.scaleY + 'px',
+                    'border-right': templateLayout === 800 ? '1rpx solid #000' : '',
+                  }"
+        >
+        	<text class="participant-wait-content">{{ participant?.index }}</text>
+        	<text class="participant-wait-content">等待连麦</text>
+        </view>
+			</view>
+		</view>
+	</view>
+</template>
+
+<script setup>
+import { ref, onMounted, computed, watch } from 'vue';
+import { useLiveSeatState } from "@/uni_modules/ui-component/state/liveseatstate";
+import { useCoGuestState } from '@/uni_modules/ui-component/state/cogueststate';
+import { useCoHostState } from '@/uni_modules/ui-component/state/cohoststate';
+import { calculateScale } from './utils/index';
+const props = defineProps({
+	liveId: {
+		type: String,
+		default: '',
+	},
+  onAudienceStreamViewClick: {
+    type: Function,
+    default: null
+  },
+  templateLayout: {
+    type: Number,
+  },
+  currentLoginUserId: {
+    type: String,
+  }
+});
+
+const systemInfo = ref({});
+const { seatList, canvas, bindVideoView, lockSeat, moveToSeat } = props?.liveId && useLiveSeatState(props?.liveId);
+const { localStatus, disconnect, CoGuestStatus } = useCoGuestState(uni?.$liveId)
+const { connectedHosts } = useCoHostState(uni?.$liveId)
+const defaultAvatarUrl = 'https://web.sdk.qcloud.com/component/TUIKit/assets/avatar_01.png';
+
+const scale = ref({ scaleX: 1, scaleY: 1 });
+const streamViewHeight = ref(1);
+
+// 初始化加载
+onMounted(() => {
+  uni.getSystemInfo({
+    success: (res) => {
+      systemInfo.value = res;
+      streamViewHeight.value = systemInfo.value.windowHeight;
+      
+      console.warn(`systemInfo: ${JSON.stringify(systemInfo.value)},
+                    windowWidth: ${res.windowWidth}, windowHeight: ${res.windowHeight},
+                    streamViewHeight: ${streamViewHeight.value}`);
+    }
+  });
+});
+
+// 下发的视频像素值, 同时 seatList 对应的视频位下发的 region 换算时也需要参考这个
+watch(canvas, (newValue) => {
+  if (newValue?.w && newValue?.h) {
+    scale.value = calculateScale(
+      newValue.w, 
+      newValue.h,
+      systemInfo.value.safeArea.width,
+      systemInfo.value.safeArea.width * newValue.h / newValue.w,
+    );
+    
+    if ((seatList.value || []).length > 1) {
+      streamViewHeight.value = (systemInfo.value.safeArea.width * canvas.value.h) / canvas.value.w;
+    }
+    
+    console.warn(`canvas change scale value: ${JSON.stringify(scale.value)}, streamViewHeight: ${streamViewHeight.value}`);
+  }
+});
+
+const streamViewClick = (options) => {
+  console.log(`click options: ${JSON.stringify(options)},
+               localStatus: ${localStatus.value}, currentLoginUserId: ${props?.currentLoginUserId}`);
+  if(connectedHosts?.value.length > 0) return
+  if (props.templateLayout === 800 && props.templateLayout === 801) {
+    if (localStatus.value !== 'DISCONNECTED' && options?.userInfo?.userId !== props?.currentLoginUserId) {
+      return;
+    }
+  } 
+  
+  if (props.onAudienceStreamViewClick) {
+  	props.onAudienceStreamViewClick({ ...options.userInfo, seatIndex: options.index });
+  }
+};
+
+const calculateTopValue = (participant) => {
+  let topValue = 1;
+  console.log(`templateLayout: ${props.templateLayout}`);
+  if (!participant) return topValue;
+  
+  if (props.templateLayout !== 800 && props.templateLayout !== 801) {
+    topValue = participant.region.y * scale.value.scaleY;
+  }
+  if (props.templateLayout === 800) {
+    topValue = participant.region.y * scale.value.scaleY;
+  }
+  if (props.templateLayout === 801) {
+    topValue = participant.region.y * scale.value.scaleY;
+  }
+  
+  console.log(`index: ${participant.index}, userId: ${participant.userId}, topValue: ${topValue}`);
+  
+  return topValue;
+};
+
+watch(seatList, (newValue) => {
+  console.log(`seatList change: ${JSON.stringify(newValue)}, localStatus: ${localStatus.value}, 
+               templateLayout: ${props.templateLayout}, canvas: ${JSON.stringify(canvas.value)}`);
+
+  if ((newValue || []).length > 1 && canvas.value?.w && canvas.value?.h) {
+    streamViewHeight.value = (systemInfo.value.safeArea.width * canvas.value.h) / canvas.value.w;
+  }
+  if ((newValue || []).length === 1 && canvas.value?.w && canvas.value?.h && localStatus.value === 'DISCONNECTED') {
+    streamViewHeight.value = systemInfo.value.windowHeight;
+  }
+  console.log(`sealList change streamViewHeight: ${streamViewHeight.value}`);
+});
+
+watch(localStatus, (newVal, oldVal) => {
+  console.log(`localStatus change, newVal: ${newVal}, oldVal: ${oldVal}, templateLayout: ${props.templateLayout}`);
+  
+  if (oldVal === 'CONNECTED' && newVal !== 'CONNECTED') {
+    streamViewHeight.value = systemInfo.value.windowHeight;
+    console.log(`localStatus change streamViewHeight: ${streamViewHeight.value}`);
+  }
+});
+
+</script>
+
+<style>
+.live-stream-view-container {
+  flex: 1;
+  position: relative;
+	background: rgba(15, 16, 20, 0.5);
+	z-index: -1;
+}
+
+.live-stream-view-content {
+  flex: 1;
+  position: relative;
+}
+
+.live-stream-view-background {
+	position: relative;
+  /* right: 0;
+  bottom: 0; */
+  z-index: -1;
+}
+
+.grid-image-cell {
+  position: absolute;
+  border-radius: 24rpx;
+  overflow: hidden;
+  z-index: 1000;
+}
+
+.participant-video {
+  width: 80rpx;
+  height: 80rpx;
+  border-radius: 80rpx;
+}
+
+.grid-content-cell {
+  flex: 1;
+  /* margin-right: 8px; */
+  position: absolute;
+  overflow: hidden;
+	/* width: 130px; */
+}
+
+.participant-info-container {
+	position: absolute;
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	background: rgba(34, 38, 46, 0.4);
+	border-radius: 38rpx;
+	height: 36rpx;
+	padding-left: 6rpx;
+  padding-right: 12rpx;
+  left: 6rpx;
+  bottom: 6rpx;
+	flex: 1;
+}
+
+.mic-icon {
+  width: 24rpx;
+  height: 24rpx;
+  margin-left: 4rpx;
+}
+
+.participant-name {
+  font-size: 20rpx;
+  font-weight: 500;
+  color: #ffffff;
+  margin-left: 2rpx;
+  text-align: center;
+  min-width: 80rpx;
+  lines: 1; /* 限制为1行 */
+  text-overflow: ellipsis; /* 超出显示... */
+  overflow: hidden; /* 隐藏超出部分 */
+}
+
+.participant-wait-container {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  /* flex: 1; */
+}
+.participant-wait-content {
+  font-size: 28rpx;
+  font-weight: 500;
+  text-align: center;
+  color: #ffffff;
+  margin-top: 12rpx;
+}
+</style>

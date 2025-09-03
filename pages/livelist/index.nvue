@@ -1,0 +1,191 @@
+<template>
+	<view class="home-container" :style="{ height: safeArea.height + 'px' }">
+		<live-list />
+		<!-- 创建房间按钮 -->
+    <view class="home-footer">
+      <view class="create-btn" @click="goAnchorPage()">
+        <image style="width: 36rpx; height: 36rpx; margin-right: 10rpx;" src="/static/images/create-live.png" />
+        <text class="btn-text">开直播</text>
+      </view>
+    </view>
+	</view>
+</template>
+
+<script setup>
+import { ref, onMounted, watch } from 'vue';
+import { onLoad, onShow } from '@dcloudio/uni-app';
+import LiveList from '../../components/atomic-x/LiveList.nvue';
+
+const safeArea = ref({
+  left: 0,
+  right: 0,
+  top: 0,
+  bottom: 0,
+  width: 375,
+  height: 750,
+});
+
+onMounted(() => {
+  uni.getSystemInfo({
+    success: (res) => {
+      safeArea.value = res.safeArea;
+    }
+  });
+});
+
+
+
+onShow(() => {
+  console.warn(`home onShow`);
+  needRefresh.value = true;
+});
+
+const goAnchorPage = () => {
+  uni.redirectTo({
+    url: '/pages/anchor/index'
+  });
+}
+</script>
+
+<style>
+	.home-container {
+		flex: 1;
+		background-color: #F2F5FC;
+    position: relative;
+	}
+
+	.header {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		justify-content: space-between;
+		padding: 20rpx 32rpx;
+		background-color: #ffffff;
+		border-bottom-width: 1rpx;
+		border-bottom-color: #f0f0f0;
+		position: relative;
+		height: 120rpx;
+	}
+
+	.header-left {
+		width: 80rpx;
+		display: flex;
+		align-items: center;
+		justify-content: flex-start;
+	}
+
+	.back-icon {
+		width: 40rpx;
+		height: 40rpx;
+		opacity: 0.8;
+	}
+
+	.header-center {
+		flex: 1;
+		display: flex;
+		flex-direction: column;
+		justify-content: center;
+		align-items: center;
+		position: relative;
+	}
+
+	.header-title {
+		font-size: 36rpx;
+		font-weight: 600;
+		color: #333333;
+		margin-bottom: 8rpx;
+	}
+
+	.title-underline {
+		width: 60rpx;
+		height: 4rpx;
+		background-color: #007AFF;
+		border-radius: 2rpx;
+	}
+
+	.header-right {
+		width: 80rpx;
+		display: flex;
+		justify-content: flex-end;
+		align-items: center;
+	}
+
+	.help-icon {
+		width: 40rpx;
+		height: 40rpx;
+		opacity: 0.8;
+	}
+
+	.user-bar {
+		flex-direction: row;
+		align-items: center;
+		padding-top: 32rpx;
+		padding-bottom: 16rpx;
+		padding-left: 32rpx;
+		padding-right: 32rpx;
+		background-color: #fff;
+	}
+
+	.avatar {
+		width: 64rpx;
+		height: 64rpx;
+		border-radius: 32rpx;
+		margin-right: 16rpx;
+	}
+
+	.user-info {
+		flex: 1;
+		flex-direction: column;
+		justify-content: center;
+	}
+
+	.user-name {
+		font-size: 28rpx;
+		color: #222;
+		font-weight: 700;
+	}
+
+	.user-id {
+		font-size: 22rpx;
+		color: #999;
+		margin-top: 4rpx;
+	}
+
+	.user-icon {
+		width: 40rpx;
+		height: 40rpx;
+		justify-content: center;
+		align-items: center;
+	}
+
+	.icon-help {
+		width: 40rpx;
+		height: 40rpx;
+	}
+
+  .home-footer {
+    position: absolute;
+    bottom: 60rpx;
+    width: 750rpx;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+  }
+	.create-btn {
+    background-color: #0468FC;
+    border-radius: 999px;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    padding: 25rpx 60rpx;
+	}
+
+
+	.btn-text {
+		color: #fff;
+		font-size: 32rpx;
+		font-weight: 700;
+	}
+</style>

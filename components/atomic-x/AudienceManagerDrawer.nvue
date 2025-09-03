@@ -1,0 +1,307 @@
+<template>
+  <view class="bottom-drawer-container" v-if="modelValue">
+    <view class="drawer-overlay" @tap="close"></view>
+    <view class="bottom-drawer" :class="{ 'drawer-open': modelValue }">
+			
+      <view class="drawer-header">
+        <view class="user-info">
+          <image class="user-avatar" :src="userInfo?.avatarUrl || defaultAvatarUrl" mode="aspectFill" />
+          <view class="user-details">
+            <view class="name-badge-row">
+              <text class="user-name">{{ userInfo?.userName || '' }}</text>
+              <!-- <view class="badge">
+                <image class="badge-icon" src="/static/images/heart.png" mode="aspectFit" />
+                <text class="badge-text">65</text>
+              </view> -->
+            </view>
+            <text class="user-id">ID: {{ userInfo?.userId || '' }}</text>
+          </view>
+        </view>
+        <!-- <view class="follow-button" @tap="followUser">
+          <text class="follow-text">Follow</text>
+        </view> -->
+      </view>
+      
+			<view class="drawer-content">
+        <view class="drawer-actions">
+          <view class="action-btn" @tap="muteSpeak">
+            <view class="action-btn-image-container">
+							<image class="action-btn-image" v-if="userInfo?.isMessageDisabled" src="/static/images/unmute-speak.png" mode="aspectFit" />
+							<image class="action-btn-image" v-else src="/static/images/mute-speak.png" mode="aspectFit" />
+            </view>
+            <text class="action-btn-content" v-if="userInfo?.isMessageDisabled">解除禁言</text>
+						<text class="action-btn-content" v-else>禁言</text>
+          </view>
+          <view class="action-btn" @tap="kickOut(userInfo)">
+            <view class="action-btn-image-container">
+              <image class="action-btn-image" src="/static/images/kick-out-room.png" mode="aspectFit" />
+            </view>
+            <text class="action-btn-content">踢出房间</text>
+          </view>
+        </view>
+        <!-- <view class="divider-line-container">
+          <view class="divider-line"></view>
+        </view> -->
+      </view>
+    </view>
+  </view>
+</template>
+
+<script setup>
+import { ref } from 'vue';
+import { useLiveState } from "@/uni_modules/ui-component/state/livestate";
+import { useLiveAudienceState } from "@/uni_modules/ui-component/state/liveaudiencestate";
+const { currentLive } = useLiveState();
+const { setAdministrator, revokeAdministrator, kickUserOutOfRoom, disableSendMessage } = useLiveAudienceState(uni?.$liveId);
+	
+const defaultAvatarUrl = 'https://web.sdk.qcloud.com/component/TUIKit/assets/avatar_01.png';
+const props = defineProps({
+  modelValue: {
+    type: Boolean,
+    default: false
+  },
+	userInfo: {
+		type: Object,
+	},
+	liveId: {
+		type: String,
+	}
+});
+
+const emit = defineEmits(['update:modelValue']);
+const close = () => {
+	emit('update:modelValue', false);
+};
+
+const muteSpeak = () => {
+	console.log(`mute or unMute speak, liveId: ${props.liveId}, isMessageDisabled: ${props?.userInfo?.isMessageDisabled}`);
+	const params = {
+		liveId: uni?.$liveId,
+		userId: props?.userInfo?.userId,
+		isDisable: !props?.userInfo?.isMessageDisabled,
+	};
+	
+	if (props?.userInfo?.isMessageDisabled) {
+		disableSendMessage(params);
+	} else {
+		disableSendMessage(params);
+	}
+  
+  close();
+};
+
+const kickOut = () => {
+	console.log('kick out from room', props?.userInfo?.userId);
+	
+  uni.showModal({
+    content: `确认踢出${props?.userInfo?.userName || props?.userInfo?.userId}吗？`,
+    success: (res) => {
+        if (res.confirm) {
+            kickUserOutOfRoom({
+                liveId: uni?.$liveId,
+                userId: props?.userInfo?.userId,
+                success: () => {
+                close()
+                    console.log(`kickUserOutOfRoom success`);
+                },
+                fail: (errCode, errMsg) => {
+                    console.log(`kickUserOutOfRoom fail errCode: ${errCode}, errMsg: ${errMsg}`);
+                },
+        });
+        }
+    }
+  });
+};
+
+const followUser = () => {
+	console.warn('== 关注用户 ', userInfo?.userName);
+	// 这里可以添加关注用户的逻辑
+	uni.showToast({
+		title: '关注成功',
+		icon: 'success'
+	});
+}
+</script>
+
+<style>
+.bottom-drawer-container {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  top: 0;
+  z-index: 1000;
+}
+
+.drawer-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.4);
+}
+
+.bottom-drawer {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: rgba(34, 38, 46, 1);
+  border-top-left-radius: 32rpx;
+  border-top-right-radius: 32rpx;
+  transform: translateY(100%);
+  transition-property: transform;
+  transition-duration: 0.3s;
+  transition-timing-function: ease;
+  height: 400rpx;
+  flex-direction: column;
+}
+
+.drawer-open {
+  transform: translateY(0);
+}
+
+.drawer-header {
+  padding: 48rpx;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+  /* background-color: rgba(34, 38, 46, 0.8); */
+  margin: 24rpx;
+  border-radius: 24rpx;
+}
+
+.user-info {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+}
+
+.user-avatar {
+  width: 80rpx;
+  height: 80rpx;
+  border-radius: 40rpx;
+  border-width: 2rpx;
+  border-color: #ffffff;
+  margin-right: 20rpx;
+}
+
+.user-details {
+  display: flex;
+  flex-direction: column;
+}
+
+.name-badge-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  margin-bottom: 8rpx;
+}
+
+.user-name {
+  color: #ffffff;
+  font-size: 32rpx;
+  font-weight: 500;
+  margin-right: 16rpx;
+}
+
+.badge {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  background-color: #8B5CF6;
+  padding: 4rpx 12rpx;
+  border-radius: 16rpx;
+}
+
+.badge-icon {
+  width: 24rpx;
+  height: 24rpx;
+  margin-right: 8rpx;
+}
+
+.badge-text {
+  color: #ffffff;
+  font-size: 24rpx;
+  font-weight: 500;
+}
+
+.user-id {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 24rpx;
+}
+
+.follow-button {
+  background-color: #007AFF;
+  padding: 12rpx 32rpx;
+  border-radius: 32rpx;
+	/* height: 64rpx; */
+}
+
+.follow-text {
+  color: #ffffff;
+  font-size: 28rpx;
+  font-weight: 500;
+}
+
+.drawer-content {
+  /* flex: 1; */
+  padding: 0 24rpx;
+}
+
+.drawer-actions {
+	display: flex;
+  flex-direction: row;
+  /* justify-content: space-around; */
+	justify-content: flex-start;
+}
+
+.action-btn {
+  flex-direction: column;
+  align-items: center;
+  margin-right: 24rpx;
+	flex: 1;
+	height: 150rpx;
+}
+
+.action-btn-image-container {
+  width: 100rpx;
+  height: 100rpx;
+  background-color: rgba(43, 44, 48, 1);
+  margin-bottom: 12rpx;
+  border-radius: 25rpx;
+  justify-content: center;
+  align-items: center;
+}
+
+.action-btn-image {
+  width: 50rpx;
+  height: 50rpx;
+}
+
+.action-btn-content {
+  font-size: 24rpx;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.divider-line-container {
+  height: 68rpx;
+  justify-content: center;
+  position: relative;
+}
+
+.divider-line {
+  width: 268rpx;
+  height: 10rpx;
+  border-radius: 200rpx;
+  background-color: #ffffff;
+  position: absolute;
+  bottom: 16rpx;
+}
+
+.camera-mic-setting {
+  flex: 1;
+  background-color: #1f1024;
+}
+</style> 
