@@ -110,7 +110,6 @@
   const emit = defineEmits(['update:modelValue'])
   const refreshing = ref('hide')
   const isLoading = ref(false)
-  const audienceList = ref([])
   const scrollTop = ref(0)
   const activeTab = ref('pk')
   const showDrawer = ref(false)
