@@ -1,6 +1,6 @@
 <template>
   <!-- 仪表盘面板组件 -->
-  <!-- 使用方式: <NetWorkPanel v-model="showDashboardPanel" /> -->
+  <!-- 使用方式: <NetworkQualityPanel v-model="showDashboardPanel" /> -->
   <view class="bottom-drawer-container" v-if="modelValue">
     <view class="drawer-overlay" @tap="close"></view>
     <view class="bottom-drawer" :class="{ 'drawer-open': modelValue }">

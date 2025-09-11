@@ -259,7 +259,7 @@ const syncStateToUI = () => {
 };
 
 onMounted(() => {
-  console.log('AudioEffectDrawer mounted');
+  console.log('AudioEffectPanel mounted');
   
   uni.getSystemInfo({
     success: (res) => {
