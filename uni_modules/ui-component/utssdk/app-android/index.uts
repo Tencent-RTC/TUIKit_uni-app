@@ -1,36 +1,36 @@
 import Context from "android.content.Context";
 import {
-    LoginOptions, LogoutOptions, SetSelfInfoOptions,
-    FetchLiveListOptions, CreateLiveOptions, JoinLiveOptions, EndLiveOptions, LeaveLiveOptions, UpdateLiveInfoOptions,
-    LockSeatOptions, MoveToSeatOptions,
-    FetchAudienceListOptions, SetAdministratorOptions, RevokeAdministratorOptions, KickUserOutOfRoomOptions, DisableSendMessageOptions,
-    OpenLocalMicrophoneOptions, UnmuteLocalAudioOptions, SetAudioRouteOptions,
-    OpenLocalCameraOptions, SwitchCameraOptions,
-    SwitchMirrorOptions, UpdateVideoQualityOptions,
-    SendCoHostRequestOptions, CancelCoHostRequestOptions, AcceptCoHostRequestOptions, RejectCoHostRequestOptions, ExitCoHostOptions,
-    SendCoGuestRequestOptions, CancelCoGuestRequestOptions,
-    AcceptCoGuestRequestOptions, RejectCoGuestRequestOptions, DisconnectOptions,
-    SendTextMessageOptions, SendCustomMessageOptions,
-    GetGiftListOptions, SendGiftOptions,
-    SetSmoothLevelOptions, SetWhitenessLevelOptions, SetRuddyLevelOptions,
-    SetVoiceEarMonitorEnableOptions, SetVoiceEarMonitorVolumeOptions, SetMicrophoneVolumeOptions,
-    SetChangerTypeOptions, SetReverbTypeOptions,
-    SendLikeOptions,
-    CallExperimentalAPIOptions,
+  LoginOptions, LogoutOptions, SetSelfInfoOptions,
+  FetchLiveListOptions, CreateLiveOptions, JoinLiveOptions, EndLiveOptions, LeaveLiveOptions, UpdateLiveInfoOptions,
+  LockSeatOptions, MoveToSeatOptions,
+  FetchAudienceListOptions, SetAdministratorOptions, RevokeAdministratorOptions, KickUserOutOfRoomOptions, DisableSendMessageOptions,
+  OpenLocalMicrophoneOptions, UnmuteLocalAudioOptions, SetAudioRouteOptions,
+  OpenLocalCameraOptions, SwitchCameraOptions,
+  SwitchMirrorOptions, UpdateVideoQualityOptions,
+  SendCoHostRequestOptions, CancelCoHostRequestOptions, AcceptCoHostRequestOptions, RejectCoHostRequestOptions, ExitCoHostOptions,
+  SendCoGuestRequestOptions, CancelCoGuestRequestOptions,
+  AcceptCoGuestRequestOptions, RejectCoGuestRequestOptions, DisconnectOptions,
+  SendTextMessageOptions, SendCustomMessageOptions,
+  GetGiftListOptions, SendGiftOptions,
+  SetSmoothLevelOptions, SetWhitenessLevelOptions, SetRuddyLevelOptions,
+  SetVoiceEarMonitorEnableOptions, SetVoiceEarMonitorVolumeOptions, SetMicrophoneVolumeOptions,
+  SetChangerTypeOptions, SetReverbTypeOptions,
+  SendLikeOptions,
+  CallExperimentalAPIOptions,
 } from '../interface.uts';
 import {
-    LoginStoreObserver, LiveStoreObserver,
-    LiveSeatStoreObserver, LiveAudienceStoreObserver,
-    GiftStoreObserver, DeviceStoreObserver,
-    CoHostStoreObserver, CoGuestStoreObserver,
-    BarrageStoreObserver,
-    BeautyStoreObserver, AudioEffectStoreObserver, LiveSummaryStateObserver, LikeStateObserver
+  LoginStoreObserver, LiveStoreObserver,
+  LiveSeatStoreObserver, LiveAudienceStoreObserver,
+  GiftStoreObserver, DeviceStoreObserver,
+  CoHostStoreObserver, CoGuestStoreObserver,
+  BarrageStoreObserver,
+  BeautyStoreObserver, AudioEffectStoreObserver, LiveSummaryStateObserver, LikeStateObserver
 } from 'uts.sdk.modules.uiComponent.observer';
 
 import { ExperimentalApiInvoker } from 'uts.sdk.modules.uiComponent.kotlin';
 
 import {
-    V2RTCRoomEngine, LiveInfo, SeatUserInfo, DeviceType, CompletionHandler
+  V2RTCRoomEngine, LiveInfo, SeatUserInfo, DeviceType, CompletionHandler
 } from 'com.tencent.cloud.uikit.state';
 import { Logger } from "com.tencent.cloud.uikit.state.common"
 
@@ -57,794 +57,799 @@ const context : Context = UTSAndroid.getAppContext() as Context;
 
 export class V2RTCRoomEngineManager {
 
-    constructor() {
-        console.log(`${RTC_TAG} constructor start`);
+  constructor() {
+    console.log(`${RTC_TAG} constructor start`);
+  }
+
+  public login(options : LoginOptions) {
+    console.log(`${RTC_TAG} login, data: ${JSON.stringify(options)}`);
+    // this.setTestEnvironment()
+    this.setFramework()
+    const callback = new (class implements TUIRoomDefine.ActionCallback {
+      override onSuccess() : void {
+        console.log(`${RTC_TAG} login success`);
+        options?.success?.();
+      }
+
+      override onError(error : TUICommonDefine.Error, errMsg : string) : void {
+        console.error(`${RTC_TAG} login failed, error: ${error}, errMsg: ${errMsg}`);
+        options?.fail?.(error.getValue(), errMsg);
+      }
+    });
+
+    V2RTCRoomEngine.getInstance().login(context, options.sdkAppID.toInt(), options.userID, options.userSig, callback);
+  }
+
+  public setTestEnvironment() {
+    const data = { "api": "setTestEnvironment", "params": { "enableRoomTestEnv": true } }
+    TUIRoomEngine.sharedInstance().callExperimentalAPI(JSON.stringify(data), null)
+  }
+
+  public setFramework() {
+    const data = { "api": "setFramework", "params": { "framework": 11 ,"component": 21 } }
+    TUIRoomEngine.sharedInstance().callExperimentalAPI(JSON.stringify(data), null)
+  }
+
+  public logout(options : LogoutOptions) {
+    console.warn(`${RTC_TAG} logout, data: ${JSON.stringify(options)}`);
+    const callback = new (class implements TUIRoomDefine.ActionCallback {
+      override onSuccess() : void {
+        options?.success?.();
+      }
+
+      override onError(error : TUICommonDefine.Error, errMsg : string) : void {
+        options?.fail?.(error.getValue(), errMsg);
+      }
+    });
+    V2RTCRoomEngine.getInstance().logout(callback);
+  }
+
+  public setSelfInfo(options : SetSelfInfoOptions) {
+    console.warn(`${RTC_TAG} setSelfInfo, data: ${JSON.stringify(options)}`);
+    Logger.i(RTC_TAG + "setSelfInfo, data: " + JSON.stringify(options))
+
+    let userInfo : TUIRoomDefine.LoginUserInfo = ParamsCovert.convertLoginUserInfo(options.userInfo)
+    const callback = new (class implements TUIRoomDefine.ActionCallback {
+      override onSuccess() : void {
+        options?.success?.();
+      }
+
+      override onError(error : TUICommonDefine.Error, errMsg : string) : void {
+        console.warn(`${RTC_TAG} setSelfInfo failed, error: ${error}, errMsg: ${errMsg}`);
+        Logger.e(RTC_TAG + "setSelfInfo failed, error: " + error + ", errMsg: " + errMsg)
+        options?.fail?.(error.getValue(), errMsg);
+      }
+    });
+    V2RTCRoomEngine.getInstance().setSelfInfo(userInfo, callback);
+  }
+  /**
+   * LiveStore 相关接口
+   */
+  public fetchLiveList(options : FetchLiveListOptions) {
+    console.warn(`${LIVE_TAG} fetchLiveList, data: ${JSON.stringify(options)}`);
+    Logger.i(LIVE_TAG + "fetchLiveList, data: " + JSON.stringify(options))
+
+    const callback = new (class implements TUIRoomDefine.ActionCallback {
+      override onSuccess() : void {
+        console.warn(`${LIVE_TAG} fetchLiveList success`);
+        options?.success?.();
+      }
+
+      override onError(error : TUICommonDefine.Error, errMsg : string) : void {
+        options?.fail?.(error.getValue(), errMsg);
+      }
+    });
+    V2RTCRoomEngine.getInstance().getLiveStore().fetchLiveList(options.cursor, options.count?.toInt(), callback);
+  }
+
+  private enableUnlimitedRoom() : void {
+    const data = { "api": "enableUnlimitedRoom", "params": { "enable": true } }
+    const callback = new (class implements TUIRoomDefine.ExperimentalAPIResponseCallback {
+      override onResponse(jsonData : string | null) : void {
+        console.error(`${RTC_TAG}, enableUnlimitedRoom, jsonData: ${jsonData}`)
+        Logger.w(RTC_TAG + "callExperimentalAPI: enableUnlimitedRoom: " + jsonData)
+      }
+    });
+
+    TUIRoomEngine.sharedInstance().callExperimentalAPI(JSON.stringify(data), callback)
+
+    // //开启 mock 数据
+    // const enableLayoutTemplateMockData = { "api": "EnableLayoutTemplateMockData", "params": { "enable": true } }
+    // const layoutTemplateMockDataCallback = new (class implements TUIRoomDefine.ExperimentalAPIResponseCallback {
+    //     override onResponse(jsonData : string | null) : void {
+    //         console.error(`${RTC_TAG}, EnableLayoutTemplateMockData, jsonData: ${jsonData}`)
+    //         Log.w(RTC_TAG, "callExperimentalAPI: EnableLayoutTemplateMockData: " + jsonData)
+    //     }
+    // });
+    // TUIRoomEngine.sharedInstance().callExperimentalAPI(JSON.stringify(enableLayoutTemplateMockData),
+    //     layoutTemplateMockDataCallback)
+  }
+
+  public createLive(options : CreateLiveOptions) {
+    console.warn(`${LIVE_TAG} createLive, data: ${JSON.stringify(options)}`);
+    Logger.i(LIVE_TAG + "createLive, data: " + JSON.stringify(options))
+    this.enableUnlimitedRoom()
+
+    let nativeLiveInfo : LiveInfo = ParamsCovert.convertLiveInfo(options.liveInfo)
+    const callback = new (class implements TUIRoomDefine.ActionCallback {
+      override onSuccess() : void {
+        options?.success?.();
+      }
+
+      override onError(error : TUICommonDefine.Error, errMsg : string) : void {
+        options?.fail?.(error.getValue(), errMsg);
+      }
+    });
+    V2RTCRoomEngine.getInstance().getLiveStore().createLive(nativeLiveInfo, callback);
+  }
+
+  public joinLive(options : JoinLiveOptions) {
+    console.warn(`${LIVE_TAG} joinLive, data: ${JSON.stringify(options)}}`);
+    Logger.i(LIVE_TAG + "joinLive, data: " + JSON.stringify(options))
+    this.enableUnlimitedRoom()
+
+    //TODO: 暂时规避观众进房拉不到流的情况（底层原因：storeContext初始化太迟，roomObserver监听太迟，收不到变化，创建view的时候user为null）
+    V2RTCRoomEngine.getInstance().getLiveSeatStore(options.liveId)
+
+    const callback = new (class implements TUIRoomDefine.ActionCallback {
+      override onSuccess() : void {
+        options?.success?.();
+      }
+
+      override onError(error : TUICommonDefine.Error, errMsg : string) : void {
+        options?.fail?.(error.getValue(), errMsg);
+      }
+    });
+    V2RTCRoomEngine.getInstance().getLiveStore().joinLive(options?.liveId, callback);
+  }
+
+  public leaveLive(options : LeaveLiveOptions) {
+    console.warn(`${LIVE_TAG} leaveLive, data: ${JSON.stringify(options)}`);
+    Logger.i(LIVE_TAG + "leaveLive, data: " + JSON.stringify(options))
+
+    const callback = new (class implements TUIRoomDefine.ActionCallback {
+      override onSuccess() : void {
+        options?.success?.();
+      }
+
+      override onError(error : TUICommonDefine.Error, errMsg : string) : void {
+        options?.fail?.(error.getValue(), errMsg);
+      }
+    });
+    V2RTCRoomEngine.getInstance().getLiveStore().leaveLive(callback);
+  }
+
+  public endLive(options : EndLiveOptions) {
+    console.warn(`${LIVE_TAG} endLive, data: ${JSON.stringify(options)}`);
+    Logger.i(LIVE_TAG + "endLive, data: " + JSON.stringify(options))
+
+    const callback = new (class implements TUIRoomDefine.ActionCallback {
+      override onSuccess() : void {
+        options?.success?.();
+      }
+
+      override onError(error : TUICommonDefine.Error, errMsg : string) : void {
+        options?.fail?.(error.getValue(), errMsg);
+      }
+    });
+    V2RTCRoomEngine.getInstance().getLiveStore().endLive(callback);
+  }
+
+  public updateLiveInfo(options : UpdateLiveInfoOptions) {
+    console.warn(`${LIVE_TAG} updateLiveInfo, data: ${JSON.stringify(options)}`);
+    Logger.i(LIVE_TAG + "updateLiveInfo, data: " + JSON.stringify(options))
+
+    let nativeLiveInfo : LiveInfo = ParamsCovert.convertLiveInfo(options.liveInfo)
+    const callback = new (class implements TUIRoomDefine.ActionCallback {
+      override onSuccess() : void {
+        options?.success?.();
+      }
+
+      override onError(error : TUICommonDefine.Error, errMsg : string) : void {
+        options?.fail?.(error.getValue(), errMsg);
+      }
+    });
+    V2RTCRoomEngine.getInstance().getLiveStore().updateLiveInfo(nativeLiveInfo, callback);
+  }
+
+  /**
+   * LiveSeatStore 相关接口
+   */
+  public lockSeat(options : LockSeatOptions) {
+    console.warn(`${SEAT_TAG} lockSeat, data: ${JSON.stringify(options)}`);
+    Logger.i(SEAT_TAG + "lockSeat, data: " + JSON.stringify(options));
+    const callback = new (class implements TUIRoomDefine.ActionCallback {
+      override onSuccess() : void {
+        options?.success?.();
+      }
+      override onError(error : TUICommonDefine.Error, errMsg : string) : void {
+        options?.fail?.(error.getValue(), errMsg);
+      }
+    });
+    let lockMode : TUIRoomDefine.SeatLockParams | null = null
+    if (options.lockMode != null) {
+      lockMode = new TUIRoomDefine.SeatLockParams()
+      lockMode.lockSeat = options.lockMode?.lockSeat ?? false
+      lockMode.lockAudio = options.lockMode?.lockAudio ?? false
+      lockMode.lockVideo = options.lockMode?.lockVideo ?? false
+    }
+    V2RTCRoomEngine.getInstance().getLiveSeatStore(options.liveId).lockSeat(options.seatIndex?.toInt(), lockMode, callback);
+  }
+
+  public moveToSeat(options : MoveToSeatOptions) {
+    console.warn(`${SEAT_TAG} moveToSeat, data: ${JSON.stringify(options)}`);
+    Logger.i(SEAT_TAG + "moveToSeat, data: " + JSON.stringify(options));
+    const callback = new (class implements TUIRoomDefine.ActionCallback {
+      override onSuccess() : void {
+        options?.success?.();
+      }
+      override onError(error : TUICommonDefine.Error, errMsg : string) : void {
+        options?.fail?.(error.getValue(), errMsg);
+      }
+    });
+    V2RTCRoomEngine.getInstance().getLiveSeatStore(options.liveId).moveToSeat(options.targetIndex?.toInt(), callback);
+  }
+
+  /**
+   * LiveAudienceStore 相关接口
+   */
+  public fetchAudienceList(options : FetchAudienceListOptions) {
+    console.warn(`${AUDIENCE_TAG} fetchAudienceList, data: ${JSON.stringify(options)}`);
+    Logger.i(AUDIENCE_TAG + "fetchAudienceList, data: " + JSON.stringify(options));
+    const callback = new (class implements TUIRoomDefine.ActionCallback {
+      override onSuccess() : void {
+        options?.success?.();
+      }
+      override onError(error : TUICommonDefine.Error, errMsg : string) : void {
+        options?.fail?.(error.getValue(), errMsg);
+      }
+    });
+    V2RTCRoomEngine.getInstance().getLiveAudienceStore(options.liveId).fetchAudienceList(options.cursor?.toLong(), callback);
+  }
+
+  public setAdministrator(options : SetAdministratorOptions) {
+    console.warn(`${AUDIENCE_TAG} setAdministrator, data: ${JSON.stringify(options)}`);
+    Logger.i(AUDIENCE_TAG + "setAdministrator, data: " + JSON.stringify(options));
+    const callback = new (class implements TUIRoomDefine.ActionCallback {
+      override onSuccess() : void {
+        options?.success?.();
+      }
+      override onError(error : TUICommonDefine.Error, errMsg : string) : void {
+        options?.fail?.(error.getValue(), errMsg);
+      }
+    });
+    V2RTCRoomEngine.getInstance().getLiveAudienceStore(options.liveId).setAdministrator(options.userId, callback);
+  }
+
+  public revokeAdministrator(options : RevokeAdministratorOptions) {
+    console.warn(`${AUDIENCE_TAG} revokeAdministrator, data: ${JSON.stringify(options)}`);
+    Logger.i(AUDIENCE_TAG + "revokeAdministrator, data: " + JSON.stringify(options));
+    const callback = new (class implements TUIRoomDefine.ActionCallback {
+      override onSuccess() : void {
+        options?.success?.();
+      }
+      override onError(error : TUICommonDefine.Error, errMsg : string) : void {
+        options?.fail?.(error.getValue(), errMsg);
+      }
+    });
+    V2RTCRoomEngine.getInstance().getLiveAudienceStore(options.liveId).revokeAdministrator(options.userId, callback);
+  }
+
+  public kickUserOutOfRoom(options : KickUserOutOfRoomOptions) {
+    console.warn(`${AUDIENCE_TAG} kickUserOutOfRoom, data: ${JSON.stringify(options)}`);
+    Logger.i(AUDIENCE_TAG + "kickUserOutOfRoom, data: " + JSON.stringify(options));
+    const callback = new (class implements TUIRoomDefine.ActionCallback {
+      override onSuccess() : void {
+        options?.success?.();
+      }
+      override onError(error : TUICommonDefine.Error, errMsg : string) : void {
+        options?.fail?.(error.getValue(), errMsg);
+      }
+    });
+    V2RTCRoomEngine.getInstance().getLiveAudienceStore(options.liveId).kickUserOutOfRoom(options.userId, callback);
+  }
+
+  public disableSendMessage(options : DisableSendMessageOptions) {
+    console.warn(`${AUDIENCE_TAG} disableSendMessage, data: ${JSON.stringify(options)}`);
+    Logger.i(AUDIENCE_TAG + "disableSendMessage, data: " + JSON.stringify(options));
+    const callback = new (class implements TUIRoomDefine.ActionCallback {
+      override onSuccess() : void {
+        options?.success?.();
+      }
+      override onError(error : TUICommonDefine.Error, errMsg : string) : void {
+        options?.fail?.(error.getValue(), errMsg);
+      }
+    });
+    V2RTCRoomEngine.getInstance().getLiveAudienceStore(options.liveId)
+      .disableSendMessage(options.userId, options.isDisable, callback);
+  }
+
+  /**
+   * DeviceStore 相关接口
+   */
+  public openLocalMicrophone(options : OpenLocalMicrophoneOptions) {
+    console.warn(`${DEVICE_TAG} openLocalMicrophone, data: ${JSON.stringify(options)}`);
+    Logger.i(DEVICE_TAG + "openLocalMicrophone, data: " + JSON.stringify(options));
+    const callback = new (class implements TUIRoomDefine.ActionCallback {
+      override onSuccess() : void {
+        options?.success?.();
+      }
+      override onError(error : TUICommonDefine.Error, errMsg : string) : void {
+        options?.fail?.(error.getValue(), errMsg);
+      }
+    });
+    V2RTCRoomEngine.getInstance().getDeviceStore().openLocalMicrophone(callback);
+  }
+  public closeLocalMicrophone() {
+    console.warn(`${DEVICE_TAG} closeLocalMicrophone`);
+    Logger.i(DEVICE_TAG + "closeLocalMicrophone");
+    V2RTCRoomEngine.getInstance().getDeviceStore().closeLocalMicrophone();
+  }
+  public muteLocalAudio() {
+    console.warn(`${DEVICE_TAG} muteLocalAudio`);
+    Logger.i(DEVICE_TAG + "muteLocalAudio");
+    V2RTCRoomEngine.getInstance().getDeviceStore().muteLocalAudio();
+  }
+  public unmuteLocalAudio(options : UnmuteLocalAudioOptions) {
+    console.warn(`${DEVICE_TAG} unmuteLocalAudio`);
+    Logger.i(DEVICE_TAG + "unmuteLocalAudio");
+    const callback = new (class implements TUIRoomDefine.ActionCallback {
+      override onSuccess() : void {
+        options?.success?.();
+      }
+      override onError(error : TUICommonDefine.Error, errMsg : string) : void {
+        options?.fail?.(error.getValue(), errMsg);
+      }
+    });
+    V2RTCRoomEngine.getInstance().getDeviceStore().unmuteLocalAudio(callback);
+  }
+  public setAudioRoute(options : SetAudioRouteOptions) {
+    console.warn(`${DEVICE_TAG} setAudioRoute, data: ${JSON.stringify(options)}`);
+    Logger.i(DEVICE_TAG + "setAudioRoute, data: " + JSON.stringify(options));
+
+    let audioRoute = ParamsCovert.convertAudioOutput(options.route)
+    V2RTCRoomEngine.getInstance().getDeviceStore().setAudioRoute(audioRoute);
+  }
+  public openLocalCamera(options : OpenLocalCameraOptions) {
+    console.warn(`${DEVICE_TAG} openLocalCamera, data: ${JSON.stringify(options)}`);
+    Logger.i(DEVICE_TAG + "openLocalCamera, data: " + JSON.stringify(options));
+    const callback = new (class implements TUIRoomDefine.ActionCallback {
+      override onSuccess() : void {
+        options?.success?.();
+      }
+      override onError(error : TUICommonDefine.Error, errMsg : string) : void {
+        options?.fail?.(error.getValue(), errMsg);
+      }
+    });
+    V2RTCRoomEngine.getInstance().getDeviceStore().openLocalCamera(options.isFront ?? true, callback);
+  }
+  public closeLocalCamera() {
+    console.warn(`${DEVICE_TAG} closeLocalCamera`);
+    Logger.i(DEVICE_TAG + "closeLocalCamera");
+    V2RTCRoomEngine.getInstance().getDeviceStore().closeLocalCamera();
+  }
+  public switchCamera(options : SwitchCameraOptions) {
+    console.warn(`${DEVICE_TAG} switchCamera, data: ${JSON.stringify(options)}`);
+    Logger.i(DEVICE_TAG + "switchCamera, data: " + JSON.stringify(options));
+    V2RTCRoomEngine.getInstance().getDeviceStore().switchCamera(options.isFront ?? false);
+  }
+  public switchMirror(options : SwitchMirrorOptions) {
+    console.warn(`${DEVICE_TAG} switchMirror, data: ${JSON.stringify(options)}`);
+    Logger.i(DEVICE_TAG + "switchMirror, data: " + JSON.stringify(options));
+    V2RTCRoomEngine.getInstance().getDeviceStore().switchMirror(options.isMirror ?? false);
+  }
+  public updateVideoQuality(options : UpdateVideoQualityOptions) {
+    console.warn(`${DEVICE_TAG} updateVideoQuality, data: ${JSON.stringify(options)}`);
+    Logger.i(DEVICE_TAG + "updateVideoQuality, data: " + JSON.stringify(options));
+    let quality = ParamsCovert.covertVideoQuality(options.quality)
+    V2RTCRoomEngine.getInstance().getDeviceStore().updateVideoQuality(quality);
+  }
+  public startScreenShare() {
+    console.warn(`${DEVICE_TAG} startScreenShare`);
+    Logger.i(DEVICE_TAG + "startScreenShare");
+    V2RTCRoomEngine.getInstance().getDeviceStore().startScreenShare();
+  }
+  public stopScreenShare() {
+    console.warn(`${DEVICE_TAG} stopScreenShare`);
+    Logger.i(DEVICE_TAG + "stopScreenShare");
+    V2RTCRoomEngine.getInstance().getDeviceStore().stopScreenShare();
+  }
+
+  /**
+   * CoHostStore 相关接口
+   */
+  public sendCoHostRequest(options : SendCoHostRequestOptions) {
+    console.warn(`${COHOST_TAG} sendCoHostRequest, data: ${JSON.stringify(options)}`);
+    Logger.i(COHOST_TAG + "sendCoHostRequest, data: " + JSON.stringify(options));
+    const callback = new (class implements CompletionHandler {
+      override onSuccess() : void {
+        options?.success?.();
+      }
+      override onFailure(error : Int, errMsg : string) : void {
+        options?.fail?.(error, errMsg);
+      }
+    });
+    let seatUserInfo = ParamsCovert.convertSeatUserInfo(options.seatUserInfo)
+    V2RTCRoomEngine.getInstance().getCoHostStore(options.liveId).sendCoHostRequest(
+      seatUserInfo, options.timeout?.toInt(), options.extensionInfo, callback);
+  }
+  public cancelCoHostRequest(options : CancelCoHostRequestOptions) {
+    console.warn(`${COHOST_TAG} cancelCoHostRequest, data: ${JSON.stringify(options)}`);
+    Logger.i(COHOST_TAG + "cancelCoHostRequest, data: " + JSON.stringify(options));
+    const callback = new (class implements TUIRoomDefine.ActionCallback {
+      override onSuccess() : void {
+        options?.success?.();
+      }
+      override onError(error : TUICommonDefine.Error, errMsg : string) : void {
+        options?.fail?.(error.getValue(), errMsg);
+      }
+    });
+    let seatUserInfo = ParamsCovert.convertSeatUserInfo(options.seatUserInfo)
+    V2RTCRoomEngine.getInstance().getCoHostStore(options.liveId).cancelCoHostRequest(seatUserInfo, callback);
+  }
+  public acceptCoHostRequest(options : AcceptCoHostRequestOptions) {
+    console.warn(`${COHOST_TAG} acceptCoHostRequest, data: ${JSON.stringify(options)}`);
+    Logger.i(COHOST_TAG + "acceptCoHostRequest, data: " + JSON.stringify(options));
+    const callback = new (class implements TUIRoomDefine.ActionCallback {
+      override onSuccess() : void {
+        options?.success?.();
+      }
+      override onError(error : TUICommonDefine.Error, errMsg : string) : void {
+        options?.fail?.(error.getValue(), errMsg);
+      }
+    });
+    let userInfo = ParamsCovert.convertSeatUserInfo(options.userInfo)
+    V2RTCRoomEngine.getInstance().getCoHostStore(options.liveId).acceptCoHostRequest(userInfo, callback);
+  }
+  public rejectCoHostRequest(options : RejectCoHostRequestOptions) {
+    console.warn(`${COHOST_TAG} rejectCoHostRequest, data: ${JSON.stringify(options)}`);
+    Logger.i(COHOST_TAG + "rejectCoHostRequest, data: " + JSON.stringify(options));
+    const callback = new (class implements TUIRoomDefine.ActionCallback {
+      override onSuccess() : void {
+        options?.success?.();
+      }
+      override onError(error : TUICommonDefine.Error, errMsg : string) : void {
+        options?.fail?.(error.getValue(), errMsg);
+      }
+    });
+    let userInfo = ParamsCovert.convertSeatUserInfo(options.userInfo)
+    V2RTCRoomEngine.getInstance().getCoHostStore(options.liveId).rejectCoHostRequest(userInfo, callback);
+  }
+  public exitCoHost(options : ExitCoHostOptions) {
+    console.warn(`${COHOST_TAG} exitCoHost, data: ${JSON.stringify(options)}`);
+    Logger.i(COHOST_TAG + "exitCoHost, data: " + JSON.stringify(options));
+    const callback = new (class implements TUIRoomDefine.ActionCallback {
+      override onSuccess() : void {
+        options?.success?.();
+      }
+      override onError(error : TUICommonDefine.Error, errMsg : string) : void {
+        options?.fail?.(error.getValue(), errMsg);
+      }
+    });
+    V2RTCRoomEngine.getInstance().getCoHostStore(options.liveId).exitCoHost(callback);
+  }
+
+  /**
+   * CoGuestStore 相关接口
+   */
+  public sendCoGuestRequest(options : SendCoGuestRequestOptions) {
+    console.warn(`${COGUEST_TAG} sendCoGuestRequest, options: ${JSON.stringify(options)}`);
+    Logger.i(COGUEST_TAG + "sendCoGuestRequest, options: " + JSON.stringify(options))
+    const callback = new (class implements TUIRoomDefine.RequestCallback {
+      override onAccepted(requestId : string, userId : string) : void {
+        console.log(`${COGUEST_TAG} sendCoGuestRequest onAccepted, requestId: ${requestId}, userId: ${userId}`);
+        Logger.i(COGUEST_TAG + "sendCoGuestRequest onAccepted, requestId: " + requestId + ", userId: " + userId);
+        options?.onAccepted?.(requestId, userId);
+      }
+      override onRejected(requestId : string, userId : string, msg : string) : void {
+        console.log(`${COGUEST_TAG} sendCoGuestRequest onRejected, requestId: ${requestId}, userId: ${userId}, msg: ${msg}`);
+        Logger.i(COGUEST_TAG + "sendCoGuestRequest onRejected, requestId: " + requestId + ", userId: " + userId + ", msg: " + msg);
+        options?.onRejected?.(requestId, userId, msg);
+      }
+      override onCancelled(requestId : string, userId : string) : void {
+        console.log(`${COGUEST_TAG} sendCoGuestRequest onCancelled, requestId: ${requestId}, userId: ${userId}`);
+        Logger.i(COGUEST_TAG + "sendCoGuestRequest onCancelled, requestId: " + requestId + ", userId: " + userId);
+        options?.onCancelled?.(requestId, userId);
+      }
+      override onTimeout(requestId : string, userId : string) : void {
+        console.log(`${COGUEST_TAG} sendCoGuestRequest onTimeout, requestId: ${requestId}, userId: ${userId}`);
+        Logger.i(COGUEST_TAG + "sendCoGuestRequest onTimeout, requestId: " + requestId + ", userId: " + userId);
+        options?.onTimeout?.(requestId, userId);
+      }
+      override onError(requestId : string, userId : string, error : TUICommonDefine.Error, errMsg : string) : void {
+        console.log(`${COGUEST_TAG} sendCoGuestRequest onError, requestId: ${requestId}, userId: ${userId}, error: ${error}, errMsg: ${errMsg}`);
+        Logger.e(COGUEST_TAG + "sendCoGuestRequest onError, requestId: " + requestId + ", userId: " + userId + ", error: " + error + ", errMsg: " + errMsg);
+        options?.onError?.(requestId, userId, error.getValue(), errMsg);
+      }
+    });
+    V2RTCRoomEngine.getInstance().getCoGuestStore(options.liveId).sendCoGuestRequest(
+      options.seatIndex?.toInt(), options.timeout?.toInt(), options.userId, options.extraInfo, callback);
+  }
+  public cancelCoGuestRequest(options : CancelCoGuestRequestOptions) {
+    console.warn(`${COGUEST_TAG} cancelCoGuestRequest, data: ${JSON.stringify(options)}`);
+    Logger.i(COGUEST_TAG + "cancelCoGuestRequest, data: " + JSON.stringify(options));
+    const callback = new (class implements TUIRoomDefine.ActionCallback {
+      override onSuccess() : void {
+        options?.success?.();
+      }
+      override onError(error : TUICommonDefine.Error, errMsg : string) : void {
+        options?.fail?.(error.getValue(), errMsg);
+      }
+    });
+    V2RTCRoomEngine.getInstance().getCoGuestStore(options.liveId).cancelCoGuestRequest(options.userId, callback);
+  }
+  public acceptCoGuestRequest(options : AcceptCoGuestRequestOptions) {
+    console.warn(`${COGUEST_TAG} acceptCoGuestRequest, data: ${JSON.stringify(options)}`);
+    Logger.i(COGUEST_TAG + "acceptCoGuestRequest, data: " + JSON.stringify(options));
+    const callback = new (class implements TUIRoomDefine.ActionCallback {
+      override onSuccess() : void {
+        options?.success?.();
+      }
+      override onError(error : TUICommonDefine.Error, errMsg : string) : void {
+        options?.fail?.(error.getValue(), errMsg);
+      }
+    });
+    V2RTCRoomEngine.getInstance().getCoGuestStore(options.liveId).acceptCoGuestRequest(options.userId, callback);
+  }
+  public rejectCoGuestRequest(options : RejectCoGuestRequestOptions) {
+    console.warn(`${COGUEST_TAG} rejectCoGuestRequest, data: ${JSON.stringify(options)}`);
+    Logger.i(COGUEST_TAG + "rejectCoGuestRequest, data: " + JSON.stringify(options));
+    const callback = new (class implements TUIRoomDefine.ActionCallback {
+      override onSuccess() : void {
+        options?.success?.();
+      }
+      override onError(error : TUICommonDefine.Error, errMsg : string) : void {
+        options?.fail?.(error.getValue(), errMsg);
+      }
+    });
+    V2RTCRoomEngine.getInstance().getCoGuestStore(options.liveId).rejectCoGuestRequest(options.userId, callback);
+  }
+  public disconnect(options : DisconnectOptions) {
+    console.warn(`${COGUEST_TAG} disconnect, data: ${JSON.stringify(options)}`);
+    Logger.i(COGUEST_TAG + "disconnect, data: " + JSON.stringify(options));
+    const callback = new (class implements TUIRoomDefine.ActionCallback {
+      override onSuccess() : void {
+        options?.success?.();
+      }
+      override onError(error : TUICommonDefine.Error, errMsg : string) : void {
+        options?.fail?.(error.getValue(), errMsg);
+      }
+    });
+    V2RTCRoomEngine.getInstance().getCoGuestStore(options.liveId).disconnect(options.userId, callback);
+  }
+
+  /**
+   * BarrageStore 相关接口
+   */
+  public sendTextMessage(options : SendTextMessageOptions) {
+    console.warn(`${BARRAGE_TAG} sendTextMessage, data: ${JSON.stringify(options)}`);
+    Logger.i(BARRAGE_TAG + "sendTextMessage, data: " + JSON.stringify(options));
+    const callback = new (class implements TUIRoomDefine.ActionCallback {
+      override onSuccess() : void {
+        options?.success?.();
+      }
+      override onError(error : TUICommonDefine.Error, errMsg : string) : void {
+        options?.fail?.(error.getValue(), errMsg);
+      }
+    });
+    V2RTCRoomEngine.getInstance().getBarrageStore(options.liveId).sendTextMessage(options.text, options.extensionInfo, callback);
+  }
+  public sendCustomMessage(options : SendCustomMessageOptions) {
+    console.warn(`${BARRAGE_TAG} sendCustomMessage, data: ${JSON.stringify(options)}`);
+    Logger.i(BARRAGE_TAG + "sendCustomMessage, data: " + JSON.stringify(options));
+    const callback = new (class implements TUIRoomDefine.ActionCallback {
+      override onSuccess() : void {
+        options?.success?.();
+      }
+      override onError(error : TUICommonDefine.Error, errMsg : string) : void {
+        options?.fail?.(error.getValue(), errMsg);
+      }
+    });
+    V2RTCRoomEngine.getInstance().getBarrageStore(options.liveId).sendCustomMessage(options.businessId, options.data, callback);
+  }
+
+  /**
+   * GiftStore 相关接口
+   */
+  public getGiftList(options : GetGiftListOptions) {
+    console.warn(`${GIFT_TAG} getGiftList, data: ${JSON.stringify(options)}`);
+    const callback = new (class implements TUIRoomDefine.ActionCallback {
+      override onSuccess() : void {
+        options?.success?.();
+      }
+      override onError(error : TUICommonDefine.Error, errMsg : string) : void {
+        options?.fail?.(error.getValue(), errMsg);
+      }
+    });
+    V2RTCRoomEngine.getInstance().getGiftStore(options.liveId).getGiftList(callback);
+  }
+  public sendGift(options : SendGiftOptions) {
+    console.warn(`${GIFT_TAG} sendGift, data: ${JSON.stringify(options)}`);
+    Logger.i(GIFT_TAG + "sendGift, data: " + JSON.stringify(options));
+    const callback = new (class implements TUIRoomDefine.ActionCallback {
+      override onSuccess() : void {
+        options?.success?.();
+      }
+      override onError(error : TUICommonDefine.Error, errMsg : string) : void {
+        options?.fail?.(error.getValue(), errMsg);
+      }
+    });
+    V2RTCRoomEngine.getInstance().getGiftStore(options.liveId).sendGift(options.giftId, options.count?.toInt(), callback);
+  }
+
+  /**
+   * BeautyStore 相关接口
+   */
+  public setSmoothLevel(options : SetSmoothLevelOptions) {
+    console.warn(`${BEAUTY_TAG} setSmoothLevel, data: ${JSON.stringify(options)}`);
+    Logger.i(BEAUTY_TAG + "setSmoothLevel, data: " + JSON.stringify(options));
+    V2RTCRoomEngine.getInstance().getBaseBeautyStore().setSmoothLevel(options.smoothLevel.toFloat());
+  }
+
+  public setWhitenessLevel(options : SetWhitenessLevelOptions) {
+    console.warn(`${BEAUTY_TAG} setWhitenessLevel, data: ${JSON.stringify(options)}`);
+    Logger.i(BEAUTY_TAG + "setWhitenessLevel, data: " + JSON.stringify(options));
+    V2RTCRoomEngine.getInstance().getBaseBeautyStore().setWhitenessLevel(options.whitenessLevel.toFloat());
+  }
+
+  public setRuddyLevel(options : SetRuddyLevelOptions) {
+    console.warn(`${BEAUTY_TAG} setRuddyLevel, data: ${JSON.stringify(options)}`);
+    Logger.i(BEAUTY_TAG + "setRuddyLevel, data: " + JSON.stringify(options));
+    V2RTCRoomEngine.getInstance().getBaseBeautyStore().setRuddyLevel(options.ruddyLevel.toFloat());
+  }
+
+  /**
+   * V2AudioEffect 相关接口
+   */
+  public setVoiceEarMonitorEnable(options : SetVoiceEarMonitorEnableOptions) {
+    console.warn(`${AUDIOEFFECT_TAG} setVoiceEarMonitorEnable, data: ${JSON.stringify(options)}`);
+    Logger.i(AUDIOEFFECT_TAG + "setVoiceEarMonitorEnable, data: " + JSON.stringify(options));
+    V2RTCRoomEngine.getInstance().getAudioEffectStore().setVoiceEarMonitorEnable(options.enable);
+  }
+
+  public setVoiceEarMonitorVolume(options : SetVoiceEarMonitorVolumeOptions) {
+    console.warn(`${AUDIOEFFECT_TAG} setVoiceEarMonitorVolume, data: ${JSON.stringify(options)}`);
+    Logger.i(AUDIOEFFECT_TAG + "setVoiceEarMonitorVolume, data: " + JSON.stringify(options));
+    V2RTCRoomEngine.getInstance().getAudioEffectStore().setVoiceEarMonitorVolume(options.volume.toInt());
+  }
+
+  public setMicrophoneVolume(options : SetMicrophoneVolumeOptions) {
+    console.warn(`${AUDIOEFFECT_TAG} setMicrophoneVolume, data: ${JSON.stringify(options)}`);
+    V2RTCRoomEngine.getInstance().getAudioEffectStore().setMicrophoneVolume(options.volume.toInt());
+  }
+
+  public setChangerType(options : SetChangerTypeOptions) {
+    console.warn(`${AUDIOEFFECT_TAG} setChangerType, data: ${JSON.stringify(options)}`);
+    Logger.i(AUDIOEFFECT_TAG + "setChangerType, data: " + JSON.stringify(options));
+    let type = ParamsCovert.convertAudioChangerType(options.changerType)
+    V2RTCRoomEngine.getInstance().getAudioEffectStore().setChangerType(type);
+  }
+
+  public setReverbType(options : SetReverbTypeOptions) {
+    console.warn(`${AUDIOEFFECT_TAG} setReverbType, data: ${JSON.stringify(options)}`);
+    Logger.i(AUDIOEFFECT_TAG + "setReverbType, data: " + JSON.stringify(options));
+    let type = ParamsCovert.convertAudioReverbType(options.reverbType)
+    V2RTCRoomEngine.getInstance().getAudioEffectStore().setReverbType(type);
+  }
+  /**
+   * V2LikeStore 相关接口
+   */
+  public sendLike(options : SendLikeOptions) {
+    console.warn(`UTS-Like sendLike, data: ${JSON.stringify(options)}`);
+    Logger.i("UTS-Like: " + "sendLike, data: " + JSON.stringify(options));
+    const callback = new (class implements TUIRoomDefine.ActionCallback {
+      override onSuccess() : void {
+        options?.success?.();
+      }
+      override onError(error : TUICommonDefine.Error, errMsg : string) : void {
+        options?.fail?.(error.getValue(), errMsg);
+      }
+    });
+    V2RTCRoomEngine.getInstance().getLikeStore(options.liveId).sendLike(callback);
+  }
+
+  // ================= 实验性接口 =================
+  public callExperimentalAPI(options : CallExperimentalAPIOptions) {
+    const callback = new (class implements TUIRoomDefine.ExperimentalAPIResponseCallback {
+      override onResponse(jsonData : string) : void {
+        options.onResponse?.(jsonData)
+      }
+    });
+    ExperimentalApiInvoker.callExperimentalAPI(options.jsonData, callback)
+  }
+
+  /**
+   * 回调接口
+   */
+  @UTSJS.keepAlive
+  public on(eventName : string, listener : (key : string, res : any) => void, liveId : string) : void {
+    console.log(`${RTC_TAG} observer, eventName: ${eventName}, liveId: ${liveId}`);
+
+    if (eventName == "loginStoreChanged") {
+      LoginStoreObserver.loginStoreChanged(function (key : string, data : string) {
+        console.log(`${RTC_TAG} loginStoreChanged, key: ${key}, data: ${data}`);
+        Logger.i(RTC_TAG + "loginStoreChanged, key: " + key + ", data: " + data);
+        listener(key, data)
+      })
+    }
+    if (eventName == "liveStoreChanged") {
+      LiveStoreObserver.liveStoreChanged(function (key : string, data : string) {
+        console.log(`${LIVE_TAG} liveStoreChanged, key: ${key}, data: ${data}`);
+        Logger.i(LIVE_TAG + "liveStoreChanged, key: " + key + ", data: " + data);
+        listener(key, data)
+      })
+    }
+    if (eventName == "liveSeatStoreChanged") {
+      LiveSeatStoreObserver.liveSeatStoreChanged(liveId, function (key : string, data : string) {
+        // console.log(`${LIVE_TAG} liveSeatStoreChanged, key: ${key}, data: ${data}`);
+        // Log.i(LIVE_TAG, "liveSeatStoreChanged, key: " + key + ", data: " + data);
+        listener(key, data)
+      })
+    }
+    if (eventName == "liveAudienceStoreChanged") {
+      LiveAudienceStoreObserver.liveAudienceStoreChanged(liveId, function (key : string, data : string) {
+        console.log(`${AUDIENCE_TAG} liveAudienceStoreChanged, key: ${key}, data: ${data}`)
+        Logger.i(AUDIENCE_TAG + "liveAudienceStoreChanged, key: " + key + ", data: " + data);
+        listener(key, data)
+      })
+    }
+    if (eventName == "giftStoreChanged") {
+      GiftStoreObserver.giftStoreChanged(liveId, function (key : string, data : string) {
+        console.log(`${GIFT_TAG} giftStoreChanged, key: ${key}, data: ${data}`);
+        listener(key, data)
+      })
+    }
+    if (eventName == "deviceStoreChanged") {
+      DeviceStoreObserver.deviceStoreChanged(function (key : string, data : string) {
+        // console.log(`${DEVICE_TAG} deviceStoreChanged, key: ${key}, data: ${data}`);
+        listener(key, data)
+      })
+    }
+    if (eventName == "coHostStoreChanged") {
+      CoHostStoreObserver.coHostStoreChanged(liveId, function (key : string, data : string) {
+        console.log(`${COHOST_TAG} coHostStoreChanged, key: ${key}, data: ${data}`);
+        Logger.i(COHOST_TAG + "coHostStoreChanged, key: " + key + ", data: " + data);
+        listener(key, data)
+      })
+    }
+    if (eventName == "coGuestStoreChanged") {
+      CoGuestStoreObserver.coGuestStoreChanged(liveId, function (key : string, data : string) {
+        console.log(`${COGUEST_TAG} coGuestStoreChanged, key: ${key}, data: ${data}`);
+        Logger.i(COGUEST_TAG + "coGuestStoreChanged, key: " + key + ", data: " + data);
+        listener(key, data)
+      })
+    }
+    if (eventName == "barrageStoreChanged") {
+      BarrageStoreObserver.barrageStoreChanged(liveId, function (key : string, data : string) {
+        console.log(`${BARRAGE_TAG} barrageStoreChanged, key: ${key}, data: ${data}`);
+        // Logger.i(BARRAGE_TAG + "barrageStoreChanged, key: " + key + ", data: " + data);
+        listener(key, data)
+      })
+    }
+    if (eventName == "beautyStoreChanged") {
+      BeautyStoreObserver.beautyStoreChanged(function (key : string, data : string) {
+        console.log(`${BEAUTY_TAG} beautyStoreChanged, key: ${key}, data: ${data}`);
+        listener(key, data)
+      })
+    }
+    if (eventName == "audioEffectStoreChanged") {
+      AudioEffectStoreObserver.audioEffectStoreChanged(function (key : string, data : string) {
+        console.log(`${AUDIOEFFECT_TAG} audioEffectStoreChanged, key: ${key}, data: ${data}`);
+        listener(key, data)
+      })
+    }
+    if (eventName == "liveSummaryStateChanged") {
+      LiveSummaryStateObserver.liveSummaryStateChanged(liveId, function (key : string, data : string) {
+        console.log(`liveSummaryStateChanged, key: ${key}, data: ${data}`);
+        listener(key, data)
+      })
     }
 
-    public login(options : LoginOptions) {
-        console.log(`${RTC_TAG} login, data: ${JSON.stringify(options)}`);
-        // this.setTestEnvironment()
-
-        const callback = new (class implements TUIRoomDefine.ActionCallback {
-            override onSuccess() : void {
-                console.log(`${RTC_TAG} login success`);
-                options?.success?.();
-            }
-
-            override onError(error : TUICommonDefine.Error, errMsg : string) : void {
-                console.error(`${RTC_TAG} login failed, error: ${error}, errMsg: ${errMsg}`);
-                options?.fail?.(error.getValue(), errMsg);
-            }
-        });
-
-        V2RTCRoomEngine.getInstance().login(context, options.sdkAppID.toInt(), options.userID, options.userSig, callback);
+    if (eventName == "likeStateChanged") {
+      LikeStateObserver.likeStateChanged(liveId, function (key : string, data : string) {
+        console.log(`likeStateChanged, key: ${key}, data: ${data}`);
+        listener(key, data)
+      })
     }
-    
-    public setTestEnvironment() {
-        const data = { "api": "setTestEnvironment", "params": { "enableRoomTestEnv": true } }
-        TUIRoomEngine.sharedInstance().callExperimentalAPI(JSON.stringify(data), null)
-    }
-
-    public logout(options : LogoutOptions) {
-        console.warn(`${RTC_TAG} logout, data: ${JSON.stringify(options)}`);
-        const callback = new (class implements TUIRoomDefine.ActionCallback {
-            override onSuccess() : void {
-                options?.success?.();
-            }
-
-            override onError(error : TUICommonDefine.Error, errMsg : string) : void {
-                options?.fail?.(error.getValue(), errMsg);
-            }
-        });
-        V2RTCRoomEngine.getInstance().logout(callback);
-    }
-
-    public setSelfInfo(options : SetSelfInfoOptions) {
-        console.warn(`${RTC_TAG} setSelfInfo, data: ${JSON.stringify(options)}`);
-        Logger.i(RTC_TAG + "setSelfInfo, data: " + JSON.stringify(options))
-
-        let userInfo : TUIRoomDefine.LoginUserInfo = ParamsCovert.convertLoginUserInfo(options.userInfo)
-        const callback = new (class implements TUIRoomDefine.ActionCallback {
-            override onSuccess() : void {
-                options?.success?.();
-            }
-
-            override onError(error : TUICommonDefine.Error, errMsg : string) : void {
-                console.warn(`${RTC_TAG} setSelfInfo failed, error: ${error}, errMsg: ${errMsg}`);
-                Logger.e(RTC_TAG + "setSelfInfo failed, error: " + error + ", errMsg: " + errMsg)
-                options?.fail?.(error.getValue(), errMsg);
-            }
-        });
-        V2RTCRoomEngine.getInstance().setSelfInfo(userInfo, callback);
-    }
-    /**
-     * LiveStore 相关接口
-     */
-    public fetchLiveList(options : FetchLiveListOptions) {
-        console.warn(`${LIVE_TAG} fetchLiveList, data: ${JSON.stringify(options)}`);
-        Logger.i(LIVE_TAG + "fetchLiveList, data: " + JSON.stringify(options))
-
-        const callback = new (class implements TUIRoomDefine.ActionCallback {
-            override onSuccess() : void {
-                console.warn(`${LIVE_TAG} fetchLiveList success`);
-                options?.success?.();
-            }
-
-            override onError(error : TUICommonDefine.Error, errMsg : string) : void {
-                options?.fail?.(error.getValue(), errMsg);
-            }
-        });
-        V2RTCRoomEngine.getInstance().getLiveStore().fetchLiveList(options.cursor, options.count?.toInt(), callback);
-    }
-
-    private enableUnlimitedRoom() : void {
-        const data = { "api": "enableUnlimitedRoom", "params": { "enable": true } }
-        const callback = new (class implements TUIRoomDefine.ExperimentalAPIResponseCallback {
-            override onResponse(jsonData : string | null) : void {
-                console.error(`${RTC_TAG}, enableUnlimitedRoom, jsonData: ${jsonData}`)
-                Logger.w(RTC_TAG + "callExperimentalAPI: enableUnlimitedRoom: " + jsonData)
-            }
-        });
-
-        TUIRoomEngine.sharedInstance().callExperimentalAPI(JSON.stringify(data), callback)
-
-        // //开启 mock 数据
-        // const enableLayoutTemplateMockData = { "api": "EnableLayoutTemplateMockData", "params": { "enable": true } }
-        // const layoutTemplateMockDataCallback = new (class implements TUIRoomDefine.ExperimentalAPIResponseCallback {
-        //     override onResponse(jsonData : string | null) : void {
-        //         console.error(`${RTC_TAG}, EnableLayoutTemplateMockData, jsonData: ${jsonData}`)
-        //         Log.w(RTC_TAG, "callExperimentalAPI: EnableLayoutTemplateMockData: " + jsonData)
-        //     }
-        // });
-        // TUIRoomEngine.sharedInstance().callExperimentalAPI(JSON.stringify(enableLayoutTemplateMockData),
-        //     layoutTemplateMockDataCallback)
-    }
-
-    public createLive(options : CreateLiveOptions) {
-        console.warn(`${LIVE_TAG} createLive, data: ${JSON.stringify(options)}`);
-        Logger.i(LIVE_TAG + "createLive, data: " + JSON.stringify(options))
-        this.enableUnlimitedRoom()
-
-        let nativeLiveInfo : LiveInfo = ParamsCovert.convertLiveInfo(options.liveInfo)
-        const callback = new (class implements TUIRoomDefine.ActionCallback {
-            override onSuccess() : void {
-                options?.success?.();
-            }
-
-            override onError(error : TUICommonDefine.Error, errMsg : string) : void {
-                options?.fail?.(error.getValue(), errMsg);
-            }
-        });
-        V2RTCRoomEngine.getInstance().getLiveStore().createLive(nativeLiveInfo, callback);
-    }
-
-    public joinLive(options : JoinLiveOptions) {
-        console.warn(`${LIVE_TAG} joinLive, data: ${JSON.stringify(options)}}`);
-        Logger.i(LIVE_TAG + "joinLive, data: " + JSON.stringify(options))
-        this.enableUnlimitedRoom()
-
-        //TODO: 暂时规避观众进房拉不到流的情况（底层原因：storeContext初始化太迟，roomObserver监听太迟，收不到变化，创建view的时候user为null）
-        V2RTCRoomEngine.getInstance().getLiveSeatStore(options.liveId)
-
-        const callback = new (class implements TUIRoomDefine.ActionCallback {
-            override onSuccess() : void {
-                options?.success?.();
-            }
-
-            override onError(error : TUICommonDefine.Error, errMsg : string) : void {
-                options?.fail?.(error.getValue(), errMsg);
-            }
-        });
-        V2RTCRoomEngine.getInstance().getLiveStore().joinLive(options?.liveId, callback);
-    }
-
-    public leaveLive(options : LeaveLiveOptions) {
-        console.warn(`${LIVE_TAG} leaveLive, data: ${JSON.stringify(options)}`);
-        Logger.i(LIVE_TAG + "leaveLive, data: " + JSON.stringify(options))
-
-        const callback = new (class implements TUIRoomDefine.ActionCallback {
-            override onSuccess() : void {
-                options?.success?.();
-            }
-
-            override onError(error : TUICommonDefine.Error, errMsg : string) : void {
-                options?.fail?.(error.getValue(), errMsg);
-            }
-        });
-        V2RTCRoomEngine.getInstance().getLiveStore().leaveLive(callback);
-    }
-
-    public endLive(options : EndLiveOptions) {
-        console.warn(`${LIVE_TAG} endLive, data: ${JSON.stringify(options)}`);
-        Logger.i(LIVE_TAG + "endLive, data: " + JSON.stringify(options))
-
-        const callback = new (class implements TUIRoomDefine.ActionCallback {
-            override onSuccess() : void {
-                options?.success?.();
-            }
-
-            override onError(error : TUICommonDefine.Error, errMsg : string) : void {
-                options?.fail?.(error.getValue(), errMsg);
-            }
-        });
-        V2RTCRoomEngine.getInstance().getLiveStore().endLive(callback);
-    }
-
-    public updateLiveInfo(options : UpdateLiveInfoOptions) {
-        console.warn(`${LIVE_TAG} updateLiveInfo, data: ${JSON.stringify(options)}`);
-        Logger.i(LIVE_TAG + "updateLiveInfo, data: " + JSON.stringify(options))
-
-        let nativeLiveInfo : LiveInfo = ParamsCovert.convertLiveInfo(options.liveInfo)
-        const callback = new (class implements TUIRoomDefine.ActionCallback {
-            override onSuccess() : void {
-                options?.success?.();
-            }
-
-            override onError(error : TUICommonDefine.Error, errMsg : string) : void {
-                options?.fail?.(error.getValue(), errMsg);
-            }
-        });
-        V2RTCRoomEngine.getInstance().getLiveStore().updateLiveInfo(nativeLiveInfo, callback);
-    }
-
-    /**
-     * LiveSeatStore 相关接口
-     */
-    public lockSeat(options : LockSeatOptions) {
-        console.warn(`${SEAT_TAG} lockSeat, data: ${JSON.stringify(options)}`);
-        Logger.i(SEAT_TAG + "lockSeat, data: " + JSON.stringify(options));
-        const callback = new (class implements TUIRoomDefine.ActionCallback {
-            override onSuccess() : void {
-                options?.success?.();
-            }
-            override onError(error : TUICommonDefine.Error, errMsg : string) : void {
-                options?.fail?.(error.getValue(), errMsg);
-            }
-        });
-        let lockMode : TUIRoomDefine.SeatLockParams | null = null
-        if (options.lockMode != null) {
-            lockMode = new TUIRoomDefine.SeatLockParams()
-            lockMode.lockSeat = options.lockMode?.lockSeat ?? false
-            lockMode.lockAudio = options.lockMode?.lockAudio ?? false
-            lockMode.lockVideo = options.lockMode?.lockVideo ?? false
-        }
-        V2RTCRoomEngine.getInstance().getLiveSeatStore(options.liveId).lockSeat(options.seatIndex?.toInt(), lockMode, callback);
-    }
-
-    public moveToSeat(options : MoveToSeatOptions) {
-        console.warn(`${SEAT_TAG} moveToSeat, data: ${JSON.stringify(options)}`);
-        Logger.i(SEAT_TAG + "moveToSeat, data: " + JSON.stringify(options));
-        const callback = new (class implements TUIRoomDefine.ActionCallback {
-            override onSuccess() : void {
-                options?.success?.();
-            }
-            override onError(error : TUICommonDefine.Error, errMsg : string) : void {
-                options?.fail?.(error.getValue(), errMsg);
-            }
-        });
-        V2RTCRoomEngine.getInstance().getLiveSeatStore(options.liveId).moveToSeat(options.targetIndex?.toInt(), callback);
-    }
-
-    /**
-     * LiveAudienceStore 相关接口
-     */
-    public fetchAudienceList(options : FetchAudienceListOptions) {
-        console.warn(`${AUDIENCE_TAG} fetchAudienceList, data: ${JSON.stringify(options)}`);
-        Logger.i(AUDIENCE_TAG + "fetchAudienceList, data: " + JSON.stringify(options));
-        const callback = new (class implements TUIRoomDefine.ActionCallback {
-            override onSuccess() : void {
-                options?.success?.();
-            }
-            override onError(error : TUICommonDefine.Error, errMsg : string) : void {
-                options?.fail?.(error.getValue(), errMsg);
-            }
-        });
-        V2RTCRoomEngine.getInstance().getLiveAudienceStore(options.liveId).fetchAudienceList(options.cursor?.toLong(), callback);
-    }
-
-    public setAdministrator(options : SetAdministratorOptions) {
-        console.warn(`${AUDIENCE_TAG} setAdministrator, data: ${JSON.stringify(options)}`);
-        Logger.i(AUDIENCE_TAG + "setAdministrator, data: " + JSON.stringify(options));
-        const callback = new (class implements TUIRoomDefine.ActionCallback {
-            override onSuccess() : void {
-                options?.success?.();
-            }
-            override onError(error : TUICommonDefine.Error, errMsg : string) : void {
-                options?.fail?.(error.getValue(), errMsg);
-            }
-        });
-        V2RTCRoomEngine.getInstance().getLiveAudienceStore(options.liveId).setAdministrator(options.userId, callback);
-    }
-
-    public revokeAdministrator(options : RevokeAdministratorOptions) {
-        console.warn(`${AUDIENCE_TAG} revokeAdministrator, data: ${JSON.stringify(options)}`);
-        Logger.i(AUDIENCE_TAG + "revokeAdministrator, data: " + JSON.stringify(options));
-        const callback = new (class implements TUIRoomDefine.ActionCallback {
-            override onSuccess() : void {
-                options?.success?.();
-            }
-            override onError(error : TUICommonDefine.Error, errMsg : string) : void {
-                options?.fail?.(error.getValue(), errMsg);
-            }
-        });
-        V2RTCRoomEngine.getInstance().getLiveAudienceStore(options.liveId).revokeAdministrator(options.userId, callback);
-    }
-
-    public kickUserOutOfRoom(options : KickUserOutOfRoomOptions) {
-        console.warn(`${AUDIENCE_TAG} kickUserOutOfRoom, data: ${JSON.stringify(options)}`);
-        Logger.i(AUDIENCE_TAG + "kickUserOutOfRoom, data: " + JSON.stringify(options));
-        const callback = new (class implements TUIRoomDefine.ActionCallback {
-            override onSuccess() : void {
-                options?.success?.();
-            }
-            override onError(error : TUICommonDefine.Error, errMsg : string) : void {
-                options?.fail?.(error.getValue(), errMsg);
-            }
-        });
-        V2RTCRoomEngine.getInstance().getLiveAudienceStore(options.liveId).kickUserOutOfRoom(options.userId, callback);
-    }
-
-    public disableSendMessage(options : DisableSendMessageOptions) {
-        console.warn(`${AUDIENCE_TAG} disableSendMessage, data: ${JSON.stringify(options)}`);
-        Logger.i(AUDIENCE_TAG + "disableSendMessage, data: " + JSON.stringify(options));
-        const callback = new (class implements TUIRoomDefine.ActionCallback {
-            override onSuccess() : void {
-                options?.success?.();
-            }
-            override onError(error : TUICommonDefine.Error, errMsg : string) : void {
-                options?.fail?.(error.getValue(), errMsg);
-            }
-        });
-        V2RTCRoomEngine.getInstance().getLiveAudienceStore(options.liveId)
-            .disableSendMessage(options.userId, options.isDisable, callback);
-    }
-
-    /**
-     * DeviceStore 相关接口
-     */
-    public openLocalMicrophone(options : OpenLocalMicrophoneOptions) {
-        console.warn(`${DEVICE_TAG} openLocalMicrophone, data: ${JSON.stringify(options)}`);
-        Logger.i(DEVICE_TAG + "openLocalMicrophone, data: " + JSON.stringify(options));
-        const callback = new (class implements TUIRoomDefine.ActionCallback {
-            override onSuccess() : void {
-                options?.success?.();
-            }
-            override onError(error : TUICommonDefine.Error, errMsg : string) : void {
-                options?.fail?.(error.getValue(), errMsg);
-            }
-        });
-        V2RTCRoomEngine.getInstance().getDeviceStore().openLocalMicrophone(callback);
-    }
-    public closeLocalMicrophone() {
-        console.warn(`${DEVICE_TAG} closeLocalMicrophone`);
-        Logger.i(DEVICE_TAG + "closeLocalMicrophone");
-        V2RTCRoomEngine.getInstance().getDeviceStore().closeLocalMicrophone();
-    }
-    public muteLocalAudio() {
-        console.warn(`${DEVICE_TAG} muteLocalAudio`);
-        Logger.i(DEVICE_TAG + "muteLocalAudio");
-        V2RTCRoomEngine.getInstance().getDeviceStore().muteLocalAudio();
-    }
-    public unmuteLocalAudio(options : UnmuteLocalAudioOptions) {
-        console.warn(`${DEVICE_TAG} unmuteLocalAudio`);
-        Logger.i(DEVICE_TAG + "unmuteLocalAudio");
-        const callback = new (class implements TUIRoomDefine.ActionCallback {
-            override onSuccess() : void {
-                options?.success?.();
-            }
-            override onError(error : TUICommonDefine.Error, errMsg : string) : void {
-                options?.fail?.(error.getValue(), errMsg);
-            }
-        });
-        V2RTCRoomEngine.getInstance().getDeviceStore().unmuteLocalAudio(callback);
-    }
-    public setAudioRoute(options : SetAudioRouteOptions) {
-        console.warn(`${DEVICE_TAG} setAudioRoute, data: ${JSON.stringify(options)}`);
-        Logger.i(DEVICE_TAG + "setAudioRoute, data: " + JSON.stringify(options));
-
-        let audioRoute = ParamsCovert.convertAudioOutput(options.route)
-        V2RTCRoomEngine.getInstance().getDeviceStore().setAudioRoute(audioRoute);
-    }
-    public openLocalCamera(options : OpenLocalCameraOptions) {
-        console.warn(`${DEVICE_TAG} openLocalCamera, data: ${JSON.stringify(options)}`);
-        Logger.i(DEVICE_TAG + "openLocalCamera, data: " + JSON.stringify(options));
-        const callback = new (class implements TUIRoomDefine.ActionCallback {
-            override onSuccess() : void {
-                options?.success?.();
-            }
-            override onError(error : TUICommonDefine.Error, errMsg : string) : void {
-                options?.fail?.(error.getValue(), errMsg);
-            }
-        });
-        V2RTCRoomEngine.getInstance().getDeviceStore().openLocalCamera(options.isFront ?? true, callback);
-    }
-    public closeLocalCamera() {
-        console.warn(`${DEVICE_TAG} closeLocalCamera`);
-        Logger.i(DEVICE_TAG + "closeLocalCamera");
-        V2RTCRoomEngine.getInstance().getDeviceStore().closeLocalCamera();
-    }
-    public switchCamera(options : SwitchCameraOptions) {
-        console.warn(`${DEVICE_TAG} switchCamera, data: ${JSON.stringify(options)}`);
-        Logger.i(DEVICE_TAG + "switchCamera, data: " + JSON.stringify(options));
-        V2RTCRoomEngine.getInstance().getDeviceStore().switchCamera(options.isFront ?? false);
-    }
-    public switchMirror(options : SwitchMirrorOptions) {
-        console.warn(`${DEVICE_TAG} switchMirror, data: ${JSON.stringify(options)}`);
-        Logger.i(DEVICE_TAG + "switchMirror, data: " + JSON.stringify(options));
-        V2RTCRoomEngine.getInstance().getDeviceStore().switchMirror(options.isMirror ?? false);
-    }
-    public updateVideoQuality(options : UpdateVideoQualityOptions) {
-        console.warn(`${DEVICE_TAG} updateVideoQuality, data: ${JSON.stringify(options)}`);
-        Logger.i(DEVICE_TAG + "updateVideoQuality, data: " + JSON.stringify(options));
-        let quality = ParamsCovert.covertVideoQuality(options.quality)
-        V2RTCRoomEngine.getInstance().getDeviceStore().updateVideoQuality(quality);
-    }
-    public startScreenShare() {
-        console.warn(`${DEVICE_TAG} startScreenShare`);
-        Logger.i(DEVICE_TAG + "startScreenShare");
-        V2RTCRoomEngine.getInstance().getDeviceStore().startScreenShare();
-    }
-    public stopScreenShare() {
-        console.warn(`${DEVICE_TAG} stopScreenShare`);
-        Logger.i(DEVICE_TAG + "stopScreenShare");
-        V2RTCRoomEngine.getInstance().getDeviceStore().stopScreenShare();
-    }
-
-    /**
-     * CoHostStore 相关接口
-     */
-    public sendCoHostRequest(options : SendCoHostRequestOptions) {
-        console.warn(`${COHOST_TAG} sendCoHostRequest, data: ${JSON.stringify(options)}`);
-        Logger.i(COHOST_TAG + "sendCoHostRequest, data: " + JSON.stringify(options));
-        const callback = new (class implements CompletionHandler {
-            override onSuccess() : void {
-                options?.success?.();
-            }
-            override onFailure(error : Int, errMsg : string) : void {
-                options?.fail?.(error, errMsg);
-            }
-        });
-        let seatUserInfo = ParamsCovert.convertSeatUserInfo(options.seatUserInfo)
-        V2RTCRoomEngine.getInstance().getCoHostStore(options.liveId).sendCoHostRequest(
-            seatUserInfo, options.timeout?.toInt(), options.extensionInfo, callback);
-    }
-    public cancelCoHostRequest(options : CancelCoHostRequestOptions) {
-        console.warn(`${COHOST_TAG} cancelCoHostRequest, data: ${JSON.stringify(options)}`);
-        Logger.i(COHOST_TAG + "cancelCoHostRequest, data: " + JSON.stringify(options));
-        const callback = new (class implements TUIRoomDefine.ActionCallback {
-            override onSuccess() : void {
-                options?.success?.();
-            }
-            override onError(error : TUICommonDefine.Error, errMsg : string) : void {
-                options?.fail?.(error.getValue(), errMsg);
-            }
-        });
-        let seatUserInfo = ParamsCovert.convertSeatUserInfo(options.seatUserInfo)
-        V2RTCRoomEngine.getInstance().getCoHostStore(options.liveId).cancelCoHostRequest(seatUserInfo, callback);
-    }
-    public acceptCoHostRequest(options : AcceptCoHostRequestOptions) {
-        console.warn(`${COHOST_TAG} acceptCoHostRequest, data: ${JSON.stringify(options)}`);
-        Logger.i(COHOST_TAG + "acceptCoHostRequest, data: " + JSON.stringify(options));
-        const callback = new (class implements TUIRoomDefine.ActionCallback {
-            override onSuccess() : void {
-                options?.success?.();
-            }
-            override onError(error : TUICommonDefine.Error, errMsg : string) : void {
-                options?.fail?.(error.getValue(), errMsg);
-            }
-        });
-        let userInfo = ParamsCovert.convertSeatUserInfo(options.userInfo)
-        V2RTCRoomEngine.getInstance().getCoHostStore(options.liveId).acceptCoHostRequest(userInfo, callback);
-    }
-    public rejectCoHostRequest(options : RejectCoHostRequestOptions) {
-        console.warn(`${COHOST_TAG} rejectCoHostRequest, data: ${JSON.stringify(options)}`);
-        Logger.i(COHOST_TAG + "rejectCoHostRequest, data: " + JSON.stringify(options));
-        const callback = new (class implements TUIRoomDefine.ActionCallback {
-            override onSuccess() : void {
-                options?.success?.();
-            }
-            override onError(error : TUICommonDefine.Error, errMsg : string) : void {
-                options?.fail?.(error.getValue(), errMsg);
-            }
-        });
-        let userInfo = ParamsCovert.convertSeatUserInfo(options.userInfo)
-        V2RTCRoomEngine.getInstance().getCoHostStore(options.liveId).rejectCoHostRequest(userInfo, callback);
-    }
-    public exitCoHost(options : ExitCoHostOptions) {
-        console.warn(`${COHOST_TAG} exitCoHost, data: ${JSON.stringify(options)}`);
-        Logger.i(COHOST_TAG + "exitCoHost, data: " + JSON.stringify(options));
-        const callback = new (class implements TUIRoomDefine.ActionCallback {
-            override onSuccess() : void {
-                options?.success?.();
-            }
-            override onError(error : TUICommonDefine.Error, errMsg : string) : void {
-                options?.fail?.(error.getValue(), errMsg);
-            }
-        });
-        V2RTCRoomEngine.getInstance().getCoHostStore(options.liveId).exitCoHost(callback);
-    }
-
-    /**
-     * CoGuestStore 相关接口
-     */
-    public sendCoGuestRequest(options : SendCoGuestRequestOptions) {
-        console.warn(`${COGUEST_TAG} sendCoGuestRequest, options: ${JSON.stringify(options)}`);
-        Logger.i(COGUEST_TAG + "sendCoGuestRequest, options: " + JSON.stringify(options))
-        const callback = new (class implements TUIRoomDefine.RequestCallback {
-            override onAccepted(requestId : string, userId : string) : void {
-                console.log(`${COGUEST_TAG} sendCoGuestRequest onAccepted, requestId: ${requestId}, userId: ${userId}`);
-                Logger.i(COGUEST_TAG + "sendCoGuestRequest onAccepted, requestId: " + requestId + ", userId: " + userId);
-                options?.onAccepted?.(requestId, userId);
-            }
-            override onRejected(requestId : string, userId : string, msg : string) : void {
-                console.log(`${COGUEST_TAG} sendCoGuestRequest onRejected, requestId: ${requestId}, userId: ${userId}, msg: ${msg}`);
-                Logger.i(COGUEST_TAG + "sendCoGuestRequest onRejected, requestId: " + requestId + ", userId: " + userId + ", msg: " + msg);
-                options?.onRejected?.(requestId, userId, msg);
-            }
-            override onCancelled(requestId : string, userId : string) : void {
-                console.log(`${COGUEST_TAG} sendCoGuestRequest onCancelled, requestId: ${requestId}, userId: ${userId}`);
-                Logger.i(COGUEST_TAG + "sendCoGuestRequest onCancelled, requestId: " + requestId + ", userId: " + userId);
-                options?.onCancelled?.(requestId, userId);
-            }
-            override onTimeout(requestId : string, userId : string) : void {
-                console.log(`${COGUEST_TAG} sendCoGuestRequest onTimeout, requestId: ${requestId}, userId: ${userId}`);
-                Logger.i(COGUEST_TAG + "sendCoGuestRequest onTimeout, requestId: " + requestId + ", userId: " + userId);
-                options?.onTimeout?.(requestId, userId);
-            }
-            override onError(requestId : string, userId : string, error : TUICommonDefine.Error, errMsg : string) : void {
-                console.log(`${COGUEST_TAG} sendCoGuestRequest onError, requestId: ${requestId}, userId: ${userId}, error: ${error}, errMsg: ${errMsg}`);
-                Logger.e(COGUEST_TAG + "sendCoGuestRequest onError, requestId: " + requestId + ", userId: " + userId + ", error: " + error + ", errMsg: " + errMsg);
-                options?.onError?.(requestId, userId, error.getValue(), errMsg);
-            }
-        });
-        V2RTCRoomEngine.getInstance().getCoGuestStore(options.liveId).sendCoGuestRequest(
-            options.seatIndex?.toInt(), options.timeout?.toInt(), options.userId, options.extraInfo, callback);
-    }
-    public cancelCoGuestRequest(options : CancelCoGuestRequestOptions) {
-        console.warn(`${COGUEST_TAG} cancelCoGuestRequest, data: ${JSON.stringify(options)}`);
-        Logger.i(COGUEST_TAG + "cancelCoGuestRequest, data: " + JSON.stringify(options));
-        const callback = new (class implements TUIRoomDefine.ActionCallback {
-            override onSuccess() : void {
-                options?.success?.();
-            }
-            override onError(error : TUICommonDefine.Error, errMsg : string) : void {
-                options?.fail?.(error.getValue(), errMsg);
-            }
-        });
-        V2RTCRoomEngine.getInstance().getCoGuestStore(options.liveId).cancelCoGuestRequest(options.userId, callback);
-    }
-    public acceptCoGuestRequest(options : AcceptCoGuestRequestOptions) {
-        console.warn(`${COGUEST_TAG} acceptCoGuestRequest, data: ${JSON.stringify(options)}`);
-        Logger.i(COGUEST_TAG + "acceptCoGuestRequest, data: " + JSON.stringify(options));
-        const callback = new (class implements TUIRoomDefine.ActionCallback {
-            override onSuccess() : void {
-                options?.success?.();
-            }
-            override onError(error : TUICommonDefine.Error, errMsg : string) : void {
-                options?.fail?.(error.getValue(), errMsg);
-            }
-        });
-        V2RTCRoomEngine.getInstance().getCoGuestStore(options.liveId).acceptCoGuestRequest(options.userId, callback);
-    }
-    public rejectCoGuestRequest(options : RejectCoGuestRequestOptions) {
-        console.warn(`${COGUEST_TAG} rejectCoGuestRequest, data: ${JSON.stringify(options)}`);
-        Logger.i(COGUEST_TAG + "rejectCoGuestRequest, data: " + JSON.stringify(options));
-        const callback = new (class implements TUIRoomDefine.ActionCallback {
-            override onSuccess() : void {
-                options?.success?.();
-            }
-            override onError(error : TUICommonDefine.Error, errMsg : string) : void {
-                options?.fail?.(error.getValue(), errMsg);
-            }
-        });
-        V2RTCRoomEngine.getInstance().getCoGuestStore(options.liveId).rejectCoGuestRequest(options.userId, callback);
-    }
-    public disconnect(options : DisconnectOptions) {
-        console.warn(`${COGUEST_TAG} disconnect, data: ${JSON.stringify(options)}`);
-        Logger.i(COGUEST_TAG + "disconnect, data: " + JSON.stringify(options));
-        const callback = new (class implements TUIRoomDefine.ActionCallback {
-            override onSuccess() : void {
-                options?.success?.();
-            }
-            override onError(error : TUICommonDefine.Error, errMsg : string) : void {
-                options?.fail?.(error.getValue(), errMsg);
-            }
-        });
-        V2RTCRoomEngine.getInstance().getCoGuestStore(options.liveId).disconnect(options.userId, callback);
-    }
-
-    /**
-     * BarrageStore 相关接口
-     */
-    public sendTextMessage(options : SendTextMessageOptions) {
-        console.warn(`${BARRAGE_TAG} sendTextMessage, data: ${JSON.stringify(options)}`);
-        Logger.i(BARRAGE_TAG + "sendTextMessage, data: " + JSON.stringify(options));
-        const callback = new (class implements TUIRoomDefine.ActionCallback {
-            override onSuccess() : void {
-                options?.success?.();
-            }
-            override onError(error : TUICommonDefine.Error, errMsg : string) : void {
-                options?.fail?.(error.getValue(), errMsg);
-            }
-        });
-        V2RTCRoomEngine.getInstance().getBarrageStore(options.liveId).sendTextMessage(options.text, options.extensionInfo, callback);
-    }
-    public sendCustomMessage(options : SendCustomMessageOptions) {
-        console.warn(`${BARRAGE_TAG} sendCustomMessage, data: ${JSON.stringify(options)}`);
-        Logger.i(BARRAGE_TAG + "sendCustomMessage, data: " + JSON.stringify(options));
-        const callback = new (class implements TUIRoomDefine.ActionCallback {
-            override onSuccess() : void {
-                options?.success?.();
-            }
-            override onError(error : TUICommonDefine.Error, errMsg : string) : void {
-                options?.fail?.(error.getValue(), errMsg);
-            }
-        });
-        V2RTCRoomEngine.getInstance().getBarrageStore(options.liveId).sendCustomMessage(options.businessId, options.data, callback);
-    }
-
-    /**
-     * GiftStore 相关接口
-     */
-    public getGiftList(options : GetGiftListOptions) {
-        console.warn(`${GIFT_TAG} getGiftList, data: ${JSON.stringify(options)}`);
-        const callback = new (class implements TUIRoomDefine.ActionCallback {
-            override onSuccess() : void {
-                options?.success?.();
-            }
-            override onError(error : TUICommonDefine.Error, errMsg : string) : void {
-                options?.fail?.(error.getValue(), errMsg);
-            }
-        });
-        V2RTCRoomEngine.getInstance().getGiftStore(options.liveId).getGiftList(callback);
-    }
-    public sendGift(options : SendGiftOptions) {
-        console.warn(`${GIFT_TAG} sendGift, data: ${JSON.stringify(options)}`);
-        Logger.i(GIFT_TAG + "sendGift, data: " + JSON.stringify(options));
-        const callback = new (class implements TUIRoomDefine.ActionCallback {
-            override onSuccess() : void {
-                options?.success?.();
-            }
-            override onError(error : TUICommonDefine.Error, errMsg : string) : void {
-                options?.fail?.(error.getValue(), errMsg);
-            }
-        });
-        V2RTCRoomEngine.getInstance().getGiftStore(options.liveId).sendGift(options.giftId, options.count?.toInt(), callback);
-    }
-
-    /**
-     * BeautyStore 相关接口
-     */
-    public setSmoothLevel(options : SetSmoothLevelOptions) {
-        console.warn(`${BEAUTY_TAG} setSmoothLevel, data: ${JSON.stringify(options)}`);
-        Logger.i(BEAUTY_TAG + "setSmoothLevel, data: " + JSON.stringify(options));
-        V2RTCRoomEngine.getInstance().getBaseBeautyStore().setSmoothLevel(options.smoothLevel.toFloat());
-    }
-
-    public setWhitenessLevel(options : SetWhitenessLevelOptions) {
-        console.warn(`${BEAUTY_TAG} setWhitenessLevel, data: ${JSON.stringify(options)}`);
-        Logger.i(BEAUTY_TAG + "setWhitenessLevel, data: " + JSON.stringify(options));
-        V2RTCRoomEngine.getInstance().getBaseBeautyStore().setWhitenessLevel(options.whitenessLevel.toFloat());
-    }
-
-    public setRuddyLevel(options : SetRuddyLevelOptions) {
-        console.warn(`${BEAUTY_TAG} setRuddyLevel, data: ${JSON.stringify(options)}`);
-        Logger.i(BEAUTY_TAG + "setRuddyLevel, data: " + JSON.stringify(options));
-        V2RTCRoomEngine.getInstance().getBaseBeautyStore().setRuddyLevel(options.ruddyLevel.toFloat());
-    }
-
-    /**
-     * V2AudioEffect 相关接口
-     */
-    public setVoiceEarMonitorEnable(options : SetVoiceEarMonitorEnableOptions) {
-        console.warn(`${AUDIOEFFECT_TAG} setVoiceEarMonitorEnable, data: ${JSON.stringify(options)}`);
-        Logger.i(AUDIOEFFECT_TAG + "setVoiceEarMonitorEnable, data: " + JSON.stringify(options));
-        V2RTCRoomEngine.getInstance().getAudioEffectStore().setVoiceEarMonitorEnable(options.enable);
-    }
-
-    public setVoiceEarMonitorVolume(options : SetVoiceEarMonitorVolumeOptions) {
-        console.warn(`${AUDIOEFFECT_TAG} setVoiceEarMonitorVolume, data: ${JSON.stringify(options)}`);
-        Logger.i(AUDIOEFFECT_TAG + "setVoiceEarMonitorVolume, data: " + JSON.stringify(options));
-        V2RTCRoomEngine.getInstance().getAudioEffectStore().setVoiceEarMonitorVolume(options.volume.toInt());
-    }
-
-    public setMicrophoneVolume(options : SetMicrophoneVolumeOptions) {
-        console.warn(`${AUDIOEFFECT_TAG} setMicrophoneVolume, data: ${JSON.stringify(options)}`);
-        V2RTCRoomEngine.getInstance().getAudioEffectStore().setMicrophoneVolume(options.volume.toInt());
-    }
-
-    public setChangerType(options : SetChangerTypeOptions) {
-        console.warn(`${AUDIOEFFECT_TAG} setChangerType, data: ${JSON.stringify(options)}`);
-        Logger.i(AUDIOEFFECT_TAG + "setChangerType, data: " + JSON.stringify(options));
-        let type = ParamsCovert.convertAudioChangerType(options.changerType)
-        V2RTCRoomEngine.getInstance().getAudioEffectStore().setChangerType(type);
-    }
-
-    public setReverbType(options : SetReverbTypeOptions) {
-        console.warn(`${AUDIOEFFECT_TAG} setReverbType, data: ${JSON.stringify(options)}`);
-        Logger.i(AUDIOEFFECT_TAG + "setReverbType, data: " + JSON.stringify(options));
-        let type = ParamsCovert.convertAudioReverbType(options.reverbType)
-        V2RTCRoomEngine.getInstance().getAudioEffectStore().setReverbType(type);
-    }
-    /**
-     * V2LikeStore 相关接口
-     */
-    public sendLike(options : SendLikeOptions) {
-        console.warn(`UTS-Like sendLike, data: ${JSON.stringify(options)}`);
-        Logger.i("UTS-Like: " + "sendLike, data: " + JSON.stringify(options));
-        const callback = new (class implements TUIRoomDefine.ActionCallback {
-            override onSuccess() : void {
-                options?.success?.();
-            }
-            override onError(error : TUICommonDefine.Error, errMsg : string) : void {
-                options?.fail?.(error.getValue(), errMsg);
-            }
-        });
-        V2RTCRoomEngine.getInstance().getLikeStore(options.liveId).sendLike(callback);
-    }
-
-    // ================= 实验性接口 =================
-    public callExperimentalAPI(options: CallExperimentalAPIOptions) {
-        const callback = new (class implements TUIRoomDefine.ExperimentalAPIResponseCallback {
-            override onResponse(jsonData : string) : void {
-                options.onResponse?.(jsonData)
-            }
-        });
-        ExperimentalApiInvoker.callExperimentalAPI(options.jsonData, callback)
-    }
-
-    /**
-     * 回调接口
-     */
-    @UTSJS.keepAlive
-    public on(eventName : string, listener : (key : string, res : any) => void, liveId : string) : void {
-        console.log(`${RTC_TAG} observer, eventName: ${eventName}, liveId: ${liveId}`);
-
-        if (eventName == "loginStoreChanged") {
-            LoginStoreObserver.loginStoreChanged(function (key : string, data : string) {
-                console.log(`${RTC_TAG} loginStoreChanged, key: ${key}, data: ${data}`);
-                Logger.i(RTC_TAG + "loginStoreChanged, key: " + key + ", data: " + data);
-                listener(key, data)
-            })
-        }
-        if (eventName == "liveStoreChanged") {
-            LiveStoreObserver.liveStoreChanged(function (key : string, data : string) {
-                console.log(`${LIVE_TAG} liveStoreChanged, key: ${key}, data: ${data}`);
-                Logger.i(LIVE_TAG + "liveStoreChanged, key: " + key + ", data: " + data);
-                listener(key, data)
-            })
-        }
-        if (eventName == "liveSeatStoreChanged") {
-            LiveSeatStoreObserver.liveSeatStoreChanged(liveId, function (key : string, data : string) {
-                // console.log(`${LIVE_TAG} liveSeatStoreChanged, key: ${key}, data: ${data}`);
-                // Log.i(LIVE_TAG, "liveSeatStoreChanged, key: " + key + ", data: " + data);
-                listener(key, data)
-            })
-        }
-        if (eventName == "liveAudienceStoreChanged") {
-            LiveAudienceStoreObserver.liveAudienceStoreChanged(liveId, function (key : string, data : string) {
-                console.log(`${AUDIENCE_TAG} liveAudienceStoreChanged, key: ${key}, data: ${data}`)
-                Logger.i(AUDIENCE_TAG + "liveAudienceStoreChanged, key: " + key + ", data: " + data);
-                listener(key, data)
-            })
-        }
-        if (eventName == "giftStoreChanged") {
-            GiftStoreObserver.giftStoreChanged(liveId, function (key : string, data : string) {
-                console.log(`${GIFT_TAG} giftStoreChanged, key: ${key}, data: ${data}`);
-                listener(key, data)
-            })
-        }
-        if (eventName == "deviceStoreChanged") {
-            DeviceStoreObserver.deviceStoreChanged(function (key : string, data : string) {
-                // console.log(`${DEVICE_TAG} deviceStoreChanged, key: ${key}, data: ${data}`);
-                listener(key, data)
-            })
-        }
-        if (eventName == "coHostStoreChanged") {
-            CoHostStoreObserver.coHostStoreChanged(liveId, function (key : string, data : string) {
-                console.log(`${COHOST_TAG} coHostStoreChanged, key: ${key}, data: ${data}`);
-                Logger.i(COHOST_TAG + "coHostStoreChanged, key: " + key + ", data: " + data);
-                listener(key, data)
-            })
-        }
-        if (eventName == "coGuestStoreChanged") {
-            CoGuestStoreObserver.coGuestStoreChanged(liveId, function (key : string, data : string) {
-                console.log(`${COGUEST_TAG} coGuestStoreChanged, key: ${key}, data: ${data}`);
-                Logger.i(COGUEST_TAG + "coGuestStoreChanged, key: " + key + ", data: " + data);
-                listener(key, data)
-            })
-        }
-        if (eventName == "barrageStoreChanged") {
-            BarrageStoreObserver.barrageStoreChanged(liveId, function (key : string, data : string) {
-                console.log(`${BARRAGE_TAG} barrageStoreChanged, key: ${key}, data: ${data}`);
-                // Logger.i(BARRAGE_TAG + "barrageStoreChanged, key: " + key + ", data: " + data);
-                listener(key, data)
-            })
-        }
-        if (eventName == "beautyStoreChanged") {
-            BeautyStoreObserver.beautyStoreChanged(function (key : string, data : string) {
-                console.log(`${BEAUTY_TAG} beautyStoreChanged, key: ${key}, data: ${data}`);
-                listener(key, data)
-            })
-        }
-        if (eventName == "audioEffectStoreChanged") {
-            AudioEffectStoreObserver.audioEffectStoreChanged(function (key : string, data : string) {
-                console.log(`${AUDIOEFFECT_TAG} audioEffectStoreChanged, key: ${key}, data: ${data}`);
-                listener(key, data)
-            })
-        }
-        if (eventName == "liveSummaryStateChanged") {
-            LiveSummaryStateObserver.liveSummaryStateChanged(liveId, function (key : string, data : string) {
-                console.log(`liveSummaryStateChanged, key: ${key}, data: ${data}`);
-                listener(key, data)
-            })
-        }
-
-        if (eventName == "likeStateChanged") {
-            LikeStateObserver.likeStateChanged(liveId, function (key : string, data : string) {
-                console.log(`likeStateChanged, key: ${key}, data: ${data}`);
-                listener(key, data)
-            })
-        }
-    }
+  }
 }

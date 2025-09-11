@@ -45,7 +45,7 @@ export class v2RTCRoomEngineManager {
     public login(options : LoginOptions) {
         console.log(`${RTC_TAG} login, data: ${JSON.stringify(options)}`);
         // this.setTestEnvironment()
-
+        this.setFramework()
         V2RTCRoomEngine.shared.login(
             sdkAppId = options.sdkAppID.toInt(),
             userId = options.userID,
@@ -69,6 +69,16 @@ export class v2RTCRoomEngineManager {
                 console.error(`${RTC_TAG}, setTestEnvironment, jsonData: ${jsonData}`)
             }
         )
+    }
+    
+    public setFramework() {
+      const data = { "api": "setFramework", "params": { "framework": 11 ,"component": 21  } }
+      TUIRoomEngine.sharedInstance().callExperimentalAPI(
+          jsonStr = JSON.stringify(data) ?? "",
+          callback = (jsonData : string) : void => {
+              console.error(`${RTC_TAG}, setFramework, jsonData: ${jsonData}`)
+          }
+      )
     }
 
     public logout(options : LogoutOptions) {

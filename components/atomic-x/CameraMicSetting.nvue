@@ -31,7 +31,7 @@
             <text class="action-btn-content">镜像</text>
           </view>
 					
-					<view class="action-btn" @tap="openNetWorkPanel">
+					<view class="action-btn" @tap="openNetworkQualityPanel">
 					  <view class="action-btn-image-container">
 					    <image class="action-btn-image"  src="/static/images/live-dashboard.png" mode="aspectFit" />
 					  </view>
@@ -41,17 +41,17 @@
       </view>
     </view>
 		
-		<NetWorkPanel v-model="isShowNetWorkPanel"></NetWorkPanel>
+		<NetworkQualityPanel v-model="isShowNetworkQualityPanel"></NetworkQualityPanel>
     <BeautyPanel v-model="isShowBeautyPanel"></BeautyPanel>
-    <AudioEffectDrawer v-model="isShowAudioEffect"></AudioEffectDrawer>
+    <AudioEffectPanel v-model="isShowAudioEffect"></AudioEffectPanel>
   </view>
 </template>
 
 <script setup>
 import { ref, onMounted } from 'vue';
-import NetWorkPanel from './NetWorkPanel.nvue';
+import NetworkQualityPanel from './NetworkQualityPanel.nvue';
 import BeautyPanel from './BeautyPanel.nvue';
-import AudioEffectDrawer from './AudioEffectDrawer.nvue';
+import AudioEffectPanel from './AudioEffectPanel.nvue';
 import { useDeviceState } from "@/uni_modules/ui-component/state/devicestate";
 
 const { isFrontCamera, switchCamera, switchMirror, isLocalMirror } = useDeviceState(uni?.$liveId);
@@ -75,15 +75,15 @@ const props = defineProps({
 	},
 });
 
-const isShowNetWorkPanel = ref(false);
+const isShowNetworkQualityPanel = ref(false);
 const isShowBeautyPanel = ref(false);
 const isShowAudioEffect = ref(false);
 
 const handleBeauty = () => {
 	isShowBeautyPanel.value = true;
 };
-const openNetWorkPanel = () => {
-  isShowNetWorkPanel.value = true
+const openNetworkQualityPanel = () => {
+  isShowNetworkQualityPanel.value = true
 }
 const handleAudioEffect = () => {
   isShowAudioEffect.value = true;
