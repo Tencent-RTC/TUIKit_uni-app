@@ -1,0 +1,1229 @@
+/**
+ * interface接口
+ * @module interface
+ */
+/**
+ * 用户权限类型
+ * @remarks
+ * 可用值：
+ * - `ALLOW_ANY`: 允许任何人
+ * - `NEED_CONFIRM`: 需要确认
+ * - `DENY_ANY`: 拒绝任何人
+ */
+export type UserAllowType = 'ALLOW_ANY' | 'NEED_CONFIRM' | 'DENY_ANY';
+
+/**
+ * 性别类型
+ * @remarks
+ * 可用值：
+ * - `UNKNOWN`: 未知
+ * - `MALE`: 男
+ * - `FEMALE`: 女
+ */
+export type GenderType = 'UNKNOWN' | 'MALE' | 'FEMALE';
+
+/**
+ * 上麦模式类型
+ * @remarks
+ * 可用值：
+ * - `FREE`: 自由上麦模式
+ * - `APPLY`: 申请上麦模式
+ */
+export type TakeSeatModeType = 'FREE' | 'APPLY';
+
+/**
+ * 移动座位策略类型
+ * @remarks
+ * 可用值：
+ * - `ABORT_WHEN_OCCUPIED`: 当目标座位被占用时中止操作
+ * - `FORCE_REPLACE`: 强制替换目标座位上的用户
+ * - `SWAP_POSITION`: 交换位置
+ */
+export type MoveSeatPolicyType = 'ABORT_WHEN_OCCUPIED' | 'FORCE_REPLACE' | 'SWAP_POSITION';
+
+/**
+ * 设备控制策略类型
+ * @remarks
+ * 可用值：
+ * - `FORCE_OPEN`: 强制开启设备
+ * - `UNLOCK_ONLY`: 仅解锁设备权限
+ */
+export type DeviceControlPolicyType = 'FORCE_OPEN' | 'UNLOCK_ONLY';
+
+/**
+ * 音频输出类型
+ * @remarks
+ * 可用值：
+ * - `SPEAKERPHONE`: 扬声器
+ * - `EARPIECE`: 听筒
+ */
+export type AudioOutputType = 'SPEAKERPHONE' | 'EARPIECE';
+
+/**
+ * 视频质量类型
+ * @remarks
+ * 可用值：
+ * - `VIDEOQUALITY_360P`: 360P分辨率
+ * - `VIDEOQUALITY_540P`: 540P分辨率
+ * - `VIDEOQUALITY_720P`: 720P分辨率
+ * - `VIDEOQUALITY_1080P`: 1080P分辨率
+ */
+export type VideoQualityType = 'VIDEOQUALITY_360P' | 'VIDEOQUALITY_540P' | 'VIDEOQUALITY_720P' | 'VIDEOQUALITY_1080P';
+
+/**
+ * 连麦布局模板类型
+ * @remarks
+ * 可用值：
+ * - `HOST_DYNAMIC_GRID`: 动态网格布局
+ * - `HOST_DYNAMIC_1V6`: 1对6布局
+ */
+export type CoHostLayoutTemplateType = 'HOST_DYNAMIC_GRID' | 'HOST_DYNAMIC_1V6';
+
+/**
+ * 消息类型
+ * @remarks
+ * 可用值：
+ * - `TEXT`: 文本消息
+ * - `CUSTOM`: 自定义消息
+ */
+export type MessageType = 'TEXT' | 'CUSTOM';
+
+/**
+ * 设备镜像类型
+ * @remarks
+ * 可用值：
+ * - `AUTO`: 自动模式
+ * - `ENABLE`: 启用镜像
+ * - `DISABLE`: 禁用镜像
+ */
+export type DeviceMirrorType = 'AUTO' | 'ENABLE' | 'DISABLE';
+
+/**
+ * 直播间信息修改标志类型
+ * @remarks
+ * 可用值：
+ * - `NONE`: 无修改
+ * - `LIVE_NAME`: 修改直播间名称
+ * - `NOTICE`: 修改直播间公告
+ * - `IS_MESSAGE_DISABLE`: 修改消息禁用状态
+ * - `IS_PUBLIC_VISIBLE`: 修改公开可见状态
+ * - `SEAT_MODE`: 修改上麦模式
+ * - `COVER_URL`: 修改封面URL
+ * - `BACKGROUND_URL`: 修改背景URL
+ * - `CATEGORY_LIST`: 修改分类列表
+ * - `ACTIVITY_STATUS`: 修改活动状态
+ * - `SEAT_LAYOUT_TEMPLATE_ID`: 修改座位布局模板ID
+ */
+export type ModifyFlagType =
+    | 'NONE'
+    | 'LIVE_NAME'
+    | 'NOTICE'
+    | 'IS_MESSAGE_DISABLE'
+    | 'IS_PUBLIC_VISIBLE'
+    | 'SEAT_MODE'
+    | 'COVER_URL'
+    | 'BACKGROUND_URL'
+    | 'CATEGORY_LIST'
+    | 'ACTIVITY_STATUS'
+    | 'SEAT_LAYOUT_TEMPLATE_ID';
+/**
+ * 音频变声器类型参数
+ * @interface AudioChangerTypeParam
+ * @description 音频变声器效果类型
+ * @remarks
+ * 可用值：
+ * - `NONE`: 无效果
+ * - `CHILD`: 儿童音效
+ * - `LITTLE_GIRL`: 小女孩音效
+ * - `MAN`: 男性音效
+ * - `HEAVY_METAL`: 重金属音效
+ * - `COLD`: 冷峻音效
+ * - `FOREIGNER`: 外国人音效
+ * - `TRAPPED_BEAST`: 困兽音效
+ * - `FATSO`: 胖子音效
+ * - `STRONG_CURRENT`: 强电流音效
+ * - `HEAVY_MACHINERY`: 重型机械音效
+ * - `ETHEREAL`: 空灵音效
+ */
+export type AudioChangerTypeParam =
+    | 'NONE'
+    | 'CHILD'
+    | 'LITTLE_GIRL'
+    | 'MAN'
+    | 'HEAVY_METAL'
+    | 'COLD'
+    | 'FOREIGNER'
+    | 'TRAPPED_BEAST'
+    | 'FATSO'
+    | 'STRONG_CURRENT'
+    | 'HEAVY_MACHINERY'
+    | 'ETHEREAL';
+
+/**
+ * 音频混响类型参数
+ * @interface AudioReverbTypeParam
+ * @description 音频混响效果类型
+ * @remarks
+ * 可用值：
+ * - `NONE`: 无效果
+ * - `KTV`: KTV音效
+ * - `SMALL_ROOM`: 小房间音效
+ * - `AUDITORIUM`: 礼堂音效
+ * - `DEEP`: 深沉音效
+ * - `LOUD`: 响亮音效
+ * - `METALLIC`: 金属音效
+ * - `MAGNETIC`: 磁性音效
+ */
+export type AudioReverbTypeParam =
+    | 'NONE'
+    | 'KTV'
+    | 'SMALL_ROOM'
+    | 'AUDITORIUM'
+    | 'DEEP'
+    | 'LOUD'
+    | 'METALLIC'
+    | 'MAGNETIC';
+
+/**
+ * 座位用户信息参数
+ * @interface SeatUserInfoParam
+ * @param {string} userID - 用户ID（必填）
+ * @param {string} userName - 用户名（可选）
+ * @param {string} avatarURL - 头像URL（可选）
+ * @param {string} role - 用户角色（可选）
+ * @param {string} liveID - 直播间ID（必填）
+ * @param {string} microphoneStatus - 麦克风状态（可选）
+ * @param {boolean} allowOpenMicrophone - 是否允许开启麦克风（可选）
+ * @param {string} cameraStatus - 摄像头状态（可选）
+ * @param {boolean} allowOpenCamera - 是否允许开启摄像头（可选）
+ */
+export type SeatUserInfoParam = {
+    userID ?: string;
+    userName ?: string;
+    avatarURL ?: string;
+    role ?: string;
+    liveID ?: string;
+    microphoneStatus ?: string;
+    allowOpenMicrophone ?: boolean;
+    cameraStatus ?: string;
+    allowOpenCamera ?: boolean;
+};
+
+// ============== 基础数据结构类型 ==============
+/**
+ * 用户资料参数
+ * @interface UserProfileParam
+ * @description 用户资料结构
+ * @param {string} userID - 用户ID（必填）
+ * @param {string} nickname - 昵称（可选）
+ * @param {string} avatarURL - 头像URL（可选）
+ * @param {string} selfSignature - 个性签名（可选）
+ * @param {GenderType} gender - 性别（可选）
+ * @param {number} role - 角色（可选）
+ * @param {number} level - 等级（可选）
+ * @param {number} birthday - 生日时间戳（可选）
+ * @param {UserAllowType} allowType - 权限类型（可选）
+ * @param {Record<string, string>} customInfo - 自定义信息（可选）
+ */
+export type UserProfileParam = {
+    userID ?: string;
+    nickname ?: string;
+    avatarURL ?: string;
+    selfSignature ?: string;
+    gender ?: GenderType;
+    role ?: number;
+    level ?: number;
+    birthday ?: number;
+    allowType ?: UserAllowType;
+    customInfo ?: Map<string, string>;
+};
+
+/**
+ * 直播间用户信息参数
+ * @interface LiveUserInfoParam
+ * @description 直播间用户信息结构
+ * @param {string} userID - 用户ID（必填）
+ * @param {string} userName - 用户名（可选）
+ * @param {string} avatarURL - 头像URL（可选）
+ */
+export type LiveUserInfoParam = {
+    userID ?: string;
+    userName ?: string;
+    avatarURL ?: string;
+};
+
+/**
+ * 直播间信息参数
+ * @interface LiveInfoParam
+ * @description 直播间信息结构
+ * @param {string} liveID - 直播间ID（必填）
+ * @param {string} liveName - 直播间名称（可选）
+ * @param {string} notice - 直播间公告（可选）
+ * @param {boolean} isMessageDisable - 是否禁用消息（可选）
+ * @param {boolean} isPublicVisible - 是否公开可见（可选）
+ * @param {boolean} isSeatEnabled - 是否启用座位功能（必填）
+ * @param {boolean} keepOwnerOnSeat - 是否保持房主在座位上（必填）
+ * @param {number} maxSeatCount - 最大座位数（必填）
+ * @param {TakeSeatModeType} seatMode - 上麦模式类型（必填）
+ * @param {number} seatLayoutTemplateID - 座位布局模板ID（可选，默认值：600）
+ * @param {string} coverURL - 封面URL（可选）
+ * @param {string} backgroundURL - 背景URL（可选）
+ * @param {number[]} categoryList - 分类列表（可选）
+ * @param {number} activityStatus - 活动状态（可选，默认值：0）
+ * @param {number} totalViewerCount - 总观众数（必填）
+ * @param {boolean} isGiftEnabled - 是否启用礼物功能（可选）
+ * @param {Record<string, string>} metaData - 元数据（可选）
+ */
+export type LiveInfoParam = {
+    liveID : string;
+    liveName ?: string;
+    notice ?: string;
+    isMessageDisable ?: boolean;
+    isPublicVisible ?: boolean;
+    isSeatEnabled : boolean;
+    keepOwnerOnSeat : boolean;
+    maxSeatCount : number;
+    seatMode : TakeSeatModeType;
+    seatLayoutTemplateID ?: number;
+    coverURL ?: string;
+    backgroundURL ?: string;
+    categoryList ?: number[];
+    activityStatus ?: number;
+    totalViewerCount : number;
+    isGiftEnabled ?: boolean;
+    metaData ?: Map<string, string>;
+};
+
+/**
+ * 弹幕参数
+ * @interface BarrageParam
+ * @description 弹幕消息结构
+ * @param {string} liveID - 直播间ID（必填）
+ * @param {LiveUserInfoParam} sender - 发送者信息（必填）
+ * @param {number} sequence - 消息序列号（必填）
+ * @param {number} timestampInSecond - 时间戳（单位：秒）
+ * @param {MessageType} messageType - 消息类型（必填）
+ * @param {string} textContent - 文本内容（可选）
+ * @param {Record<string, string>} extensionInfo - 扩展信息（可选）
+ * @param {string} businessID - 业务ID（可选）
+ * @param {string} data - 自定义数据（可选）
+ */
+export type BarrageParam = {
+    liveID : string;
+    sender : LiveUserInfoParam;
+    sequence : number;
+    timestampInSecond : number;
+    messageType : MessageType;
+    textContent ?: string;
+    extensionInfo ?: Map<string, string>;
+    businessID ?: string;
+    data ?: string;
+};
+
+// ============== Options 接口类型 ==============
+/**
+ * 登录参数
+ * @interface LoginOptions
+ * @description 登录配置结构
+ * @param {number} sdkAppID - 应用ID（必填）
+ * @param {string} userID - 用户ID（必填）
+ * @param {string} userSig - 用户签名（必填）
+ * @param {() => void} success - 成功回调（可选）
+ * @param {(errCode: number, errMsg: string) => void} fail - 失败回调（可选）
+ */
+export type LoginOptions = {
+    sdkAppID : number;
+    userID : string;
+    userSig : string;
+    success ?: () => void;
+    fail ?: (errCode : number, errMsg : string) => void;
+};
+
+/**
+ * 登出参数
+ * @interface LogoutOptions
+ * @description 登出配置结构
+ * @param {() => void} success - 成功回调（可选）
+ * @param {(errCode: number, errMsg: string) => void} fail - 失败回调（可选）
+ */
+export type LogoutOptions = {
+    success ?: () => void;
+    fail ?: (errCode : number, errMsg : string) => void;
+};
+
+/**
+ * 设置用户信息参数
+ * @interface SetSelfInfoOptions
+ * @description 设置用户信息配置结构
+ * @param {UserProfileParam} userProfile - 用户资料信息（必填）
+ * @param {() => void} success - 成功回调（可选）
+ * @param {(errCode: number, errMsg: string) => void} fail - 失败回调（可选）
+ */
+export type SetSelfInfoOptions = {
+    userProfile : UserProfileParam;
+    success ?: () => void;
+    fail ?: (errCode : number, errMsg : string) => void;
+};
+
+// ================= LiveListStore 相关 =================
+/**
+ * 获取直播间列表参数
+ * @interface FetchLiveListOptions
+ * @description 获取直播间列表查询结构
+ * @param {string} cursor - 游标，用于分页查询（必填）
+ * @param {number} count - 每页数量（必填）
+ * @param {() => void} success - 成功回调（可选）
+ * @param {(errCode: number, errMsg: string) => void} fail - 失败回调（可选）
+ */
+export type FetchLiveListOptions = {
+    cursor : string;
+    count : number;
+    success ?: () => void;
+    fail ?: (errCode : number, errMsg : string) => void;
+}
+
+/**
+ * 创建直播间参数
+ * @interface CreateLiveOptions
+ * @description 创建直播间配置结构
+ * @param {LiveInfoParam} liveInfo - 直播间信息（必填）
+ * @param {(liveInfo: String) => void} success - 成功回调（可选）
+ * @param {(errCode: number, errMsg: string) => void} fail - 失败回调（可选）
+ */
+export type CreateLiveOptions = {
+    liveInfo : LiveInfoParam;
+    success ?: (liveInfo : String) => void;
+    fail ?: (errCode : number, errMsg : string) => void;
+}
+
+/**
+ * 加入直播间参数
+ * @interface JoinLiveOptions
+ * @description 加入直播间配置结构
+ * @param {string} liveID - 直播间ID（必填）
+ * @param {(liveInfo: String) => void} success - 成功回调（可选）
+ * @param {(errCode: number, errMsg: string) => void} fail - 失败回调（可选）
+ */
+export type JoinLiveOptions = {
+    liveID : string;
+    success ?: (liveInfo : String) => void;
+    fail ?: (errCode : number, errMsg : string) => void;
+}
+
+/**
+ * 离开直播间参数
+ * @interface LeaveLiveOptions
+ * @description 离开直播间配置结构
+ * @param {() => void} success - 成功回调（可选）
+ * @param {(errCode: number, errMsg: string) => void} fail - 失败回调（可选）
+ */
+export type LeaveLiveOptions = {
+    success ?: () => void;
+    fail ?: (errCode : number, errMsg : string) => void;
+}
+
+/**
+ * 结束直播间参数
+ * @interface EndLiveOptions
+ * @description 结束直播间配置结构
+ * @param {(data: string) => void} success - 成功回调（可选）
+ * @param {(errCode: number, errMsg: string) => void} fail - 失败回调（可选）
+ */
+export type EndLiveOptions = {
+    success ?: (data : string) => void;
+    fail ?: (errCode : number, errMsg : string) => void;
+}
+
+/**
+ * 更新直播间信息参数
+ * @interface UpdateLiveInfoOptions
+ * @description 更新直播间信息配置结构
+ * @param {LiveInfoParam} liveInfo - 更新的直播间信息（必填）
+ * @param {number[]} modifyFlagList - 修改标志列表，标识需要更新的字段（必填）
+ * @param {() => void} success - 成功回调（可选）
+ * @param {(errCode: number, errMsg: string) => void} fail - 失败回调（可选）
+ */
+export type UpdateLiveInfoOptions = {
+    liveInfo : LiveInfoParam;
+    modifyFlagList : number[]
+    success ?: () => void;
+    fail ?: (errCode : number, errMsg : string) => void;
+}
+
+// ================= LiveSeatStore 相关 =================
+/**
+ * 上麦参数
+ * @interface TakeSeatOptions
+ * @description 上麦配置结构
+ * @param {string} liveID - 直播间ID（必填）
+ * @param {number} seatIndex - 座位索引（必填）
+ * @param {() => void} success - 成功回调（可选）
+ * @param {(errCode: number, errMsg: string) => void} fail - 失败回调（可选）
+ */
+export type TakeSeatOptions = {
+    liveID : string;
+    seatIndex : number;
+    success ?: () => void;
+    fail ?: (errCode : number, errMsg : string) => void;
+}
+
+/**
+ * 下麦参数
+ * @interface LeaveSeatOptions
+ * @description 下麦配置结构
+ * @param {string} liveID - 直播间ID（必填）
+ * @param {() => void} success - 成功回调（可选）
+ * @param {(errCode: number, errMsg: string) => void} fail - 失败回调（可选）
+ */
+export type LeaveSeatOptions = {
+    liveID : string;
+    success ?: () => void;
+    fail ?: (errCode : number, errMsg : string) => void;
+}
+
+/**
+ * 静音麦克风参数
+ * @interface MuteMicrophoneOptions
+ * @description 静音麦克风配置结构
+ * @param {string} liveID - 直播间ID（必填）
+ */
+export type MuteMicrophoneOptions = {
+    liveID : string;
+}
+
+/**
+ * 取消静音麦克风参数
+ * @interface UnmuteMicrophoneOptions
+ * @description 取消静音麦克风配置结构
+ * @param {string} liveID - 直播间ID（必填）
+ * @param {() => void} success - 成功回调（可选）
+ * @param {(errCode: number, errMsg: string) => void} fail - 失败回调（可选）
+ */
+export type UnmuteMicrophoneOptions = {
+    liveID : string;
+    success ?: () => void;
+    fail ?: (errCode : number, errMsg : string) => void;
+}
+
+/**
+ * 踢用户下麦参数
+ * @interface KickUserOutOfSeatOptions
+ * @description 踢用户下麦配置结构
+ * @param {string} liveID - 直播间ID（必填）
+ * @param {string} userID - 用户ID（必填）
+ * @param {() => void} success - 成功回调（可选）
+ * @param {(errCode: number, errMsg: string) => void} fail - 失败回调（可选）
+ */
+export type KickUserOutOfSeatOptions = {
+    liveID : string;
+    userID : string;
+    success ?: () => void;
+    fail ?: (errCode : number, errMsg : string) => void;
+}
+
+/**
+ * 移动用户到座位参数
+ * @interface MoveUserToSeatOptions
+ * @description 移动用户到座位配置结构
+ * @param {string} liveID - 直播间ID（必填）
+ * @param {string} userID - 用户ID（必填）
+ * @param {number} targetIndex - 目标座位索引（必填）
+ * @param {MoveSeatPolicyType} policy - 移动策略（可选）
+ * @param {() => void} success - 成功回调（可选）
+ * @param {(errCode: number, errMsg: string) => void} fail - 失败回调（可选）
+ */
+export type MoveUserToSeatOptions = {
+    liveID : string;
+    userID : string;
+    targetIndex : number;
+    policy ?: MoveSeatPolicyType;
+    success ?: () => void;
+    fail ?: (errCode : number, errMsg : string) => void;
+}
+
+/**
+ * 锁定座位参数
+ * @interface LockSeatOptions
+ * @description 锁定座位配置结构
+ * @param {string} liveID - 直播间ID（必填）
+ * @param {number} seatIndex - 座位索引（必填）
+ * @param {() => void} success - 成功回调（可选）
+ * @param {(errCode: number, errMsg: string) => void} fail - 失败回调（可选）
+ */
+export type LockSeatOptions = {
+    liveID : string
+    seatIndex : number;
+    success ?: () => void;
+    fail ?: (errCode : number, errMsg : string) => void;
+}
+
+/**
+ * 解锁座位参数
+ * @interface UnlockSeatOptions
+ * @description 解锁座位配置结构
+ * @param {string} liveID - 直播间ID（必填）
+ * @param {number} seatIndex - 座位索引（必填）
+ * @param {() => void} success - 成功回调（可选）
+ * @param {(errCode: number, errMsg: string) => void} fail - 失败回调（可选）
+ */
+export type UnlockSeatOptions = {
+    liveID : string;
+    seatIndex : number;
+    success ?: () => void;
+    fail ?: (errCode : number, errMsg : string) => void;
+}
+
+/**
+ * 开启远程摄像头参数
+ * @interface OpenRemoteCameraOptions
+ * @description 开启远程摄像头配置结构
+ * @param {string} liveID - 直播间ID（必填）
+ * @param {string} userID - 用户ID（必填）
+ * @param {DeviceControlPolicyType} policy - 控制策略（必填）
+ * @param {() => void} success - 成功回调（可选）
+ * @param {(errCode: number, errMsg: string) => void} fail - 失败回调（可选）
+ */
+export type OpenRemoteCameraOptions = {
+    liveID : string;
+    userID : string;
+    policy : DeviceControlPolicyType;
+    success ?: () => void;
+    fail ?: (errCode : number, errMsg : string) => void;
+}
+
+/**
+ * 关闭远程摄像头参数
+ * @interface CloseRemoteCameraOptions
+ * @description 关闭远程摄像头配置结构
+ * @param {string} liveID - 直播间ID（必填）
+ * @param {string} userID - 用户ID（必填）
+ * @param {() => void} success - 成功回调（可选）
+ * @param {(errCode: number, errMsg: string) => void} fail - 失败回调（可选）
+ */
+export type CloseRemoteCameraOptions = {
+    liveID : string;
+    userID : string;
+    success ?: () => void;
+    fail ?: (errCode : number, errMsg : string) => void;
+}
+
+/**
+ * 开启远程麦克风参数
+ * @interface OpenRemoteMicrophoneOptions
+ * @description 开启远程麦克风配置结构
+ * @param {string} liveID - 直播间ID（必填）
+ * @param {string} userID - 用户ID（必填）
+ * @param {DeviceControlPolicyType} policy - 控制策略（必填，参考DeviceControlPolicyType）
+ * @param {() => void} success - 成功回调（可选）
+ * @param {(errCode: number, errMsg: string) => void} fail - 失败回调（可选）
+ */
+export type OpenRemoteMicrophoneOptions = {
+    liveID : string;
+    userID : string;
+    policy : DeviceControlPolicyType;
+    success ?: () => void;
+    fail ?: (errCode : number, errMsg : string) => void;
+}
+
+/**
+ * 关闭远程麦克风参数
+ * @interface CloseRemoteMicrophoneOptions
+ * @description 关闭远程麦克风配置结构
+ * @param {string} liveID - 直播间ID（必填）
+ * @param {string} userID - 用户ID（必填）
+ * @param {() => void} success - 成功回调（可选）
+ * @param {(errCode: number, errMsg: string) => void} fail - 失败回调（可选）
+ */
+export type CloseRemoteMicrophoneOptions = {
+    liveID : string;
+    userID : string;
+    success ?: () => void;
+    fail ?: (errCode : number, errMsg : string) => void;
+}
+
+// ================= LiveAudienceStore 相关 =================
+/**
+ * 获取观众列表参数
+ * @interface FetchAudienceListOptions
+ * @description 获取观众列表配置结构
+ * @param {string} liveID - 直播间ID（必填）
+ * @param {() => void} success - 成功回调（可选）
+ * @param {(errCode: number, errMsg: string) => void} fail - 失败回调（可选）
+ */
+export type FetchAudienceListOptions = {
+    liveID : string
+    success ?: () => void;
+    fail ?: (errCode : number, errMsg : string) => void;
+}
+
+/**
+ * 设置管理员参数
+ * @interface SetAdministratorOptions
+ * @description 设置管理员配置结构
+ * @param {string} liveID - 直播间ID（必填）
+ * @param {string} userID - 用户ID（必填）
+ * @param {() => void} success - 成功回调（可选）
+ * @param {(errCode: number, errMsg: string) => void} fail - 失败回调（可选）
+ */
+export type SetAdministratorOptions = {
+    liveID : string;
+    userID : string;
+    success ?: () => void;
+    fail ?: (errCode : number, errMsg : string) => void;
+}
+
+/**
+ * 撤销管理员参数
+ * @interface RevokeAdministratorOptions
+ * @description 撤销管理员配置结构
+ * @param {string} liveID - 直播间ID（必填）
+ * @param {string} userID - 用户ID（必填）
+ * @param {() => void} success - 成功回调（可选）
+ * @param {(errCode: number, errMsg: string) => void} fail - 失败回调（可选）
+ */
+export type RevokeAdministratorOptions = {
+    liveID : string;
+    userID : string;
+    success ?: () => void;
+    fail ?: (errCode : number, errMsg : string) => void;
+}
+
+/**
+ * 踢出房间参数
+ * @interface KickUserOutOfRoomOptions
+ * @description 踢出房间配置结构
+ * @param {string} liveID - 直播间ID（必填）
+ * @param {string} userID - 用户ID（必填）
+ * @param {() => void} success - 成功回调（可选）
+ * @param {(errCode: number, errMsg: string) => void} fail - 失败回调（可选）
+ */
+export type KickUserOutOfRoomOptions = {
+    liveID : string;
+    userID : string;
+    success ?: () => void;
+    fail ?: (errCode : number, errMsg : string) => void;
+}
+
+/**
+ * 禁用发送消息参数
+ * @interface DisableSendMessageOptions
+ * @description 禁用发送消息配置结构
+ * @param {string} liveID - 直播间ID（必填）
+ * @param {string} userID - 用户ID（必填）
+ * @param {boolean} isDisable - 是否禁用（必填）
+ * @param {() => void} success - 成功回调（可选）
+ * @param {(errCode: number, errMsg: string) => void} fail - 失败回调（可选）
+ */
+export type DisableSendMessageOptions = {
+    liveID : string;
+    userID : string;
+    isDisable : boolean;
+    success ?: () => void;
+    fail ?: (errCode : number, errMsg : string) => void;
+}
+
+// ================= DeviceStore 相关 =================
+/**
+ * 开启本地麦克风参数
+ * @interface OpenLocalMicrophoneOptions
+ * @description 开启本地麦克风配置结构
+ * @param {() => void} success - 成功回调（可选）
+ * @param {(errCode: number, errMsg: string) => void} fail - 失败回调（可选）
+ */
+export type OpenLocalMicrophoneOptions = {
+    success ?: () => void;
+    fail ?: (errCode : number, errMsg : string) => void;
+}
+
+/**
+ * 音量参数
+ * @interface VolumeOptions
+ * @description 音量设置结构
+ * @param {number} volume - 音量大小（必填）
+ */
+export type VolumeOptions = {
+    volume : number
+}
+
+/**
+ * 设置音频路由参数
+ * @interface SetAudioRouteOptions
+ * @description 设置音频路由配置结构
+ * @param {AudioOutputType} route - 音频路由类型（必填）
+ */
+export type SetAudioRouteOptions = {
+    route : AudioOutputType;
+}
+
+/**
+ * 开启本地摄像头参数
+ * @interface OpenLocalCameraOptions
+ * @description 开启本地摄像头配置结构
+ * @param {boolean} isFront - 是否前置摄像头（必填）
+ * @param {() => void} success - 成功回调（可选）
+ * @param {(errCode: number, errMsg: string) => void} fail - 失败回调（可选）
+ */
+export type OpenLocalCameraOptions = {
+    isFront : boolean;
+    success ?: () => void;
+    fail ?: (errCode : number, errMsg : string) => void;
+}
+
+/**
+ * 切换摄像头参数
+ * @interface SwitchCameraOptions
+ * @description 切换摄像头配置结构
+ * @param {boolean} isFront - 是否前置摄像头（必填）
+ */
+export type SwitchCameraOptions = {
+    isFront : boolean;
+}
+
+/**
+ * 切换镜像参数
+ * @interface SwitchMirrorOptions
+ * @description 切换镜像配置结构
+ * @param {DeviceMirrorType} mirrorType - 镜像类型（必填）
+ */
+export type SwitchMirrorOptions = {
+    mirrorType : DeviceMirrorType;
+}
+
+/**
+ * 更新视频质量参数
+ * @interface UpdateVideoQualityOptions
+ * @description 更新视频质量配置结构
+ * @param {VideoQualityType} quality - 视频质量类型（必填）
+ */
+export type UpdateVideoQualityOptions = {
+    quality : VideoQualityType;
+}
+
+/**
+ * 开始屏幕分享参数（仅iOS）
+ * @interface StartScreenShareOptions
+ * @description iOS屏幕分享配置结构
+ * @param {string} appGroup - App Group标识（必填）
+ */
+// only for iOS
+export type StartScreenShareOptions = {
+    appGroup : string;
+}
+
+// ================= CoHostStore 相关 =================
+/**
+ * 请求主播连麦参数
+ * @interface RequestHostConnectionOptions
+ * @description 请求主播连麦配置结构
+ * @param {string} liveID - 当前直播间ID（必填）
+ * @param {string} targetHostLiveID - 目标主播直播间ID（必填）
+ * @param {CoHostLayoutTemplateType} layoutTemplate - 连麦布局模板（必填）
+ * @param {number} timeout - 超时时间（毫秒，必填）
+ * @param {Record<string, string>} extensionInfo - 扩展信息（可选）
+ * @param {() => void} success - 成功回调（可选）
+ * @param {(errCode: number, errMsg: string) => void} fail - 失败回调（可选）
+ */
+export type RequestHostConnectionOptions = {
+    liveID : string;
+    targetHostLiveID : String;
+    layoutTemplate : CoHostLayoutTemplateType;
+    timeout : number;
+    extensionInfo ?: string;
+    success ?: () => void;
+    fail ?: (errCode : number, errMsg : string) => void;
+}
+
+/**
+ * 取消主播连麦请求参数
+ * @interface CancelHostConnectionOptions
+ * @description 取消主播连麦请求配置结构
+ * @param {string} liveID - 当前直播间ID（必填）
+ * @param {string} toHostLiveID - 目标主播直播间ID（必填）
+ * @param {() => void} success - 成功回调（可选）
+ * @param {(errCode: number, errMsg: string) => void} fail - 失败回调（可选）
+ */
+export type CancelHostConnectionOptions = {
+    liveID : string;
+    toHostLiveID : String;
+    success ?: () => void;
+    fail ?: (errCode : number, errMsg : string) => void;
+}
+
+/**
+ * 接受主播连麦请求参数
+ * @interface AcceptHostConnectionOptions
+ * @description 接受主播连麦请求配置结构
+ * @param {string} liveID - 当前直播间ID（必填）
+ * @param {string} fromHostLiveID - 来源主播直播间ID（必填）
+ * @param {() => void} success - 成功回调（可选）
+ * @param {(errCode: number, errMsg: string) => void} fail - 失败回调（可选）
+ */
+export type AcceptHostConnectionOptions = {
+    liveID : string;
+    fromHostLiveID : String;
+    success ?: () => void;
+    fail ?: (errCode : number, errMsg : string) => void;
+}
+
+/**
+ * 拒绝主播连麦请求参数
+ * @interface RejectHostConnectionOptions
+ * @description 拒绝主播连麦请求配置结构
+ * @param {string} liveID - 当前直播间ID（必填）
+ * @param {string} fromHostLiveID - 来源主播直播间ID（必填）
+ * @param {() => void} success - 成功回调（可选）
+ * @param {(errCode: number, errMsg: string) => void} fail - 失败回调（可选）
+ */
+export type RejectHostConnectionOptions = {
+    liveID : string;
+    fromHostLiveID : String;
+    success ?: () => void;
+    fail ?: (errCode : number, errMsg : string) => void;
+}
+
+/**
+ * 退出主播连麦参数
+ * @interface ExitHostConnectionOptions
+ * @description 退出主播连麦配置结构
+ * @param {string} liveID - 当前直播间ID（必填）
+ * @param {() => void} success - 成功回调（可选）
+ * @param {(errCode: number, errMsg: string) => void} fail - 失败回调（可选）
+ */
+export type ExitHostConnectionOptions = {
+    liveID : string;
+    success ?: () => void;
+    fail ?: (errCode : number, errMsg : string) => void;
+}
+
+// ================= CoGuestStore 相关 =================
+/**
+ * 申请上麦参数
+ * @interface ApplyForSeatOptions
+ * @description 申请上麦配置结构
+ * @param {string} liveID - 直播间ID（必填）
+ * @param {number} seatIndex - 申请的座位索引（必填）
+ * @param {number} timeout - 超时时间（毫秒，必填）
+ * @param {string} extraInfo - 额外信息（可选）
+ * @param {() => void} success - 成功回调（可选）
+ * @param {(errCode: number, errMsg: string) => void} fail - 失败回调（可选）
+ */
+export type ApplyForSeatOptions = {
+    liveID : string;
+    seatIndex : number;
+    timeout : number;
+    extraInfo ?: string;
+    success ?: () => void;
+    fail ?: (errCode : number, errMsg : string) => void;
+}
+
+/**
+ * 取消申请参数
+ * @interface CancelApplicationOptions
+ * @description 取消申请配置结构
+ * @param {string} liveID - 直播间ID（必填）
+ * @param {() => void} success - 成功回调（可选）
+ * @param {(errCode: number, errMsg: string) => void} fail - 失败回调（可选）
+ */
+export type CancelApplicationOptions = {
+    liveID : string;
+    success ?: () => void;
+    fail ?: (errCode : number, errMsg : string) => void;
+}
+
+/**
+ * 接受申请参数
+ * @interface AcceptApplicationOptions
+ * @description 接受申请配置结构
+ * @param {string} liveID - 直播间ID（必填）
+ * @param {string} userID - 申请用户ID（必填）
+ * @param {() => void} success - 成功回调（可选）
+ * @param {(errCode: number, errMsg: string) => void} fail - 失败回调（可选）
+ */
+export type AcceptApplicationOptions = {
+    liveID : string;
+    userID : string;
+    success ?: () => void;
+    fail ?: (errCode : number, errMsg : string) => void;
+}
+
+/**
+ * 拒绝申请参数
+ * @interface RejectApplicationOptions
+ * @description 拒绝申请配置结构
+ * @param {string} liveID - 直播间ID（必填）
+ * @param {string} userID - 申请用户ID（必填）
+ * @param {() => void} success - 成功回调（可选）
+ * @param {(errCode: number, errMsg: string) => void} fail - 失败回调（可选）
+ */
+export type RejectApplicationOptions = {
+    liveID : string;
+    userID : string;
+    success ?: () => void;
+    fail ?: (errCode : number, errMsg : string) => void;
+}
+
+/**
+ * 邀请上麦参数
+ * @interface InviteToSeatOptions
+ * @description 邀请上麦配置结构
+ * @param {string} liveID - 直播间ID（必填）
+ * @param {string} inviteeID - 被邀请用户ID（必填）
+ * @param {number} seatIndex - 座位索引（必填）
+ * @param {number} timeout - 超时时间（毫秒，必填）
+ * @param {string} extraInfo - 额外信息（可选）
+ * @param {() => void} success - 成功回调（可选）
+ * @param {(errCode: number, errMsg: string) => void} fail - 失败回调（可选）
+ */
+export type InviteToSeatOptions = {
+    liveID : string;
+    inviteeID : string;
+    seatIndex : number;
+    timeout : number;
+    extraInfo ?: string;
+    success ?: () => void;
+    fail ?: (errCode : number, errMsg : string) => void;
+}
+
+/**
+ * 取消邀请参数
+ * @interface CancelInvitationOptions
+ * @description 取消邀请配置结构
+ * @param {string} liveID - 直播间ID（必填）
+ * @param {string} inviteeID - 被邀请用户ID（必填）
+ * @param {() => void} success - 成功回调（可选）
+ * @param {(errCode: number, errMsg: string) => void} fail - 失败回调（可选）
+ */
+export type CancelInvitationOptions = {
+    liveID : string;
+    inviteeID : string;
+    success ?: () => void;
+    fail ?: (errCode : number, errMsg : string) => void;
+}
+
+/**
+ * 接受邀请参数
+ * @interface AcceptInvitationOptions
+ * @description 接受邀请配置结构
+ * @param {string} liveID - 直播间ID（必填）
+ * @param {string} inviterID - 邀请者用户ID（必填）
+ * @param {() => void} success - 成功回调（可选）
+ * @param {(errCode: number, errMsg: string) => void} fail - 失败回调（可选）
+ */
+export type AcceptInvitationOptions = {
+    liveID : string;
+    inviterID : string;
+    success ?: () => void;
+    fail ?: (errCode : number, errMsg : string) => void;
+}
+
+/**
+ * 拒绝邀请参数
+ * @interface RejectInvitationOptions
+ * @description 拒绝邀请配置结构
+ * @param {string} liveID - 直播间ID（必填）
+ * @param {string} inviterID - 邀请者用户ID（必填）
+ * @param {() => void} success - 成功回调（可选）
+ * @param {(errCode: number, errMsg: string) => void} fail - 失败回调（可选）
+ */
+export type RejectInvitationOptions = {
+    liveID : string;
+    inviterID : string;
+    success ?: () => void;
+    fail ?: (errCode : number, errMsg : string) => void;
+}
+
+/**
+ * 断开连接参数
+ * @interface DisconnectOptions
+ * @description 断开连接配置结构
+ * @param {string} liveID - 直播间ID（必填）
+ * @param {() => void} success - 成功回调（可选）
+ * @param {(errCode: number, errMsg: string) => void} fail - 失败回调（可选）
+ */
+export type DisconnectOptions = {
+    liveID : string;
+    success ?: () => void;
+    fail ?: (errCode : number, errMsg : string) => void;
+}
+
+// ================= BarrageStore 相关 =================
+/**
+ * 发送文本消息参数
+ * @interface SendTextMessageOptions
+ * @description 发送文本消息配置结构
+ * @param {string} liveID - 直播间ID（必填）
+ * @param {string} text - 消息文本内容（必填）
+ * @param {Map<string, string>} extensionInfo - 扩展信息（可选）
+ * @param {() => void} success - 成功回调（可选）
+ * @param {(errCode: number, errMsg: string) => void} fail - 失败回调（可选）
+ */
+export type SendTextMessageOptions = {
+    liveID : string;
+    text : string;
+    extensionInfo ?: Map<string, string>;
+    success ?: () => void;
+    fail ?: (errCode : number, errMsg : string) => void;
+}
+
+/**
+ * 发送自定义消息参数
+ * @interface SendCustomMessageOptions
+ * @description 发送自定义消息配置结构
+ * @param {string} liveID - 直播间ID（必填）
+ * @param {string} businessID - 业务ID（必填）
+ * @param {string} data - 自定义数据（必填）
+ * @param {() => void} success - 成功回调（可选）
+ * @param {(errCode: number, errMsg: string) => void} fail - 失败回调（可选）
+ */
+export type SendCustomMessageOptions = {
+    liveID : string;
+    businessID : string;
+    data : string;
+    success ?: () => void;
+    fail ?: (errCode : number, errMsg : string) => void;
+}
+
+/**
+ * 添加本地提示参数
+ * @interface AppendLocalTipOptions
+ * @description 添加本地提示配置结构
+ * @param {string} liveID - 直播间ID（必填）
+ * @param {BarrageParam} message - 提示消息参数（必填）
+ */
+export type AppendLocalTipOptions = {
+    liveID : string;
+    message : BarrageParam;
+}
+
+// ================= GiftStore 相关接口 =================
+/**
+ * 刷新可用礼物列表参数
+ * @interface RefreshUsableGiftsOptions
+ * @description 刷新可用礼物列表配置结构
+ * @param {string} liveID - 直播间ID（必填）
+ * @param {() => void} success - 成功回调（可选）
+ * @param {(errCode: number, errMsg: string) => void} fail - 失败回调（可选）
+ */
+export type RefreshUsableGiftsOptions = {
+    liveID : string;
+    success ?: () => void;
+    fail ?: (errCode : number, errMsg : string) => void;
+}
+
+/**
+ * 发送礼物参数
+ * @interface SendGiftOptions
+ * @description 发送礼物配置结构
+ * @param {string} liveID - 直播间ID（必填）
+ * @param {string} giftID - 礼物ID（必填）
+ * @param {number} count - 礼物数量（必填）
+ * @param {() => void} success - 成功回调（可选）
+ * @param {(errCode: number, errMsg: string) => void} fail - 失败回调（可选）
+ */
+export type SendGiftOptions = {
+    liveID : string;
+    giftID : string;
+    count : number;
+    success ?: () => void;
+    fail ?: (errCode : number, errMsg : string) => void;
+}
+
+// ================= BaseBeautyStore 相关 =================
+/**
+ * 设置美颜平滑等级参数
+ * @interface SetSmoothLevelOptions
+ * @description 设置美颜平滑等级配置结构
+ * @param {number} smoothLevel - 平滑等级（必填）
+ */
+export type SetSmoothLevelOptions = {
+    smoothLevel : number;
+}
+
+/**
+ * 设置美白等级参数
+ * @interface SetWhitenessLevelOptions
+ * @description 设置美白等级配置结构
+ * @param {number} whitenessLevel - 美白等级（必填）
+ */
+export type SetWhitenessLevelOptions = {
+    whitenessLevel : number;
+}
+
+/**
+ * 设置红润等级参数
+ * @interface SetRuddyLevelOptions
+ * @description 设置红润等级配置结构
+ * @param {number} ruddyLevel - 红润等级（必填）
+ */
+export type SetRuddyLevelOptions = {
+    ruddyLevel : number;
+}
+
+// ================= AudioEffectStore 相关 =================
+/**
+ * 设置音频变声器类型参数
+ * @interface SetAudioChangerTypeOptions
+ * @description 设置音频变声器类型配置结构
+ * @param {AudioChangerTypeParam} changerType - 变声器类型（必填）
+ */
+export type SetAudioChangerTypeOptions = {
+    changerType : AudioChangerTypeParam;
+}
+
+/**
+ * 设置音频混响类型参数
+ * @interface SetAudioReverbTypeOptions
+ * @description 设置音频混响类型配置结构
+ * @param {AudioReverbTypeParam} reverbType - 混响类型（必填）
+ */
+export type SetAudioReverbTypeOptions = {
+    reverbType : AudioReverbTypeParam;
+}
+
+/**
+ * 设置语音耳返开关参数
+ * @interface SetVoiceEarMonitorEnableOptions
+ * @description 设置语音耳返功能配置结构
+ * @param {boolean} enable - 是否开启耳返（必填）
+ */
+export type SetVoiceEarMonitorEnableOptions = {
+    enable : boolean;
+}
+
+// ================= LikeStore 相关 =================
+/**
+ * 发送点赞参数
+ * @interface SendLikeOptions
+ * @description 发送点赞配置结构
+ * @param {string} liveID - 直播间ID（必填）
+ * @param {number} count - 点赞数量（必填）
+ * @param {() => void} success - 成功回调（可选）
+ * @param {(errCode: number, errMsg: string) => void} fail - 失败回调（可选）
+ */
+export type SendLikeOptions = {
+    liveID : string;
+    count : number;
+    success ?: () => void;
+    fail ?: (errCode : number, errMsg : string) => void;
+}
+
+// ================= 实验性接口 相关 =================
+export type CallExperimentalAPIOptions = {
+    jsonData : string;
+    onResponse ?: (jsonData : string) => void;
+}
+
+// ================= Extension 接口 =================
+export type FetchLogfileListOptions = {
+    result : (jsonData ?: string) => void;
+}
+
+/**
+ * 直播监听器接口
+ * @interface ILiveListener
+ * @description 直播事件监听器结构
+ * @param {(res: string) => void} callback - 回调函数（必填）
+ */
+export type ILiveListener = {
+    callback : (res : string) => void
+}

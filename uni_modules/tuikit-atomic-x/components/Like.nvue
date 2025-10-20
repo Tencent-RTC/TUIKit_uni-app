@@ -1,0 +1,671 @@
+<template>
+  <view class="like-container">
+    <!-- 点赞按钮 -->
+    <view class="action-btn-wrapper" @click="handleLikeClick" @touchstart="handleTouchStart" v-if="role !== 'anchor' ">
+      <image class="action-btn" src="/static/images/live-like.png" />
+    </view>
+
+    <!-- 点赞动画容器 - 平台适配 -->
+    <view class="like-animations-container" :class="{ 'ios-container': isIOS, 'android-container': !isIOS }" :style="{ 
+        width: likeAnimations.length > 0 ? '400rpx' : '0',
+        height: likeAnimations.length > 0 ? '600rpx' : '0'
+      }">
+      <view v-for="(like, index) in likeAnimations" :key="like.id" class="like-animation"
+        :class="{ 'ios-animation': isIOS, 'android-animation': !isIOS }" :style="getAnimationStyle(like)">
+        <image class="heart-icon" :src="like.imageSrc" mode="aspectFit" />
+      </view>
+    </view>
+  </view>
+</template>
+
+<script setup lang="ts">
+  import { ref, watch, computed, onMounted, onUnmounted } from 'vue';
+  import { useLikeState } from "@/uni_modules/tuikit-atomic-x/state/LikeState";
+
+  // 配置选项
+  const props = defineProps({
+    // 动画方案选择：'platform' - 平台适配方案, 'simple' - 统一兼容方案
+    animationMode: {
+      type: String,
+      default: 'platform',
+      validator: (value) => ['platform', 'simple'].includes(value)
+    },
+    // 角色：anchor 主播 | audience 观众，用于设置默认行为或样式
+    role: {
+      type: String,
+      default: 'audience',
+      validator: (value) => ['anchor', 'audience'].includes(value)
+    },
+    // 容器位置
+    position: {
+      type: String,
+      default: 'bottom-right',
+      validator: (v) => ['bottom-right', 'bottom-left', 'top-right', 'top-left'].includes(v)
+    },
+    // 同屏最大漂浮数量
+    maxConcurrent: {
+      type: Number,
+      default: 20,
+    },
+    // 是否启用触觉反馈
+    enableHaptics: {
+      type: Boolean,
+      default: true,
+    },
+  });
+
+  const { sendLike, addLikeListener, totalLikeCount, removeLikeListener } = useLikeState(uni.$liveID)
+
+  // 平台检测
+  const systemInfo = ref({});
+  const isIOS = computed(() => systemInfo.value.platform === 'ios');
+
+  // 初始化系统信息
+  uni.getSystemInfo({
+    success: (res) => {
+      systemInfo.value = res;
+      console.log('系统信息:', res);
+    }
+  });
+
+  // 点赞动画相关状态
+  const likeAnimations = ref([]);
+  let likeAnimationId = 0;
+  const currentLikeCount = ref(0);
+  let lastClickTime = 0; // 记录上次点击时间
+  const CLICK_INTERVAL = 100; // 点击间隔时间（毫秒）
+
+  // 批量点赞策略相关状态
+  const pendingLikeCount = ref(0); // 待发送的点赞数量
+  const batchTimer = ref(null); // 批量发送定时器
+  const BATCH_DELAY = 6000; // 6秒批量发送延迟
+  const lastSendTime = ref(0); // 记录上次发送时间
+  const isFirstClick = ref(true); // 是否第一次点击
+  
+  // 存储每次接收到的总点赞数
+  const lastTotalLikesReceived = ref(0); // 上次接收到的总点赞数
+
+  // 心形图片数组
+  const heartImages = [
+    '/static/images/gift_heart0.png',
+    '/static/images/gift_heart1.png',
+    '/static/images/gift_heart2.png',
+    '/static/images/gift_heart3.png',
+    '/static/images/gift_heart4.png',
+    '/static/images/gift_heart5.png',
+    '/static/images/gift_heart6.png',
+    '/static/images/gift_heart7.png',
+    '/static/images/gift_heart8.png'
+  ];
+
+  onMounted(() => {
+    addLikeListener(uni.$liveID, 'onReceiveLikesMessage', handleReceiveLikesMessage)
+  })
+
+  onUnmounted(() => {
+    removeLikeListener(uni.$liveID, 'onReceiveLikesMessage', handleReceiveLikesMessage)
+
+    // 清理定时器
+    if (batchTimer.value) {
+      clearTimeout(batchTimer.value);
+      batchTimer.value = null;
+    }
+
+    if (pendingLikeCount.value > 0) {
+      console.log('组件卸载，发送待发送的点赞（不显示动画）');
+      sendBatchLikes();
+    }
+  })
+
+  // 随机选择心形图片
+  const getRandomHeartImage = () => {
+    const randomIndex = Math.floor(Math.random() * heartImages.length);
+    return heartImages[randomIndex];
+  };
+
+  // 获取动画样式 - 平台适配
+  const getAnimationStyle = (like) => {
+    if (isIOS.value) {
+      // iOS端使用更简单的定位方式
+      return {
+        left: like.left + 'rpx',
+        top: like.top + 'rpx',
+        transform: like.transform,
+        opacity: like.opacity
+      };
+    } else {
+      // 安卓端使用原有方式
+      return {
+        left: like.left + 'rpx',
+        bottom: like.bottom + 'rpx',
+        transform: like.transform,
+        opacity: like.opacity
+      };
+    }
+  };
+
+  const createLikeAnimation = (count : number) => {
+    console.log('=== createLikeAnimation 开始 ===');
+    console.log('传入的count参数:', count);
+    console.log('当前动画数组长度:', likeAnimations.value.length);
+    console.log('当前动画数组:', JSON.stringify(likeAnimations.value));
+
+    // 固定创建3个动画，忽略传入的count参数
+    const fixedCount = 3;
+    console.log('创建点赞动画，固定数量:', fixedCount, '平台:', isIOS.value ? 'iOS' : 'Android', '模式:', props.animationMode);
+
+    // 根据配置选择动画方案
+    if (props.animationMode === 'simple') {
+      console.log('使用简单动画方案');
+      createSimpleAnimation(fixedCount);
+      console.log('=== createLikeAnimation 结束（简单方案） ===');
+      return;
+    }
+
+    // 创建固定3个动画
+    const actualCount = Math.min(fixedCount, props.maxConcurrent); // 限制最大数量
+    console.log('实际创建动画数量:', actualCount);
+
+    for (let i = 0; i < actualCount; i++) {
+      const newLike = {
+        id: ++likeAnimationId,
+        show: true,
+        imageSrc: getRandomHeartImage(),
+        left: Math.random() * 120 + 40, // 随机水平位置
+        bottom: isIOS.value ? 0 : 60, // iOS端使用top定位，Android端使用bottom定位
+        top: isIOS.value ? 400 : 0, // iOS端从顶部开始
+        transform: 'scale(0.8)',
+        opacity: 1
+      };
+
+      console.log('添加动画元素:', newLike);
+
+      // 控制最大并发，如果超过限制则移除最旧的
+      if (likeAnimations.value.length >= props.maxConcurrent) {
+        likeAnimations.value.shift();
+      }
+      likeAnimations.value.push(newLike);
+
+      // 平台适配的动画逻辑，添加延迟避免同时出现
+      const delay = i * 100; // 每个动画间隔100ms
+      setTimeout(() => {
+        if (isIOS.value) {
+          console.log('使用iOS动画方案');
+          createIOSAnimation(newLike);
+        } else {
+          console.log('使用Android动画方案');
+          createAndroidAnimation(newLike);
+        }
+      }, delay);
+    }
+
+    console.log('添加后动画数组长度:', likeAnimations.value.length);
+    console.log('=== createLikeAnimation 结束 ===');
+  };
+
+  // iOS端动画实现
+  const createIOSAnimation = (newLike) => {
+    // iOS端使用更简单的动画，避免复杂的transition
+    setTimeout(() => {
+      const index = likeAnimations.value.findIndex(item => item.id === newLike.id);
+      if (index > -1) {
+        const like = likeAnimations.value[index];
+        like.transform = 'scale(1.2)';
+        like.top = like.top - 40;
+        console.log('iOS动画阶段1:', like.id);
+      }
+    }, 50);
+
+    setTimeout(() => {
+      const index = likeAnimations.value.findIndex(item => item.id === newLike.id);
+      if (index > -1) {
+        const like = likeAnimations.value[index];
+        like.transform = 'scale(1)';
+        like.top = like.top - 40;
+        console.log('iOS动画阶段2:', like.id);
+      }
+    }, 150);
+
+    setTimeout(() => {
+      const index = likeAnimations.value.findIndex(item => item.id === newLike.id);
+      if (index > -1) {
+        const like = likeAnimations.value[index];
+        like.transform = 'scale(0.9)';
+        like.top = like.top - 40;
+        like.opacity = 0.9;
+        console.log('iOS动画阶段3:', like.id);
+      }
+    }, 300);
+
+    setTimeout(() => {
+      const index = likeAnimations.value.findIndex(item => item.id === newLike.id);
+      if (index > -1) {
+        const like = likeAnimations.value[index];
+        like.transform = 'scale(0.7)';
+        like.top = like.top - 40;
+        like.opacity = 0.7;
+        console.log('iOS动画阶段4:', like.id);
+      }
+    }, 450);
+
+    setTimeout(() => {
+      const index = likeAnimations.value.findIndex(item => item.id === newLike.id);
+      if (index > -1) {
+        const like = likeAnimations.value[index];
+        like.transform = 'scale(0.5)';
+        like.top = like.top - 40;
+        like.opacity = 0.3;
+        console.log('iOS动画阶段5:', like.id);
+      }
+    }, 600);
+
+    // 动画结束后移除
+    setTimeout(() => {
+      const index = likeAnimations.value.findIndex(item => item.id === newLike.id);
+      if (index > -1) {
+        likeAnimations.value.splice(index, 1);
+        console.log('移除iOS动画元素:', newLike.id);
+        console.log('移除后动画数组长度:', likeAnimations.value.length);
+      }
+    }, 1200);
+  };
+
+  // 安卓端动画实现
+  const createAndroidAnimation = (newLike) => {
+    setTimeout(() => {
+      const index = likeAnimations.value.findIndex(item => item.id === newLike.id);
+      if (index > -1) {
+        const like = likeAnimations.value[index];
+        like.transform = 'scale(1.2)';
+        like.bottom = like.bottom + 40;
+        console.log('Android动画阶段1:', like.id);
+      }
+    }, 100);
+
+    setTimeout(() => {
+      const index = likeAnimations.value.findIndex(item => item.id === newLike.id);
+      if (index > -1) {
+        const like = likeAnimations.value[index];
+        like.transform = 'scale(1)';
+        like.bottom = like.bottom + 40;
+        console.log('Android动画阶段2:', like.id);
+      }
+    }, 200);
+
+    setTimeout(() => {
+      const index = likeAnimations.value.findIndex(item => item.id === newLike.id);
+      if (index > -1) {
+        const like = likeAnimations.value[index];
+        like.transform = 'scale(0.9)';
+        like.bottom = like.bottom + 40;
+        like.opacity = 0.9;
+        console.log('Android动画阶段3:', like.id);
+      }
+    }, 400);
+
+    setTimeout(() => {
+      const index = likeAnimations.value.findIndex(item => item.id === newLike.id);
+      if (index > -1) {
+        const like = likeAnimations.value[index];
+        like.transform = 'scale(0.7)';
+        like.bottom = like.bottom + 40;
+        like.opacity = 0.7;
+        console.log('Android动画阶段4:', like.id);
+      }
+    }, 600);
+
+    setTimeout(() => {
+      const index = likeAnimations.value.findIndex(item => item.id === newLike.id);
+      if (index > -1) {
+        const like = likeAnimations.value[index];
+        like.transform = 'scale(0.5)';
+        like.bottom = like.bottom + 40;
+        like.opacity = 0.3;
+        console.log('Android动画阶段5:', like.id);
+      }
+    }, 800);
+
+    // 动画结束后移除
+    setTimeout(() => {
+      const index = likeAnimations.value.findIndex(item => item.id === newLike.id);
+      if (index > -1) {
+        likeAnimations.value.splice(index, 1);
+        console.log('移除Android动画元素:', newLike.id);
+        console.log('移除后动画数组长度:', likeAnimations.value.length);
+      }
+    }, 1500);
+  };
+
+  // 批量发送点赞
+  const sendBatchLikes = () => {
+    if (pendingLikeCount.value > 0) {
+      console.log('=== 批量发送点赞 ===');
+      console.log('发送数量:', pendingLikeCount.value);
+
+      sendLike({
+        liveID: uni.$liveID,
+        count: pendingLikeCount.value,
+        success: () => {
+          console.log('批量sendLike success, count:', pendingLikeCount.value);
+          // 更新发送时间
+          lastSendTime.value = Date.now();
+          isFirstClick.value = false;
+        },
+        fail: (code, msg) => {
+          console.error(`批量sendLike failed, code: ${code}, msg: ${msg}`);
+        },
+      });
+      
+      // 清空待发送数量
+      pendingLikeCount.value = 0;
+    }
+
+    // 清除定时器
+    if (batchTimer.value) {
+      clearTimeout(batchTimer.value);
+      batchTimer.value = null;
+    }
+  };
+
+  // 处理点赞点击事件
+  const handleLikeClick = () => {
+    console.log('=== 点赞点击事件开始 ===');
+    console.log('当前时间:', new Date().toISOString());
+    console.log('当前动画数量:', likeAnimations.value.length);
+    console.log('待发送点赞数量:', pendingLikeCount.value);
+
+    // 添加点击间隔控制，确保每次点击只创建一个动画
+    const currentTime = Date.now();
+    if (currentTime - lastClickTime < CLICK_INTERVAL) {
+      console.log('点击间隔太短，跳过本次点击');
+      console.log('=== 点赞点击事件结束（跳过） ===');
+      return;
+    }
+    lastClickTime = currentTime;
+
+    // 添加平台检测和调试信息
+    const systemInfo = uni.getSystemInfoSync();
+    console.log('当前平台:', systemInfo.platform);
+    console.log('点击事件触发时间:', new Date().toISOString());
+    console.log('当前动画数量:', likeAnimations.value.length);
+
+    // 添加触觉反馈（仅安卓端）
+    if (props.enableHaptics && systemInfo.platform === 'android') {
+      uni.vibrateShort({
+        type: 'light'
+      });
+    }
+
+    // 智能发送策略：判断是否需要立即发送
+    const timeSinceLastSend = currentTime - lastSendTime.value;
+    const shouldSendImmediately = isFirstClick.value || timeSinceLastSend >= BATCH_DELAY;
+    
+    console.log('智能发送判断:', {
+      isFirstClick: isFirstClick.value,
+      timeSinceLastSend: timeSinceLastSend,
+      shouldSendImmediately: shouldSendImmediately
+    });
+
+    // 累积点赞数量
+    pendingLikeCount.value += 1;
+
+    if (shouldSendImmediately) {
+      // 第一次点击或距离上次发送超过6秒，立即发送
+      console.log('立即发送点赞');
+      sendBatchLikes();
+      
+      // 立即发送时显示动画
+      console.log('立即发送，显示动画');
+      createLikeAnimation(3);
+    } else {
+      // 距离上次发送不足6秒，累积并设置定时器
+      console.log('累积点赞，设置延迟发送');
+      
+      // 6秒内点击不显示动画，只累积数量
+      console.log('6秒内点击，不显示动画，只累积数量');
+      
+      // 清除之前的定时器
+      if (batchTimer.value) {
+        clearTimeout(batchTimer.value);
+      }
+
+      // 计算剩余等待时间
+      const remainingTime = BATCH_DELAY - timeSinceLastSend;
+      console.log('剩余等待时间:', remainingTime, 'ms');
+      
+      // 设置剩余时间的定时器
+      batchTimer.value = setTimeout(() => {
+        sendBatchLikes();
+        // 批量发送时显示动画
+        console.log('批量发送，显示动画');
+        createLikeAnimation(3);
+      }, remainingTime);
+    }
+
+    console.log('=== 点赞点击事件结束 ===');
+  };
+
+  // 对外暴露触发方法
+  function triggerLike(count : number = 1) {
+    createLikeAnimation(count);
+  }
+
+  defineExpose({ triggerLike });
+
+  // 处理触摸事件（安卓端备用方案）
+  const handleTouchStart = (event) => {
+    console.log('touch start event:', event);
+
+    // 防止重复触发
+    if (event && event.preventDefault) {
+      event.preventDefault();
+    }
+
+    // 触摸事件，直接调用点赞逻辑（间隔控制已在handleLikeClick中处理）
+    if (event && event.touches && event.touches.length > 0) {
+      handleLikeClick();
+    }
+  };
+
+  // 方案二：统一兼容方案 - 使用更简单的动画实现
+  const createSimpleAnimation = (count : number) => {
+    console.log('=== createSimpleAnimation 开始 ===');
+    console.log('传入的count参数:', count);
+    console.log('当前动画数组长度:', likeAnimations.value.length);
+
+    // 固定创建3个动画，忽略传入的count参数
+    const fixedCount = 3;
+    console.log('使用简单动画方案，固定数量:', fixedCount);
+
+    // 创建固定3个动画
+    const actualCount = Math.min(fixedCount, props.maxConcurrent);
+    console.log('实际创建简单动画数量:', actualCount);
+
+    for (let i = 0; i < actualCount; i++) {
+      const newLike = {
+        id: ++likeAnimationId,
+        show: true,
+        imageSrc: getRandomHeartImage(),
+        left: Math.random() * 120 + 40,
+        bottom: 60,
+        transform: 'scale(1)',
+        opacity: 1
+      };
+
+      console.log('添加简单动画元素:', newLike);
+
+      // 控制最大并发
+      if (likeAnimations.value.length >= props.maxConcurrent) {
+        likeAnimations.value.shift();
+      }
+      likeAnimations.value.push(newLike);
+
+      // 简化的动画逻辑，适用于两个平台，添加延迟避免同时出现
+      const delay = i * 100; // 每个动画间隔100ms
+      setTimeout(() => {
+        const animate = () => {
+          const index = likeAnimations.value.findIndex(item => item.id === newLike.id);
+          if (index > -1) {
+            const like = likeAnimations.value[index];
+            like.bottom = like.bottom + 20;
+            like.opacity = like.opacity - 0.1;
+
+            if (like.opacity > 0) {
+              setTimeout(animate, 100);
+            } else {
+              likeAnimations.value.splice(index, 1);
+              console.log('简单动画结束，移除元素:', newLike.id);
+              console.log('移除后动画数组长度:', likeAnimations.value.length);
+            }
+          }
+        };
+        animate();
+      }, delay);
+    }
+
+    console.log('添加后动画数组长度:', likeAnimations.value.length);
+    console.log('=== createSimpleAnimation 结束 ===');
+  };
+
+  const handleReceiveLikesMessage = {
+    callback: (event) => {
+      const res = JSON.parse(event)
+      if (res.sender.userID !== uni.$userID) {
+        createLikeAnimation(3);
+      }
+    }
+  }
+
+  watch(totalLikeCount, (newVal, oldVal) => {
+    if (oldVal) {
+      currentLikeCount.value = newVal - oldVal
+    }
+  }, {
+    deep: true,
+    immediate: true,
+  })
+  // 位置样式计算（用于简化模板内联 style 的拼接）
+  const containerInlineStyle = computed(() => {
+    const base = {
+      width: likeAnimations.value.length > 0 ? '400rpx' : '0',
+      height: likeAnimations.value.length > 0 ? '600rpx' : '0',
+    } as any;
+    switch (props.position) {
+      case 'bottom-left':
+        base.left = '40rpx';
+        base.bottom = '40rpx';
+        break;
+      case 'top-right':
+        base.right = '40rpx';
+        base.top = '40rpx';
+        break;
+      case 'top-left':
+        base.left = '40rpx';
+        base.top = '40rpx';
+        break;
+      default:
+        base.right = '40rpx';
+        base.bottom = '40rpx';
+    }
+    return base;
+  });
+</script>
+
+<style>
+  .like-container {
+    position: relative;
+    pointer-events: none;
+  }
+
+  .action-btn-wrapper {
+    width: 80rpx;
+    height: 80rpx;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: transparent;
+    z-index: 1000;
+    pointer-events: auto;
+    /* 增加点击区域 */
+    padding: 8rpx;
+    /* 确保在安卓端可以正常点击 */
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  .action-btn {
+    width: 64rpx;
+    height: 64rpx;
+    pointer-events: none;
+    /* 确保图片正确显示 */
+  }
+
+  .heart-icon {
+    width: 60rpx;
+    height: 60rpx;
+  }
+
+  .like-animations-container {
+    position: fixed;
+    bottom: 40rpx;
+    right: 40rpx;
+    width: 0;
+    height: 0;
+    z-index: 0;
+    pointer-events: none;
+    overflow: hidden;
+    transition: all 0.3s ease;
+  }
+
+  /* iOS端特殊样式 */
+  .ios-container {
+    position: absolute;
+    bottom: 40rpx;
+    right: 40rpx;
+    width: 0;
+    height: 0;
+    z-index: 0;
+    pointer-events: none;
+    overflow: hidden;
+    transition: all 0.3s ease;
+  }
+
+  /* Android端特殊样式 */
+  .android-container {
+    position: fixed;
+    bottom: 40rpx;
+    right: 40rpx;
+    width: 0;
+    height: 0;
+    z-index: 0;
+    pointer-events: none;
+    overflow: hidden;
+    transition: all 0.3s ease;
+  }
+
+  .like-animation {
+    position: absolute;
+    transition: all 0.1s ease-out;
+    pointer-events: none;
+  }
+
+  /* iOS端动画样式 */
+  .ios-animation {
+    position: absolute;
+    transition: none;
+    /* iOS端不使用transition，避免兼容性问题 */
+    pointer-events: none;
+  }
+
+  /* Android端动画样式 */
+  .android-animation {
+    position: absolute;
+    transition: all 0.1s ease-out;
+    pointer-events: none;
+  }
+
+  .heart-icon {
+    width: 60rpx;
+    height: 60rpx;
+  }
+</style>

@@ -10,7 +10,7 @@
           <text class="nickname-label">昵称:</text>
           <text class="nickname-value">{{ displayUserName }}</text>
         </view>
-        <text class="user-id-label">用户ID:{{ loginUserInfo.userId }}</text>
+        <text class="user-id-label">用户ID:{{ loginUserInfo.userID }}</text>
       </view>
     </view>
 
@@ -50,7 +50,7 @@
 
 <script setup>
 import { ref, watch, computed } from 'vue'
-import { useLoginState } from "@/uni_modules/ui-component/state/loginstate";
+import { useLoginState } from "@/uni_modules/tuikit-atomic-x/state/LoginState";
 
 // ===== 状态管理 =====
 const { loginUserInfo, setSelfInfo, logout } = useLoginState();
@@ -87,11 +87,11 @@ const isShowOverDialog = ref(false);
 
 // ===== 计算属性 =====
 const currentAvatar = computed(() => {
-  return loginUserInfo.value?.avatarUrl || DEFAULT_AVATAR_URL;
+  return loginUserInfo.value?.avatarURL || DEFAULT_AVATAR_URL;
 });
 
 const currentUserName = computed(() => {
-  return loginUserInfo.value?.userName || loginUserInfo.value?.userId || '';
+  return loginUserInfo.value?.nickname || loginUserInfo.value?.userID || '';
 });
 
 // 显示用的昵称（带省略号处理）
@@ -104,7 +104,7 @@ const displayUserName = computed(() => {
 });
 
 // ===== 监听器 =====
-watch(() => loginUserInfo.value?.avatarUrl, (newAvatar, oldAvatar) => {
+watch(() => loginUserInfo.value?.avatarURL, (newAvatar, oldAvatar) => {
   console.log('头像更新:', oldAvatar, '->', newAvatar);
   // 当头像更新时，如果弹窗是打开状态，更新选中状态
   if (isShowOverDialog.value && newAvatar) {
@@ -115,7 +115,7 @@ watch(() => loginUserInfo.value?.avatarUrl, (newAvatar, oldAvatar) => {
   }
 }, { immediate: true });
 
-watch(() => loginUserInfo.value?.userName, (newUserName, oldUserName) => {
+watch(() => loginUserInfo.value?.nickname, (newUserName, oldUserName) => {
   console.log('昵称更新:', oldUserName, '->', newUserName);
 }, { immediate: true });
 
@@ -129,9 +129,9 @@ const updateUserInfo = async (updates) => {
 
     // 构建完整的用户信息对象
     const userInfo = {
-      userId: loginUserInfo.value.userId,
-      userName: loginUserInfo.value.userName || loginUserInfo.value.userId,
-      avatarUrl: loginUserInfo.value.avatarUrl || DEFAULT_AVATAR_URL,
+      userID: loginUserInfo.value.userID,
+      nickname: loginUserInfo.value.nickname || loginUserInfo.value.userID,
+      avatarURL: loginUserInfo.value.avatarURL || DEFAULT_AVATAR_URL,
       ...updates // 覆盖需要更新的字段
     };
 
@@ -139,7 +139,7 @@ const updateUserInfo = async (updates) => {
     Object.assign(loginUserInfo.value, updates);
     
     // 同步到服务器
-    await setSelfInfo({userInfo});
+    await setSelfInfo({userProfile: userInfo});
     
     return true;
   } catch (error) {
@@ -153,11 +153,11 @@ const showEditNickname = () => {
     title: '修改昵称',
     content: '请输入新的昵称',
     editable: true,
-    placeholderText: loginUserInfo.value?.userName || loginUserInfo.value?.userId || '请输入昵称',
+    placeholderText: loginUserInfo.value?.nickname || loginUserInfo.value?.userID || '请输入昵称',
     success: (res) => {
       if (res.confirm && res.content) {
         const newNickname = res.content.trim();
-        if (newNickname && newNickname !== loginUserInfo.value?.userName) {
+        if (newNickname && newNickname !== loginUserInfo.value?.nickname) {
           updateNickname(newNickname);
         } else if (!newNickname) {
           uni.showToast({
@@ -172,7 +172,7 @@ const showEditNickname = () => {
 
 const updateNickname = async (newNickname) => {
   try {
-    await updateUserInfo({ userName: newNickname });
+    await updateUserInfo({ nickname: newNickname });
     
     uni.showToast({
       title: '昵称修改成功',
@@ -208,7 +208,7 @@ const handleLogout = () => {
 
 const handleCoverError = () => {
   if (loginUserInfo.value) {
-    loginUserInfo.value.avatarUrl = DEFAULT_AVATAR_URL;
+    loginUserInfo.value.avatarURL = DEFAULT_AVATAR_URL;
   }
 };
 const selectAvatar = (idx) => {
@@ -217,7 +217,7 @@ const selectAvatar = (idx) => {
 
 const showEditAvatar = () => {
   // 检查当前用户头像是否在头像列表中，如果匹配则设置选中索引
-  const currentAvatarIndex = AVATAR_LIST.findIndex(avatar => avatar === loginUserInfo.value?.avatarUrl);
+  const currentAvatarIndex = AVATAR_LIST.findIndex(avatar => avatar === loginUserInfo.value?.avatarURL);
   selectedAvatarIndex.value = currentAvatarIndex !== -1 ? currentAvatarIndex : 0;
   isShowOverDialog.value = true;
 };
@@ -226,7 +226,7 @@ const setCover = async () => {
   try {
     const selectedAvatar = AVATAR_LIST[selectedAvatarIndex.value];
     
-    await updateUserInfo({ avatarUrl: selectedAvatar });
+    await updateUserInfo({ avatarURL: selectedAvatar });
     
     uni.showToast({
       title: '头像设置成功',

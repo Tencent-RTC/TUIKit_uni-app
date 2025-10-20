@@ -1,46 +1,17 @@
 <!-- HBuilder X 版本要求: 3.6.11+ -->
 <script lang="ts">
-  import { useLiveState } from "@/uni_modules/ui-component/state/livestate";
-  import { initConstants } from './components/atomic-x/utils/index';
-  
-  const LanguageMap = {
-    'zh-CN': 'zh-Hans', // android
-    'zh-TW': 'zh-Hant', // android
-    'zh-Hans-US': 'zh-Hans', // iOS
-    en: 'en',
-  };
-  
-  const { callExperimentalAPI } = useLiveState();
-  
+  import { setSdkLanguageFromSystem } from '@/uni_modules/tuikit-atomic-x/utils/setSdkLanguageFromSystem'
+
   let firstBackTime = 0
   export default {
     onLaunch: function () {
-      initConstants();
       console.log('App Launch')
-			
-			uni.$liveId = '';
-      
-      uni.getSystemInfo()
-        .then((systemInfo) => {
-            console.log(`systemInfo.language: ${systemInfo.language}`);
-            const data = {
-              api: 'setCurrentLanguage',
-              params: {
-                language: LanguageMap[systemInfo.language] || LanguageMap['zh-CN'],
-              } ,
-            };
-            console.log(`callExperimentalAPI data: ${JSON.stringify(data)}`);
-            
-            callExperimentalAPI({ jsonData: JSON.stringify(data) });
-          })
-        .catch((e) => {
-            console.error('获取系统信息失败', e);
-          });
+      setSdkLanguageFromSystem()
     },
     onShow: function () {
       console.log('App Show')
     },
-    onError:function(error: any){
+    onError: function (error : any) {
       console.log('App onError: ', error)
     },
     onHide: function () {

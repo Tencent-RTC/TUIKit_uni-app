@@ -1,0 +1,466 @@
+<template>
+  <view class="bottom-drawer-container" v-if="modelValue">
+    <view class="drawer-overlay" @tap="close"></view>
+    <view class="bottom-drawer" :class="{ 'drawer-open': modelValue }" @click.stop>
+      <view class="drawer-header">
+        <view class="user-info-section">
+          <view class="avatar-container">
+            <image class="user-avatar" :src="userInfo?.avatar || defaultAvatarURL" mode="aspectFill"></image>
+          </view>
+          <view class="user-details">
+            <text class="username">{{ userInfo?.userName || '' }}</text>
+            <text class="user-id">ID: {{ userInfo?.userID || '' }}</text>
+          </view>
+        </view>
+      </view>
+
+      <view class="drawer-content">
+        <view class="drawer-actions">
+          <view class="action-btn" @tap.stop="microphoneOperation">
+            <view class="action-btn-image-container">
+              <image class="action-btn-image" v-if="targetMicStatus !== 'OFF'" src="/static/images/mute-mic.png"
+                mode="aspectFit" />
+              <image class="action-btn-image" v-else src="/static/images/unmute-mic.png" mode="aspectFit" />
+            </view>
+            <text class="action-btn-content" v-if="targetMicStatus !== 'OFF'">{{ micOffText }}</text>
+            <text class="action-btn-content" v-else>{{ micOnText }}</text>
+          </view>
+
+          <view class="action-btn" @tap="cameraOperation">
+            <view class="action-btn-image-container">
+              <image class="action-btn-image" v-if="targetCameraStatus !== 'OFF'" src="/static/images/end-camera.png"
+                mode="aspectFit" />
+              <image class="action-btn-image" v-else src="/static/images/start-camera.png" mode="aspectFit" />
+            </view>
+            <text class="action-btn-content" v-if="targetCameraStatus !== 'OFF'">{{ cameraOffText }}</text>
+            <text class="action-btn-content" v-else>{{ cameraOnText }}</text>
+          </view>
+
+          <view class="action-btn" @tap="flipCamera" v-if="showFlip">
+            <view class="action-btn-image-container">
+              <image class="action-btn-image" src="/static/images/flip.png" mode="aspectFit" />
+            </view>
+            <text class="action-btn-content">翻转</text>
+          </view>
+
+          <view class="action-btn" @tap="handleHangUp" v-if="showHangup">
+            <view class="action-btn-image-container">
+              <image class="action-btn-image" src="/static/images/hangup.png" mode="aspectFit" />
+            </view>
+            <text class="action-btn-content">{{ hangupText }}</text>
+          </view>
+        </view>
+      </view>
+    </view>
+  </view>
+</template>
+
+<script setup>
+  import {
+    ref,
+    computed,
+    watch
+  } from 'vue';
+  import {
+    useDeviceState
+  } from "@/uni_modules/tuikit-atomic-x/state/DeviceState";
+  import {
+    useCoGuestState
+  } from "@/uni_modules/tuikit-atomic-x/state/CoGuestState";
+  import {
+    useCoHostState
+  } from "@/uni_modules/tuikit-atomic-x/state/CoHostState";
+  import {
+    useLiveSeatState
+  } from "@/uni_modules/tuikit-atomic-x/state/LiveSeatState";
+
+  const defaultAvatarURL = 'https://web.sdk.qcloud.com/component/TUIKit/assets/avatar_01.png';
+
+  const props = defineProps({
+    modelValue: {
+      type: Boolean,
+      default: false
+    },
+    // 点击对象信息：{ userID, userName, seatIndex, avatar, ... }
+    userInfo: {
+      type: Object,
+      default: {}
+    },
+    liveID: {
+      type: String,
+      default: ''
+    },
+    // 展示模式：主播或观众
+    isAnchorMode: {
+      type: Boolean,
+      default: false
+    },
+    // 是否当前登录者本人（主播/观众自我操作用）
+    isSelf: {
+      type: Boolean,
+      default: false
+    }
+  });
+
+  const emit = defineEmits(['update:modelValue']);
+  const close = () => emit('update:modelValue', false);
+  // 设备与连麦状态
+  const {
+    microphoneStatus,
+    cameraStatus,
+    isFrontCamera,
+    openLocalCamera,
+    closeLocalCamera,
+    openLocalMicrophone,
+    closeLocalMicrophone,
+    switchCamera,
+  } = useDeviceState(uni?.$liveID);
+  const {
+    exitHostConnection,
+    coHostStatus
+  } = useCoHostState(uni?.$liveID);
+  const {
+    disconnect
+  } = useCoGuestState(uni?.$liveID);
+  const {
+    seatList,
+    muteMicrophone,
+    unmuteMicrophone,
+    openRemoteCamera,
+    closeRemoteCamera,
+    openRemoteMicrophone,
+    closeRemoteMicrophone,
+    kickUserOutOfSeat
+  } = useLiveSeatState(uni?.$liveID);
+
+  // 控件显隐与文案
+  const showMic = computed(() => props.isSelf || (!props.isSelf && !props.isAnchorMode));
+  const showCamera = computed(() => props.isSelf || (!props.isSelf && !props.isAnchorMode));
+  const showFlip = computed(() => props.isSelf && targetCameraStatus.value === 'ON');
+  const showHangup = computed(() => !props.isSelf || (props.isSelf && !props.isAnchorMode));
+
+  const micOffText = computed(() => props.isAnchorMode && props.isSelf ? '静音' : '关闭音频');
+  const micOnText = computed(() => props.isAnchorMode && props.isSelf ? '解除静音' : '打开音频');
+  const cameraOffText = computed(() => props.isAnchorMode && props.isSelf ? '关闭视频' : '关闭视频');
+  const cameraOnText = computed(() => props.isAnchorMode && props.isSelf ? '打开视频' : '打开视频');
+  const hangupText = computed(() => props.isAnchorMode ? '移下麦' : '断开连麦');
+
+  const targetSeat = computed(() => {
+    const list = seatList.value || [];
+    const userID = props?.userInfo?.userID;
+    if (!userID || !Array.isArray(list)) return null;
+    return list.find(item => item?.userInfo?.userID === userID) || null;
+  });
+
+  const targetMicStatus = computed(() => {
+    return targetSeat.value?.userInfo?.microphoneStatus || 'OFF';
+  });
+
+  const targetCameraStatus = computed(() => {
+    return targetSeat.value?.userInfo?.cameraStatus || 'OFF';
+  });
+
+  // seatList 变化自动关闭（当目标用户离席）
+  watch(seatList, (newVal, oldVal) => {
+    if (!oldVal || !newVal || newVal.length === oldVal.length) return;
+    if (newVal.length < oldVal.length) {
+      const missing = oldVal.find(oldItem => !newVal.some(newItem => newItem.userInfo.userID === oldItem.userInfo
+        .userID));
+      if (missing && missing.userInfo?.userID === props?.userInfo?.userID) {
+        close();
+      }
+    }
+  }, {
+    deep: true,
+    immediate: true
+  });
+
+  // 操作区
+  const microphoneOperation = () => {
+    if (!props.isSelf) {
+      if (targetMicStatus.value === 'OFF') {
+        openRemoteMicrophone({
+          liveID: uni.$liveID,
+          userID: props.userInfo.userID,
+          policy: 'UNLOCK_ONLY'
+        });
+        uni.showToast({
+          title: `您已将${props.userInfo.userName || props.userInfo.userID} 解除静音`,
+          icon: 'none'
+        })
+        close();
+        return;
+      }
+      if (targetMicStatus.value === 'ON') {
+        closeRemoteMicrophone({
+          liveID: uni.$liveID,
+          userID: props.userInfo.userID,
+        });
+        uni.showToast({
+          title: `您已将${props.userInfo.userName || props.userInfo.userID} 静音`,
+          icon: 'none'
+        })
+        close();
+        return;
+      }
+    } else {
+      if (targetMicStatus.value === 'OFF') {
+        unmuteMicrophone({
+          liveID: uni.$liveID,
+          fail: (errorCode) => {
+            if (errorCode === -2360) {
+              uni.showToast({
+                title: '你已被静音',
+                icon: 'none'
+              })
+            }
+          }
+        });
+        close();
+        return;
+      }
+      if (targetMicStatus.value === 'ON') {
+        muteMicrophone({
+          liveID: uni.$liveID
+        });
+        close();
+        return;
+      }
+    }
+
+  };
+
+  const cameraOperation = () => {
+    if (!props.isSelf) {
+      if (targetCameraStatus.value === 'OFF') {
+        openRemoteCamera({
+          liveID: uni.$liveID,
+          userID: props.userInfo.userID,
+          policy: 'UNLOCK_ONLY'
+        });
+        uni.showToast({
+          title: `您已将${props.userInfo.userName || props.userInfo.userID} 解除禁画`,
+          icon: 'none'
+        })
+        close();
+        return;
+      }
+      if (targetCameraStatus.value === 'ON') {
+        closeRemoteCamera({
+          liveID: uni.$liveID,
+          userID: props.userInfo.userID,
+        });
+        uni.showToast({
+          title: `您已将${props.userInfo.userName || props.userInfo.userID} 禁画`,
+          icon: 'none'
+        })
+        close();
+        return;
+      }
+    } else {
+      if (targetCameraStatus.value === 'OFF') {
+        openLocalCamera({
+          isFront: isFrontCamera.value,
+          fail: (errorCode) => {
+            if (errorCode === -2370) {
+              uni.showToast({
+                title: '你已被禁画',
+                icon: 'none'
+              })
+            }
+          }
+        });
+        close();
+        return;
+      }
+      if (targetCameraStatus.value === 'ON') {
+        closeLocalCamera();
+        close();
+        return;
+      }
+    }
+
+  };
+
+  const flipCamera = () => {
+    if (cameraStatus.value !== 'ON' || !props.isSelf) return;
+    switchCamera({
+      isFront: !isFrontCamera.value
+    });
+    close();
+  };
+
+  const handleHangUp = () => {
+    if (props.isAnchorMode) {
+      // 主播模式：当自己处于主播连线时，提示断开与主播的连线；否则断开与观众的连麦
+      if (coHostStatus.value === 'CONNECTED') {
+        uni.showModal({
+          content: '确定要断开与其他主播的连线吗？',
+          confirmText: '断开',
+          success: (res) => {
+            if (res.confirm) {
+              exitHostConnection({
+                liveID: uni?.$liveID
+              });
+            }
+            close();
+          }
+        });
+      } else {
+        uni.showModal({
+          content: '确定要断开与其他观众的连麦吗？',
+          confirmText: '断开',
+          success: (res) => {
+            if (res.confirm) {
+              kickUserOutOfSeat({
+                liveID: uni?.$liveID,
+                userID: props.userInfo.userID,
+                success: () => {},
+                fail: () => {},
+              });
+            }
+            close();
+          }
+        });
+      }
+    } else {
+      // 观众模式：断开当前连麦
+      uni.showModal({
+        content: '确定要断开当前连麦吗？',
+        success: (res) => {
+          if (res.confirm) {
+            disconnect({
+              liveID: uni?.$liveID,
+              success: () => {},
+              fail: () => {},
+            });
+            close();
+          }
+        }
+      });
+    }
+  };
+</script>
+
+<style>
+  .bottom-drawer-container {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    top: 0;
+    z-index: 1000;
+  }
+
+  .drawer-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.4);
+  }
+
+  .bottom-drawer {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: rgba(31, 32, 36, 1);
+    border-top-left-radius: 32rpx;
+    border-top-right-radius: 32rpx;
+    transform: translateY(100%);
+    transition-property: transform;
+    transition-duration: 0.3s;
+    transition-timing-function: ease;
+    height: 400rpx;
+    flex-direction: column;
+  }
+
+  .drawer-open {
+    transform: translateY(0);
+  }
+
+  .drawer-header {
+    padding: 40rpx 48rpx;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .user-info-section {
+    flex-direction: row;
+    align-items: center;
+    flex: 1;
+  }
+
+  .avatar-container {
+    width: 80rpx;
+    height: 80rpx;
+    margin-right: 24rpx;
+  }
+
+  .user-avatar {
+    width: 80rpx;
+    height: 80rpx;
+    border-radius: 40rpx;
+  }
+
+  .user-details {
+    flex: 1;
+    flex-direction: column;
+  }
+
+  .username {
+    font-size: 32rpx;
+    color: #C5CCDB;
+    font-weight: 500;
+    margin-bottom: 8rpx;
+  }
+
+  .user-id {
+    font-size: 28rpx;
+    color: #7C85A6;
+  }
+
+  .drawer-content {
+    height: 400rpx;
+    justify-content: flex-start;
+    padding: 0 48rpx;
+  }
+
+  .drawer-actions {
+    display: flex;
+    flex-direction: row;
+  }
+
+  .action-btn {
+    flex-direction: column;
+    align-items: center;
+    height: 160rpx;
+    margin-left: 10rpx;
+    width: 120rpx
+  }
+
+  .action-btn-image-container {
+    width: 100rpx;
+    height: 100rpx;
+    background-color: rgba(43, 44, 48, 1);
+    margin-bottom: 16rpx;
+    border-radius: 20rpx;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .action-btn-image {
+    width: 50rpx;
+    height: 50rpx;
+  }
+
+  .action-btn-content {
+    font-size: 26rpx;
+    color: #ffffff;
+    text-align: left;
+    white-space: nowrap;
+  }
+</style>

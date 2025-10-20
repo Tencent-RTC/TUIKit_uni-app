@@ -1,12 +1,12 @@
 {
-	"id": "ui-component",
+	"id": "tuikit-atomic-x",
 	"name": "LiveKit",
 	"displayName": "LiveKit",
 	"version": "1.1.19",
 	"description": "LiveKit UTS项目",
 	"keywords": [
 		"uts",
-		"ui-component"
+		"tuikit-atomic-x"
 	],
 	"author": "",
 	"license": "MIT",

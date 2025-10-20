@@ -1,0 +1,85 @@
+<template>
+  <svga-player ref="playerRef" :url="computedUrl" style="position: absolute; z-index: -1;" @onFinished="handleFinished"
+    :style="modelValue ? {
+      top: (safeArea?.top || 0) + 'px',
+      left: (safeArea?.left || 0) + 'px',
+      width: (safeArea?.width || 0) + 'px',
+      height: (safeArea?.height || 0) + 'px',
+    } : {
+      width: 0 + 'rpx',
+      height: 0 + 'rpx',
+    }"></svga-player>
+</template>
+
+<script setup lang="ts">
+  import { ref, watch, onMounted, computed } from 'vue';
+  import { downloadAndSaveToPath } from '@/uni_modules/tuikit-atomic-x/components/GiftPlayer/giftService';
+
+  interface SafeAreaLike {
+    top ?: number;
+    left ?: number;
+    width ?: number;
+    height ?: number;
+  }
+
+  const props = defineProps<{
+    modelValue : boolean;
+    url ?: string;
+    safeArea ?: SafeAreaLike;
+    autoHideMs ?: number;
+  }>();
+
+  const emit = defineEmits<{
+    (e : 'update:modelValue', value : boolean) : void
+    (e : 'finished') : void
+  }>();
+
+  const playerRef = ref<any>(null);
+  const internalUrl = ref<string>('');
+  const computedUrl = computed(() => props.url || internalUrl.value || '');
+
+  const tryStart = () => {
+    if (props.modelValue && computedUrl.value && playerRef.value) {
+      try {
+        playerRef.value.startPlay(computedUrl.value);
+      } catch (e) {
+        // swallow to avoid crashing UI if native not ready
+      }
+    }
+  }
+
+  watch(() => computedUrl.value, () => {
+    tryStart();
+  });
+
+
+  const handleFinished = () => {
+    emit('finished');
+    emit('update:modelValue', false);
+  }
+
+  async function playGift(giftData : { resourceURL ?: string; name ?: string; giftID ?: string | number }) {
+    if (!giftData || !giftData.resourceURL) return;
+    try {
+      const giftKey = `${(giftData.name || '').split(' ').join('')}-${giftData.giftID}`;
+      let svgaGiftSourceUrl = plus.storage.getItem(giftKey);
+      if (!svgaGiftSourceUrl) {
+        const filePath = await downloadAndSaveToPath(`${giftData.resourceURL}`);
+        plus.storage.setItem(giftKey, filePath as string);
+      }
+      svgaGiftSourceUrl = plus.storage.getItem(giftKey);
+      internalUrl.value = svgaGiftSourceUrl as string;
+      emit('update:modelValue', true);
+      tryStart();
+      const autoHide = typeof props.autoHideMs === 'number' ? props.autoHideMs : 10000;
+      setTimeout(() => emit('update:modelValue', false), autoHide);
+    } catch (e) {
+      // ignore
+    }
+  }
+
+  defineExpose({ playGift });
+</script>
+
+<style>
+</style>

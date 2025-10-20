@@ -1,0 +1,375 @@
+<template>
+  <view class="live-list">
+    <view class="live-list-quick-join">
+      <input v-model="inputLiveId" class="quick-join-input" placeholder="输入房间名称、主播名称或房间ID" confirm-type="done"
+        @confirm="handleJoinLiveById" maxlength="64" />
+
+    </view>
+
+    <!-- 无匹配结果提示 -->
+    <view v-if="hasNoResults" class="empty-container">
+      <text class="empty-text">未找到匹配的直播</text>
+    </view>
+
+    <!-- 直播列表内容 -->
+    <list v-else class="live-list-content" @loadmore="loadMore" :show-scrollbar="false">
+      <cell v-for="(row, rowIndex) in groupedLiveList" :key="`row-${rowIndex}-${row[0]?.liveID || 'empty'}`">
+        <view class="live-row">
+          <view v-for="(live, index) in row" :key="live.liveID" class="live-card" @tap="handleJoinLive(live)">
+            <view class="live-cover">
+              <image :src="live.coverURL || defaultCoverURL" :mode="'aspectFill'" class="cover-image"
+                @error="handleCoverError(live)" />
+              <view class="live-status">
+                <view class="live-bar-container">
+                  <view class="bar bar-1"></view>
+                  <view class="bar bar-2"></view>
+                  <view class="bar bar-3"></view>
+                </view>
+                <text class="viewer-count">{{ formatViewerCount(live.totalViewerCount) }}人看过</text>
+              </view>
+              <!-- 直播信息覆盖在封面图底部 -->
+              <view class="live-info-overlay">
+                <text class="live-title" :lines="1">{{ live.liveName }}</text>
+                <view class="live-owner">
+                  <image :src="live?.liveOwner?.avatarURL || defaultAvatarURL" class="owner-avatar" mode="aspectFill" />
+                  <text class="owner-name"
+                    :numberOfLines="1">{{ live?.liveOwner?.userName || live?.liveOwner?.userID}}</text>
+                </view>
+              </view>
+            </view>
+          </view>
+        </view>
+      </cell>
+    </list>
+  </view>
+</template>
+
+<script setup>
+  import {
+    ref,
+    onMounted,
+    computed
+  } from 'vue';
+  import {
+    onLoad
+  } from '@dcloudio/uni-app';
+
+  import {
+    useLiveListState
+  } from "@/uni_modules/tuikit-atomic-x/state/LiveListState";
+  const {
+    liveList,
+    liveListCursor,
+    joinLive,
+    fetchLiveList
+  } = useLiveListState();
+
+  // 数据状态
+  const inputLiveId = ref(''); // 'live_'
+  const isLoadingJoin = ref(false);
+  // 默认图片
+  const defaultCoverURL =
+    'https://liteav-test-1252463788.cos.ap-guangzhou.myqcloud.com/voice_room/voice_room_cover1.png';
+  const defaultAvatarURL = 'https://web.sdk.qcloud.com/component/TUIKit/assets/avatar_01.png';
+
+
+  onMounted(() => {
+    const params = {
+      cursor: "", // 首次拉起传空（不能是null),然后根据回调数据的cursor确认是否拉完
+      count: 20, // 分页拉取的个数
+    };
+    fetchLiveList(params);
+  })
+
+  // 无匹配结果标记（用于 UI 展示）
+  const hasNoResults = computed(() => {
+    const k = (inputLiveId.value || '').trim();
+    return !!k && ((filteredLiveList.value || []).length === 0);
+  });
+
+  // 进入直播间
+  const handleJoinLive = async (live) => {
+    try {
+      uni.$liveID = live.liveID;
+
+      uni.redirectTo({
+        url: `/pages/audience/index?liveID=${live.liveID}`
+      });
+    } catch (error) {
+      console.error('进入直播间失败:', error);
+      uni.showToast({
+        title: '进入直播间失败',
+        icon: 'none'
+      });
+    }
+  };
+
+
+  const handleJoinLiveById = () => {
+    if (!inputLiveId.value.trim()) {
+      uni.showToast({
+        title: '请输入 liveID',
+        icon: 'none'
+      });
+      return;
+    }
+    uni.$liveID = inputLiveId.value.trim();
+
+    isLoadingJoin.value = true;
+
+    joinLive({
+      liveID: inputLiveId.value.trim(),
+      success: () => {
+        isLoadingJoin.value = false;
+        uni.redirectTo({
+          url: `/pages/audience/index?liveID=${inputLiveId.value.trim()}`,
+        });
+      },
+      fail: (error) => {
+        isLoadingJoin.value = false;
+        console.error('进房失败 = ', JSON.stringify(error))
+
+        uni.showToast({
+          title: "进入失败",
+          icon: "none",
+          content: error?.message || "房间不存在或已关闭",
+        });
+      },
+    });
+  };
+
+  const handleCoverError = (live) => {
+    live.coverURL = defaultCoverURL;
+  }
+
+  // 根据输入框的 liveID 关键字过滤直播列表（前端过滤，不请求后端）
+  const filteredLiveList = computed(() => {
+    const keyword = (inputLiveId.value || '').trim().toLowerCase();
+    if (!keyword) return liveList.value;
+    return (liveList.value || []).filter(item => {
+      const id = (item?.liveID || '').toLowerCase();
+      const name = (item?.liveName || '').toLowerCase();
+      const ownerName = (item?.liveOwner?.userName || item?.liveOwner?.userID || '').toLowerCase();
+      return id.includes(keyword) || name.includes(keyword) || ownerName.includes(keyword);
+    });
+  });
+
+  // 将直播列表分组，每行两个元素（对过滤后的结果进行分组）
+  const groupedLiveList = computed(() => {
+    const source = filteredLiveList.value || [];
+    const groups = [];
+    for (let i = 0; i < source.length; i += 2) {
+      const row = source.slice(i, i + 2);
+      groups.push(row);
+    }
+    return groups;
+  });
+
+  // 格式化观看人数
+  const formatViewerCount = (count) => {
+    if (count >= 10000) {
+      return `${(count / 10000).toFixed(1)}万`;
+    }
+    return count.toString();
+  };
+
+  // 加载更多
+  const loadMore = () => {
+    if (!liveListCursor.value) {
+      uni.showToast({
+        title: "没有更多了",
+        icon: "none"
+      });
+      return;
+    }
+    const params = {
+      cursor: liveListCursor.value,
+      count: 20,
+    };
+    fetchLiveList(params);
+  };
+</script>
+
+<style>
+  .live-list {
+    width: 750rpx;
+    background-color: #FFFFFF;
+    flex: 1;
+  }
+
+  .live-list-header {
+    padding: 32rpx;
+  }
+
+  .header-title {
+    font-size: 40rpx;
+    font-weight: 600;
+    color: #333333;
+  }
+
+  .live-list-quick-join {
+    flex-direction: row;
+    align-items: center;
+    margin: 0 32rpx 24rpx 32rpx;
+  }
+
+  .quick-join-input {
+    flex: 1;
+    height: 64rpx;
+    border: 1rpx solid #e0e0e0;
+    border-radius: 999rpx;
+    padding: 10rpx 20rpx;
+    margin-top: 20rpx;
+    font-size: 28rpx;
+    background: #fff;
+  }
+
+  .live-list-content {
+    width: 750rpx;
+  }
+
+  .live-row {
+    flex-direction: row;
+    padding: 0 32rpx;
+    margin-bottom: 24rpx;
+    justify-content: space-between;
+  }
+
+  .live-card {
+    width: 334rpx;
+    height: 500rpx;
+    border-radius: 16rpx;
+    background-color: #ffffff;
+  }
+
+  .live-cover {
+    position: relative;
+    width: 334rpx;
+    height: 500rpx;
+  }
+
+  .cover-image {
+    width: 334rpx;
+    height: 400rpx;
+    border-radius: 16rpx;
+  }
+
+  .live-status {
+    position: absolute;
+    top: 24rpx;
+    left: 20rpx;
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .live-bar-container {
+    width: 16rpx;
+    height: 16rpx;
+    flex-direction: row;
+    justify-content: center;
+    align-items: flex-end;
+    margin-right: 8rpx;
+  }
+
+  .bar {
+    width: 4rpx;
+    background-color: #5AD69E;
+  }
+
+  .bar-1 {
+    height: 10rpx;
+    margin-right: 2rpx;
+  }
+
+  .bar-2 {
+    height: 16rpx;
+    margin-right: 2rpx;
+  }
+
+  .bar-3 {
+    height: 6rpx;
+  }
+
+  .viewer-count {
+    color: #ffffff;
+    font-size: 24rpx;
+  }
+
+  /* 新增：直播信息覆盖样式 */
+  .live-info-overlay {
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    padding: 16rpx 20rpx;
+    width: 334rpx;
+    background-color: rgba(240, 242, 247, 1);
+    border-bottom-right-radius: 16rpx;
+    border-bottom-left-radius: 16rpx;
+    /* 半透明黑色背景 */
+  }
+
+  .live-info-overlay .live-title {
+    font-size: 32rpx;
+    font-weight: 600;
+    color: rgba(0, 0, 0, 0.9);
+    margin-bottom: 8rpx;
+    lines: 1;
+    max-width: 400rpx;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .live-info-overlay .live-owner {
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .live-info-overlay .owner-avatar {
+    width: 40rpx;
+    height: 40rpx;
+    border-radius: 20rpx;
+    margin-right: 8rpx;
+  }
+
+  .live-info-overlay .owner-name {
+    font-size: 24rpx;
+    color: rgba(0, 0, 0, 0.55);
+    font-weight: 500;
+    flex: 1;
+    lines: 1;
+    max-width: 300rpx;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .loading-container,
+  .empty-container,
+  .loading-more {
+    padding: 32rpx;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .loading-icon {
+    width: 36rpx;
+    height: 36rpx;
+    color: #666666;
+  }
+
+  .loading-text,
+  .empty-text {
+    margin-top: 16rpx;
+    font-size: 28rpx;
+    color: #666666;
+  }
+
+  .load-more {
+    padding: 32rpx;
+    justify-content: center;
+  }
+
+  .load-more-text {
+    font-size: 28rpx;
+    color: #666666;
+  }
+</style>

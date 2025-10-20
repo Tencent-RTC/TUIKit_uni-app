@@ -1,0 +1,506 @@
+<template>
+  <view class="live-stream-view-container">
+    <view class="live-stream-view-content" :class="{ 'audience-mode': !isAnchor }" @touchend.stop="" :style="{
+                top: isAnchor ? systemInfo.safeArea.top + 'px' : '0px',
+                left: isAnchor ? '0px' : systemInfo.safeArea.left + 'px',
+                width: isAnchor ? safeArea.width + 'px' : systemInfo.safeArea.width + 'px',
+                height: isAnchor ? systemInfo.safeArea?.height + 'px' : systemInfo.windowHeight + 'px',
+              }">
+      <!-- 主播模式：显示默认头像 -->
+      <view v-if="isAnchor && cameraStatus === 'OFF' && seatList.length === 1 && isLiving" class="default-avatar"
+        :style="{ top: safeArea.height * 1/2 + 'px' }">
+        <image style="width: 96rpx; height: 96rpx; border-radius: 99px;"
+          :src="loginUserInfo.avatarURL || defaultAvatarURL" />
+      </view>
+
+      <!-- 主视频流 -->
+      <live-core-view class="live-stream-view-background" :liveID="liveID"
+        :viewType=" isAnchor ? 'PUSH_VIEW' : 'PLAY_VIEW'" @tap="streamViewClick(loginUserInfo)" :style="{
+                  top: '0px',
+                  width: safeArea.width + 'px',
+                  height: streamViewHeight + 'px',
+                }">
+      </live-core-view>
+
+      <!-- 单人模式（观众视角特有） -->
+      <view v-if="!isAnchor && seatList?.length === 1" @touchend.stop="" class="grid-content-cell"
+        v-for="(participant, colIndex) in seatList" :key="`${colIndex}`" @tap="streamViewClick(participant)" :style="{
+                  left: participant?.region?.x * scale.scaleX + 'px',
+                  top: (calculateTopValue(participant) - 2) + 'px',
+                  'background-color': participant?.userInfo?.cameraStatus === 'OFF' ? '#000' : 'transparent',
+                }">
+        <view style="display: flex; flex-direction: row; width: 120rpx; justify-content: center; align-items: center;"
+          :style="{
+                    width: participant?.region?.w * scale.scaleX + 'px',
+                    height: (streamViewHeight + 10) + 'px',
+                  }">
+          <view v-if="participant?.userInfo?.cameraStatus === 'OFF'" class="video-container">
+            <image class="participant-video" :src="participant?.userInfo?.avatarURL || defaultAvatarURL"
+              mode="aspectFill" />
+          </view>
+        </view>
+      </view>
+
+      <!-- 多人模式：非网格布局 -->
+      <view v-if="seatList?.length > 1 && (templateLayout !== 801 && templateLayout !== 800)" @touchend.stop=""
+        class="grid-content-cell" v-for="(participant, colIndex) in seatList" :key="`${colIndex}`"
+        @tap="streamViewClick(participant)" style="border-radius: 0rpx;" :style="{
+                  left: participant?.region?.x * scale.scaleX + 'px',
+                  top: calculateTopValue(participant) + (isAnchor ? 0 : -2) + 'px',
+                  'background-color': !isAnchor && participant?.userInfo?.cameraStatus === 'OFF' ? '#000' : 'transparent',
+                }">
+        <view style="display: flex; flex-direction: row; width: 120rpx; justify-content: center; align-items: center;"
+          :style="{
+                    width: participant?.region?.w * scale.scaleX + 'px',
+                    height: isAnchor ? (participant?.region?.h * scale.scaleY + 'px') : (participant?.region?.h * scale.scaleY + 2) + 'px',
+                  }">
+          <view v-if="participant?.userInfo?.cameraStatus === 'OFF'" class="video-container">
+            <image class="participant-video" :src="participant?.userInfo?.avatarURL || defaultAvatarURL"
+              mode="aspectFill" />
+          </view>
+
+          <view class="participant-info-container">
+            <image v-if="participant?.userInfo?.microphoneStatus === 'OFF'" class="mic-icon"
+              src="/static/images/unmute-mic.png" mode="aspectFit" />
+            <text class="participant-name" :style="{ 'max-width': participant?.region.w * scale.scaleX * 0.85 + 'px' }">
+              {{ participant?.userInfo?.userName || participant?.userInfo?.userID }}
+            </text>
+          </view>
+        </view>
+      </view>
+
+      <!-- 多人模式：网格布局 -->
+      <view v-if="seatList?.length > 1 && (templateLayout === 801 || templateLayout === 800)" @touchend.stop=""
+        class="grid-content-cell" v-for="(participant, colIndex) in seatList"
+        :key="`${isAnchor ? colIndex : participant.index}`" @tap="streamViewClick(participant)"
+        style="border-radius: 0rpx;" :style="{
+                  left: participant?.region?.x * scale.scaleX + 'px',
+                  top: calculateTopValue(participant) + (isAnchor ? 0 : -2) + 'px',
+                  'background-color': !isAnchor && participant?.userInfo?.cameraStatus === 'OFF' ? '#000' : 'transparent',
+                }">
+        <view v-if="participant?.userInfo.userID"
+          style="display: flex; flex-direction: row; width: 120rpx; justify-content: center; align-items: center;"
+          :style="{
+                    width: participant?.region?.w * scale.scaleX + 'px',
+                    height: isAnchor ? (participant?.region?.h * scale.scaleY + 'px') : (participant?.region?.h * scale.scaleY + 2) + 'px',
+                  }">
+          <view v-if="participant?.userInfo?.cameraStatus === 'OFF'" class="video-container">
+            <image class="participant-video" :src="participant?.userInfo?.avatarURL || defaultAvatarURL"
+              mode="aspectFill" />
+          </view>
+
+          <view class="participant-info-container" :class="{ 'audience-mode': !isAnchor }">
+            <image v-if="participant?.userInfo?.microphoneStatus === 'OFF'" class="mic-icon"
+              src="/static/images/unmute-mic.png" mode="aspectFit" />
+            <text class="participant-name" :style="{ 'max-width': participant?.region.w * scale.scaleX * 0.85 + 'px' }">
+              {{ participant?.userInfo?.userName || participant?.userInfo?.userID }}
+            </text>
+          </view>
+        </view>
+
+        <view class="participant-wait-container" v-else :style="{
+                    width: participant?.region?.w * scale.scaleX + 'px',
+                    height: participant?.region?.h * scale.scaleY + 'px',
+                    'border-bottom': '1rpx solid #000',
+                    'background-color': '#1f2024',
+                    'border-left': isAnchor && templateLayout === 800 ? '1rpx solid #000' : '',
+                    'border-right': !isAnchor && templateLayout === 800 ? '1rpx solid #000' : '',
+                  }">
+          <text class="participant-wait-content">{{ isAnchor ? colIndex : participant?.index }}</text>
+          <text class="participant-wait-content">等待连麦</text>
+        </view>
+      </view>
+      <LiveStreamActionPanel v-if="enableClickPanel" v-model="isShowClickPanel" :liveID="liveID || ''"
+        :userInfo="clickUserInfo" :isAnchorMode="isAnchor"
+        :isSelf="(isAnchor ? (clickUserInfo?.userID === loginUserInfo?.userID) : (clickUserInfo?.userID === currentLoginUserId))" />
+    </view>
+  </view>
+</template>
+
+<script setup lang="ts">
+  import {
+    ref,
+    onMounted,
+    computed,
+    watch
+  } from 'vue';
+  import {
+    useLiveSeatState
+  } from "@/uni_modules/tuikit-atomic-x/state/LiveSeatState";
+  import {
+    useLoginState
+  } from "@/uni_modules/tuikit-atomic-x/state/LoginState";
+  import {
+    useCoHostState
+  } from "@/uni_modules/tuikit-atomic-x/state/CoHostState";
+  import {
+    useDeviceState
+  } from "@/uni_modules/tuikit-atomic-x/state/DeviceState";
+  import {
+    useCoGuestState
+  } from "@/uni_modules/tuikit-atomic-x/state/CoGuestState";
+  import LiveStreamActionPanel from '@/uni_modules/tuikit-atomic-x/components/LiveStreamView/LiveStreamActionPanel.nvue';
+
+  const props = defineProps({
+    liveID: {
+      type: String,
+      default: '',
+    },
+    onStreamViewClick: {
+      type: Function,
+      default: null
+    },
+    isAnchor: {
+      type: Boolean,
+      default: true,
+    },
+    templateLayout: {
+      type: Number,
+    },
+    isLiving: {
+      type: Boolean,
+      default: false,
+    },
+    currentLoginUserId: {
+      type: String,
+    }
+    ,
+    enableClickPanel: {
+      type: Boolean,
+      default: false,
+    }
+  });
+
+  const emit = defineEmits(['streamViewClick']);
+
+  // 状态管理
+  const {
+    loginUserInfo
+  } = useLoginState();
+  const {
+    connected,
+    coHostStatus
+  } = useCoHostState(uni?.$liveID);
+  const {
+    cameraStatus
+  } = useDeviceState();
+  const {
+    connected: audienceConnected
+  } = useCoGuestState(uni?.$liveID)
+  // 使用 rpx
+  const standardWidth = 750;
+  let standardHeight = standardWidth * 16 / 9;
+  const safeArea = ref({
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    width: standardWidth,
+    height: standardHeight,
+  });
+  const systemInfo = ref({});
+
+  const deviceWidthRatio = ref(1);
+  const deviceHeightRatio = ref(1);
+  const bottomPanelHeight = ref(80);
+  const pixelWidthRatio = ref(1);
+
+  const {
+    seatList,
+    canvas,
+    lockSeat,
+  } = props?.liveID && useLiveSeatState(props?.liveID);
+  const platform = ref('android');
+  const defaultAvatarURL = 'https://web.sdk.qcloud.com/component/TUIKit/assets/avatar_01.png';
+
+  const scale = ref({
+    scaleX: 1,
+    scaleY: 1
+  });
+  const streamViewHeight = ref(1);
+  const isShowClickPanel = ref(false);
+  const clickUserInfo = ref<any>({});
+
+  function calculateScale(originalWidth : number, originalHeight : number, displayWidth : number, displayHeight : number) {
+    // 等比缩放（以宽度或高度中较小的比例为准）
+    const scaleX = displayWidth / originalWidth;
+    const scaleY = displayHeight / originalHeight;
+
+    return { scaleX, scaleY }; // 确保不变形
+  }
+
+  // 初始化加载
+  onMounted(() => {
+    uni.getSystemInfo({
+      success: (res) => {
+        systemInfo.value = res;
+
+        safeArea.value = res.safeArea;
+        deviceWidthRatio.value = standardWidth / res.windowWidth;
+        platform.value = res.platform;
+
+        if (platform.value === 'ios') {
+          bottomPanelHeight.value = 60;
+        }
+
+        if (props.isAnchor) {
+          streamViewHeight.value = systemInfo.value.safeArea.height - bottomPanelHeight.value;
+        } else {
+          streamViewHeight.value = systemInfo.value.windowHeight;
+        }
+
+        console.warn(`LiveStreamView: isAnchor=${props.isAnchor}, safeArea: ${JSON.stringify(res.safeArea)},
+                    deviceWidthRatio: ${deviceWidthRatio.value}, deviceHeightRatio: ${deviceHeightRatio.value}, 
+                    windowWidth: ${res.windowWidth}, windowHeight: ${res.windowHeight},
+                    streamViewHeight: ${streamViewHeight.value}`);
+      }
+    });
+  });
+
+  // 下发的视频像素值
+  watch(canvas, (newValue) => {
+    if (newValue?.w) {
+      pixelWidthRatio.value = (safeArea.value.width / newValue?.w) * deviceWidthRatio.value;
+      console.warn(`LiveStreamView: canvas 变动: ${pixelWidthRatio.value}`)
+    }
+
+    if (newValue?.w && newValue?.h) {
+      scale.value = calculateScale(
+        newValue.w,
+        newValue.h,
+        systemInfo.value.safeArea.width,
+        systemInfo.value.safeArea.width * newValue.h / newValue.w,
+      );
+
+      console.warn(
+        `LiveStreamView: scale value: ${JSON.stringify(scale.value)}, streamViewHeight: ${streamViewHeight.value}`
+      );
+    }
+  });
+
+  const streamViewClick = (options) => {
+    console.log(`LiveStreamView: click options: ${JSON.stringify(options)}, isAnchor: ${props.isAnchor}`);
+    if (!props.isLiving) return
+    // 非主播模式且没有参与者信息（背景点击），直接忽略
+    if (!props.isAnchor && !options?.userInfo) {
+      return;
+    }
+
+    if (props.isAnchor) {
+      // 主播模式：区分点击背景（loginUserInfo）和点击参与者（带 userInfo）
+      if (options?.userInfo) {
+        if (audienceConnected.value.length > 1 && connected?.value.length === 0) {
+          const userInfo = { ...options.userInfo, seatIndex: options.index };
+          if (!userInfo?.userID) return;
+          if (props.enableClickPanel) {
+            clickUserInfo.value = userInfo;
+            isShowClickPanel.value = true;
+          }
+        }
+        if (connected?.value.length > 0) {
+          if (options?.userInfo.userID === uni.$userID) {
+            const userInfo = { ...options.userInfo, seatIndex: options.index };
+            if (!userInfo?.userID) return;
+            if (props.enableClickPanel) {
+              clickUserInfo.value = userInfo;
+              isShowClickPanel.value = true;
+            }
+          }
+        }
+      } else {
+        // 背景点击：直接把当前登录用户信息抛给上层，保持原有行为
+        // props.onStreamViewClick?.(options);
+        // emit('streamViewClick', options);
+        if (props.enableClickPanel) {
+          clickUserInfo.value = { ...(loginUserInfo.value || {}), userID: loginUserInfo.value?.userID } as any;
+          isShowClickPanel.value = true;
+        }
+      }
+    } else {
+      // 面板限制规则仅影响面板，不影响事件下发给页面
+      const isClickSelf = options?.userInfo?.userID === props?.currentLoginUserId;
+      const isTemplateGrid = props.templateLayout === 800 || props.templateLayout === 801;
+      const isCoGuesting = uni.$localGuestStatus !== 'DISCONNECTED';
+      const payload = { ...options.userInfo, seatIndex: options.index };
+
+      if (props.enableClickPanel && isClickSelf) {
+        clickUserInfo.value = payload as any;
+        isShowClickPanel.value = true;
+        return
+      }
+      props.onStreamViewClick?.(payload);
+      emit('streamViewClick', payload);
+    }
+  };
+
+  // 返回 px 对应的计算值
+  const calculateTopValue = (participant) => {
+    let topValue = 1;
+    console.log(
+      `LiveStreamView: templateLayout: ${props.templateLayout}, platform: ${platform.value}, isAnchor: ${props.isAnchor}`
+    );
+    if (!participant) return topValue;
+
+    if (props.templateLayout !== 800 && props.templateLayout !== 801) {
+      topValue = participant.region.y * scale.value.scaleY;
+    }
+    if (props.templateLayout === 800) {
+      topValue = participant.region.y * scale.value.scaleY;
+    }
+    if (props.templateLayout === 801) {
+      topValue = participant.region.y * scale.value.scaleY;
+    }
+
+    console.log(`LiveStreamView: topValue: ${topValue}`);
+
+    return topValue;
+  };
+
+  watch(seatList, (newValue) => {
+    if ((newValue || []).length > 1 && canvas.value?.w && canvas.value?.h) {
+      if (props.isAnchor) {
+        streamViewHeight.value = systemInfo.value.safeArea.height - bottomPanelHeight.value;
+      } else {
+        streamViewHeight.value = systemInfo.value.windowHeight;
+      }
+    }
+    if (!props.isAnchor && (newValue || []).length === 1 && canvas.value?.w && canvas.value?.h &&
+      audienceConnected.value.length === 1) {
+      streamViewHeight.value = systemInfo.value.windowHeight;
+    }
+
+    console.log(`LiveStreamView: seatList change streamViewHeight: ${streamViewHeight.value}`);
+  });
+
+
+
+  // 观众模式特有的状态监听
+  if (!props.isAnchor) {
+    watch(audienceConnected.value, (newVal, oldVal) => {
+      console.log(
+        `LiveStreamView: audience localStatus change, newVal: ${newVal}, oldVal: ${oldVal}, templateLayout: ${props.templateLayout}`
+      );
+
+      if (newVal.length === 1) {
+        streamViewHeight.value = systemInfo.value.windowHeight;
+        console.log(`LiveStreamView: audience localStatus change streamViewHeight: ${streamViewHeight.value}`);
+      }
+    });
+  }
+
+  defineExpose({
+    streamViewClick,
+    calculateTopValue,
+    scale,
+    streamViewHeight
+  });
+</script>
+
+<style>
+  .live-stream-view-container {
+    flex: 1;
+    position: relative;
+    background: rgba(15, 16, 20, 0.5);
+    z-index: -1;
+    overflow: hidden;
+  }
+
+  .live-stream-view-content {
+    flex: 1;
+    position: relative;
+  }
+
+  .live-stream-view-content.audience-mode {
+    background-color: #000;
+  }
+
+  .live-stream-view-background {
+    position: relative;
+    right: 0;
+    bottom: 0;
+    z-index: -1;
+  }
+
+  .grid-image-cell {
+    position: absolute;
+    border-radius: 24rpx;
+    overflow: hidden;
+    z-index: 1000;
+  }
+
+  .participant-video {
+    width: 80rpx;
+    height: 80rpx;
+    border-radius: 80rpx;
+  }
+
+  .grid-content-cell {
+    flex: 1;
+    position: absolute;
+    border-radius: 24rpx;
+    overflow: hidden;
+  }
+
+  .participant-info-container {
+    position: absolute;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    background: rgba(34, 38, 46, 0.4);
+    border-radius: 38rpx;
+    height: 36rpx;
+    padding-left: 6rpx;
+    padding-right: 12rpx;
+    left: 6rpx;
+    bottom: 6rpx;
+    flex: 1;
+  }
+
+  .participant-info-container.audience-mode {
+    /* 观众模式下的特殊样式 */
+  }
+
+  .mic-icon {
+    width: 24rpx;
+    height: 24rpx;
+    margin-left: 4rpx;
+    background-color: rgba(34, 38, 46, 0);
+  }
+
+  .participant-name {
+    font-size: 24rpx;
+    font-weight: 500;
+    color: #ffffff;
+    margin-left: 2rpx;
+    text-align: center;
+    min-width: 80rpx;
+    lines: 1;
+    text-overflow: ellipsis;
+    overflow: hidden;
+  }
+
+  .participant-wait-container {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .participant-wait-content {
+    font-size: 28rpx;
+    font-weight: 500;
+    text-align: center;
+    color: #ffffff;
+    margin-top: 12rpx;
+  }
+
+  .default-avatar {
+    position: sticky;
+    left: 0;
+    right: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+</style>

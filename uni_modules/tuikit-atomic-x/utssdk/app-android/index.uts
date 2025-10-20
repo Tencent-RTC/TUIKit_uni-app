@@ -1,0 +1,1409 @@
+import Context from "android.content.Context";
+import {
+    LoginOptions, LogoutOptions, SetSelfInfoOptions,
+    FetchLiveListOptions, CreateLiveOptions, JoinLiveOptions, EndLiveOptions, LeaveLiveOptions, UpdateLiveInfoOptions,
+    LockSeatOptions, TakeSeatOptions, LeaveSeatOptions,
+    MuteMicrophoneOptions, UnmuteMicrophoneOptions, KickUserOutOfSeatOptions, MoveUserToSeatOptions,
+    UnlockSeatOptions, OpenRemoteCameraOptions, CloseRemoteCameraOptions,
+    OpenRemoteMicrophoneOptions, CloseRemoteMicrophoneOptions,
+    FetchAudienceListOptions, SetAdministratorOptions, RevokeAdministratorOptions, KickUserOutOfRoomOptions, DisableSendMessageOptions,
+    OpenLocalMicrophoneOptions, SetAudioRouteOptions, OpenLocalCameraOptions, SwitchCameraOptions, SwitchMirrorOptions,
+    UpdateVideoQualityOptions,
+    DisconnectOptions, ApplyForSeatOptions, CancelApplicationOptions, AcceptApplicationOptions, RejectApplicationOptions,
+    InviteToSeatOptions, CancelInvitationOptions, AcceptInvitationOptions, RejectInvitationOptions,
+    SendTextMessageOptions, SendCustomMessageOptions, SendGiftOptions, SetSmoothLevelOptions,
+    SetWhitenessLevelOptions, SetRuddyLevelOptions, SetVoiceEarMonitorEnableOptions,
+    SendLikeOptions, CallExperimentalAPIOptions, VolumeOptions, RequestHostConnectionOptions, AcceptHostConnectionOptions,
+    CancelHostConnectionOptions, RejectHostConnectionOptions, ExitHostConnectionOptions, AppendLocalTipOptions,
+    RefreshUsableGiftsOptions, SetAudioReverbTypeOptions, SetAudioChangerTypeOptions, ILiveListener,
+} from "../../../tuikit-atomic-x/utssdk/interface";
+import { ParamsCovert } from "./utils/ParamsCovert";
+
+import {
+    LoginStoreObserver, LiveListStoreObserver, LiveSeatStoreObserver, LiveAudienceStoreObserver,
+    CoHostStoreObserver, CoGuestStoreObserver,
+    BarrageStoreObserver, GiftStoreObserver, DeviceStoreObserver,
+    BaseBeautyStoreObserver, AudioEffectStoreObserver, LiveSummaryStoreObserver, LikeStoreObserver
+} from 'uts.sdk.modules.atomicx.observer';
+import { Logger, ExperimentalApiInvoker } from 'uts.sdk.modules.atomicx.kotlin';
+import {
+    TGiftListener, TLikeListener, TLiveAudienceListener, TLiveListListener, TLiveSeatListener,
+    TCoGuestHostListener, TCoGuestGuestListener, TCoHostListener, NativeLiveListener, createLiveListEventDispatcher, liveListListenerMap, liveSeatListenerMap, createLiveSeatEventDispatcher, createAudienceEventDispatcher, audienceListenerMap, createCoHostEventDispatcher, coHostListenerMap, createCoGuestHostEventDispatcher, coGuestHostListenerMap, createCoGuestGuestEventDispatcher, coGuestGuestListenerMap, createGiftEventDispatcher, giftListenerMap, createLikeEventDispatcher, likeListenerMap
+} from "./listener/LiveListener";
+
+// from native aar
+import { TUIRoomDefine, TUIRoomEngine } from 'com.tencent.cloud.tuikit.engine.room';
+import { TUICommonDefine } from 'com.tencent.cloud.tuikit.engine.common';
+import { TUILiveListManager } from 'com.tencent.cloud.tuikit.engine.extension';
+import { VideoForegroundService } from 'com.trtc.tuikit.common.foregroundservice';
+import {
+    CompletionHandler, StopLiveCompletionHandler, LiveInfoCompletionHandler,
+    LoginStore, UserProfile, LiveInfo, LiveListStore, LiveSeatStore, LiveAudienceStore, AudioRoute, CoHostStore, CoGuestStore,
+    DeviceStore, BarrageStore, GiftStore, BaseBeautyStore, AudioEffectStore, LikeStore,
+    DeviceControlPolicy, CoHostLayoutTemplate, MirrorType
+} from 'io.trtc.tuikit.atomicxcore.api';
+
+const RTC_TAG = "UTS-Login: "
+const LIVE_TAG = "UTS-Live: "
+const SEAT_TAG = "UTS-LiveSeat: "
+const AUDIENCE_TAG = "UTS-LiveAudience: "
+const GIFT_TAG = "UTS-Gift: "
+const DEVICE_TAG = "UTS-Device: "
+const COHOST_TAG = "UTS-CoHost: "
+const COGUEST_TAG = "UTS-CoGuest: "
+const BARRAGE_TAG = "UTS-Barrage: "
+const BEAUTY_TAG = "UTS-Beauty: "
+const AUDIOEFFECT_TAG = "UTS-AudioEffect: "
+
+const context : Context = UTSAndroid.getAppContext() as Context;
+
+export class RTCRoomEngineManager {
+    nativeGiftListener ?: TGiftListener = null;
+    nativeLikeListener ?: TLikeListener = null;
+    nativeAudienceListener ?: TLiveAudienceListener = null;
+    nativeLiveListListener ?: TLiveListListener = null;
+    nativeLiveSeatListener ?: TLiveSeatListener = null;
+    nativeCoGuestHostListener ?: TCoGuestHostListener = null;
+    nativeCoGuestGuestListener ?: TCoGuestGuestListener = null;
+    nativeCoHostListener ?: TCoHostListener = null;
+
+    constructor() {
+        console.log(`${RTC_TAG} constructor start`);
+    }
+    //================= LoginStore 相关接口 =================
+    public login(options : LoginOptions) {
+        UTSAndroid.getDispatcher("main").async(function (_) {
+            console.log(`${RTC_TAG} login, data: ${JSON.stringify(options)}`);
+            this.setFramework()
+            const callback = new (class implements CompletionHandler {
+                override onSuccess() : void {
+
+                    TUIRoomEngine.login(context, options.sdkAppID.toInt(), options.userID, options.userSig,
+                        new (class implements TUIRoomDefine.ActionCallback {
+                            override onSuccess() : void {
+                                console.log(`${RTC_TAG} login success`);
+                                options?.success?.();
+                            }
+                            override onError(error? : TUICommonDefine.Error, message? : string) : void {
+                                console.log(`${RTC_TAG} login failed ,errorCode: ${error}, message: ${message}`);
+                                options?.fail?.(error?.getValue() ?? 0, message ?? "");
+                            }
+                        })
+                    );
+                }
+                override onFailure(error : Int, errMsg : string) : void {
+                    console.log(`${RTC_TAG} login failed ,error: ${error}, errMsg: ${errMsg}`);
+                    options?.fail?.(error, errMsg);
+                }
+            });
+            LoginStore.shared.login(context, options.sdkAppID.toInt(), options.userID, options.userSig, callback);
+        }, null)
+    }
+
+    private setFramework() {
+        const data = { "api": "setFramework", "params": { "framework": 11, "component": 21 } }
+        TUIRoomEngine.sharedInstance().callExperimentalAPI(JSON.stringify(data), null)
+    }
+    public logout(options : LogoutOptions) {
+        UTSAndroid.getDispatcher("main").async(function (_) {
+            console.warn(`${RTC_TAG} logout, data: ${JSON.stringify(options)}`);
+            const callback = new (class implements CompletionHandler {
+                override onSuccess() {
+                    options.success?.();
+                }
+
+                override onFailure(code : Int, desc : String) {
+                    options.fail?.(Number.from(code), desc);
+                }
+            });
+            LoginStore.shared.logout(callback);
+        }, null)
+    }
+
+    public setSelfInfo(options : SetSelfInfoOptions) {
+        UTSAndroid.getDispatcher("main").async(function (_) {
+            console.warn(`${RTC_TAG} setSelfInfo, data: ${JSON.stringify(options)}`);
+            Logger.i(RTC_TAG + "setSelfInfo, data: " + JSON.stringify(options))
+
+            let userProfile : UserProfile = ParamsCovert.convertUserProfile(options.userProfile)
+            const callback = new (class implements CompletionHandler {
+                override onSuccess() {
+                    options.success?.();
+                }
+                override onFailure(code : Int, desc : String) {
+                    console.error(`${RTC_TAG} setSelfInfo failed, code: ${code}, desc: ${desc}`);
+                    Logger.e(RTC_TAG + "setSelfInfo failed, code: " + code + ", desc: " + desc)
+                    options.fail?.(Number.from(code), desc);
+                }
+            });
+            LoginStore.shared.setSelfInfo(userProfile, callback);
+        }, null)
+    }
+
+    //================= LiveListStore 相关接口 =================
+    @UTSJS.keepAlive
+    public addLiveListListener(eventName : string, listener : ILiveListener) : void {
+        UTSAndroid.getDispatcher("main").async(function (_) {
+            if (this.nativeLiveListListener == null) {
+                this.nativeLiveListListener = new TLiveListListener(createLiveListEventDispatcher())
+            }
+            if (liveListListenerMap.size === 0 && this.nativeLiveListListener != null) {
+                LiveListStore.shared().addLiveListListener(this.nativeLiveListListener!!);
+            }
+
+            const listenerArray = liveListListenerMap.get(eventName) ?? new Array<ILiveListener>()
+            if (!listenerArray.includes(listener)) {
+                listenerArray.push(listener)
+            }
+            liveListListenerMap.set(eventName, listenerArray);
+        }, null)
+    }
+
+    @UTSJS.keepAlive
+    public removeLiveListListener(eventName : string, listener : ILiveListener) : void {
+        UTSAndroid.getDispatcher("main").async(function (_) {
+            let listenerArray = liveListListenerMap.get(eventName) ?? new Array<ILiveListener>()
+            let index = listenerArray.indexOf(listener)
+            listenerArray.splice(index, 1)
+            if (listenerArray.length == 0) {
+                liveListListenerMap.delete(eventName);
+            }
+        }, null)
+    }
+    public fetchLiveList(options : FetchLiveListOptions) {
+        UTSAndroid.getDispatcher("main").async(function (_) {
+            console.warn(`${LIVE_TAG} fetchLiveList, data: ${JSON.stringify(options)}`);
+            Logger.i(LIVE_TAG + "fetchLiveList, data: " + JSON.stringify(options))
+
+            const callback = new (class implements CompletionHandler {
+                override onSuccess() {
+                    options.success?.();
+                }
+                override onFailure(code : Int, desc : String) {
+                    options.fail?.(Number.from(code), desc);
+                }
+            });
+            LiveListStore.shared().fetchLiveList(options.cursor, options.count?.toInt() ?? 0, callback);
+        }, null)
+    }
+    private enableUnlimitedRoom() : void {
+        const data = { "api": "enableUnlimitedRoom", "params": { "enable": true } }
+        const callback = new (class implements TUIRoomDefine.ExperimentalAPIResponseCallback {
+            override onResponse(jsonData : string | null) : void {
+                console.error(`${RTC_TAG}, enableUnlimitedRoom, jsonData: ${jsonData}`)
+                Logger.w(RTC_TAG + "callExperimentalAPI: enableUnlimitedRoom: " + jsonData)
+            }
+        });
+        TUIRoomEngine.sharedInstance().callExperimentalAPI(JSON.stringify(data), callback)
+    }
+    public createLive(options : CreateLiveOptions) {
+        UTSAndroid.getDispatcher("main").async(function (_) {
+            console.warn(`${LIVE_TAG} createLive, data: ${JSON.stringify(options)}`);
+            Logger.i(LIVE_TAG + "createLive, data: " + JSON.stringify(options))
+            this.enableUnlimitedRoom()
+
+            let nativeLiveInfo : LiveInfo = ParamsCovert.convertLiveInfo(options.liveInfo)
+            const callback = new (class implements LiveInfoCompletionHandler {
+                override onSuccess(liveInfo : LiveInfo) {
+                    options.success?.(JSON.stringify(liveInfo));
+                    //主播创建房间成功，开始保活
+                    startForegroundService()
+                }
+                override onFailure(code : Int, desc : String) {
+                    console.error(`${LIVE_TAG} createLive failed, code: ${code}, desc: ${desc}`);
+                    Logger.e(LIVE_TAG + "createLive failed, code: " + code + ", desc: " + desc)
+                    options.fail?.(Number.from(code), desc);
+                }
+            });
+            LiveListStore.shared().createLive(nativeLiveInfo, callback);
+        }, null)
+    }
+    public joinLive(options : JoinLiveOptions) {
+        UTSAndroid.getDispatcher("main").async(function (_) {
+            console.warn(`${LIVE_TAG} joinLive, data: ${JSON.stringify(options)}}`);
+            Logger.i(LIVE_TAG + "joinLive, data: " + JSON.stringify(options))
+            this.enableUnlimitedRoom()
+
+            const callback = new (class implements LiveInfoCompletionHandler {
+                override onSuccess(liveInfo : LiveInfo) {
+                    options.success?.(JSON.stringify(liveInfo));
+                    //观众进入房间成功，开始保活
+                    startForegroundService()
+                }
+                override onFailure(code : Int, desc : String) {
+                    console.error(`${LIVE_TAG} joinLive failed, code: ${code}, desc: ${desc}`);
+                    Logger.e(LIVE_TAG + "joinLive failed, code: " + code + ", desc: " + desc)
+                    options.fail?.(Number.from(code), desc);
+                }
+            });
+            LiveListStore.shared().joinLive(options?.liveID, callback);
+        }, null)
+    }
+    public leaveLive(options : LeaveLiveOptions) {
+        UTSAndroid.getDispatcher("main").async(function (_) {
+            console.warn(`${LIVE_TAG} leaveLive, data: ${JSON.stringify(options)}`);
+            Logger.i(LIVE_TAG + "leaveLive, data: " + JSON.stringify(options))
+
+            const callback = new (class implements CompletionHandler {
+                override onSuccess() {
+                    options.success?.();
+                }
+                override onFailure(code : Int, desc : String) {
+                    console.error(`${LIVE_TAG} leaveLive failed, code: ${code}, desc: ${desc}`);
+                    Logger.e(LIVE_TAG + "leaveLive failed, code: " + code + ", desc: " + desc)
+                    options.fail?.(Number.from(code), desc);
+                }
+            });
+            LiveListStore.shared().leaveLive(callback);
+            //离开房间，结束保活
+            stopForegroundService()
+        }, null)
+    }
+    public endLive(options : EndLiveOptions) {
+        UTSAndroid.getDispatcher("main").async(function (_) {
+            console.warn(`${LIVE_TAG} endLive, data: ${JSON.stringify(options)}`);
+            Logger.i(LIVE_TAG + "endLive, data: " + JSON.stringify(options))
+
+            const callback = new (class implements StopLiveCompletionHandler {
+                override onSuccess(data : TUILiveListManager.LiveStatisticsData) {
+                    options.success?.(JSON.stringify(data));
+                }
+                override onFailure(code : Int, desc : String) {
+                    console.error(`${LIVE_TAG} endLive failed, code: ${code}, desc: ${desc}`);
+                    Logger.e(LIVE_TAG + "endLive failed, code: " + code + ", desc: " + desc)
+                    options.fail?.(Number.from(code), desc);
+                }
+            });
+            LiveListStore.shared().endLive(callback);
+            //结束房间，结束保活
+            stopForegroundService()
+        }, null)
+    }
+    public updateLiveInfo(options : UpdateLiveInfoOptions) {
+        UTSAndroid.getDispatcher("main").async(function (_) {
+            console.warn(`${LIVE_TAG} updateLiveInfo, data: ${JSON.stringify(options)}`);
+            Logger.i(LIVE_TAG + "updateLiveInfo, data: " + JSON.stringify(options))
+
+            let nativeLiveInfo : LiveInfo = ParamsCovert.convertLiveInfo(options.liveInfo)
+            let modifyFlagList : List<LiveInfo.ModifyFlag> = ParamsCovert.convertModifyFlagList(options.modifyFlagList)
+            const callback = new (class implements CompletionHandler {
+                override onSuccess() {
+                    options.success?.();
+                }
+                override onFailure(code : Int, desc : String) {
+                    options.fail?.(Number.from(code), desc);
+                }
+            });
+            LiveListStore.shared().updateLiveInfo(nativeLiveInfo, modifyFlagList, callback);
+        }, null)
+    }
+
+    // ================= LiveSeatStore 相关接口 =================
+    @UTSJS.keepAlive
+    public addLiveSeatEventListener(liveID : string, eventName : string, listener : ILiveListener) : void {
+        UTSAndroid.getDispatcher("main").async(function (_) {
+            if (this.nativeLiveSeatListener == null) {
+                this.nativeLiveSeatListener = new TLiveSeatListener(createLiveSeatEventDispatcher())
+            }
+            if (this.nativeLiveSeatListener != null) {
+                LiveSeatStore.create(liveID).addLiveSeatEventListener(this.nativeLiveSeatListener);
+            }
+            const listenerArray = liveSeatListenerMap.get(eventName) ?? new Array<ILiveListener>()
+            if (!listenerArray.includes(listener)) {
+                listenerArray.push(listener)
+            }
+            liveSeatListenerMap.set(eventName, listenerArray);
+        }, null)
+    }
+    @UTSJS.keepAlive
+    public removeLiveSeatEventListener(liveID : string, eventName : string, listener ?: ILiveListener) : void {
+        UTSAndroid.getDispatcher("main").async(function (_) {
+            let listenerArray = liveSeatListenerMap.get(eventName) ?? new Array<ILiveListener>()
+            let index = listenerArray.indexOf(listener)
+            listenerArray.splice(index, 1)
+            if (listenerArray.length == 0) {
+                liveSeatListenerMap.delete(eventName);
+            }
+            if (liveSeatListenerMap.size === 0) {
+                LiveSeatStore.create(liveID).removeLiveSeatEventListener(this.nativeLiveSeatListener)
+            }
+        }, null)
+    }
+    public takeSeat(options : TakeSeatOptions) {
+        UTSAndroid.getDispatcher("main").async(function (_) {
+            console.warn(`${SEAT_TAG} takeSeat, data: ${JSON.stringify(options)}`);
+            Logger.i(SEAT_TAG + "takeSeat, data: " + JSON.stringify(options));
+            const callback = new (class implements CompletionHandler {
+                override onSuccess() {
+                    options.success?.();
+                }
+                override onFailure(code : Int, desc : String) {
+                    console.error(`${SEAT_TAG} takeSeat failed, code: ${code}, desc: ${desc}`);
+                    Logger.e(SEAT_TAG + "takeSeat failed, code: " + code + ", desc: " + desc)
+                    options.fail?.(Number.from(code), desc);
+                }
+            });
+            LiveSeatStore.create(options.liveID).takeSeat(options.seatIndex.toInt(), callback);
+        }, null)
+    }
+    public leaveSeat(options : LeaveSeatOptions) {
+        UTSAndroid.getDispatcher("main").async(function (_) {
+            console.warn(`${SEAT_TAG} leaveSeat, data: ${JSON.stringify(options)}`);
+            Logger.i(SEAT_TAG + "leaveSeat, data: " + JSON.stringify(options));
+            const callback = new (class implements CompletionHandler {
+                override onSuccess() {
+                    options.success?.();
+                }
+                override onFailure(code : Int, desc : String) {
+                    options.fail?.(Number.from(code), desc);
+                }
+            });
+            LiveSeatStore.create(options.liveID).leaveSeat(callback);
+        }, null)
+    }
+    public muteMicrophone(options : MuteMicrophoneOptions) {
+        UTSAndroid.getDispatcher("main").async(function (_) {
+            console.warn(`${SEAT_TAG} muteMicrophone, data: ${JSON.stringify(options)}`);
+            Logger.i(SEAT_TAG + "muteMicrophone, data: " + JSON.stringify(options));
+            LiveSeatStore.create(options.liveID).muteMicrophone();
+        }, null)
+    }
+    public unmuteMicrophone(options : UnmuteMicrophoneOptions) {
+        UTSAndroid.getDispatcher("main").async(function (_) {
+            console.warn(`${SEAT_TAG} unmuteMicrophone, data: ${JSON.stringify(options)}`);
+            Logger.i(SEAT_TAG + "unmuteMicrophone, data: " + JSON.stringify(options));
+            const callback = new (class implements CompletionHandler {
+                override onSuccess() {
+                    options.success?.();
+                }
+                override onFailure(code : Int, desc : String) {
+                    options.fail?.(Number.from(code), desc);
+                }
+            });
+            LiveSeatStore.create(options.liveID).unmuteMicrophone(callback);
+        }, null)
+    }
+    public kickUserOutOfSeat(options : KickUserOutOfSeatOptions) {
+        UTSAndroid.getDispatcher("main").async(function (_) {
+            console.warn(`${SEAT_TAG} kickUserOutOfSeat, data: ${JSON.stringify(options)}`);
+            Logger.i(SEAT_TAG + "kickUserOutOfSeat, data: " + JSON.stringify(options));
+            const callback = new (class implements CompletionHandler {
+                override onSuccess() {
+                    options.success?.();
+                }
+                override onFailure(code : Int, desc : String) {
+                    console.error(`${SEAT_TAG} kickUserOutOfSeat failed, code: ${code}, desc: ${desc}`);
+                    Logger.e(SEAT_TAG + "kickUserOutOfSeat failed, code: " + code + ", desc: " + desc)
+                    options.fail?.(Number.from(code), desc);
+                }
+            });
+            LiveSeatStore.create(options.liveID).kickUserOutOfSeat(options.userID, callback);
+        }, null);
+    }
+    public moveUserToSeat(options : MoveUserToSeatOptions) {
+        UTSAndroid.getDispatcher("main").async(function (_) {
+            console.warn(`${SEAT_TAG} moveUserToSeat, data: ${JSON.stringify(options)}`);
+            Logger.i(SEAT_TAG + "moveUserToSeat, data: " + JSON.stringify(options));
+            const callback = new (class implements CompletionHandler {
+                override onSuccess() {
+                    options.success?.();
+                }
+                override onFailure(code : Int, desc : String) {
+                    console.error(`${SEAT_TAG} moveUserToSeat failed, code: ${code}, desc: ${desc}`);
+                    Logger.e(SEAT_TAG + "moveUserToSeat failed, code: " + code + ", desc: " + desc)
+                    options.fail?.(Number.from(code), desc);
+                }
+            });
+            let policy = ParamsCovert.convertMoveSeatPolicy(options.policy)
+            LiveSeatStore.create(options.liveID).moveUserToSeat(options.userID, options.targetIndex.toInt(), policy, callback);
+        }, null);
+    }
+    public lockSeat(options : LockSeatOptions) {
+        UTSAndroid.getDispatcher("main").async(function (_) {
+            console.warn(`${SEAT_TAG} lockSeat, data: ${JSON.stringify(options)}`);
+            Logger.i(SEAT_TAG + "lockSeat, data: " + JSON.stringify(options));
+            const callback = new (class implements CompletionHandler {
+                override onSuccess() {
+                    options.success?.();
+                }
+                override onFailure(code : Int, desc : String) {
+                    console.error(`${SEAT_TAG} lockSeat failed, code: ${code}, desc: ${desc}`);
+                    Logger.e(SEAT_TAG + "lockSeat failed, code: " + code + ", desc: " + desc)
+                    options.fail?.(Number.from(code), desc);
+                }
+            });
+            LiveSeatStore.create(options.liveID).lockSeat(options.seatIndex.toInt(), callback);
+        }, null);
+    }
+    public unlockSeat(options : UnlockSeatOptions) {
+        UTSAndroid.getDispatcher("main").async(function (_) {
+            console.warn(`${SEAT_TAG} unlockSeat, data: ${JSON.stringify(options)}`);
+            Logger.i(SEAT_TAG + "unlockSeat, data: " + JSON.stringify(options));
+            const callback = new (class implements CompletionHandler {
+                override onSuccess() {
+                    options.success?.();
+                }
+                override onFailure(code : Int, desc : String) {
+                    console.error(`${SEAT_TAG} unlockSeat failed, code: ${code}, desc: ${desc}`);
+                    Logger.e(SEAT_TAG + "unlockSeat failed, code: " + code + ", desc: " + desc)
+                    options.fail?.(Number.from(code), desc);
+                }
+            });
+            LiveSeatStore.create(options.liveID).unlockSeat(options.seatIndex.toInt(), callback);
+        }, null);
+    }
+    public openRemoteCamera(options : OpenRemoteCameraOptions) {
+        UTSAndroid.getDispatcher("main").async(function (_) {
+            console.warn(`${SEAT_TAG} openRemoteCamera, data: ${JSON.stringify(options)}`);
+            Logger.i(SEAT_TAG + "openRemoteCamera, data: " + JSON.stringify(options));
+            const callback = new (class implements CompletionHandler {
+                override onSuccess() {
+                    options.success?.();
+                }
+                override onFailure(code : Int, desc : String) {
+                    console.error(`${SEAT_TAG} openRemoteCamera failed, code: ${code}, desc: ${desc}`);
+                    Logger.e(SEAT_TAG + "openRemoteCamera failed, code: " + code + ", desc: " + desc)
+                    options.fail?.(Number.from(code), desc);
+                }
+            });
+            // TODO : 底层暂时删除
+            // let devicePolicy = DeviceControlPolicy.FORCE_OPEN
+            // if (options.policy == 'UNLOCK_ONLY') {
+            //     devicePolicy = DeviceControlPolicy.UNLOCK_ONLY
+            // }
+            let devicePolicy = DeviceControlPolicy.UNLOCK_ONLY
+            LiveSeatStore.create(options.liveID).openRemoteCamera(options.userID, devicePolicy, callback);
+        }, null);
+    }
+
+    public closeRemoteCamera(options : CloseRemoteCameraOptions) {
+        UTSAndroid.getDispatcher("main").async(function (_) {
+            console.warn(`${SEAT_TAG} closeRemoteCamera, data: ${JSON.stringify(options)}`);
+            Logger.i(SEAT_TAG + "closeRemoteCamera, data: " + JSON.stringify(options));
+            const callback = new (class implements CompletionHandler {
+                override onSuccess() {
+                    options.success?.();
+                }
+                override onFailure(code : Int, desc : String) {
+                    console.error(`${SEAT_TAG} closeRemoteCamera failed, code: ${code}, desc: ${desc}`);
+                    Logger.e(SEAT_TAG + "closeRemoteCamera failed, code: " + code + ", desc: " + desc)
+                    options.fail?.(Number.from(code), desc);
+                }
+            });
+            LiveSeatStore.create(options.liveID).closeRemoteCamera(options.userID, callback);
+        }, null);
+    }
+
+    public openRemoteMicrophone(options : OpenRemoteMicrophoneOptions) {
+        UTSAndroid.getDispatcher("main").async(function (_) {
+            console.warn(`${SEAT_TAG} openRemoteMicrophone, data: ${JSON.stringify(options)}`);
+            Logger.i(SEAT_TAG + "openRemoteMicrophone, data: " + JSON.stringify(options));
+            const callback = new (class implements CompletionHandler {
+                override onSuccess() {
+                    options.success?.();
+                }
+                override onFailure(code : Int, desc : String) {
+                    console.error(`${SEAT_TAG} openRemoteMicrophone failed, code: ${code}, desc: ${desc}`);
+                    Logger.e(SEAT_TAG + "openRemoteMicrophone failed, code: " + code + ", desc: " + desc)
+                    options.fail?.(Number.from(code), desc);
+                }
+            });
+            // TODO: 底层暂时删除
+            // let devicePolicy = DeviceControlPolicy.FORCE_OPEN
+            // if (options.policy == 'UNLOCK_ONLY') {
+            //     devicePolicy = DeviceControlPolicy.UNLOCK_ONLY
+            // }
+            let devicePolicy = DeviceControlPolicy.UNLOCK_ONLY
+            LiveSeatStore.create(options.liveID).openRemoteMicrophone(options.userID, devicePolicy, callback);
+        }, null);
+    }
+
+    public closeRemoteMicrophone(options : CloseRemoteMicrophoneOptions) {
+        UTSAndroid.getDispatcher("main").async(function (_) {
+            console.warn(`${SEAT_TAG} closeRemoteMicrophone, data: ${JSON.stringify(options)}`);
+            Logger.i(SEAT_TAG + "closeRemoteMicrophone, data: " + JSON.stringify(options));
+            const callback = new (class implements CompletionHandler {
+                override onSuccess() {
+                    options.success?.();
+                }
+                override onFailure(code : Int, desc : String) {
+                    console.error(`${SEAT_TAG} closeRemoteMicrophone failed, code: ${code}, desc: ${desc}`);
+                    Logger.e(SEAT_TAG + "closeRemoteMicrophone failed, code: " + code + ", desc: " + desc)
+                    options.fail?.(Number.from(code), desc);
+                }
+            });
+            LiveSeatStore.create(options.liveID).closeRemoteMicrophone(options.userID, callback);
+        }, null)
+    }
+
+    // ================= LiveAudienceStore 相关接口 =================
+    @UTSJS.keepAlive
+    public addAudienceListener(liveID : string, eventName : string, listener : ILiveListener) : void {
+        UTSAndroid.getDispatcher("main").async(function (_) {
+            if (this.nativeAudienceListener == null) {
+                this.nativeAudienceListener = new TLiveAudienceListener(createAudienceEventDispatcher())
+            }
+            if (this.nativeAudienceListener != null) {
+                LiveAudienceStore.create(liveID).addLiveAudienceListener(this.nativeAudienceListener!!);
+            }
+            const listenerArray = audienceListenerMap.get(eventName) ?? new Array<ILiveListener>()
+            if (!listenerArray.includes(listener)) {
+                listenerArray.push(listener)
+            }
+            audienceListenerMap.set(eventName, listenerArray);
+        }, null)
+    }
+
+    @UTSJS.keepAlive
+    public removeAudienceListener(liveID : string, eventName : string, listener ?: ILiveListener) : void {
+        UTSAndroid.getDispatcher("main").async(function (_) {
+            let listenerArray = audienceListenerMap.get(eventName) ?? new Array<ILiveListener>()
+            let index = listenerArray.indexOf(listener)
+            listenerArray.splice(index, 1)
+            if (listenerArray.length == 0) {
+                audienceListenerMap.delete(eventName);
+            }
+            if (this.nativeAudienceListener != null) {
+                LiveAudienceStore.create(liveID).removeLiveAudienceListener(this.nativeAudienceListener!!)
+            }
+        }, null)
+    }
+    public fetchAudienceList(options : FetchAudienceListOptions) {
+        UTSAndroid.getDispatcher("main").async(function (_) {
+            console.warn(`${AUDIENCE_TAG} fetchAudienceList, data: ${JSON.stringify(options)}`);
+            Logger.i(AUDIENCE_TAG + "fetchAudienceList, data: " + JSON.stringify(options));
+            const callback = new (class implements CompletionHandler {
+                override onSuccess() {
+                    options.success?.();
+                }
+                override onFailure(code : Int, desc : String) {
+                    console.error(`${AUDIENCE_TAG} fetchAudienceList failed, code: ${code}, desc: ${desc}`);
+                    Logger.e(AUDIENCE_TAG + "fetchAudienceList failed, code: " + code + ", desc: " + desc)
+                    options.fail?.(Number.from(code), desc);
+                }
+            });
+            LiveAudienceStore.create(options.liveID).fetchAudienceList(callback);
+        }, null)
+    }
+    public setAdministrator(options : SetAdministratorOptions) {
+        UTSAndroid.getDispatcher("main").async(function (_) {
+            console.warn(`${AUDIENCE_TAG} setAdministrator, data: ${JSON.stringify(options)}`);
+            Logger.i(AUDIENCE_TAG + "setAdministrator, data: " + JSON.stringify(options))
+
+            const callback = new (class implements CompletionHandler {
+                override onSuccess() {
+                    options.success?.();
+                }
+                override onFailure(code : Int, desc : String) {
+                    options.fail?.(Number.from(code), desc);
+                }
+            });
+            LiveAudienceStore.create(options.liveID).setAdministrator(options.userID, callback);
+        }, null)
+    }
+    public revokeAdministrator(options : RevokeAdministratorOptions) {
+        UTSAndroid.getDispatcher("main").async(function (_) {
+            console.warn(`${AUDIENCE_TAG} revokeAdministrator, data: ${JSON.stringify(options)}`);
+            Logger.i(AUDIENCE_TAG + "revokeAdministrator, data: " + JSON.stringify(options))
+
+            const callback = new (class implements CompletionHandler {
+                override onSuccess() {
+                    options.success?.();
+                }
+                override onFailure(code : Int, desc : String) {
+                    options.fail?.(Number.from(code), desc);
+                }
+            });
+            LiveAudienceStore.create(options.liveID).revokeAdministrator(options.userID, callback);
+        }, null)
+    }
+
+    public kickUserOutOfRoom(options : KickUserOutOfRoomOptions) {
+        UTSAndroid.getDispatcher("main").async(function (_) {
+            console.warn(`${AUDIENCE_TAG} kickUserOutOfRoom, data: ${JSON.stringify(options)}`);
+            Logger.i(AUDIENCE_TAG + "kickUserOutOfRoom, data: " + JSON.stringify(options));
+            const callback = new (class implements CompletionHandler {
+                override onSuccess() {
+                    options.success?.();
+                }
+                override onFailure(code : Int, desc : String) {
+                    options.fail?.(Number.from(code), desc);
+                }
+            });
+            LiveAudienceStore.create(options.liveID).kickUserOutOfRoom(options.userID, callback);
+        }, null)
+    }
+
+    public disableSendMessage(options : DisableSendMessageOptions) {
+        UTSAndroid.getDispatcher("main").async(function (_) {
+            console.warn(`${AUDIENCE_TAG} disableSendMessage, data: ${JSON.stringify(options)}`);
+            Logger.i(AUDIENCE_TAG + "disableSendMessage, data: " + JSON.stringify(options));
+            const callback = new (class implements CompletionHandler {
+                override onSuccess() {
+                    options.success?.();
+                }
+                override onFailure(code : Int, desc : String) {
+                    console.error(`${AUDIENCE_TAG} disableSendMessage failed, code: ${code}, desc: ${desc}`);
+                    Logger.e(AUDIENCE_TAG + "disableSendMessage failed, code: " + code + ", desc: " + desc)
+                    options.fail?.(Number.from(code), desc);
+                }
+            });
+            LiveAudienceStore.create(options.liveID).disableSendMessage(options.userID, options.isDisable, callback);
+        }, null)
+    }
+
+    // ================= DeviceStore 相关接口 =================
+    public openLocalMicrophone(options : OpenLocalMicrophoneOptions) {
+        UTSAndroid.getDispatcher("main").async(function (_) {
+            console.warn(`${DEVICE_TAG} openLocalMicrophone, data: ${JSON.stringify(options)}`);
+            Logger.i(DEVICE_TAG + "openLocalMicrophone, data: " + JSON.stringify(options));
+            const callback = new (class implements CompletionHandler {
+                override onSuccess() {
+                    options.success?.();
+                }
+                override onFailure(code : Int, desc : String) {
+                    console.error(`${DEVICE_TAG} openLocalMicrophone failed, code: ${code}, desc: ${desc}`);
+                    Logger.e(DEVICE_TAG + "openLocalMicrophone failed, code: " + code + ", desc: " + desc)
+                    options.fail?.(Number.from(code), desc);
+                }
+            });
+            DeviceStore.shared().openLocalMicrophone(callback);
+        }, null)
+    }
+    public closeLocalMicrophone() {
+        UTSAndroid.getDispatcher("main").async(function (_) {
+            console.warn(`${DEVICE_TAG} closeLocalMicrophone`);
+            Logger.i(DEVICE_TAG + "closeLocalMicrophone");
+            DeviceStore.shared().closeLocalMicrophone();
+        }, null)
+    }
+    public setCaptureVolume(options : VolumeOptions) {
+        UTSAndroid.getDispatcher("main").async(function (_) {
+            console.warn(`${DEVICE_TAG} setCaptureVolume, data: ${JSON.stringify(options)}`);
+            Logger.i(DEVICE_TAG + "setCaptureVolume, data: " + JSON.stringify(options));
+            DeviceStore.shared().setCaptureVolume(options.volume.toInt());
+        }, null)
+    }
+    public setOutputVolume(options : VolumeOptions) {
+        UTSAndroid.getDispatcher("main").async(function (_) {
+            console.warn(`${DEVICE_TAG} setOutputVolume, data: ${JSON.stringify(options)}`);
+            Logger.i(DEVICE_TAG + "setOutputVolume, data: " + JSON.stringify(options));
+            DeviceStore.shared().setOutputVolume(options.volume.toInt());
+        }, null)
+    }
+    public setAudioRoute(options : SetAudioRouteOptions) {
+        UTSAndroid.getDispatcher("main").async(function (_) {
+            console.warn(`${DEVICE_TAG} setAudioRoute, data: ${JSON.stringify(options)}`);
+            Logger.i(DEVICE_TAG + "setAudioRoute, data: " + JSON.stringify(options));
+
+            let audioRoute = AudioRoute.SPEAKERPHONE
+            if (options.route == 'EARPIECE') {
+                audioRoute = AudioRoute.EARPIECE
+            }
+            DeviceStore.shared().setAudioRoute(audioRoute);
+        }, null)
+    }
+    public openLocalCamera(options : OpenLocalCameraOptions) {
+        UTSAndroid.getDispatcher("main").async(function (_) {
+            console.warn(`${DEVICE_TAG} openLocalCamera, data: ${JSON.stringify(options)}`);
+            Logger.i(DEVICE_TAG + "openLocalCamera, data: " + JSON.stringify(options));
+            const callback = new (class implements CompletionHandler {
+                override onSuccess() {
+                    options.success?.();
+                }
+                override onFailure(code : Int, desc : String) {
+                    options.fail?.(Number.from(code), desc);
+                }
+            });
+            DeviceStore.shared().openLocalCamera(options.isFront ?? true, callback);
+        }, null)
+    }
+    public closeLocalCamera() {
+        UTSAndroid.getDispatcher("main").async(function (_) {
+            console.warn(`${DEVICE_TAG} closeLocalCamera`);
+            Logger.i(DEVICE_TAG + "closeLocalCamera");
+            DeviceStore.shared().closeLocalCamera();
+        }, null)
+    }
+    public switchCamera(options : SwitchCameraOptions) {
+        UTSAndroid.getDispatcher("main").async(function (_) {
+            console.warn(`${DEVICE_TAG} switchCamera, data: ${JSON.stringify(options)}`);
+            Logger.i(DEVICE_TAG + "switchCamera, data: " + JSON.stringify(options));
+            DeviceStore.shared().switchCamera(options.isFront ?? false);
+        }, null)
+    }
+    public switchMirror(options : SwitchMirrorOptions) {
+        UTSAndroid.getDispatcher("main").async(function (_) {
+            console.warn(`${DEVICE_TAG} switchMirror, data: ${JSON.stringify(options)}`);
+            Logger.i(DEVICE_TAG + "switchMirror, data: " + JSON.stringify(options));
+            let type = MirrorType.AUTO
+            if(options.mirrorType == 'DISABLE') {
+                type = MirrorType.DISABLE
+            } else if(options.mirrorType == 'ENABLE') {
+                type = MirrorType.ENABLE
+            }
+            DeviceStore.shared().switchMirror(type);
+        }, null)
+    }
+    public updateVideoQuality(options : UpdateVideoQualityOptions) {
+        UTSAndroid.getDispatcher("main").async(function (_) {
+            console.warn(`${DEVICE_TAG} updateVideoQuality, data: ${JSON.stringify(options)}`);
+            Logger.i(DEVICE_TAG + "updateVideoQuality, data: " + JSON.stringify(options));
+            let quality = ParamsCovert.covertVideoQuality(options.quality)
+            DeviceStore.shared().updateVideoQuality(quality);
+        }, null)
+    }
+    public startScreenShare() {
+        UTSAndroid.getDispatcher("main").async(function (_) {
+            console.warn(`${DEVICE_TAG} startScreenShare`);
+            Logger.i(DEVICE_TAG + "startScreenShare");
+            DeviceStore.shared().startScreenShare();
+        }, null)
+    }
+    public stopScreenShare() {
+        UTSAndroid.getDispatcher("main").async(function (_) {
+            console.warn(`${DEVICE_TAG} stopScreenShare`);
+            Logger.i(DEVICE_TAG + "stopScreenShare");
+            DeviceStore.shared().stopScreenShare();
+        }, null)
+    }
+
+    // ================= CoHostStore 相关接口 ================= 
+    @UTSJS.keepAlive
+    public addCoHostListener(liveID : string, eventName : string, listener : ILiveListener) : void {
+        UTSAndroid.getDispatcher("main").async(function (_) {
+            if (this.nativeCoHostListener == null) {
+                this.nativeCoHostListener = new TCoHostListener(createCoHostEventDispatcher())
+            }
+            if (this.nativeCoHostListener != null) {
+                CoHostStore.create(liveID).addCoHostListener(this.nativeCoHostListener);
+            }
+            const listenerArray = coHostListenerMap.get(eventName) ?? new Array<ILiveListener>()
+            if (!listenerArray.includes(listener)) {
+                listenerArray.push(listener)
+            }
+            coHostListenerMap.set(eventName, listenerArray);
+        }, null)
+    }
+
+    @UTSJS.keepAlive
+    public removeCoHostListener(liveID : string, eventName : string, listener ?: ILiveListener) : void {
+        UTSAndroid.getDispatcher("main").async(function (_) {
+            let listenerArray = coHostListenerMap.get(eventName) ?? new Array<ILiveListener>()
+            let index = listenerArray.indexOf(listener)
+            listenerArray.splice(index, 1)
+            if (listenerArray.length == 0) {
+                coHostListenerMap.delete(eventName);
+            }
+            if (coHostListenerMap.size === 0) {
+                CoHostStore.create(liveID).removeCoHostListener(this.nativeCoHostListener)
+            }
+        }, null)
+    }
+
+    public requestHostConnection(options : RequestHostConnectionOptions) {
+        UTSAndroid.getDispatcher("main").async(function (_) {
+            console.warn(`${COHOST_TAG} requestHostConnection, data: ${JSON.stringify(options)}`);
+            Logger.i(COHOST_TAG + "requestHostConnection, data: " + JSON.stringify(options));
+            const callback = new (class implements CompletionHandler {
+                override onSuccess() {
+                    options.success?.();
+                }
+                override onFailure(code : Int, desc : String) {
+                    options.fail?.(Number.from(code), desc);
+                }
+            });
+            let template = CoHostLayoutTemplate.HOST_DYNAMIC_GRID
+            if (options.layoutTemplate == 'HOST_DYNAMIC_1V6') {
+                template = CoHostLayoutTemplate.HOST_DYNAMIC_1V6
+            }
+            CoHostStore.create(options.liveID).requestHostConnection(options.targetHostLiveID, template,
+                options.timeout?.toInt() ?? 0, options.extensionInfo, callback);
+        }, null)
+    }
+    public cancelHostConnection(options : CancelHostConnectionOptions) {
+        UTSAndroid.getDispatcher("main").async(function (_) {
+            console.warn(`${COHOST_TAG} cancelHostConnection, data: ${JSON.stringify(options)}`);
+            Logger.i(COHOST_TAG + "cancelHostConnection, data: " + JSON.stringify(options));
+            const callback = new (class implements CompletionHandler {
+                override onSuccess() {
+                    options.success?.();
+                }
+                override onFailure(code : Int, desc : String) {
+                    options.fail?.(Number.from(code), desc);
+                }
+            });
+            CoHostStore.create(options.liveID).cancelHostConnection(options.toHostLiveID, callback);
+        }, null)
+    }
+    public acceptHostConnection(options : AcceptHostConnectionOptions) {
+        UTSAndroid.getDispatcher("main").async(function (_) {
+            console.warn(`${COHOST_TAG} acceptHostConnection, data: ${JSON.stringify(options)}`);
+            Logger.i(COHOST_TAG + "acceptHostConnection, data: " + JSON.stringify(options));
+            const callback = new (class implements CompletionHandler {
+                override onSuccess() {
+                    options.success?.();
+                }
+                override onFailure(code : Int, desc : String) {
+                    options.fail?.(Number.from(code), desc);
+                }
+            });
+            CoHostStore.create(options.liveID).acceptHostConnection(options.fromHostLiveID, callback);
+        }, null)
+    }
+    public rejectHostConnection(options : RejectHostConnectionOptions) {
+        UTSAndroid.getDispatcher("main").async(function (_) {
+            console.warn(`${COHOST_TAG} rejectHostConnection, data: ${JSON.stringify(options)}`);
+            Logger.i(COHOST_TAG + "rejectHostConnection, data: " + JSON.stringify(options));
+            const callback = new (class implements CompletionHandler {
+                override onSuccess() {
+                    options.success?.();
+                }
+                override onFailure(code : Int, desc : String) {
+                    options.fail?.(Number.from(code), desc);
+                }
+            });
+            CoHostStore.create(options.liveID).rejectHostConnection(options.fromHostLiveID, callback);
+        }, null)
+    }
+    public exitHostConnection(options : ExitHostConnectionOptions) {
+        UTSAndroid.getDispatcher("main").async(function (_) {
+            console.warn(`${COHOST_TAG} exitHostConnection, data: ${JSON.stringify(options)}`);
+            Logger.i(COHOST_TAG + "exitHostConnection, data: " + JSON.stringify(options));
+            const callback = new (class implements CompletionHandler {
+                override onSuccess() {
+                    options.success?.();
+                }
+                override onFailure(code : Int, desc : String) {
+                    options.fail?.(Number.from(code), desc);
+                }
+            });
+            CoHostStore.create(options.liveID).exitHostConnection(callback);
+        }, null)
+    }
+
+    // ================= CoGuestStore 相关接口 =================
+    @UTSJS.keepAlive
+    public addCoGuestHostListener(liveID : string, eventName : string, listener : ILiveListener) : void {
+        UTSAndroid.getDispatcher("main").async(function (_) {
+            if (this.nativeCoGuestHostListener == null) {
+                this.nativeCoGuestHostListener = new TCoGuestHostListener(createCoGuestHostEventDispatcher())
+            }
+            if (this.nativeCoGuestHostListener != null) {
+                CoGuestStore.create(liveID).addHostListener(this.nativeCoGuestHostListener);
+            }
+            const listenerArray = coGuestHostListenerMap.get(eventName) ?? new Array<ILiveListener>()
+            if (!listenerArray.includes(listener)) {
+                listenerArray.push(listener)
+            }
+            coGuestHostListenerMap.set(eventName, listenerArray);
+        }, null)
+    }
+
+    @UTSJS.keepAlive
+    public removeCoGuestHostListener(liveID : string, eventName : string, listener ?: ILiveListener) : void {
+        UTSAndroid.getDispatcher("main").async(function (_) {
+            let listenerArray = coGuestHostListenerMap.get(eventName) ?? new Array<ILiveListener>()
+            let index = listenerArray.indexOf(listener)
+            listenerArray.splice(index, 1)
+            if (listenerArray.length == 0) {
+                coGuestHostListenerMap.delete(eventName);
+            }
+            if (coGuestHostListenerMap.size === 0) {
+                CoGuestStore.create(liveID).removeHostListener(this.nativeCoGuestHostListener)
+            }
+        }, null)
+    }
+
+    @UTSJS.keepAlive
+    public addCoGuestGuestListener(liveID : string, eventName : string, listener : ILiveListener) : void {
+        UTSAndroid.getDispatcher("main").async(function (_) {
+            if (this.nativeCoGuestGuestListener == null) {
+                this.nativeCoGuestGuestListener = new TCoGuestGuestListener(createCoGuestGuestEventDispatcher())
+            }
+            if (this.nativeCoGuestGuestListener != null) {
+                CoGuestStore.create(liveID).addGuestListener(this.nativeCoGuestGuestListener);
+            }
+            const listenerArray = coGuestGuestListenerMap.get(eventName) ?? new Array<ILiveListener>()
+            if (!listenerArray.includes(listener)) {
+                listenerArray.push(listener)
+            }
+            coGuestGuestListenerMap.set(eventName, listenerArray);
+        }, null)
+    }
+    @UTSJS.keepAlive
+    public removeCoGuestGuestListener(liveID : string, eventName : string, listener ?: ILiveListener) : void {
+        UTSAndroid.getDispatcher("main").async(function (_) {
+            let listenerArray = coGuestGuestListenerMap.get(eventName) ?? new Array<ILiveListener>()
+            let index = listenerArray.indexOf(listener)
+            listenerArray.splice(index, 1)
+            if (listenerArray.length == 0) {
+                coGuestGuestListenerMap.delete(eventName);
+            }
+            if (coGuestGuestListenerMap.size === 0) {
+                CoGuestStore.create(liveID).removeGuestListener(this.nativeCoGuestGuestListener)
+            }
+        }, null)
+    }
+    public applyForSeat(options : ApplyForSeatOptions) {
+        UTSAndroid.getDispatcher("main").async(function (_) {
+            console.warn(`${COGUEST_TAG} applyForSeat, data: ${JSON.stringify(options)}`);
+            Logger.i(COGUEST_TAG + "applyForSeat, data: " + JSON.stringify(options));
+            const callback = new (class implements CompletionHandler {
+                override onSuccess() {
+                    options.success?.();
+                }
+                override onFailure(code : Int, desc : String) {
+                    options.fail?.(Number.from(code), desc);
+                }
+            });
+            CoGuestStore.create(options.liveID).applyForSeat(options.seatIndex.toInt(), options.timeout?.toInt() ?? 0,
+                options.extraInfo, callback);
+        }, null)
+    }
+
+    public cancelApplication(options : CancelApplicationOptions) {
+        UTSAndroid.getDispatcher("main").async(function (_) {
+            console.warn(`${COGUEST_TAG} cancelApplication, data: ${JSON.stringify(options)}`);
+            Logger.i(COGUEST_TAG + "cancelApplication, data: " + JSON.stringify(options));
+            const callback = new (class implements CompletionHandler {
+                override onSuccess() {
+                    options.success?.();
+                }
+                override onFailure(code : Int, desc : String) {
+                    options.fail?.(Number.from(code), desc);
+                }
+            });
+            CoGuestStore.create(options.liveID).cancelApplication(callback);
+        }, null);
+    }
+
+    public acceptApplication(options : AcceptApplicationOptions) {
+        UTSAndroid.getDispatcher("main").async(function (_) {
+            console.warn(`${COGUEST_TAG} acceptApplication, data: ${JSON.stringify(options)}`);
+            Logger.i(COGUEST_TAG + "acceptApplication, data: " + JSON.stringify(options));
+            const callback = new (class implements CompletionHandler {
+                override onSuccess() {
+                    options.success?.();
+                }
+                override onFailure(code : Int, desc : String) {
+                    options.fail?.(Number.from(code), desc);
+                }
+            });
+            CoGuestStore.create(options.liveID).acceptApplication(options.userID, callback);
+        }, null);
+    }
+
+    public rejectApplication(options : RejectApplicationOptions) {
+        UTSAndroid.getDispatcher("main").async(function (_) {
+            console.warn(`${COGUEST_TAG} rejectApplication, data: ${JSON.stringify(options)}`);
+            Logger.i(COGUEST_TAG + "rejectApplication, data: " + JSON.stringify(options));
+            const callback = new (class implements CompletionHandler {
+                override onSuccess() {
+                    options.success?.();
+                }
+                override onFailure(code : Int, desc : String) {
+                    options.fail?.(Number.from(code), desc);
+                }
+            });
+            CoGuestStore.create(options.liveID).rejectApplication(options.userID, callback);
+        }, null);
+    }
+
+    public inviteToSeat(options : InviteToSeatOptions) {
+        UTSAndroid.getDispatcher("main").async(function (_) {
+            console.warn(`${COGUEST_TAG} inviteToSeat, data: ${JSON.stringify(options)}`);
+            Logger.i(COGUEST_TAG + "inviteToSeat, data: " + JSON.stringify(options));
+            const callback = new (class implements CompletionHandler {
+                override onSuccess() {
+                    options.success?.();
+                }
+                override onFailure(code : Int, desc : String) {
+                    options.fail?.(Number.from(code), desc);
+                }
+            });
+            CoGuestStore.create(options.liveID).inviteToSeat(options.inviteeID, options.seatIndex.toInt(),
+                options.timeout?.toInt() ?? 0, options.extraInfo, callback);
+        }, null);
+    }
+
+    public cancelInvitation(options : CancelInvitationOptions) {
+        UTSAndroid.getDispatcher("main").async(function (_) {
+            console.warn(`${COGUEST_TAG} cancelInvitation, data: ${JSON.stringify(options)}`);
+            Logger.i(COGUEST_TAG + "cancelInvitation, data: " + JSON.stringify(options));
+            const callback = new (class implements CompletionHandler {
+                override onSuccess() {
+                    options.success?.();
+                }
+                override onFailure(code : Int, desc : String) {
+                    options.fail?.(Number.from(code), desc);
+                }
+            });
+            CoGuestStore.create(options.liveID).cancelInvitation(options.inviteeID, callback);
+        }, null);
+    }
+
+    public acceptInvitation(options : AcceptInvitationOptions) {
+        UTSAndroid.getDispatcher("main").async(function (_) {
+            console.warn(`${COGUEST_TAG} acceptInvitation, data: ${JSON.stringify(options)}`);
+            Logger.i(COGUEST_TAG + "acceptInvitation, data: " + JSON.stringify(options));
+            const callback = new (class implements CompletionHandler {
+                override onSuccess() {
+                    options.success?.();
+                }
+                override onFailure(code : Int, desc : String) {
+                    options.fail?.(Number.from(code), desc);
+                }
+            });
+            CoGuestStore.create(options.liveID).acceptInvitation(options.inviterID, callback);
+        }, null);
+    }
+
+    public rejectInvitation(options : RejectInvitationOptions) {
+        UTSAndroid.getDispatcher("main").async(function (_) {
+            console.warn(`${COGUEST_TAG} rejectInvitation, data: ${JSON.stringify(options)}`);
+            Logger.i(COGUEST_TAG + "rejectInvitation, data: " + JSON.stringify(options));
+            const callback = new (class implements CompletionHandler {
+                override onSuccess() {
+                    options.success?.();
+                }
+                override onFailure(code : Int, desc : String) {
+                    options.fail?.(Number.from(code), desc);
+                }
+            });
+            CoGuestStore.create(options.liveID).rejectInvitation(options.inviterID, callback);
+        }, null);
+    }
+    public disconnect(options : DisconnectOptions) {
+        UTSAndroid.getDispatcher("main").async(function (_) {
+            console.warn(`${COGUEST_TAG} disconnect, data: ${JSON.stringify(options)}`);
+            Logger.i(COGUEST_TAG + "disconnect, data: " + JSON.stringify(options));
+            const callback = new (class implements CompletionHandler {
+                override onSuccess() {
+                    options.success?.();
+                }
+                override onFailure(code : Int, desc : String) {
+                    options.fail?.(Number.from(code), desc);
+                }
+            });
+            CoGuestStore.create(options.liveID).disconnect(callback);
+        }, null);
+    }
+
+    // ================= BarrageStore 相关接口 =================
+    public sendTextMessage(options : SendTextMessageOptions) {
+        UTSAndroid.getDispatcher("main").async(function (_) {
+            console.warn(`${BARRAGE_TAG} sendTextMessage, data: ${JSON.stringify(options)}`);
+            Logger.i(BARRAGE_TAG + "sendTextMessage, data: " + JSON.stringify(options));
+            const callback = new (class implements CompletionHandler {
+                override onSuccess() {
+                    options.success?.();
+                }
+                override onFailure(code : Int, desc : String) {
+                    options.fail?.(Number.from(code), desc);
+                }
+            });
+            BarrageStore.create(options.liveID).sendTextMessage(options.text, options.extensionInfo, callback);
+        }, null);
+    }
+    public sendCustomMessage(options : SendCustomMessageOptions) {
+        UTSAndroid.getDispatcher("main").async(function (_) {
+            console.warn(`${BARRAGE_TAG} sendCustomMessage, data: ${JSON.stringify(options)}`);
+            Logger.i(BARRAGE_TAG + "sendCustomMessage, data: " + JSON.stringify(options));
+            const callback = new (class implements CompletionHandler {
+                override onSuccess() {
+                    options.success?.();
+                }
+                override onFailure(code : Int, desc : String) {
+                    options.fail?.(Number.from(code), desc);
+                }
+            });
+            BarrageStore.create(options.liveID).sendCustomMessage(options.businessID, options.data, callback);
+        }, null);
+    }
+    public appendLocalTip(options : AppendLocalTipOptions) {
+        UTSAndroid.getDispatcher("main").async(function (_) {
+            console.warn(`${BARRAGE_TAG} appendLocalTip, data: ${JSON.stringify(options)}`);
+            Logger.i(BARRAGE_TAG + "appendLocalTip, data: " + JSON.stringify(options));
+            let message = ParamsCovert.convertBarrage(options.message)
+            BarrageStore.create(options.liveID).appendLocalTip(message);
+        }, null);
+    }
+
+    // ================= GiftStore 相关接口 =================
+    @UTSJS.keepAlive
+    public addGiftListener(liveID : string, eventName : string, listener : ILiveListener) : void {
+        UTSAndroid.getDispatcher("main").async(function (_) {
+            if (this.nativeGiftListener == null) {
+                this.nativeGiftListener = new TGiftListener(createGiftEventDispatcher())
+            }
+            if (this.nativeGiftListener != null) {
+                GiftStore.create(liveID).addGiftListener(this.nativeGiftListener);
+            }
+            const listenerArray = giftListenerMap.get(eventName) ?? new Array<ILiveListener>()
+            if (!listenerArray.includes(listener)) {
+                listenerArray.push(listener)
+            }
+            giftListenerMap.set(eventName, listenerArray);
+        }, null);
+    }
+    @UTSJS.keepAlive
+    public removeGiftListener(liveID : string, eventName : string, listener ?: ILiveListener) : void {
+        UTSAndroid.getDispatcher("main").async(function (_) {
+            let listenerArray = giftListenerMap.get(eventName) ?? new Array<ILiveListener>()
+            let index = listenerArray.indexOf(listener)
+            listenerArray.splice(index, 1)
+            if (listenerArray.length == 0) {
+                giftListenerMap.delete(eventName);
+            }
+            if (giftListenerMap.size === 0) {
+                GiftStore.create(liveID).removeGiftListener(this.nativeGiftListener)
+            }
+        }, null);
+    }
+    public refreshUsableGifts(options : RefreshUsableGiftsOptions) {
+        UTSAndroid.getDispatcher("main").async(function (_) {
+            console.warn(`${GIFT_TAG} refreshUsableGifts, data: ${JSON.stringify(options)}`);
+            const callback = new (class implements CompletionHandler {
+                override onSuccess() {
+                    options.success?.();
+                }
+                override onFailure(code : Int, desc : String) {
+                    options.fail?.(Number.from(code), desc);
+                }
+            });
+            GiftStore.create(options.liveID).refreshUsableGifts(callback);
+        }, null);
+    }
+    public sendGift(options : SendGiftOptions) {
+        UTSAndroid.getDispatcher("main").async(function (_) {
+            console.warn(`${GIFT_TAG} sendGift, data: ${JSON.stringify(options)}`);
+            Logger.i(GIFT_TAG + "sendGift, data: " + JSON.stringify(options));
+            const callback = new (class implements CompletionHandler {
+                override onSuccess() {
+                    options.success?.();
+                }
+                override onFailure(code : Int, desc : String) {
+                    options.fail?.(Number.from(code), desc);
+                }
+            });
+            GiftStore.create(options.liveID).sendGift(options.giftID, options.count.toInt(), callback);
+        }, null);
+    }
+
+    // ================= BaseBeautyStore 相关接口 =================
+    public setSmoothLevel(options : SetSmoothLevelOptions) {
+        UTSAndroid.getDispatcher("main").async(function (_) {
+            console.warn(`${BEAUTY_TAG} setSmoothLevel, data: ${JSON.stringify(options)}`);
+            Logger.i(BEAUTY_TAG + "setSmoothLevel, data: " + JSON.stringify(options));
+            BaseBeautyStore.shared().setSmoothLevel(options.smoothLevel.toFloat());
+        }, null);
+    }
+
+    public setWhitenessLevel(options : SetWhitenessLevelOptions) {
+        UTSAndroid.getDispatcher("main").async(function (_) {
+            console.warn(`${BEAUTY_TAG} setWhitenessLevel, data: ${JSON.stringify(options)}`);
+            Logger.i(BEAUTY_TAG + "setWhitenessLevel, data: " + JSON.stringify(options));
+            BaseBeautyStore.shared().setWhitenessLevel(options.whitenessLevel.toFloat());
+        }, null);
+    }
+
+    public setRuddyLevel(options : SetRuddyLevelOptions) {
+        UTSAndroid.getDispatcher("main").async(function (_) {
+            console.warn(`${BEAUTY_TAG} setRuddyLevel, data: ${JSON.stringify(options)}`);
+            Logger.i(BEAUTY_TAG + "setRuddyLevel, data: " + JSON.stringify(options));
+            BaseBeautyStore.shared().setRuddyLevel(options.ruddyLevel.toFloat());
+        }, null);
+    }
+
+    // ================= AudioEffectStore 相关接口 =================
+    public setAudioChangerType(options : SetAudioChangerTypeOptions) {
+        UTSAndroid.getDispatcher("main").async(function (_) {
+            console.warn(`${AUDIOEFFECT_TAG} setAudioChangerType, data: ${JSON.stringify(options)}`);
+            Logger.i(AUDIOEFFECT_TAG + "setAudioChangerType, data: " + JSON.stringify(options));
+            let type = ParamsCovert.convertAudioChangerType(options.changerType)
+            AudioEffectStore.shared().setAudioChangerType(type);
+        }, null);
+    }
+
+    public setAudioReverbType(options : SetAudioReverbTypeOptions) {
+        UTSAndroid.getDispatcher("main").async(function (_) {
+            console.warn(`${AUDIOEFFECT_TAG} setAudioReverbType, data: ${JSON.stringify(options)}`);
+            Logger.i(AUDIOEFFECT_TAG + "setAudioReverbType, data: " + JSON.stringify(options));
+            let type = ParamsCovert.convertAudioReverbType(options.reverbType)
+            AudioEffectStore.shared().setAudioReverbType(type);
+        }, null);
+    }
+
+    public setVoiceEarMonitorEnable(options : SetVoiceEarMonitorEnableOptions) {
+        UTSAndroid.getDispatcher("main").async(function (_) {
+            console.warn(`${AUDIOEFFECT_TAG} setVoiceEarMonitorEnable, data: ${JSON.stringify(options)}`);
+            Logger.i(AUDIOEFFECT_TAG + "setVoiceEarMonitorEnable, data: " + JSON.stringify(options));
+            AudioEffectStore.shared().setVoiceEarMonitorEnable(options.enable);
+        }, null);
+    }
+
+    public setVoiceEarMonitorVolume(options : VolumeOptions) {
+        UTSAndroid.getDispatcher("main").async(function (_) {
+            console.warn(`${AUDIOEFFECT_TAG} setVoiceEarMonitorVolume, data: ${JSON.stringify(options)}`);
+            Logger.i(AUDIOEFFECT_TAG + "setVoiceEarMonitorVolume, data: " + JSON.stringify(options));
+            AudioEffectStore.shared().setVoiceEarMonitorVolume(options.volume.toInt());
+        }, null);
+    }
+
+    // ================= LikeStore 相关接口 =================
+    @UTSJS.keepAlive
+    public addLikeListener(liveID : string, eventName : string, listener : ILiveListener) : void {
+        UTSAndroid.getDispatcher("main").async(function (_) {
+            if (this.nativeLikeListener == null) {
+                this.nativeLikeListener = new TLikeListener(createLikeEventDispatcher())
+            }
+            if (this.nativeLikeListener != null) {
+                LikeStore.create(liveID).addLikeListener(this.nativeLikeListener);
+            }
+            const listenerArray = likeListenerMap.get(eventName) ?? new Array<ILiveListener>()
+            if (!listenerArray.includes(listener)) {
+                listenerArray.push(listener)
+            }
+            likeListenerMap.set(eventName, listenerArray);
+        }, null);
+    }
+    @UTSJS.keepAlive
+    public removeLikeListener(liveID : string, eventName : string, listener ?: ILiveListener) : void {
+        UTSAndroid.getDispatcher("main").async(function (_) {
+            let listenerArray = likeListenerMap.get(eventName) ?? new Array<ILiveListener>()
+            let index = listenerArray.indexOf(listener)
+            listenerArray.splice(index, 1)
+            if (listenerArray.length == 0) {
+                likeListenerMap.delete(eventName);
+            }
+            if (likeListenerMap.size === 0) {
+                LikeStore.create(liveID).removeLikeListener(this.nativeLikeListener)
+            }
+        }, null);
+    }
+    public sendLike(options : SendLikeOptions) {
+        UTSAndroid.getDispatcher("main").async(function (_) {
+            console.warn(`UTS-Like sendLike, data: ${JSON.stringify(options)}`);
+            Logger.i("UTS-Like: " + "sendLike, data: " + JSON.stringify(options));
+            const callback = new (class implements CompletionHandler {
+                override onSuccess() {
+                    options.success?.();
+                }
+                override onFailure(code : Int, desc : String) {
+                    options.fail?.(Number.from(code), desc);
+                }
+            });
+            LikeStore.create(options.liveID).sendLike(options.count?.toInt() ?? 1, callback);
+        }, null);
+    }
+
+    // ================= 实验性接口 =================
+    public callExperimentalAPI(options : CallExperimentalAPIOptions) {
+        UTSAndroid.getDispatcher("main").async(function (_) {
+            const callback = new (class implements TUIRoomDefine.ExperimentalAPIResponseCallback {
+                override onResponse(jsonData : string) : void {
+                    options.onResponse?.(jsonData)
+                }
+            });
+            ExperimentalApiInvoker.callExperimentalAPI(options.jsonData, callback)
+        }, null);
+    }
+
+    // ================= State event listener =================
+    @UTSJS.keepAlive
+    public on(eventName : string, listener : (key : string, res : string) => void, liveID : string) {
+        UTSAndroid.getDispatcher("main").async(function (_) {
+            console.log(`${RTC_TAG} observer, eventName: ${eventName}, liveID: ${liveID}`);
+
+            if (eventName == "loginStoreChanged") {
+                LoginStoreObserver.loginStoreChanged(function (key : string, data : string) {
+                    console.log(`${RTC_TAG} loginStoreChanged, key: ${key}, data: ${data}`);
+                    Logger.i(RTC_TAG + "loginStoreChanged, key: " + key + ", data: " + data);
+                    listener(key, data)
+                })
+            }
+            if (eventName == "liveStoreChanged") {
+                LiveListStoreObserver.liveStoreChanged(function (key : string, data : string) {
+                    console.log(`${LIVE_TAG} liveStoreChanged, key: ${key}, data: ${data}`);
+                    Logger.i(LIVE_TAG + "liveStoreChanged, key: " + key + ", data: " + data);
+                    listener(key, data)
+                })
+            }
+            if (eventName == "liveSeatStoreChanged") {
+                LiveSeatStoreObserver.liveSeatStoreChanged(liveID, function (key : string, data : string) {
+                    listener(key, data)
+                })
+            }
+            if (eventName == "liveAudienceStoreChanged") {
+                LiveAudienceStoreObserver.liveAudienceStoreChanged(liveID, function (key : string, data : string) {
+                    listener(key, data)
+                })
+            }
+            if (eventName == "giftStoreChanged") {
+                GiftStoreObserver.giftStoreChanged(liveID, function (key : string, data : string) {
+                    console.log(`${GIFT_TAG} giftStoreChanged, key: ${key}, data: ${data}`);
+                    listener(key, data)
+                })
+            }
+            if (eventName == "deviceStoreChanged") {
+                DeviceStoreObserver.deviceStoreChanged(function (key : string, data : string) {
+                    listener(key, data)
+                })
+            }
+            if (eventName == "coHostStoreChanged") {
+                CoHostStoreObserver.coHostStoreChanged(liveID, function (key : string, data : string) {
+                    console.log(`${COHOST_TAG} coHostStoreChanged, key: ${key}, data: ${data}`);
+                    Logger.i(COHOST_TAG + "coHostStoreChanged, key: " + key + ", data: " + data);
+                    listener(key, data)
+                })
+            }
+            if (eventName == "coGuestStoreChanged") {
+                CoGuestStoreObserver.coGuestStoreChanged(liveID, function (key : string, data : string) {
+                    console.log(`${COGUEST_TAG} coGuestStoreChanged, key: ${key}, data: ${data}`);
+                    Logger.i(COGUEST_TAG + "coGuestStoreChanged, key: " + key + ", data: " + data);
+                    listener(key, data)
+                })
+            }
+            if (eventName == "barrageStoreChanged") {
+                BarrageStoreObserver.barrageStoreChanged(liveID, function (key : string, data : string) {
+                    console.log(`${BARRAGE_TAG} barrageStoreChanged, key: ${key}, data: ${data}`);
+                    listener(key, data)
+                })
+            }
+            if (eventName == "beautyStoreChanged") {
+                BaseBeautyStoreObserver.beautyStoreChanged(function (key : string, data : string) {
+                    console.log(`${BEAUTY_TAG} beautyStoreChanged, key: ${key}, data: ${data}`);
+                    listener(key, data)
+                })
+            }
+            if (eventName == "audioEffectStoreChanged") {
+                AudioEffectStoreObserver.audioEffectStoreChanged(function (key : string, data : string) {
+                    console.log(`${AUDIOEFFECT_TAG} audioEffectStoreChanged, key: ${key}, data: ${data}`);
+                    listener(key, data)
+                })
+            }
+            if (eventName == "liveSummaryStoreChanged") {
+                LiveSummaryStoreObserver.liveSummaryStoreChanged(liveID, function (key : string, data : string) {
+                    listener(key, data)
+                })
+            }
+
+            if (eventName == "likeStoreChanged") {
+                LikeStoreObserver.likeStoreChanged(liveID, function (key : string, data : string) {
+                    listener(key, data)
+                })
+            }
+        }, null);
+    }
+}
+
+function startForegroundService() {
+    console.log("UTS-Live: startForegroundService")
+    VideoForegroundService.start(context, "", "", 0)
+}
+
+function stopForegroundService() {
+    console.log("UTS-Live: stopForegroundService")
+    VideoForegroundService.stop(context)
+}

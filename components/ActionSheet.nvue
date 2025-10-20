@@ -1,0 +1,173 @@
+<template>
+  <view v-if="internalVisible" class="as-mask" @click="onMaskClick">
+    <view class="as-container" :style="{
+                                          width: systemInfo?.safeArea?.width + 'px',
+                                       }" @click.stop>
+      <view class="as-panel">
+        <view v-if="title" class="as-header">
+          <text class="as-header-text">{{ title }}</text>
+        </view>
+        <scroll-view class="as-list" scroll-y>
+          <view v-for="(item, index) in itemList" :key="index"
+            :class="['as-item', index !== itemList.length - 1 ? 'as-item--divider' : '']" @click="onSelect(index)">
+            <text class="as-item-text">{{ item }}</text>
+          </view>
+        </scroll-view>
+      </view>
+
+      <view v-if="showCancel" class="as-cancel" @click="onCancel">
+        <text class="as-cancel-text">{{ cancelText }}</text>
+      </view>
+    </view>
+  </view>
+  <view v-else />
+</template>
+
+<script setup lang="ts">
+  import { ref, watch, defineEmits, defineProps, nextTick, defineExpose, onMounted } from 'vue';
+
+  const props = defineProps({
+    modelValue: { type: Boolean, default: false },
+    itemList: { type: Array as () => string[], default: () => [] },
+    title: { type: String, default: '' },
+    cancelText: { type: String, default: '取消' },
+    closeOnMask: { type: Boolean, default: true },
+    showCancel: { type: Boolean, default: true },
+  })
+
+
+
+  const systemInfo = ref({});
+  onMounted(() => {
+    uni.getSystemInfo({
+      success: (res) => {
+        systemInfo.value = res;
+        console.log(systemInfo.value)
+      }
+    });
+  })
+
+  const emit = defineEmits(['update:modelValue', 'select', 'cancel', 'close'])
+
+  const internalVisible = ref<boolean>(props.modelValue)
+
+  watch(() => props.modelValue, (val) => {
+    internalVisible.value = val
+  })
+  const open = () => {
+    if (!internalVisible.value) {
+      internalVisible.value = true
+      emit('update:modelValue', true)
+    }
+  }
+
+  const close = () => {
+    if (internalVisible.value) {
+      internalVisible.value = false
+      emit('update:modelValue', false)
+      emit('close')
+    }
+  }
+
+  const onMaskClick = () => {
+    if (props.closeOnMask) {
+      emit('cancel')
+      close()
+    }
+  }
+
+  const onCancel = () => {
+    emit('cancel')
+    close()
+  }
+
+  const onSelect = (index : number) => {
+    emit('select', { tapIndex: index })
+    close()
+  }
+
+
+
+  defineExpose({ open, close })
+</script>
+
+<style>
+  .as-mask {
+    position: fixed;
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.4);
+    justify-content: flex-end;
+    align-items: center;
+    display: flex;
+    z-index: 5000;
+  }
+
+  .as-container {
+    margin-bottom: 40rpx;
+  }
+
+  .as-panel {
+    background-color: #ffffff;
+    border-radius: 48rpx;
+    overflow: hidden;
+  }
+
+  .as-header {
+    padding: 28rpx 32rpx;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    border-bottom-width: 1rpx;
+    border-bottom-color: #eef0f3;
+    flex: 1;
+  }
+
+  .as-header-text {
+    color: rgba(124, 133, 166, 1);
+    font-size: 24rpx;
+    text-align: center;
+  }
+
+  .as-list {
+    max-height: 600rpx;
+  }
+
+  .as-item {
+    padding: 32rpx;
+    align-items: center;
+    justify-content: center;
+    display: flex;
+  }
+
+  .as-item--divider {
+    border-bottom-width: 1rpx;
+    border-bottom-color: #eef0f3;
+  }
+
+  .as-item-text {
+    color: #111826;
+    font-size: 34rpx;
+  }
+
+  .as-item-text--danger {
+    color: #ff3b30;
+  }
+
+  .as-cancel {
+    margin-top: 16rpx;
+    background-color: #ffffff;
+    border-radius: 48rpx;
+    padding: 28rpx 32rpx;
+    align-items: center;
+    justify-content: center;
+    display: flex;
+  }
+
+  .as-cancel-text {
+    color: #111826;
+    font-size: 34rpx;
+  }
+</style>

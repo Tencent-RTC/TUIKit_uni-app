@@ -1,0 +1,47 @@
+<template>
+  <view class="bottom-drawer-container" v-if="modelValue">
+    <view class="drawer-overlay" @tap="close"></view>
+    <view class="bottom-drawer" :class="{ 'drawer-open': modelValue }">
+      <view class="avatar-container">
+        <image class="avatar" :src="userInfo?.avatarURL || defaultAvatarURL" mode="aspectFill" />
+      </view>
+
+      <view class="user-info-container" v-if="isShowAnchor">
+        <text class="user-name">{{ userInfo?.userName || userInfo?.userID || '' }}</text>
+        <text class="user-roomid">直播房间ID：{{ userInfo?.liveID || userInfo?.roomId }}</text>
+      </view>
+      <view class="user-info-container" v-if="!isShowAnchor">
+        <text class="user-name">{{ userInfo?.userName || userInfo?.userID || '' }}</text>
+        <text class="user-roomid">UserId：{{ userInfo?.userID  }}</text>
+      </view>
+    </view>
+  </view>
+</template>
+
+<script setup>
+const defaultAvatarURL = 'https://web.sdk.qcloud.com/component/TUIKit/assets/avatar_01.png';
+
+const props = defineProps({
+  modelValue: { type: Boolean, default: false },
+  userInfo: { type: Object, default: () => ({}) },
+  isShowAnchor: { type: Boolean, default: true }
+});
+
+const emit = defineEmits(['update:modelValue']);
+const close = () => { emit('update:modelValue', false); };
+</script>
+
+<style>
+.bottom-drawer-container { position: fixed; bottom: 0; left: 0; right: 0; top: 0; z-index: 1000; }
+.drawer-overlay { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(15, 16, 20, 0.8); }
+.bottom-drawer { position: absolute; bottom: 0; left: 0; right: 0; background: rgba(34, 38, 46, 1); transition-property: transform; transition-duration: 0.3s; transition-timing-function: ease; flex-direction: column; align-items: center; height: 400rpx; padding: 20rpx 0; border-top-left-radius: 32rpx; border-top-right-radius: 32rpx; overflow: hidden; }
+.drawer-open { transform: translateY(0); }
+.avatar-container { width: 200rpx; height: 120rpx; justify-content: center; align-items: center; position: absolute; }
+.avatar { width: 112rpx; height: 112rpx; border-radius: 56rpx; }
+.user-info-container { flex: 1; padding-top: 120rpx; align-items: center; }
+.user-name { font-size: 32rpx; color: rgba(255, 255, 255, 0.9); }
+.user-roomid { font-size: 24rpx; color: rgba(255, 255, 255, 0.55); margin: 20rpx 0; }
+.divider-line-container { height: 68rpx; justify-content: center; position: relative; align-items: center; }
+.divider-line { width: 268rpx; height: 10rpx; border-radius: 200rpx; background-color: rgba(255, 255, 255, 1); position: absolute; bottom: 16rpx; }
+</style>
+

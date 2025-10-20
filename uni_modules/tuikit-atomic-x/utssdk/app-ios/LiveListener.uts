@@ -1,0 +1,121 @@
+import { ILiveListener } from "../interface";
+
+export const giftListenerMap = new Map<string, Array<ILiveListener>>();
+export const likeListenerMap = new Map<string, Array<ILiveListener>>();
+export const audienceListenerMap = new Map<string, Array<ILiveListener>>();
+export const liveListListenerMap = new Map<string, Array<ILiveListener>>();
+export const liveSeatListenerMap = new Map<string, Array<ILiveListener>>();
+export const coGuestHostListenerMap = new Map<string, Array<ILiveListener>>();
+export const coGuestGuestListenerMap = new Map<string, Array<ILiveListener>>();
+export const coHostListenerMap = new Map<string, Array<ILiveListener>>();
+
+export type NativeLiveListener = {
+    listener : (eventName : string, data : string) => void
+}
+
+export class LiveListenerImpl {
+    private listener : (eventName : string, data : string) => void;
+
+    constructor(options : NativeLiveListener) {
+        this.listener = options.listener;
+    }
+
+    public dispatchEvent(eventName : string, data : string) {
+        this.listener(eventName, data)
+    }
+}
+
+// 创建LiveList事件分发器
+export function createLiveListEventDispatcher() {
+    const liveListener : NativeLiveListener = {
+        listener: (eventName : string, data : string) => {
+            liveListListenerMap.get(eventName)?.forEach((iLiveListener) => {
+                iLiveListener.callback(data);
+            });
+        },
+    };
+    return liveListener
+}
+// 创建 LiveAudience 事件分发器
+export function createAudienceEventDispatcher() {
+    const liveListener : NativeLiveListener = {
+        listener: (eventName : string, data : string) => {
+            audienceListenerMap.get(eventName)?.forEach((iLiveListener) => {
+                iLiveListener.callback(data);
+            });
+        },
+    };
+    return liveListener
+}
+
+// 创建CoHost事件分发器
+export function createCoHostEventDispatcher() {
+    const liveListener : NativeLiveListener = {
+        listener: (eventName : string, data : string) => {
+            coHostListenerMap.get(eventName)?.forEach((iLiveListener) => {
+                iLiveListener.callback(data);
+            });
+        },
+    };
+    return liveListener
+}
+
+// 创建CoGuestHost事件分发器
+export function createCoGuestHostEventDispatcher() {
+    const liveListener : NativeLiveListener = {
+        listener: (eventName : string, data : string) => {
+            coGuestHostListenerMap.get(eventName)?.forEach((iLiveListener) => {
+                iLiveListener.callback(data);
+            });
+        },
+    };
+    return liveListener
+}
+
+// 创建CoGuestGuest事件分发器
+export function createCoGuestGuestEventDispatcher() {
+    const liveListener : NativeLiveListener = {
+        listener: (eventName : string, data : string) => {
+            coGuestGuestListenerMap.get(eventName)?.forEach((iLiveListener) => {
+                iLiveListener.callback(data);
+            });
+        },
+    };
+    return liveListener
+}
+
+// 创建Gift事件分发器
+export function createGiftEventDispatcher() {
+    const liveListener : NativeLiveListener = {
+        listener: (eventName : string, data : string) => {
+            giftListenerMap.get(eventName)?.forEach((iLiveListener) => {
+                iLiveListener.callback(data);
+            });
+        },
+    };
+    return liveListener
+}
+
+// 创建Like事件分发器
+export function createLikeEventDispatcher() {
+    const liveListener : NativeLiveListener = {
+        listener: (eventName : string, data : string) => {
+            likeListenerMap.get(eventName)?.forEach((iLiveListener) => {
+                iLiveListener.callback(data);
+            });
+        },
+    };
+    return liveListener
+}
+
+// 创建LiveSeat事件分发器
+export function createLiveSeatEventDispatcher() {
+    const liveListener : NativeLiveListener = {
+        listener: (eventName : string, data : string) => {
+            liveSeatListenerMap.get(eventName)?.forEach((iLiveListener) => {
+                iLiveListener.callback(data);
+            });
+        },
+    };
+    return liveListener
+}
