@@ -283,6 +283,7 @@ typedef unsigned int swift_uint4  __attribute__((__ext_vector_type__(4)));
 @import CoreFoundation;
 @import Foundation;
 @import ObjectiveC;
+@import RTCRoomEngine;
 @import UIKit;
 #endif
 
@@ -337,6 +338,68 @@ SWIFT_CLASS("_TtC11AtomicXCore15C2CSettingStore")
 @interface C2CSettingStore : NSObject
 - (nonnull instancetype)init SWIFT_UNAVAILABLE;
 + (nonnull instancetype)new SWIFT_UNAVAILABLE_MSG("-init is unavailable");
+@end
+
+
+SWIFT_CLASS("_TtC11AtomicXCore13CallListStore")
+@interface CallListStore : NSObject
+- (nonnull instancetype)init OBJC_DESIGNATED_INITIALIZER;
+@end
+
+
+SWIFT_CLASS("_TtC11AtomicXCore17CallListStoreImpl")
+@interface CallListStoreImpl : CallListStore
+- (nonnull instancetype)init SWIFT_UNAVAILABLE;
++ (nonnull instancetype)new SWIFT_UNAVAILABLE_MSG("-init is unavailable");
+@end
+
+
+@class TUICallObserverExtraInfo;
+
+@interface CallListStoreImpl (SWIFT_EXTENSION(AtomicXCore)) <TUICallObserver>
+- (void)onCallReceived:(NSString * _Nonnull)callId callerId:(NSString * _Nonnull)callerId calleeIdList:(NSArray<NSString *> * _Nonnull)calleeIdList mediaType:(TUICallMediaType)mediaType info:(TUICallObserverExtraInfo * _Nonnull)info;
+- (void)onCallBegin:(NSString * _Nonnull)callId mediaType:(TUICallMediaType)mediaType info:(TUICallObserverExtraInfo * _Nonnull)info;
+- (void)onCallEnd:(NSString * _Nonnull)callId mediaType:(TUICallMediaType)mediaType reason:(TUICallEndReason)reason userId:(NSString * _Nonnull)userId totalTime:(float)totalTime info:(TUICallObserverExtraInfo * _Nonnull)info;
+- (void)onCallNotConnected:(NSString * _Nonnull)callId mediaType:(TUICallMediaType)mediaType reason:(TUICallEndReason)reason userId:(NSString * _Nonnull)userId info:(TUICallObserverExtraInfo * _Nonnull)info;
+- (void)onCallCancelled:(NSString * _Nonnull)callerId;
+@end
+
+
+
+SWIFT_CLASS("_TtC11AtomicXCore20CallParticipantStore")
+@interface CallParticipantStore : NSObject
+- (nonnull instancetype)init OBJC_DESIGNATED_INITIALIZER;
+@end
+
+
+SWIFT_CLASS("_TtC11AtomicXCore24CallParticipantStoreImpl")
+@interface CallParticipantStoreImpl : CallParticipantStore
+- (nonnull instancetype)init SWIFT_UNAVAILABLE;
++ (nonnull instancetype)new SWIFT_UNAVAILABLE_MSG("-init is unavailable");
+@end
+
+
+
+@class NSNumber;
+@class TUINetworkQualityInfo;
+
+@interface CallParticipantStoreImpl (SWIFT_EXTENSION(AtomicXCore)) <TUICallObserver>
+- (void)onCallReceived:(NSString * _Nonnull)callId callerId:(NSString * _Nonnull)callerId calleeIdList:(NSArray<NSString *> * _Nonnull)calleeIdList mediaType:(TUICallMediaType)mediaType info:(TUICallObserverExtraInfo * _Nonnull)info;
+- (void)onCallBegin:(NSString * _Nonnull)callId mediaType:(TUICallMediaType)mediaType info:(TUICallObserverExtraInfo * _Nonnull)info;
+- (void)onCallEnd:(NSString * _Nonnull)callId mediaType:(TUICallMediaType)mediaType reason:(TUICallEndReason)reason userId:(NSString * _Nonnull)userId totalTime:(float)totalTime info:(TUICallObserverExtraInfo * _Nonnull)info;
+- (void)onCallNotConnected:(NSString * _Nonnull)callId mediaType:(TUICallMediaType)mediaType reason:(TUICallEndReason)reason userId:(NSString * _Nonnull)userId info:(TUICallObserverExtraInfo * _Nonnull)info;
+- (void)onCallCancelled:(NSString * _Nonnull)callerId;
+- (void)onUserJoin:(NSString * _Nonnull)userId;
+- (void)onUserLeave:(NSString * _Nonnull)userId;
+- (void)onUserReject:(NSString * _Nonnull)userId;
+- (void)onUserInviting:(NSString * _Nonnull)userId;
+- (void)onUserLineBusy:(NSString * _Nonnull)userId;
+- (void)onUserNoResponse:(NSString * _Nonnull)userId;
+- (void)onUserVoiceVolumeChanged:(NSDictionary<NSString *, NSNumber *> * _Nonnull)volumeMap;
+- (void)onUserNetworkQualityChanged:(NSArray<TUINetworkQualityInfo *> * _Nonnull)networkQualityList;
+- (void)onUserAudioAvailable:(NSString * _Nonnull)userId isAudioAvailable:(BOOL)isAudioAvailable;
+- (void)onUserVideoAvailable:(NSString * _Nonnull)userId isVideoAvailable:(BOOL)isVideoAvailable;
+- (void)onKickedOffline;
 @end
 
 @class TUIConnectionUser;
@@ -413,6 +476,7 @@ SWIFT_CLASS("_TtC11AtomicXCore12LiveCoreView")
 
 
 
+
 @interface LiveCoreView (SWIFT_EXTENSION(AtomicXCore))
 - (void)didMoveToWindow;
 @end
@@ -435,8 +499,7 @@ SWIFT_CLASS("_TtC11AtomicXCore12LiveCoreView")
 
 
 
-
-
+/// Login management class.
 SWIFT_CLASS("_TtC11AtomicXCore10LoginStore")
 @interface LoginStore : NSObject
 - (nonnull instancetype)init SWIFT_UNAVAILABLE;
@@ -452,12 +515,26 @@ SWIFT_CLASS("_TtC11AtomicXCore16MessageListStore")
 
 
 
+SWIFT_CLASS("_TtC11AtomicXCore15ParticipantView")
+@interface ParticipantView : UIView
+- (nullable instancetype)initWithCoder:(NSCoder * _Nonnull)coder SWIFT_UNAVAILABLE;
+- (nonnull instancetype)initWithFrame:(CGRect)frame SWIFT_UNAVAILABLE;
+@end
+
+
+@interface ParticipantView (SWIFT_EXTENSION(AtomicXCore))
+- (void)didMoveToWindow;
+@end
+
+
+
 SWIFT_CLASS("_TtC11AtomicXCore15SignalVideoView")
 @interface SignalVideoView : UIView
 - (nullable instancetype)initWithCoder:(NSCoder * _Nonnull)coder SWIFT_UNAVAILABLE;
 - (void)didMoveToWindow;
 - (nonnull instancetype)initWithFrame:(CGRect)frame SWIFT_UNAVAILABLE;
 @end
+
 
 
 
@@ -501,16 +578,33 @@ SWIFT_CLASS_PROPERTY(@property (nonatomic, class, readonly, strong) UserInfoModi
 @class TUISeatFullInfo;
 enum ViewLayer : NSInteger;
 
+/// Video view adapter protocol
 SWIFT_PROTOCOL("_TtP11AtomicXCore17VideoViewDelegate_")
 @protocol VideoViewDelegate
+/// Create co-guest view.
+/// @param seatInfo User information.
+/// @param viewLayer View layer. {@link ViewLayer}
+/// @return Co-guest view.
 - (UIView * _Nullable)createCoGuestViewWithSeatInfo:(TUISeatFullInfo * _Nonnull)seatInfo viewLayer:(enum ViewLayer)viewLayer SWIFT_WARN_UNUSED_RESULT;
+/// Create cross-room co-host view.
+/// @param seatInfo Cross-room co-host user information.
+/// @param viewLayer View layer.
+/// @return Cross-room co-host view.
 - (UIView * _Nullable)createCoHostViewWithSeatInfo:(TUISeatFullInfo * _Nonnull)seatInfo viewLayer:(enum ViewLayer)viewLayer SWIFT_WARN_UNUSED_RESULT;
+/// Create PK view.
+/// @param battleUser PK user information.
+/// @return PK view.
 - (UIView * _Nullable)createBattleViewWithBattleUser:(TUIBattleUser * _Nonnull)battleUser SWIFT_WARN_UNUSED_RESULT;
+/// Create PK container view.
+/// @return PK container view.
 - (UIView * _Nullable)createBattleContainerView SWIFT_WARN_UNUSED_RESULT;
 @end
 
+/// View layer.
 typedef SWIFT_ENUM(NSInteger, ViewLayer, open) {
+/// Foreground layer.
   ViewLayerForeground = 0,
+/// Background layer.
   ViewLayerBackground = 1,
 };
 
@@ -807,6 +901,7 @@ typedef unsigned int swift_uint4  __attribute__((__ext_vector_type__(4)));
 @import CoreFoundation;
 @import Foundation;
 @import ObjectiveC;
+@import RTCRoomEngine;
 @import UIKit;
 #endif
 
@@ -861,6 +956,68 @@ SWIFT_CLASS("_TtC11AtomicXCore15C2CSettingStore")
 @interface C2CSettingStore : NSObject
 - (nonnull instancetype)init SWIFT_UNAVAILABLE;
 + (nonnull instancetype)new SWIFT_UNAVAILABLE_MSG("-init is unavailable");
+@end
+
+
+SWIFT_CLASS("_TtC11AtomicXCore13CallListStore")
+@interface CallListStore : NSObject
+- (nonnull instancetype)init OBJC_DESIGNATED_INITIALIZER;
+@end
+
+
+SWIFT_CLASS("_TtC11AtomicXCore17CallListStoreImpl")
+@interface CallListStoreImpl : CallListStore
+- (nonnull instancetype)init SWIFT_UNAVAILABLE;
++ (nonnull instancetype)new SWIFT_UNAVAILABLE_MSG("-init is unavailable");
+@end
+
+
+@class TUICallObserverExtraInfo;
+
+@interface CallListStoreImpl (SWIFT_EXTENSION(AtomicXCore)) <TUICallObserver>
+- (void)onCallReceived:(NSString * _Nonnull)callId callerId:(NSString * _Nonnull)callerId calleeIdList:(NSArray<NSString *> * _Nonnull)calleeIdList mediaType:(TUICallMediaType)mediaType info:(TUICallObserverExtraInfo * _Nonnull)info;
+- (void)onCallBegin:(NSString * _Nonnull)callId mediaType:(TUICallMediaType)mediaType info:(TUICallObserverExtraInfo * _Nonnull)info;
+- (void)onCallEnd:(NSString * _Nonnull)callId mediaType:(TUICallMediaType)mediaType reason:(TUICallEndReason)reason userId:(NSString * _Nonnull)userId totalTime:(float)totalTime info:(TUICallObserverExtraInfo * _Nonnull)info;
+- (void)onCallNotConnected:(NSString * _Nonnull)callId mediaType:(TUICallMediaType)mediaType reason:(TUICallEndReason)reason userId:(NSString * _Nonnull)userId info:(TUICallObserverExtraInfo * _Nonnull)info;
+- (void)onCallCancelled:(NSString * _Nonnull)callerId;
+@end
+
+
+
+SWIFT_CLASS("_TtC11AtomicXCore20CallParticipantStore")
+@interface CallParticipantStore : NSObject
+- (nonnull instancetype)init OBJC_DESIGNATED_INITIALIZER;
+@end
+
+
+SWIFT_CLASS("_TtC11AtomicXCore24CallParticipantStoreImpl")
+@interface CallParticipantStoreImpl : CallParticipantStore
+- (nonnull instancetype)init SWIFT_UNAVAILABLE;
++ (nonnull instancetype)new SWIFT_UNAVAILABLE_MSG("-init is unavailable");
+@end
+
+
+
+@class NSNumber;
+@class TUINetworkQualityInfo;
+
+@interface CallParticipantStoreImpl (SWIFT_EXTENSION(AtomicXCore)) <TUICallObserver>
+- (void)onCallReceived:(NSString * _Nonnull)callId callerId:(NSString * _Nonnull)callerId calleeIdList:(NSArray<NSString *> * _Nonnull)calleeIdList mediaType:(TUICallMediaType)mediaType info:(TUICallObserverExtraInfo * _Nonnull)info;
+- (void)onCallBegin:(NSString * _Nonnull)callId mediaType:(TUICallMediaType)mediaType info:(TUICallObserverExtraInfo * _Nonnull)info;
+- (void)onCallEnd:(NSString * _Nonnull)callId mediaType:(TUICallMediaType)mediaType reason:(TUICallEndReason)reason userId:(NSString * _Nonnull)userId totalTime:(float)totalTime info:(TUICallObserverExtraInfo * _Nonnull)info;
+- (void)onCallNotConnected:(NSString * _Nonnull)callId mediaType:(TUICallMediaType)mediaType reason:(TUICallEndReason)reason userId:(NSString * _Nonnull)userId info:(TUICallObserverExtraInfo * _Nonnull)info;
+- (void)onCallCancelled:(NSString * _Nonnull)callerId;
+- (void)onUserJoin:(NSString * _Nonnull)userId;
+- (void)onUserLeave:(NSString * _Nonnull)userId;
+- (void)onUserReject:(NSString * _Nonnull)userId;
+- (void)onUserInviting:(NSString * _Nonnull)userId;
+- (void)onUserLineBusy:(NSString * _Nonnull)userId;
+- (void)onUserNoResponse:(NSString * _Nonnull)userId;
+- (void)onUserVoiceVolumeChanged:(NSDictionary<NSString *, NSNumber *> * _Nonnull)volumeMap;
+- (void)onUserNetworkQualityChanged:(NSArray<TUINetworkQualityInfo *> * _Nonnull)networkQualityList;
+- (void)onUserAudioAvailable:(NSString * _Nonnull)userId isAudioAvailable:(BOOL)isAudioAvailable;
+- (void)onUserVideoAvailable:(NSString * _Nonnull)userId isVideoAvailable:(BOOL)isVideoAvailable;
+- (void)onKickedOffline;
 @end
 
 @class TUIConnectionUser;
@@ -937,6 +1094,7 @@ SWIFT_CLASS("_TtC11AtomicXCore12LiveCoreView")
 
 
 
+
 @interface LiveCoreView (SWIFT_EXTENSION(AtomicXCore))
 - (void)didMoveToWindow;
 @end
@@ -959,8 +1117,7 @@ SWIFT_CLASS("_TtC11AtomicXCore12LiveCoreView")
 
 
 
-
-
+/// Login management class.
 SWIFT_CLASS("_TtC11AtomicXCore10LoginStore")
 @interface LoginStore : NSObject
 - (nonnull instancetype)init SWIFT_UNAVAILABLE;
@@ -976,12 +1133,26 @@ SWIFT_CLASS("_TtC11AtomicXCore16MessageListStore")
 
 
 
+SWIFT_CLASS("_TtC11AtomicXCore15ParticipantView")
+@interface ParticipantView : UIView
+- (nullable instancetype)initWithCoder:(NSCoder * _Nonnull)coder SWIFT_UNAVAILABLE;
+- (nonnull instancetype)initWithFrame:(CGRect)frame SWIFT_UNAVAILABLE;
+@end
+
+
+@interface ParticipantView (SWIFT_EXTENSION(AtomicXCore))
+- (void)didMoveToWindow;
+@end
+
+
+
 SWIFT_CLASS("_TtC11AtomicXCore15SignalVideoView")
 @interface SignalVideoView : UIView
 - (nullable instancetype)initWithCoder:(NSCoder * _Nonnull)coder SWIFT_UNAVAILABLE;
 - (void)didMoveToWindow;
 - (nonnull instancetype)initWithFrame:(CGRect)frame SWIFT_UNAVAILABLE;
 @end
+
 
 
 
@@ -1025,16 +1196,33 @@ SWIFT_CLASS_PROPERTY(@property (nonatomic, class, readonly, strong) UserInfoModi
 @class TUISeatFullInfo;
 enum ViewLayer : NSInteger;
 
+/// Video view adapter protocol
 SWIFT_PROTOCOL("_TtP11AtomicXCore17VideoViewDelegate_")
 @protocol VideoViewDelegate
+/// Create co-guest view.
+/// @param seatInfo User information.
+/// @param viewLayer View layer. {@link ViewLayer}
+/// @return Co-guest view.
 - (UIView * _Nullable)createCoGuestViewWithSeatInfo:(TUISeatFullInfo * _Nonnull)seatInfo viewLayer:(enum ViewLayer)viewLayer SWIFT_WARN_UNUSED_RESULT;
+/// Create cross-room co-host view.
+/// @param seatInfo Cross-room co-host user information.
+/// @param viewLayer View layer.
+/// @return Cross-room co-host view.
 - (UIView * _Nullable)createCoHostViewWithSeatInfo:(TUISeatFullInfo * _Nonnull)seatInfo viewLayer:(enum ViewLayer)viewLayer SWIFT_WARN_UNUSED_RESULT;
+/// Create PK view.
+/// @param battleUser PK user information.
+/// @return PK view.
 - (UIView * _Nullable)createBattleViewWithBattleUser:(TUIBattleUser * _Nonnull)battleUser SWIFT_WARN_UNUSED_RESULT;
+/// Create PK container view.
+/// @return PK container view.
 - (UIView * _Nullable)createBattleContainerView SWIFT_WARN_UNUSED_RESULT;
 @end
 
+/// View layer.
 typedef SWIFT_ENUM(NSInteger, ViewLayer, open) {
+/// Foreground layer.
   ViewLayerForeground = 0,
+/// Background layer.
   ViewLayerBackground = 1,
 };
 

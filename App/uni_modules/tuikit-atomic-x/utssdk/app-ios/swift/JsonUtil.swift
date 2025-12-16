@@ -84,4 +84,34 @@ public class JsonUtil {
             }
         }
     }
+
+    public static func toBattleRequestClosure(
+        success: ((_ battleInfo: String, _ resultMap: String) -> Void)?,
+        failure: ((_ code: Int, _ message: String) -> Void)?
+    ) -> BattleRequestClosure {
+        return { result in
+            switch result {
+            case .success(let data):
+                let (battleInfo, resultMap) = data
+
+                var battleInfoDict: [String: Any] = [
+                    "battleID": battleInfo.battleID,
+                    "config": [
+                        "duration": battleInfo.config.duration,
+                        "needResponse": battleInfo.config.needResponse,
+                        "extensionInfo": battleInfo.config.extensionInfo,
+                    ],
+                    "startTime": battleInfo.startTime,
+                    "endTime": battleInfo.endTime,
+                ]
+
+                let battleInfoJson = JsonUtil.toJson(battleInfoDict) ?? ""
+                let resultMapJson = JsonUtil.toJson(resultMap) ?? ""
+
+                success?(battleInfoJson, resultMapJson)
+            case .failure(let errorInfo):
+                failure?(errorInfo.code, errorInfo.message)
+            }
+        }
+    }
 }

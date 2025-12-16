@@ -4,36 +4,36 @@
     <view class="header">
       <text class="title">直播已结束</text>
     </view>
-    <!-- <view class="stats-card">
+    <view class="stats-card">
       <view class="stats-row">
         <view class="stats-item">
           <text class="stats-value">{{ formattedDuration }}</text>
           <text class="stats-label">直播时长</text>
         </view>
         <view class="stats-item">
-          <text class="stats-value">{{ summaryData.totalViewers }}</text>
+          <text class="stats-value">{{ summaryData?.totalViewers }}</text>
           <text class="stats-label">累计观看</text>
         </view>
         <view class="stats-item">
-          <text class="stats-value">{{ summaryData.totalMessageSent }}</text>
+          <text class="stats-value">{{ summaryData?.totalMessageSent }}</text>
           <text class="stats-label">消息数量</text>
         </view>
       </view>
       <view class="stats-row">
         <view class="stats-item">
-          <text class="stats-value">{{ summaryData.totalGiftCoins }}</text>
+          <text class="stats-value">{{ summaryData?.totalGiftCoins }}</text>
           <text class="stats-label">礼物收入</text>
         </view>
         <view class="stats-item">
-          <text class="stats-value">{{ summaryData.totalGiftUniqueSenders }}</text>
+          <text class="stats-value">{{ summaryData?.totalGiftUniqueSenders }}</text>
           <text class="stats-label">送礼人数</text>
         </view>
         <view class="stats-item">
-          <text class="stats-value">{{ summaryData.totalLikesReceived }}</text>
+          <text class="stats-value">{{ summaryData?.totalLikesReceived }}</text>
           <text class="stats-label">点赞数量</text>
         </view>
       </view>
-    </view> -->
+    </view>
   </view>
 </template>
 
@@ -44,8 +44,9 @@
     computed
   } from 'vue';
   import {
-    useLiveSummaryState
-  } from '@/uni_modules/tuikit-atomic-x/state/LiveSummaryState'
+    onLoad
+  } from '@dcloudio/uni-app';
+
   const safeArea = ref({
     left: 0,
     right: 0,
@@ -55,14 +56,17 @@
     height: 750,
   });
 
-  // const {
-  //   summaryData
-  // } = useLiveSummaryState(uni.$liveID)
+  const summaryData = ref()
 
-  // 计算属性：格式化后的直播时长
-  // const formattedDuration = computed(() => {
-  //   return formatDuration(summaryData.value?.totalDuration);
-  // });
+
+  onLoad((options) => {
+    summaryData.value = uni.$summaryData
+  })
+
+  // 计算属性： 格式化后的直播时长
+  const formattedDuration = computed(() => {
+    return formatDuration(summaryData.value?.totalDuration);
+  });
 
   onMounted(() => {
     uni.getSystemInfo({
@@ -84,23 +88,23 @@
     });
   }
 
-  // // 格式化直播时长
-  // const formatDuration = (seconds) => {
-  //   // 处理无效输入
-  //   if (!seconds || seconds <= 0 || isNaN(seconds)) {
-  //     return '00:00:00';
-  //   }
+// 格式化直播时长（输入单位为毫秒）
+const formatDuration = (milliseconds) => {
+  // 处理无效输入
+  if (!milliseconds || milliseconds <= 0 || isNaN(milliseconds)) {
+    return '00:00:00';
+  }
 
-  //   // 确保是整数
-  //   seconds = Math.floor(seconds);
+  // 将毫秒转换为秒（向下取整）
+  const totalSeconds = Math.floor(milliseconds / 1000);
 
-  //   const hours = Math.floor(seconds / 3600);
-  //   const minutes = Math.floor((seconds % 3600) / 60);
-  //   const remainingSeconds = seconds % 60;
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const remainingSeconds = totalSeconds % 60;
 
-  //   // 始终显示 HH:MM:SS 格式
-  //   return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
-  // };
+  // 始终显示 HH:MM:SS 格式
+  return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
+};
 </script>
 
 <style scoped>

@@ -151,6 +151,7 @@
   import { useAudioEffectState } from '@/uni_modules/tuikit-atomic-x/state/AudioEffectState'
   import { useBaseBeautyState } from '@/uni_modules/tuikit-atomic-x/state/BaseBeautyState'
   import { useGiftState } from "@/uni_modules/tuikit-atomic-x/state/GiftState";
+  import { useLiveSummaryState } from '@/uni_modules/tuikit-atomic-x/state/LiveSummaryState'
   import ActionSheet from '@/components/ActionSheet.nvue'
   const dom = uni.requireNativePlugin('dom')
   const { loginUserInfo } = useLoginState();
@@ -159,11 +160,7 @@
   const { setVoiceEarMonitorEnable,
     setVoiceEarMonitorVolume,
     setAudioChangerType,
-    setAudioReverbType,
-    isEarMonitorOpened,
-    earMonitorVolume,
-    changerType,
-    reverbType } = useAudioEffectState(uni.$liveID)
+    setAudioReverbType } = useAudioEffectState(uni.$liveID)
   const { setSmoothLevel, setWhitenessLevel, setRuddyLevel, whitenessLevel, ruddyLevel, smoothLevel } = useBaseBeautyState(uni.$liveID)
   const { addCoHostListener, removeCoHostListener, acceptHostConnection, rejectHostConnection, exitHostConnection, coHostStatus, invitees } = useCoHostState(uni?.$liveID)
   const { joinLive, createLive, fetchLiveList, liveList, endLive, currentLive, liveListCursor, callExperimentalAPI } = useLiveListState();
@@ -173,7 +170,7 @@
   const { audienceList } = useLiveAudienceState(uni?.$liveID);
   const { seatList, canvas, lockSeat, } = useLiveSeatState(uni?.$liveID);
   const { addGiftListener, removeGiftListener } = useGiftState(uni?.$liveID);
-
+  const { summaryData } = useLiveSummaryState(uni.$liveID)
   const defaultCoverURL = 'https://liteav-test-1252463788.cos.ap-guangzhou.myqcloud.com/voice_room/voice_room_cover1.png';
   const defaultAvatarURL = 'https://web.sdk.qcloud.com/component/TUIKit/assets/avatar_01.png';
   const audienceCount = computed(() => audienceList.value.length);
@@ -353,7 +350,11 @@
   const showGiftToast = async (giftData ?: any) => {
     if (!giftData) return;
     giftInfo.value = giftData;
-    showGift(giftData, { onlyDisplay: true });
+
+    showGift(giftData, {
+      onlyDisplay: true,
+      isFromSelf: false
+    });
 
     // 使用 BarrageList 的 showToast 方法显示礼物提示
     if (barrageListRef.value) {
@@ -546,6 +547,7 @@
     if (coHostStatus.value === 'CONNECTED' && index === 1 || coHostStatus.value !== 'CONNECTED' && index === 0) {
       clearAudioEffectSet()
       clearBeautyPanelSet()
+      uni.$summaryData = summaryData.value
       endLive({
         success: () => {
           uni.redirectTo({ url: '/pages/liveend/index' });
@@ -568,7 +570,6 @@
       liveInfo: {
         liveID: uni?.$liveID,
         liveName: liveTitle.value,
-        totalViewerCount: 4,
         coverURL: coverURL.value,
         isSeatEnabled: true,
         seatMode: 'APPLY',

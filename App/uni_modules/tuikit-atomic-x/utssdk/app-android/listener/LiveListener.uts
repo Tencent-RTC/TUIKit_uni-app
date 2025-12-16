@@ -1,10 +1,11 @@
 import { ILiveListener } from '../../interface';
+import { GiftListener, Gift, } from 'io.trtc.tuikit.atomicxcore.api.gift';
 import {
-    GiftListener, Gift, LiveUserInfo, LikeListener, LiveAudienceListener, LiveListListener, LiveEndedReason,
-    LiveKickedOutReason, LiveSeatListener, DeviceControlPolicy,
-    HostListener, GuestListener, NoResponseReason,
-    CoHostListener, SeatUserInfo
-} from 'io.trtc.tuikit.atomicxcore.api';
+  LiveUserInfo, LikeListener, LiveAudienceListener, LiveListListener,
+  LiveEndedReason, LiveKickedOutReason, LiveSeatListener, DeviceControlPolicy,
+  HostListener, GuestListener, NoResponseReason, CoHostListener, SeatUserInfo,
+  BattleListener, BattleInfo, BattleEndedReason,
+} from 'io.trtc.tuikit.atomicxcore.api.live';
 
 const TAG = "UTS-Event"
 export const giftListenerMap = new Map<string, Array<ILiveListener>>();
@@ -15,515 +16,678 @@ export const liveSeatListenerMap = new Map<string, Array<ILiveListener>>();
 export const coGuestHostListenerMap = new Map<string, Array<ILiveListener>>();
 export const coGuestGuestListenerMap = new Map<string, Array<ILiveListener>>();
 export const coHostListenerMap = new Map<string, Array<ILiveListener>>();
+export const battleListenerMap = new Map<string, Array<ILiveListener>>();
 
 export type NativeLiveListener = {
-    listener : (eventName : string, data : string) => void
+  listener : (eventName : string, data : string) => void
 }
 
 // 创建LiveList事件分发器
 export function createLiveListEventDispatcher() {
-    const liveListener : NativeLiveListener = {
-        listener: (eventName : string, data : string) => {
-            liveListListenerMap.get(eventName)?.forEach((iLiveListener) => {
-                iLiveListener.callback(data);
-            });
-        },
-    };
-    return liveListener
+  const liveListener : NativeLiveListener = {
+    listener: (eventName : string, data : string) => {
+      liveListListenerMap.get(eventName)?.forEach((iLiveListener) => {
+        iLiveListener.callback(data);
+      });
+    },
+  };
+  return liveListener
 }
 // 创建 LiveAudience 事件分发器
 export function createAudienceEventDispatcher() {
-    const liveListener : NativeLiveListener = {
-        listener: (eventName : string, data : string) => {
-            audienceListenerMap.get(eventName)?.forEach((iLiveListener) => {
-                iLiveListener.callback(data);
-            });
-        },
-    };
-    return liveListener
+  const liveListener : NativeLiveListener = {
+    listener: (eventName : string, data : string) => {
+      audienceListenerMap.get(eventName)?.forEach((iLiveListener) => {
+        iLiveListener.callback(data);
+      });
+    },
+  };
+  return liveListener
 }
 
 // 创建CoHost事件分发器
 export function createCoHostEventDispatcher() {
-    const liveListener : NativeLiveListener = {
-        listener: (eventName : string, data : string) => {
-            coHostListenerMap.get(eventName)?.forEach((iLiveListener) => {
-                iLiveListener.callback(data);
-            });
-        },
-    };
-    return liveListener
+  const liveListener : NativeLiveListener = {
+    listener: (eventName : string, data : string) => {
+      coHostListenerMap.get(eventName)?.forEach((iLiveListener) => {
+        iLiveListener.callback(data);
+      });
+    },
+  };
+  return liveListener
 }
 
 // 创建CoGuestHost事件分发器
 export function createCoGuestHostEventDispatcher() {
-    const liveListener : NativeLiveListener = {
-        listener: (eventName : string, data : string) => {
-            coGuestHostListenerMap.get(eventName)?.forEach((iLiveListener) => {
-                iLiveListener.callback(data);
-            });
-        },
-    };
-    return liveListener
+  const liveListener : NativeLiveListener = {
+    listener: (eventName : string, data : string) => {
+      coGuestHostListenerMap.get(eventName)?.forEach((iLiveListener) => {
+        iLiveListener.callback(data);
+      });
+    },
+  };
+  return liveListener
 }
 
 // 创建CoGuestGuest事件分发器
 export function createCoGuestGuestEventDispatcher() {
-    const liveListener : NativeLiveListener = {
-        listener: (eventName : string, data : string) => {
-            coGuestGuestListenerMap.get(eventName)?.forEach((iLiveListener) => {
-                iLiveListener.callback(data);
-            });
-        },
-    };
-    return liveListener
+  const liveListener : NativeLiveListener = {
+    listener: (eventName : string, data : string) => {
+      coGuestGuestListenerMap.get(eventName)?.forEach((iLiveListener) => {
+        iLiveListener.callback(data);
+      });
+    },
+  };
+  return liveListener
 }
 
 // 创建Gift事件分发器
 export function createGiftEventDispatcher() {
-    const liveListener : NativeLiveListener = {
-        listener: (eventName : string, data : string) => {
-            giftListenerMap.get(eventName)?.forEach((iLiveListener) => {
-                iLiveListener.callback(data);
-            });
-        },
-    };
-    return liveListener
+  const liveListener : NativeLiveListener = {
+    listener: (eventName : string, data : string) => {
+      giftListenerMap.get(eventName)?.forEach((iLiveListener) => {
+        iLiveListener.callback(data);
+      });
+    },
+  };
+  return liveListener
 }
 
 // 创建Like事件分发器
 export function createLikeEventDispatcher() {
-    const liveListener : NativeLiveListener = {
-        listener: (eventName : string, data : string) => {
-            likeListenerMap.get(eventName)?.forEach((iLiveListener) => {
-                iLiveListener.callback(data);
-            });
-        },
-    };
-    return liveListener
+  const liveListener : NativeLiveListener = {
+    listener: (eventName : string, data : string) => {
+      likeListenerMap.get(eventName)?.forEach((iLiveListener) => {
+        iLiveListener.callback(data);
+      });
+    },
+  };
+  return liveListener
+}
+
+// 创建Battle事件分发器
+export function createBattleEventDispatcher() {
+  const liveListener : NativeLiveListener = {
+    listener: (eventName : string, data : string) => {
+      battleListenerMap.get(eventName)?.forEach((iLiveListener) => {
+        iLiveListener.callback(data);
+      });
+    },
+  };
+  return liveListener
 }
 
 // 创建LiveSeat事件分发器
 export function createLiveSeatEventDispatcher() {
-    const liveListener : NativeLiveListener = {
-        listener: (eventName : string, data : string) => {
-            liveSeatListenerMap.get(eventName)?.forEach((iLiveListener) => {
-                iLiveListener.callback(data);
-            });
-        },
-    };
-    return liveListener
+  const liveListener : NativeLiveListener = {
+    listener: (eventName : string, data : string) => {
+      liveSeatListenerMap.get(eventName)?.forEach((iLiveListener) => {
+        iLiveListener.callback(data);
+      });
+    },
+  };
+  return liveListener
 }
 
 export class TGiftListener extends GiftListener {
-    private listener : (eventType : string, data : string) => void;
+  private listener : (eventType : string, data : string) => void;
 
-    constructor(options : NativeLiveListener) {
-        super();
-        this.listener = options.listener;
+  constructor(options : NativeLiveListener) {
+    super();
+    this.listener = options.listener;
+  }
+  override onReceiveGift(liveID : String, gift : Gift, count : Int, sender : LiveUserInfo) {
+    console.log(`${TAG} onReceiveGift liveID: ${liveID},gift:${gift} ,count: ${count}, sender: ${sender}`);
+
+    const giftData = {
+      giftID: gift.giftID,
+      name: gift.name,
+      desc: gift.desc,
+      iconURL: gift.iconURL,
+      resourceURL: gift.resourceURL,
+      level: gift.level,
+      coins: gift.coins,
+      extensionInfo: gift.extensionInfo
+    };
+    const senderUser = {
+      userID: sender.userID,
+      userName: sender.userName,
+      avatarURL: sender.avatarURL
     }
-    override onReceiveGift(liveID : String, gift : Gift, count : Int, sender : LiveUserInfo) {
-        console.log(`${TAG} onReceiveGift liveID: ${liveID},gift:${gift} ,count: ${count}, sender: ${sender}`);
 
-        const giftData = {
-            giftID: gift.giftID,
-            name: gift.name,
-            desc: gift.desc,
-            iconURL: gift.iconURL,
-            resourceURL: gift.resourceURL,
-            level: gift.level,
-            coins: gift.coins,
-            extensionInfo: gift.extensionInfo
-        };
-        const senderUser = {
-            userID: sender.userID,
-            userName: sender.userName,
-            avatarURL: sender.avatarURL
-        }
-
-        let data = {
-            liveID,
-            gift: giftData,
-            count,
-            sender: senderUser
-        }
-        this.listener('onReceiveGift', JSON.stringify(data));
+    let data = {
+      liveID,
+      gift: giftData,
+      count,
+      sender: senderUser
     }
+    this.listener('onReceiveGift', JSON.stringify(data));
+  }
 }
 
 export class TLikeListener extends LikeListener {
-    private listener : (eventType : string, data : string) => void;
+  private listener : (eventType : string, data : string) => void;
 
-    constructor(options : NativeLiveListener) {
-        super();
-        this.listener = options.listener;
-    }
-    override onReceiveLikesMessage(liveID : String, totalLikesReceived : Long, sender : LiveUserInfo) {
-        console.log(`${TAG} onReceiveLikesMessage liveID: ${liveID}, totalLikesReceived: ${totalLikesReceived}, sender: ${sender}`);
-        const senderUser = {
-            userID: sender.userID,
-            userName: sender.userName,
-            avatarURL: sender.avatarURL
-        };
+  constructor(options : NativeLiveListener) {
+    super();
+    this.listener = options.listener;
+  }
+  override onReceiveLikesMessage(liveID : String, totalLikesReceived : Long, sender : LiveUserInfo) {
+    console.log(`${TAG} onReceiveLikesMessage liveID: ${liveID}, totalLikesReceived: ${totalLikesReceived}, sender: ${sender}`);
+    const senderUser = {
+      userID: sender.userID,
+      userName: sender.userName,
+      avatarURL: sender.avatarURL
+    };
 
-        let data = {
-            liveID,
-            totalLikesReceived,
-            sender: senderUser
-        };
-        this.listener('onReceiveLikesMessage', JSON.stringify(data));
-    }
+    let data = {
+      liveID,
+      totalLikesReceived,
+      sender: senderUser
+    };
+    this.listener('onReceiveLikesMessage', JSON.stringify(data));
+  }
 }
 
 export class TLiveAudienceListener extends LiveAudienceListener {
-    private listener : (eventType : string, data : string) => void;
+  private listener : (eventType : string, data : string) => void;
 
-    constructor(options : NativeLiveListener) {
-        super();
-        this.listener = options.listener;
+  constructor(options : NativeLiveListener) {
+    super();
+    this.listener = options.listener;
+  }
+  override onAudienceJoined(audience : LiveUserInfo) {
+    console.log(`${TAG} onAudienceJoined audience: ${audience}`);
+    const audienceUser = {
+      userID: audience.userID,
+      userName: audience.userName,
+      avatarURL: audience.avatarURL
+    };
+    let data = {
+      audience: audienceUser
     }
-    override onAudienceJoined(audience : LiveUserInfo) {
-        console.log(`${TAG} onAudienceJoined audience: ${audience}`);
-        const audienceUser = {
-            userID: audience.userID,
-            userName: audience.userName,
-            avatarURL: audience.avatarURL
-        };
-        let data = {
-            audience: audienceUser
-        }
-        this.listener('onAudienceJoined', JSON.stringify(data));
+    this.listener('onAudienceJoined', JSON.stringify(data));
+  }
+  override onAudienceLeft(audience : LiveUserInfo) {
+    console.log(`${TAG} onAudienceLeft audience: ${audience}`);
+    const audienceUser = {
+      userID: audience.userID,
+      userName: audience.userName,
+      avatarURL: audience.avatarURL
+    };
+    let data = {
+      audience: audienceUser
     }
-    override onAudienceLeft(audience : LiveUserInfo) {
-        console.log(`${TAG} onAudienceLeft audience: ${audience}`);
-        const audienceUser = {
-            userID: audience.userID,
-            userName: audience.userName,
-            avatarURL: audience.avatarURL
-        };
-        let data = {
-            audience: audienceUser
-        }
-        this.listener('onAudienceLeft', JSON.stringify(data));
+    this.listener('onAudienceLeft', JSON.stringify(data));
+  }
+  override onAudienceMessageDisabled(audience : LiveUserInfo, isDisable : Boolean) {
+    console.log(`${TAG} onAudienceMessageDisabled audience: ${audience}`);
+    const audienceUser = {
+      userID: audience.userID,
+      userName: audience.userName,
+      avatarURL: audience.avatarURL
+    };
+    let data = {
+      audience: audienceUser,
+      isDisable
     }
+    this.listener('onAudienceMessageDisabled', JSON.stringify(data));
+  }
 }
 
 export class TLiveListListener extends LiveListListener {
-    private listener : (eventType : string, data : string) => void;
+  private listener : (eventType : string, data : string) => void;
 
-    constructor(options : NativeLiveListener) {
-        super();
-        this.listener = options.listener;
+  constructor(options : NativeLiveListener) {
+    super();
+    this.listener = options.listener;
+  }
+  override onLiveEnded(liveID : String, reason : LiveEndedReason, message : String) {
+    let reasonStr = "ENDED_BY_HOST"
+    if (reason == LiveEndedReason.ENDED_BY_SERVER) {
+      reasonStr = "ENDED_BY_SERVER"
     }
-    override onLiveEnded(liveID : String, reason : LiveEndedReason, message : String) {
-        let reasonStr = "ENDED_BY_HOST" 
-        if(reason == LiveEndedReason.ENDED_BY_SERVER) {
-            reasonStr = "ENDED_BY_SERVER"
-        }
-        let data = {
-            liveID,
-            reason : reasonStr,
-            message
-        };
-         console.log(`${TAG} onLiveEnded, data : ${JSON.stringify(data)}`)
-        this.listener('onLiveEnded', JSON.stringify(data));
+    let data = {
+      liveID,
+      reason: reasonStr,
+      message
+    };
+    console.log(`${TAG} onLiveEnded, data : ${JSON.stringify(data)}`)
+    this.listener('onLiveEnded', JSON.stringify(data));
+  }
+  override onKickedOutOfLive(liveID : String, reason : LiveKickedOutReason, message : String) {
+    let data = {
+      liveID,
+      reason: this.convertKickedOutReasonToString(reason),
+      message
+    };
+    console.log(`${TAG} onKickedOutOfLive, data : ${JSON.stringify(data)}`);
+    this.listener('onKickedOutOfLive', JSON.stringify(data));
+  }
+  private convertKickedOutReasonToString(reason : LiveKickedOutReason) : String {
+    switch (reason) {
+      case LiveKickedOutReason.BY_LOGGED_ON_OTHER_DEVICE:
+        return "BY_LOGGED_ON_OTHER_DEVICE"
+      case LiveKickedOutReason.BY_SERVER:
+        return "BY_SERVER"
+      case LiveKickedOutReason.FOR_NETWORK_DISCONNECTED:
+        return "FOR_NETWORK_DISCONNECTED"
+      case LiveKickedOutReason.FOR_JOIN_ROOM_STATUS_INVALID_DURING_OFFLINE:
+        return "FOR_JOIN_ROOM_STATUS_INVALID_DURING_OFFLINE"
+      case LiveKickedOutReason.FOR_COUNT_OF_JOINED_ROOMS_EXCEED_LIMIT:
+        return "FOR_COUNT_OF_JOINED_ROOMS_EXCEED_LIMIT"
+      default:
+        return "BY_ADMIN"
     }
-    override onKickedOutOfLive(liveID : String, reason : LiveKickedOutReason, message : String) {
-        let data = {
-            liveID,
-            reason : this.convertKickedOutReasonToString(reason),
-            message
-        };
-        console.log(`${TAG} onKickedOutOfLive, data : ${JSON.stringify(data)}`);
-        this.listener('onKickedOutOfLive', JSON.stringify(data));
-    }
-    private convertKickedOutReasonToString(reason : LiveKickedOutReason) : String {
-        switch (reason) {
-            case LiveKickedOutReason.BY_LOGGED_ON_OTHER_DEVICE:
-                return "BY_LOGGED_ON_OTHER_DEVICE"
-            case LiveKickedOutReason.BY_SERVER:
-                return "BY_SERVER"
-            case LiveKickedOutReason.FOR_NETWORK_DISCONNECTED:
-                return "FOR_NETWORK_DISCONNECTED"
-            case LiveKickedOutReason.FOR_JOIN_ROOM_STATUS_INVALID_DURING_OFFLINE:
-                return "FOR_JOIN_ROOM_STATUS_INVALID_DURING_OFFLINE"
-            case LiveKickedOutReason.FOR_COUNT_OF_JOINED_ROOMS_EXCEED_LIMIT:
-                return "FOR_COUNT_OF_JOINED_ROOMS_EXCEED_LIMIT"
-            default:
-                return "BY_ADMIN"
-        }
-    }
+  }
 }
 
 export class TLiveSeatListener extends LiveSeatListener {
-    private listener : (eventType : string, data : string) => void;
+  private listener : (eventType : string, data : string) => void;
 
-    constructor(options : NativeLiveListener) {
-        super();
-        this.listener = options.listener;
+  constructor(options : NativeLiveListener) {
+    super();
+    this.listener = options.listener;
+  }
+  override onLocalCameraOpenedByAdmin(policy : DeviceControlPolicy) {
+    console.log(`${TAG} onLocalCameraOpenedByAdmin policy: ${policy}`);
+    let devicePolicy = "FORCE_OPEN"
+    if (policy == DeviceControlPolicy.UNLOCK_ONLY) {
+      devicePolicy = "UNLOCK_ONLY"
     }
-    override onLocalCameraOpenedByAdmin(policy : DeviceControlPolicy) {
-        console.log(`${TAG} onLocalCameraOpenedByAdmin policy: ${policy}`);
-        let devicePolicy = "FORCE_OPEN"
-        if (policy == DeviceControlPolicy.UNLOCK_ONLY) {
-            devicePolicy = "UNLOCK_ONLY"
-        }
-        this.listener('onLocalCameraOpenedByAdmin', devicePolicy);
+    this.listener('onLocalCameraOpenedByAdmin', devicePolicy);
+  }
+  override onLocalCameraClosedByAdmin() {
+    console.log(`${TAG} onLocalCameraClosedByAdmin`);
+    this.listener('onLocalCameraClosedByAdmin', "");
+  }
+  override onLocalMicrophoneOpenedByAdmin(policy : DeviceControlPolicy) {
+    console.log(`${TAG} onLocalMicrophoneOpenedByAdmin policy: ${policy}`);
+    let devicePolicy = "FORCE_OPEN"
+    if (policy == DeviceControlPolicy.UNLOCK_ONLY) {
+      devicePolicy = "UNLOCK_ONLY"
     }
-    override onLocalCameraClosedByAdmin() {
-        console.log(`${TAG} onLocalCameraClosedByAdmin`);
-        this.listener('onLocalCameraClosedByAdmin', "");
-    }
-    override onLocalMicrophoneOpenedByAdmin(policy : DeviceControlPolicy) {
-        console.log(`${TAG} onLocalMicrophoneOpenedByAdmin policy: ${policy}`);
-        let devicePolicy = "FORCE_OPEN"
-        if (policy == DeviceControlPolicy.UNLOCK_ONLY) {
-            devicePolicy = "UNLOCK_ONLY"
-        }
-        this.listener('onLocalMicrophoneOpenedByAdmin', devicePolicy);
-    }
-    override onLocalMicrophoneClosedByAdmin() {
-        console.log(`${TAG} onLocalMicrophoneClosedByAdmin`);
-        this.listener('onLocalMicrophoneClosedByAdmin', "");
-    }
+    this.listener('onLocalMicrophoneOpenedByAdmin', devicePolicy);
+  }
+  override onLocalMicrophoneClosedByAdmin() {
+    console.log(`${TAG} onLocalMicrophoneClosedByAdmin`);
+    this.listener('onLocalMicrophoneClosedByAdmin', "");
+  }
 }
 
 // CoGuestStore: HostListener
 export class TCoGuestHostListener extends HostListener {
-    private listener : (eventType : string, data : string) => void;
+  private listener : (eventType : string, data : string) => void;
 
-    constructor(options : NativeLiveListener) {
-        super();
-        this.listener = options.listener;
-    }
-    override onGuestApplicationReceived(guestUser : LiveUserInfo) {
-        console.log(`${TAG} onGuestApplicationReceived guestUser: ${guestUser}`);
-        const guestUserInfo = {
-            userID: guestUser.userID,
-            userName: guestUser.userName,
-            avatarURL: guestUser.avatarURL
-        };
-        let data = {
-            guestUser: guestUserInfo,
-        };  
-        this.listener('onGuestApplicationReceived', JSON.stringify(data));
-    }
-    override onGuestApplicationCancelled(guestUser : LiveUserInfo) {
-        console.log(`${TAG} onGuestApplicationCancelled guestUser: ${guestUser}`);
-        const guestUserInfo = {
-            userID: guestUser.userID,
-            userName: guestUser.userName,
-            avatarURL: guestUser.avatarURL
-        };
-        let data = {
-            guestUser: guestUserInfo,
-        };
-        this.listener('onGuestApplicationCancelled', JSON.stringify(data));
-    }
-    override onGuestApplicationProcessedByOtherHost(guestUser : LiveUserInfo, hostUser : LiveUserInfo) {
-        console.log(`${TAG} onGuestApplicationProcessedByOtherHost guestUser: ${guestUser}, hostUser: ${hostUser}`);
-        const guestUserInfo = {
-            userID: guestUser.userID,
-            userName: guestUser.userName,
-            avatarURL: guestUser.avatarURL
-        };
+  constructor(options : NativeLiveListener) {
+    super();
+    this.listener = options.listener;
+  }
+  override onGuestApplicationReceived(guestUser : LiveUserInfo) {
+    console.log(`${TAG} onGuestApplicationReceived guestUser: ${guestUser}`);
+    const guestUserInfo = {
+      userID: guestUser.userID,
+      userName: guestUser.userName,
+      avatarURL: guestUser.avatarURL
+    };
+    let data = {
+      guestUser: guestUserInfo,
+    };
+    this.listener('onGuestApplicationReceived', JSON.stringify(data));
+  }
+  override onGuestApplicationCancelled(guestUser : LiveUserInfo) {
+    console.log(`${TAG} onGuestApplicationCancelled guestUser: ${guestUser}`);
+    const guestUserInfo = {
+      userID: guestUser.userID,
+      userName: guestUser.userName,
+      avatarURL: guestUser.avatarURL
+    };
+    let data = {
+      guestUser: guestUserInfo,
+    };
+    this.listener('onGuestApplicationCancelled', JSON.stringify(data));
+  }
+  override onGuestApplicationProcessedByOtherHost(guestUser : LiveUserInfo, hostUser : LiveUserInfo) {
+    console.log(`${TAG} onGuestApplicationProcessedByOtherHost guestUser: ${guestUser}, hostUser: ${hostUser}`);
+    const guestUserInfo = {
+      userID: guestUser.userID,
+      userName: guestUser.userName,
+      avatarURL: guestUser.avatarURL
+    };
 
-        const hostUserInfo = {
-            userID: hostUser.userID,
-            userName: hostUser.userName,
-            avatarURL: hostUser.avatarURL
-        };
+    const hostUserInfo = {
+      userID: hostUser.userID,
+      userName: hostUser.userName,
+      avatarURL: hostUser.avatarURL
+    };
 
-        let data = {
-            guestUser: guestUserInfo,
-            hostUser: hostUserInfo
-        };
+    let data = {
+      guestUser: guestUserInfo,
+      hostUser: hostUserInfo
+    };
 
-        this.listener('onGuestApplicationProcessedByOtherHost', JSON.stringify(data));
-    }
-    override onHostInvitationResponded(isAccept : Boolean, guestUser : LiveUserInfo) {
-        console.log(`${TAG} onHostInvitationResponded isAccept: ${isAccept}, guestUser: ${guestUser}`);
+    this.listener('onGuestApplicationProcessedByOtherHost', JSON.stringify(data));
+  }
+  override onHostInvitationResponded(isAccept : Boolean, guestUser : LiveUserInfo) {
+    console.log(`${TAG} onHostInvitationResponded isAccept: ${isAccept}, guestUser: ${guestUser}`);
 
-        const guestUserInfo = {
-            userID: guestUser.userID,
-            userName: guestUser.userName,
-            avatarURL: guestUser.avatarURL
-        };
+    const guestUserInfo = {
+      userID: guestUser.userID,
+      userName: guestUser.userName,
+      avatarURL: guestUser.avatarURL
+    };
 
-        let data = {
-            isAccept,
-            guestUser: guestUserInfo
-        };
+    let data = {
+      isAccept,
+      guestUser: guestUserInfo
+    };
 
-        this.listener('onHostInvitationResponded', JSON.stringify(data));
-    }
-    override onHostInvitationNoResponse(guestUser : LiveUserInfo, reason : NoResponseReason) {
-        console.log(`${TAG} onHostInvitationNoResponse guestUser: ${guestUser}, reason: ${reason}`);
-        const guestUserInfo = {
-            userID: guestUser.userID,
-            userName: guestUser.userName,
-            avatarURL: guestUser.avatarURL
-        };
+    this.listener('onHostInvitationResponded', JSON.stringify(data));
+  }
+  override onHostInvitationNoResponse(guestUser : LiveUserInfo, reason : NoResponseReason) {
+    console.log(`${TAG} onHostInvitationNoResponse guestUser: ${guestUser}, reason: ${reason}`);
+    const guestUserInfo = {
+      userID: guestUser.userID,
+      userName: guestUser.userName,
+      avatarURL: guestUser.avatarURL
+    };
 
-        let data = {
-            guestUser: guestUserInfo,
-            reason: reason
-        };
+    let data = {
+      guestUser: guestUserInfo,
+      reason: reason
+    };
 
-        this.listener('onHostInvitationNoResponse', JSON.stringify(data));
-    }
+    this.listener('onHostInvitationNoResponse', JSON.stringify(data));
+  }
 }
 // CoGuestStore: GuestListener
 export class TCoGuestGuestListener extends GuestListener {
-    private listener : (eventType : string, data : string) => void;
+  private listener : (eventType : string, data : string) => void;
 
-    constructor(options : NativeLiveListener) {
-        super();
-        this.listener = options.listener;
-    }
-    override onHostInvitationReceived(hostUser : LiveUserInfo) {
-        const hostUserInfo = {
-            userID: hostUser.userID,
-            userName: hostUser.userName,
-            avatarURL: hostUser.avatarURL
-        };
-        
-        let data = {
-            hostUser: hostUserInfo,
-        };
-        console.log(`${TAG} onHostInvitationReceived hostUser: ${JSON.stringify(data)}`);
-        this.listener('onHostInvitationReceived', JSON.stringify(data));
-    }
-    override onHostInvitationCancelled(hostUser : LiveUserInfo) {
-        const hostUserInfo = {
-            userID: hostUser.userID,
-            userName: hostUser.userName,
-            avatarURL: hostUser.avatarURL
-        };
-        
-        let data = {
-            hostUser: hostUserInfo,
-        };
-        console.log(`${TAG} onHostInvitationCancelled hostUser: ${JSON.stringify(data)}`);
-        this.listener('onHostInvitationCancelled', JSON.stringify(data));
-    }
-    override onGuestApplicationResponded(isAccept : Boolean, hostUser : LiveUserInfo) {
-        const hostUserInfo = {
-            userID: hostUser.userID,
-            userName: hostUser.userName,
-            avatarURL: hostUser.avatarURL
-        };
+  constructor(options : NativeLiveListener) {
+    super();
+    this.listener = options.listener;
+  }
+  override onHostInvitationReceived(hostUser : LiveUserInfo) {
+    const hostUserInfo = {
+      userID: hostUser.userID,
+      userName: hostUser.userName,
+      avatarURL: hostUser.avatarURL
+    };
+    let data = {
+      hostUser: hostUserInfo,
+    };
+    console.log(`${TAG} onHostInvitationReceived hostUser: ${JSON.stringify(data)}`);
+    this.listener('onHostInvitationReceived', JSON.stringify(data));
+  }
+  override onHostInvitationCancelled(hostUser : LiveUserInfo) {
+    const hostUserInfo = {
+      userID: hostUser.userID,
+      userName: hostUser.userName,
+      avatarURL: hostUser.avatarURL
+    };
+    let data = {
+      hostUser: hostUserInfo,
+    };
+    console.log(`${TAG} onHostInvitationCancelled hostUser: ${JSON.stringify(data)}`);
+    this.listener('onHostInvitationCancelled', JSON.stringify(data));
+  }
+  override onGuestApplicationResponded(isAccept : Boolean, hostUser : LiveUserInfo) {
+    const hostUserInfo = {
+      userID: hostUser.userID,
+      userName: hostUser.userName,
+      avatarURL: hostUser.avatarURL
+    };
 
-        let data = {
-            isAccept,
-            hostUser: hostUserInfo
-        };
-        console.log(`${TAG} onGuestApplicationResponded isAccept: ${isAccept}, hostUser: ${JSON.stringify(data)}`);
-        this.listener('onGuestApplicationResponded', JSON.stringify(data));
+    let data = {
+      isAccept,
+      hostUser: hostUserInfo
+    };
+    console.log(`${TAG} onGuestApplicationResponded isAccept: ${isAccept}, hostUser: ${JSON.stringify(data)}`);
+    this.listener('onGuestApplicationResponded', JSON.stringify(data));
+  }
+  override onGuestApplicationNoResponse(reason : NoResponseReason) {
+    let reasonStr = "TIMEOUT"
+    if (reason == NoResponseReason.ALREADY_SEATED) {
+      reasonStr = "ALREADY_SEATED"
     }
-    override onGuestApplicationNoResponse(reason : NoResponseReason) {
-        let reasonStr = "TIMEOUT"
-        if(reason == NoResponseReason.ALREADY_SEATED) {
-            reasonStr = "ALREADY_SEATED"
-        }
-        let data = {
-            reason: reasonStr,
-        }
-        console.log(`${TAG} onGuestApplicationNoResponse reason: ${JSON.stringify(data)}`);
-        this.listener('onGuestApplicationNoResponse', JSON.stringify(data));
+    let data = {
+      reason: reasonStr,
     }
-    override onKickedOffSeat(seatIndex : Int, hostUser : LiveUserInfo) {
-        console.log(`${TAG} onKickedOffSeat seatIndex: ${seatIndex}, hostUser: ${hostUser}`);
-        const hostUserInfo = {
-            userID: hostUser.userID,
-            userName: hostUser.userName,
-            avatarURL: hostUser.avatarURL
-        };
+    console.log(`${TAG} onGuestApplicationNoResponse reason: ${JSON.stringify(data)}`);
+    this.listener('onGuestApplicationNoResponse', JSON.stringify(data));
+  }
+  override onKickedOffSeat(seatIndex : Int, hostUser : LiveUserInfo) {
+    console.log(`${TAG} onKickedOffSeat seatIndex: ${seatIndex}, hostUser: ${hostUser}`);
+    const hostUserInfo = {
+      userID: hostUser.userID,
+      userName: hostUser.userName,
+      avatarURL: hostUser.avatarURL
+    };
 
-        let data = {
-            seatIndex,
-            hostUser: hostUserInfo
-        };
+    let data = {
+      seatIndex,
+      hostUser: hostUserInfo
+    };
 
-        this.listener('onKickedOffSeat', JSON.stringify(data));
-    }
+    this.listener('onKickedOffSeat', JSON.stringify(data));
+  }
 }
 
 //CoHostStore: CoHostListener
 export class TCoHostListener extends CoHostListener {
-    private listener : (eventType : string, data : string) => void;
+  private listener : (eventType : string, data : string) => void;
 
-    constructor(options : NativeLiveListener) {
-        super();
-        this.listener = options.listener;
+  constructor(options : NativeLiveListener) {
+    super();
+    this.listener = options.listener;
+  }
+
+  private convertSeatUserInfoToData(seatUserInfo ?: SeatUserInfo) {
+    return {
+      userID: seatUserInfo?.userID,
+      userName: seatUserInfo?.userName,
+      avatarURL: seatUserInfo?.avatarURL,
+      role: seatUserInfo?.role,
+      liveID: seatUserInfo?.liveID,
+      microphoneStatus: seatUserInfo?.microphoneStatus,
+      allowOpenMicrophone: seatUserInfo?.allowOpenMicrophone,
+      cameraStatus: seatUserInfo?.cameraStatus,
+      allowOpenCamera: seatUserInfo?.allowOpenCamera
+    };
+  }
+
+  override onCoHostRequestReceived(inviter : SeatUserInfo, extensionInfo : String) {
+    console.log(`${TAG} onCoHostRequestReceived inviter: ${inviter}, extensionInfo: ${extensionInfo}`);
+    let data = {
+      inviter: this.convertSeatUserInfoToData(inviter),
+      extensionInfo: extensionInfo ?? ""
+    };
+
+    this.listener('onCoHostRequestReceived', JSON.stringify(data));
+  }
+  override onCoHostRequestCancelled(inviter : SeatUserInfo, invitee ?: SeatUserInfo) {
+    console.log(`${TAG} onCoHostRequestCancelled inviter: ${inviter}, invitee: ${invitee}`);
+    let data = {
+      inviter: this.convertSeatUserInfoToData(inviter),
+      invitee: this.convertSeatUserInfoToData(invitee)
+    };
+
+    this.listener('onCoHostRequestCancelled', JSON.stringify(data));
+  }
+  override onCoHostRequestAccepted(invitee : SeatUserInfo) {
+    console.log(`${TAG} onCoHostRequestAccepted invitee: ${invitee}`);
+    let data = {
+      invitee: this.convertSeatUserInfoToData(invitee)
+    };
+    this.listener('onCoHostRequestAccepted', JSON.stringify(data));
+  }
+  override onCoHostRequestRejected(invitee : SeatUserInfo) {
+    console.log(`${TAG} onCoHostRequestRejected invitee: ${invitee}`);
+    let data = {
+      invitee: this.convertSeatUserInfoToData(invitee)
+    };
+    this.listener('onCoHostRequestRejected', JSON.stringify(data));
+  }
+  override onCoHostRequestTimeout(inviter : SeatUserInfo, invitee : SeatUserInfo) {
+    console.log(`${TAG} onCoHostRequestTimeout inviter: ${inviter}`);
+    let data = {
+      inviter: this.convertSeatUserInfoToData(inviter),
+      invitee: this.convertSeatUserInfoToData(invitee),
+    };
+    this.listener('onCoHostRequestTimeout', JSON.stringify(data));
+  }
+  override onCoHostUserJoined(userInfo : SeatUserInfo) {
+    console.log(`${TAG} onCoHostUserJoined userInfo: ${userInfo}`);
+    let data = {
+      userInfo: this.convertSeatUserInfoToData(userInfo)
+    }
+    this.listener('onCoHostUserJoined', JSON.stringify(data));
+  }
+  override onCoHostUserLeft(userInfo : SeatUserInfo) {
+    console.log(`${TAG} onCoHostUserLeft userInfo: ${userInfo}`);
+    let data = {
+      userInfo: this.convertSeatUserInfoToData(userInfo)
+    }
+    this.listener('onCoHostUserLeft', JSON.stringify(data));
+  }
+}
+
+// BattleStore: BattleListener
+export class TBattleListener extends BattleListener {
+  private listener : (eventType : string, data : string) => void;
+
+  constructor(options : NativeLiveListener) {
+    super();
+    this.listener = options.listener;
+  }
+
+  private convertSeatUserInfoToData(seatUserInfo ?: SeatUserInfo) {
+    return {
+      userID: seatUserInfo?.userID,
+      userName: seatUserInfo?.userName,
+      avatarURL: seatUserInfo?.avatarURL,
+      role: seatUserInfo?.role,
+      liveID: seatUserInfo?.liveID,
+      microphoneStatus: seatUserInfo?.microphoneStatus,
+      allowOpenMicrophone: seatUserInfo?.allowOpenMicrophone,
+      cameraStatus: seatUserInfo?.cameraStatus,
+      allowOpenCamera: seatUserInfo?.allowOpenCamera
+    };
+  }
+
+  private convertBattleInfoToData(battleInfo : BattleInfo) {
+    let battleConfig = {
+      duration: battleInfo.config.duration,
+      needResponse: battleInfo.config.needResponse,
+      extensionInfo: battleInfo.config.extensionInfo
     }
 
-    private convertSeatUserInfoToData(seatUserInfo ?: SeatUserInfo) {
-        return {
-            userID: seatUserInfo?.userID,
-            userName: seatUserInfo?.userName,
-            avatarURL: seatUserInfo?.avatarURL,
-            role: seatUserInfo?.role,
-            liveID: seatUserInfo?.liveID,
-            microphoneStatus: seatUserInfo?.microphoneStatus,
-            allowOpenMicrophone: seatUserInfo?.allowOpenMicrophone,
-            cameraStatus: seatUserInfo?.cameraStatus,
-            allowOpenCamera: seatUserInfo?.allowOpenCamera
-        };
-    }
+    return {
+      battleID: battleInfo.battleID,
+      config: battleConfig,
+      startTime: battleInfo.startTime,
+      endTime: battleInfo.endTime
+    };
+  }
 
-    override onCoHostRequestReceived(inviter : SeatUserInfo, extensionInfo : String) {
-        console.log(`${TAG} onCoHostRequestReceived inviter: ${inviter}, extensionInfo: ${extensionInfo}`);
-        let data = {
-            inviter: this.convertSeatUserInfoToData(inviter),
-            extensionInfo: extensionInfo ?? ""
-        };
+  override onBattleStarted(battleInfo : BattleInfo, inviter : SeatUserInfo, invitees : List<SeatUserInfo>) {
+    console.log(`${TAG} onBattleStarted battleInfo: ${battleInfo}, inviter: ${inviter}, invitees: ${invitees}`);
+    let data = {
+      battleInfo: this.convertBattleInfoToData(battleInfo),
+      inviter: this.convertSeatUserInfoToData(inviter),
+      invitees: invitees.map(user => this.convertSeatUserInfoToData(user))
+    };
+    console.log(`${TAG} onBattleStarted data: ${JSON.stringify(data)}`);
+    this.listener('onBattleStarted', JSON.stringify(data));
+  }
 
-        this.listener('onCoHostRequestReceived', JSON.stringify(data));
+  override onBattleEnded(battleInfo : BattleInfo, reason ?: BattleEndedReason) {
+    console.log(`${TAG} onUserJoinBattle battleInfo: ${battleInfo}, reason: ${reason}`);
+    let reasonStr = "TIME_OVER"
+    if (reason == BattleEndedReason.ALL_MEMBER_EXIT) {
+      reasonStr = "ALL_MEMBER_EXIT"
     }
-    override onCoHostRequestCancelled(inviter : SeatUserInfo, invitee ?: SeatUserInfo) {
-        console.log(`${TAG} onCoHostRequestCancelled inviter: ${inviter}, invitee: ${invitee}`);
-        let data = {
-            inviter: this.convertSeatUserInfoToData(inviter),
-            invitee: this.convertSeatUserInfoToData(invitee)
-        };
+    let data = {
+      battleInfo: this.convertBattleInfoToData(battleInfo),
+      reason: reasonStr,
+    };
+    console.log(`${TAG} onBattleEnded data: ${JSON.stringify(data)}`);
+    this.listener('onBattleEnded', JSON.stringify(data));
+  }
 
-        this.listener('onCoHostRequestCancelled', JSON.stringify(data));
-    }
-    override onCoHostRequestAccepted(invitee : SeatUserInfo) {
-        console.log(`${TAG} onCoHostRequestAccepted invitee: ${invitee}`);
-        let data = {
-            invitee: this.convertSeatUserInfoToData(invitee)
-        };
-        this.listener('onCoHostRequestAccepted', JSON.stringify(data));
-    }
-    override onCoHostRequestRejected(invitee : SeatUserInfo) {
-        console.log(`${TAG} onCoHostRequestRejected invitee: ${invitee}`);
-        let data = {
-            invitee: this.convertSeatUserInfoToData(invitee)
-        };
-        this.listener('onCoHostRequestRejected', JSON.stringify(data));
-    }
-    override onCoHostRequestTimeout(inviter : SeatUserInfo, invitee : SeatUserInfo) {
-        console.log(`${TAG} onCoHostRequestTimeout inviter: ${inviter}`);
-        let data = {
-            inviter: this.convertSeatUserInfoToData(inviter),
-            invitee: this.convertSeatUserInfoToData(invitee),
-        };
-        this.listener('onCoHostRequestTimeout', JSON.stringify(data));
-    }
-    override onCoHostUserJoined(userInfo : SeatUserInfo) {
-        console.log(`${TAG} onCoHostUserJoined userInfo: ${userInfo}`);
-        let data = {
-            userInfo: this.convertSeatUserInfoToData(userInfo)
-        }
-        this.listener('onCoHostUserJoined', JSON.stringify(data));
-    }
-    override onCoHostUserLeft(userInfo : SeatUserInfo) {
-        console.log(`${TAG} onCoHostUserLeft userInfo: ${userInfo}`);
-        let data = {
-            userInfo: this.convertSeatUserInfoToData(userInfo)
-        }
-        this.listener('onCoHostUserLeft', JSON.stringify(data));
-    }
+  override onUserJoinBattle(battleID : String, battleUser : SeatUserInfo) {
+    console.log(`${TAG} onUserJoinBattle battleID: ${battleID}, battleUser: ${battleUser}`);
+    let data = {
+      battleID,
+      battleUser: this.convertSeatUserInfoToData(battleUser)
+    };
+    console.log(`${TAG} onUserJoinBattle data: ${JSON.stringify(data)}`);
+    this.listener('onUserJoinBattle', JSON.stringify(data));
+  }
+
+  override onUserExitBattle(battleID : String, battleUser : SeatUserInfo) {
+    console.log(`${TAG} onUserExitBattle battleID: ${battleID}, battleUser: ${battleUser}`);
+    let data = {
+      battleID,
+      battleUser: this.convertSeatUserInfoToData(battleUser)
+    };
+    console.log(`${TAG} onUserExitBattle data: ${JSON.stringify(data)}`);
+    this.listener('onUserExitBattle', JSON.stringify(data));
+  }
+
+  override onBattleRequestReceived(battleID : String, inviter : SeatUserInfo, invitee : SeatUserInfo) {
+    console.log(`${TAG} onBattleRequestReceived battleID: ${battleID}, inviter: ${inviter}, invitee: ${invitee}`);
+    let data = {
+      battleID,
+      inviter: this.convertSeatUserInfoToData(inviter),
+      invitee: this.convertSeatUserInfoToData(invitee)
+    };
+    console.log(`${TAG} onBattleRequestReceived data: ${JSON.stringify(data)}`);
+    this.listener('onBattleRequestReceived', JSON.stringify(data));
+  }
+
+  override onBattleRequestCancelled(battleID : String, inviter : SeatUserInfo, invitee : SeatUserInfo) {
+    console.log(`${TAG} onBattleRequestCancelled battleID: ${battleID}, inviter: ${inviter}, invitee: ${invitee}`);
+    let data = {
+      battleID,
+      inviter: this.convertSeatUserInfoToData(inviter),
+      invitee: this.convertSeatUserInfoToData(invitee)
+    };
+    console.log(`${TAG} onBattleRequestCancelled data: ${JSON.stringify(data)}`);
+    this.listener('onBattleRequestCancelled', JSON.stringify(data));
+  }
+
+  override onBattleRequestTimeout(battleID : String, inviter : SeatUserInfo, invitee : SeatUserInfo) {
+    console.log(`${TAG} onBattleRequestTimeout battleID: ${battleID}, inviter: ${inviter}, invitee: ${invitee}`);
+    let data = {
+      battleID,
+      inviter: this.convertSeatUserInfoToData(inviter),
+      invitee: this.convertSeatUserInfoToData(invitee)
+    };
+    console.log(`${TAG} onBattleRequestTimeout data: ${JSON.stringify(data)}`);
+    this.listener('onBattleRequestTimeout', JSON.stringify(data));
+  }
+
+  override onBattleRequestAccept(battleID : String, inviter : SeatUserInfo, invitee : SeatUserInfo) {
+    console.log(`${TAG} onBattleRequestAccept battleID: ${battleID}, inviter: ${inviter}, invitee: ${invitee}`);
+    let data = {
+      battleID,
+      inviter: this.convertSeatUserInfoToData(inviter),
+      invitee: this.convertSeatUserInfoToData(invitee)
+    };
+    console.log(`${TAG} onBattleRequestAccept data: ${JSON.stringify(data)}`);
+    this.listener('onBattleRequestAccept', JSON.stringify(data));
+  }
+
+  override onBattleRequestReject(battleID : String, inviter : SeatUserInfo, invitee : SeatUserInfo) {
+    console.log(`${TAG} onBattleRequestReject battleID: ${battleID}, inviter: ${inviter}, invitee: ${invitee}`);
+    let data = {
+      battleID,
+      inviter: this.convertSeatUserInfoToData(inviter),
+      invitee: this.convertSeatUserInfoToData(invitee)
+    };
+    console.log(`${TAG} onBattleRequestReject data: ${JSON.stringify(data)}`);
+    this.listener('onBattleRequestReject', JSON.stringify(data));
+  }
 }

@@ -1,9 +1,9 @@
 package uts.sdk.modules.atomicx.observer
 
 import com.google.gson.Gson
-import io.trtc.tuikit.atomicxcore.api.Barrage
-import io.trtc.tuikit.atomicxcore.api.BarrageStore
-import io.trtc.tuikit.atomicxcore.api.BarrageType
+import io.trtc.tuikit.atomicxcore.api.barrage.Barrage
+import io.trtc.tuikit.atomicxcore.api.barrage.BarrageStore
+import io.trtc.tuikit.atomicxcore.api.barrage.BarrageType
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job

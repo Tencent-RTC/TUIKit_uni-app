@@ -119,8 +119,8 @@
     setAudioReverbType,
     isEarMonitorOpened,
     earMonitorVolume,
-    changerType,
-    reverbType
+    audioChangerType,
+    audioReverbType
   } = useAudioEffectState(uni.$liveID)
 
   const props = defineProps({
@@ -212,8 +212,8 @@
       console.log('状态管理器中的值:', {
         isEarMonitorOpened: isEarMonitorOpened.value,
         earMonitorVolume: earMonitorVolume.value,
-        changerType: changerType.value,
-        reverbType: reverbType.value
+        audioChangerType: audioChangerType.value,
+        audioReverbType: audioReverbType.value
       });
 
       // 同步耳返状态
@@ -224,20 +224,20 @@
 
 
       // 同步变声类型 - 确保值有效
-      if (changerType.value && typeof changerType.value === 'string') {
-        currentEffect.value = changerType.value;
-        console.log('变声类型同步:', changerType.value);
+      if (audioChangerType.value && typeof audioChangerType.value === 'string') {
+        currentEffect.value = audioChangerType.value;
+        console.log('变声类型同步:', audioChangerType.value);
       } else {
-        console.warn('变声类型无效:', changerType.value);
+        console.warn('变声类型无效:', audioChangerType.value);
         currentEffect.value = 'NONE';
       }
 
       // 同步混响类型 - 确保值有效
-      if (reverbType.value && typeof reverbType.value === 'string') {
-        currentReverb.value = reverbType.value;
-        console.log('混响类型同步:', reverbType.value);
+      if (audioReverbType.value && typeof audioReverbType.value === 'string') {
+        currentReverb.value = audioReverbType.value;
+        console.log('混响类型同步:', audioReverbType.value);
       } else {
-        console.warn('混响类型无效:', reverbType.value);
+        console.warn('混响类型无效:', audioReverbType.value);
         currentReverb.value = 'NONE';
       }
 

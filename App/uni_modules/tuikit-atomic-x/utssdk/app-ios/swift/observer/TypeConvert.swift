@@ -80,4 +80,17 @@ struct TypeConvert {
                 return "APPLY"
         }
     }
+
+    static func convertLiveSummaryDataToDic(summaryData: LiveSummaryData) -> [String: Any] {
+        var dict: [String: Any] = [
+            "totalDuration": summaryData.totalDuration,
+            "totalViewers": summaryData.totalViewers,
+            "totalGiftsSent": summaryData.totalGiftsSent,
+            "totalGiftUniqueSenders": summaryData.totalGiftUniqueSenders,
+            "totalGiftCoins": summaryData.totalGiftCoins,
+            "totalLikesReceived": summaryData.totalLikesReceived,
+            "totalMessageSent": summaryData.totalMessageSent,
+        ]
+        return dict
+    }
 }

@@ -542,8 +542,23 @@
   // 显示礼物提示
   const showGiftToast = async (giftData ?: any, isOnlyDisplay : boolean = false) => {
     if (!giftData) return;
-    giftInfo.value = giftData;
-    showGift(giftData, { onlyDisplay: isOnlyDisplay });
+ 
+    const giftDataCopy = {
+      ...giftData,
+      resourceURL: giftData.resourceURL ? String(giftData.resourceURL) : '',
+      name: giftData.name ? String(giftData.name) : '',
+      giftID: giftData.giftID || 0,
+    };
+    
+    giftInfo.value = giftDataCopy;
+    
+    const isFromSelf = !giftData?.sender || giftData?.sender?.userID === uni.$userID;
+    
+
+    showGift(giftDataCopy, { 
+      onlyDisplay: isOnlyDisplay,
+      isFromSelf: isFromSelf  
+    });
 
     // 使用 BarrageList 的 showToast 方法显示礼物提示
     if (barrageListRef.value) {

@@ -19,14 +19,16 @@ export function giftService(params: {
     const { sendGift } = useGiftState(uni?.$liveID)
     const isGiftPlaying = ref(false)
 
-    const showGift = async (giftData: GiftData, options?: { onlyDisplay?: boolean }) => {
+    const showGift = async (giftData: GiftData, options?: { onlyDisplay?: boolean; isFromSelf?: boolean }) => {
         if (!giftData) return
         const onlyDisplay = !!options?.onlyDisplay
+        const isFromSelf = !!options?.isFromSelf  // 是否为自送礼物（用户自己送的）
 
         // SVGA 类型
         if (giftData.resourceURL) {
             isGiftPlaying.value = true
-            params.giftPlayerRef?.value?.playGift(giftData)
+            // 传递 isFromSelf 参数，用于队列优先级管理
+            params.giftPlayerRef?.value?.playGift(giftData, isFromSelf)
         } else if (params.giftToastRef?.value) {
             // 普通礼物提示
             params.giftToastRef?.value?.showToast({
@@ -76,15 +78,22 @@ export function downloadAndSaveToPath(url: string) {
                     tempFilePath: res.tempFilePath,
                     success: (res) => {
                         imageFilePath = res.savedFilePath
-                        imageFilePath = plus.io.convertLocalFileSystemURL(imageFilePath)
+
+                        // 转换为本地文件系统 URL
+                        if (plus && plus.io && plus.io.convertLocalFileSystemURL) {
+                            imageFilePath = plus.io.convertLocalFileSystemURL(imageFilePath)
+                        } 
+
                         resolve(imageFilePath)
                     },
-                    fail: () => {
+                    fail: (err) => {
                         reject(new Error('保存文件失败'))
                     },
                 })
             },
-            fail: (err) => reject(err),
+            fail: (err) => {
+                reject(err)
+            },
         })
     })
 }

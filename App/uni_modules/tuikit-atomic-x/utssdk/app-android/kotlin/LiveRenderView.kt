@@ -8,8 +8,8 @@ import android.view.View
 import android.view.ViewOutlineProvider
 import androidx.constraintlayout.widget.ConstraintLayout
 import io.dcloud.uts.console
-import io.trtc.tuikit.atomicxcore.api.CoreViewType
-import io.trtc.tuikit.atomicxcore.api.LiveCoreView
+import io.trtc.tuikit.atomicxcore.api.view.CoreViewType
+import io.trtc.tuikit.atomicxcore.api.view.LiveCoreView
 
 private const val TAG = "UTS-LiveRenderView: "
 

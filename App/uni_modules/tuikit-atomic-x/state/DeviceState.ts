@@ -1,6 +1,11 @@
 /**
- * 设备状态管理
  * @module DeviceState
+ * @module_description
+ * 设备状态管理模块
+ * 核心功能：管理摄像头、麦克风等音视频设备的控制，提供设备状态监控、权限检查等基础设备服务。
+ * 技术特点：支持多设备管理、设备状态实时监控、权限动态检查、设备故障自动恢复等高级功能。
+ * 业务价值：为直播系统提供稳定的设备基础，确保音视频采集的可靠性和用户体验。
+ * 应用场景：设备管理、权限控制、音视频采集、设备故障处理等基础技术场景。
  */
 import { ref } from "vue";
 import {
@@ -75,6 +80,19 @@ const DEVICE_ERROR_MAP: Record<DeviceErrorCodeType, DeviceErrorType> = {
  * 麦克风开启状态
  * @type {Ref<DeviceStatusType>}
  * @memberof module:DeviceState
+ * @example
+ * import { useDeviceState } from '@/uni_modules/tuikit-atomic-x/state/DeviceState';
+ * const { microphoneStatus } = useDeviceState();
+ * 
+ * // 监听麦克风状态变化
+ * watch(microphoneStatus, (newStatus) => {
+ *   console.log('麦克风状态:', newStatus);
+ *   if (newStatus === 'ON') {
+ *     console.log('麦克风已打开');
+ *   } else if (newStatus === 'OFF') {
+ *     console.log('麦克风已关闭');
+ *   }
+ * });
  */
 const microphoneStatus = ref<DeviceStatusType>();
 
@@ -82,6 +100,16 @@ const microphoneStatus = ref<DeviceStatusType>();
  * 麦克风最后一次错误状态
  * @type {Ref<DeviceErrorType>}
  * @memberof module:DeviceState
+ * @example
+ * import { useDeviceState } from '@/uni_modules/tuikit-atomic-x/state/DeviceState';
+ * const { microphoneLastError } = useDeviceState();
+ * 
+ * // 监听麦克风错误状态
+ * watch(microphoneLastError, (newError) => {
+ *   if (newError && newError !== 'NO_ERROR') {
+ *     console.log('麦克风错误:', newError);
+ *   }
+ * });
  */
 const microphoneLastError = ref<DeviceErrorType>();
 
@@ -89,6 +117,15 @@ const microphoneLastError = ref<DeviceErrorType>();
  * 是否有音频发布权限
  * @type {Ref<boolean>}
  * @memberof module:DeviceState
+ * @example
+ * import { useDeviceState } from '@/uni_modules/tuikit-atomic-x/state/DeviceState';
+ * const { hasPublishAudioPermission } = useDeviceState();
+ * 
+ * // 检查是否有音频发布权限
+ * const hasPermission = hasPublishAudioPermission.value;
+ * if (!hasPermission) {
+ *   console.log('没有音频发布权限');
+ * }
  */
 const hasPublishAudioPermission = ref<boolean>(true);
 
@@ -96,6 +133,14 @@ const hasPublishAudioPermission = ref<boolean>(true);
  * 采集音量大小（0-100）
  * @type {Ref<number>}
  * @memberof module:DeviceState
+ * @example
+ * import { useDeviceState } from '@/uni_modules/tuikit-atomic-x/state/DeviceState';
+ * const { captureVolume } = useDeviceState();
+ * 
+ * // 监听采集音量变化
+ * watch(captureVolume, (newVolume) => {
+ *   console.log('采集音量:', newVolume);
+ * });
  */
 const captureVolume = ref<number>(0);
 
@@ -103,6 +148,14 @@ const captureVolume = ref<number>(0);
  * 当前麦克风音量（0-100）
  * @type {Ref<number>}
  * @memberof module:DeviceState
+ * @example
+ * import { useDeviceState } from '@/uni_modules/tuikit-atomic-x/state/DeviceState';
+ * const { currentMicVolume } = useDeviceState();
+ * 
+ * // 监听麦克风音量变化
+ * watch(currentMicVolume, (newVolume) => {
+ *   console.log('当前麦克风音量:', newVolume);
+ * });
  */
 const currentMicVolume = ref<number>(0);
 
@@ -110,6 +163,14 @@ const currentMicVolume = ref<number>(0);
  * 输出音量大小（0-100）
  * @type {Ref<number>}
  * @memberof module:DeviceState
+ * @example
+ * import { useDeviceState } from '@/uni_modules/tuikit-atomic-x/state/DeviceState';
+ * const { outputVolume } = useDeviceState();
+ * 
+ * // 监听输出音量变化
+ * watch(outputVolume, (newVolume) => {
+ *   console.log('输出音量:', newVolume);
+ * });
  */
 const outputVolume = ref<number>(0);
 
@@ -117,6 +178,17 @@ const outputVolume = ref<number>(0);
  * 摄像头开启状态
  * @type {Ref<DeviceStatusType>}
  * @memberof module:DeviceState
+ * @example
+ * import { useDeviceState } from '@/uni_modules/tuikit-atomic-x/state/DeviceState';
+ * const { cameraStatus } = useDeviceState();
+ * 
+ * // 监听摄像头状态变化
+ * watch(cameraStatus, (newStatus) => {
+ *   console.log('摄像头状态:', newStatus);
+ *   if (newStatus === 'ON') {
+ *     console.log('摄像头已打开');
+ *   }
+ * });
  */
 const cameraStatus = ref<DeviceStatusType>();
 
@@ -124,6 +196,16 @@ const cameraStatus = ref<DeviceStatusType>();
  * 摄像头最后一次错误状态
  * @type {Ref<DeviceErrorType>}
  * @memberof module:DeviceState
+ * @example
+ * import { useDeviceState } from '@/uni_modules/tuikit-atomic-x/state/DeviceState';
+ * const { cameraLastError } = useDeviceState();
+ * 
+ * // 监听摄像头错误状态
+ * watch(cameraLastError, (newError) => {
+ *   if (newError && newError !== 'NO_ERROR') {
+ *     console.log('摄像头错误:', newError);
+ *   }
+ * });
  */
 const cameraLastError = ref<DeviceErrorType>();
 
@@ -131,6 +213,15 @@ const cameraLastError = ref<DeviceErrorType>();
  * 是否为前置摄像头
  * @type {Ref<boolean>}
  * @memberof module:DeviceState
+ * @example
+ * import { useDeviceState } from '@/uni_modules/tuikit-atomic-x/state/DeviceState';
+ * const { isFrontCamera } = useDeviceState();
+ * 
+ * // 检查当前是否为前置摄像头
+ * const isFront = isFrontCamera.value;
+ * if (isFront) {
+ *   console.log('当前使用前置摄像头');
+ * }
  */
 const isFrontCamera = ref<boolean>();
 
@@ -138,6 +229,13 @@ const isFrontCamera = ref<boolean>();
  * 本地镜像类型
  * @type {Ref<string>}
  * @memberof module:DeviceState
+ * @example
+ * import { useDeviceState } from '@/uni_modules/tuikit-atomic-x/state/DeviceState';
+ * const { localMirrorType } = useDeviceState();
+ * 
+ * // 获取本地镜像类型
+ * const mirrorType = localMirrorType.value;
+ * console.log('本地镜像类型:', mirrorType);
  */
 const localMirrorType = ref<string>('');
 
@@ -145,6 +243,13 @@ const localMirrorType = ref<string>('');
  * 本地视频质量设置
  * @type {Ref<any>}
  * @memberof module:DeviceState
+ * @example
+ * import { useDeviceState } from '@/uni_modules/tuikit-atomic-x/state/DeviceState';
+ * const { localVideoQuality } = useDeviceState();
+ * 
+ * // 获取本地视频质量设置
+ * const quality = localVideoQuality.value;
+ * console.log('本地视频质量:', quality);
  */
 const localVideoQuality = ref<any>();
 
@@ -152,6 +257,19 @@ const localVideoQuality = ref<any>();
  * 当前音频输出路由（扬声器/耳机）
  * @type {Ref<AudioOutputType>}
  * @memberof module:DeviceState
+ * @example
+ * import { useDeviceState } from '@/uni_modules/tuikit-atomic-x/state/DeviceState';
+ * const { currentAudioRoute } = useDeviceState();
+ * 
+ * // 监听音频输出路由变化
+ * watch(currentAudioRoute, (newRoute) => {
+ *   console.log('音频输出路由:', newRoute);
+ *   if (newRoute === 'SPEAKERPHONE') {
+ *     console.log('使用扬声器');
+ *   } else if (newRoute === 'EARPIECE') {
+ *     console.log('使用耳机');
+ *   }
+ * });
  */
 const currentAudioRoute = ref<AudioOutputType>();
 
@@ -159,6 +277,17 @@ const currentAudioRoute = ref<AudioOutputType>();
  * 屏幕共享状态
  * @type {Ref<DeviceStatusType>}
  * @memberof module:DeviceState
+ * @example
+ * import { useDeviceState } from '@/uni_modules/tuikit-atomic-x/state/DeviceState';
+ * const { screenStatus } = useDeviceState();
+ * 
+ * // 监听屏幕共享状态
+ * watch(screenStatus, (newStatus) => {
+ *   console.log('屏幕共享状态:', newStatus);
+ *   if (newStatus === 'ON') {
+ *     console.log('屏幕共享已开启');
+ *   }
+ * });
  */
 const screenStatus = ref<DeviceStatusType>();
 
@@ -166,9 +295,19 @@ const screenStatus = ref<DeviceStatusType>();
  * 网络信息状态
  * @type {Ref<any>}
  * @memberof module:DeviceState
+ * @example
+ * import { useDeviceState } from '@/uni_modules/tuikit-atomic-x/state/DeviceState';
+ * const { networkInfo } = useDeviceState();
+ * 
+ * // 获取网络信息
+ * const info = networkInfo.value;
+ * console.log('网络信息:', info);
  */
 const networkInfo = ref<any>();
 
+/**
+ * @internal
+ */
 function mapStatusCodeToDeviceStatus(
   statusCode: number
 ): DeviceStatusType | null {
@@ -179,7 +318,9 @@ function mapStatusCodeToDeviceStatus(
   }
   return mappedStatus;
 }
-
+/**
+ * @internal
+ */
 function mapErrorCodeToDeviceError(errorCode: number): DeviceErrorType | null {
   const mappedError = DEVICE_ERROR_MAP[errorCode as DeviceErrorCodeType];
   if (!mappedError) {

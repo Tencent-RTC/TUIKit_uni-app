@@ -8,6 +8,7 @@ export const liveSeatListenerMap = new Map<string, Array<ILiveListener>>();
 export const coGuestHostListenerMap = new Map<string, Array<ILiveListener>>();
 export const coGuestGuestListenerMap = new Map<string, Array<ILiveListener>>();
 export const coHostListenerMap = new Map<string, Array<ILiveListener>>();
+export const battleListenerMap = new Map<string, Array<ILiveListener>>();
 
 export type NativeLiveListener = {
     listener : (eventName : string, data : string) => void
@@ -113,6 +114,18 @@ export function createLiveSeatEventDispatcher() {
     const liveListener : NativeLiveListener = {
         listener: (eventName : string, data : string) => {
             liveSeatListenerMap.get(eventName)?.forEach((iLiveListener) => {
+                iLiveListener.callback(data);
+            });
+        },
+    };
+    return liveListener
+}
+
+// 创建Battle事件分发器
+export function createBattleEventDispatcher() {
+    const liveListener : NativeLiveListener = {
+        listener: (eventName : string, data : string) => {
+            battleListenerMap.get(eventName)?.forEach((iLiveListener) => {
                 iLiveListener.callback(data);
             });
         },

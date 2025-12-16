@@ -80,11 +80,11 @@ export type VideoQualityType = 'VIDEOQUALITY_360P' | 'VIDEOQUALITY_540P' | 'VIDE
 export type CoHostLayoutTemplateType = 'HOST_DYNAMIC_GRID' | 'HOST_DYNAMIC_1V6';
 
 /**
- * 消息类型
+ * 弹幕消息类型
  * @remarks
  * 可用值：
- * - `TEXT`: 文本消息
- * - `CUSTOM`: 自定义消息
+ * - `TEXT`: 文本类型弹幕，包含纯文字内容
+ * - `CUSTOM`: 自定义类型弹幕，支持业务自定义数据格式（如带特效的弹幕、互动消息等）
  */
 export type MessageType = 'TEXT' | 'CUSTOM';
 
@@ -114,75 +114,76 @@ export type DeviceMirrorType = 'AUTO' | 'ENABLE' | 'DISABLE';
  * - `ACTIVITY_STATUS`: 修改活动状态
  * - `SEAT_LAYOUT_TEMPLATE_ID`: 修改座位布局模板ID
  */
-export type ModifyFlagType =
-    | 'NONE'
-    | 'LIVE_NAME'
-    | 'NOTICE'
-    | 'IS_MESSAGE_DISABLE'
-    | 'IS_PUBLIC_VISIBLE'
-    | 'SEAT_MODE'
-    | 'COVER_URL'
-    | 'BACKGROUND_URL'
-    | 'CATEGORY_LIST'
-    | 'ACTIVITY_STATUS'
-    | 'SEAT_LAYOUT_TEMPLATE_ID';
+
+export type LiveModifyFlag =
+  | 'NONE'
+  | 'LIVE_NAME'
+  | 'NOTICE'
+  | 'IS_MESSAGE_DISABLE'
+  | 'IS_PUBLIC_VISIBLE'
+  | 'SEAT_MODE'
+  | 'COVER_URL'
+  | 'BACKGROUND_URL'
+  | 'CATEGORY_LIST'
+  | 'ACTIVITY_STATUS'
+  | 'SEAT_LAYOUT_TEMPLATE_ID';
 /**
- * 音频变声器类型参数
+ * 音频变声效果
  * @interface AudioChangerTypeParam
- * @description 音频变声器效果类型
+ * @description 音频变声效果
  * @remarks
  * 可用值：
  * - `NONE`: 无效果
- * - `CHILD`: 儿童音效
- * - `LITTLE_GIRL`: 小女孩音效
- * - `MAN`: 男性音效
- * - `HEAVY_METAL`: 重金属音效
- * - `COLD`: 冷峻音效
- * - `FOREIGNER`: 外国人音效
- * - `TRAPPED_BEAST`: 困兽音效
- * - `FATSO`: 胖子音效
- * - `STRONG_CURRENT`: 强电流音效
- * - `HEAVY_MACHINERY`: 重型机械音效
- * - `ETHEREAL`: 空灵音效
+ * - `CHILD`: 小孩
+ * - `LITTLE_GIRL`: 小女孩
+ * - `MAN`: 男人
+ * - `HEAVY_METAL`: 重金属
+ * - `COLD`: 冷酷
+ * - `FOREIGNER`: 外国人
+ * - `TRAPPED_BEAST`: 野兽
+ * - `FATSO`: 胖子
+ * - `STRONG_CURRENT`: 电流
+ * - `HEAVY_MACHINERY`: 机械
+ * - `ETHEREAL`: 空灵
  */
 export type AudioChangerTypeParam =
-    | 'NONE'
-    | 'CHILD'
-    | 'LITTLE_GIRL'
-    | 'MAN'
-    | 'HEAVY_METAL'
-    | 'COLD'
-    | 'FOREIGNER'
-    | 'TRAPPED_BEAST'
-    | 'FATSO'
-    | 'STRONG_CURRENT'
-    | 'HEAVY_MACHINERY'
-    | 'ETHEREAL';
+  | 'NONE'
+  | 'CHILD'
+  | 'LITTLE_GIRL'
+  | 'MAN'
+  | 'HEAVY_METAL'
+  | 'COLD'
+  | 'FOREIGNER'
+  | 'TRAPPED_BEAST'
+  | 'FATSO'
+  | 'STRONG_CURRENT'
+  | 'HEAVY_MACHINERY'
+  | 'ETHEREAL';
 
 /**
- * 音频混响类型参数
+ * 音频混响效果
  * @interface AudioReverbTypeParam
- * @description 音频混响效果类型
+ * @description 音频混响效果
  * @remarks
  * 可用值：
  * - `NONE`: 无效果
- * - `KTV`: KTV音效
- * - `SMALL_ROOM`: 小房间音效
- * - `AUDITORIUM`: 礼堂音效
- * - `DEEP`: 深沉音效
- * - `LOUD`: 响亮音效
- * - `METALLIC`: 金属音效
- * - `MAGNETIC`: 磁性音效
+ * - `KTV`: KTV
+ * - `SMALL_ROOM`: 小房间
+ * - `AUDITORIUM`: 礼堂
+ * - `DEEP`: 深沉
+ * - `LOUD`: 洪亮
+ * - `METALLIC`: 金属
+ * - `MAGNETIC`: 磁性
  */
 export type AudioReverbTypeParam =
-    | 'NONE'
-    | 'KTV'
-    | 'SMALL_ROOM'
-    | 'AUDITORIUM'
-    | 'DEEP'
-    | 'LOUD'
-    | 'METALLIC'
-    | 'MAGNETIC';
+  | 'NONE'
+  | 'KTV'
+  | 'SMALL_ROOM'
+  | 'AUDITORIUM'
+  | 'DEEP'
+  | 'LOUD'
+  | 'METALLIC'
+  | 'MAGNETIC';
 
 /**
  * 座位用户信息参数
@@ -198,18 +199,17 @@ export type AudioReverbTypeParam =
  * @param {boolean} allowOpenCamera - 是否允许开启摄像头（可选）
  */
 export type SeatUserInfoParam = {
-    userID ?: string;
-    userName ?: string;
-    avatarURL ?: string;
-    role ?: string;
-    liveID ?: string;
-    microphoneStatus ?: string;
-    allowOpenMicrophone ?: boolean;
-    cameraStatus ?: string;
-    allowOpenCamera ?: boolean;
+  userID ?: string;
+  userName ?: string;
+  avatarURL ?: string;
+  role ?: string;
+  liveID ?: string;
+  microphoneStatus ?: string;
+  allowOpenMicrophone ?: boolean;
+  cameraStatus ?: string;
+  allowOpenCamera ?: boolean;
 };
 
-// ============== 基础数据结构类型 ==============
 /**
  * 用户资料参数
  * @interface UserProfileParam
@@ -223,19 +223,18 @@ export type SeatUserInfoParam = {
  * @param {number} level - 等级（可选）
  * @param {number} birthday - 生日时间戳（可选）
  * @param {UserAllowType} allowType - 权限类型（可选）
- * @param {Record<string, string>} customInfo - 自定义信息（可选）
  */
 export type UserProfileParam = {
-    userID ?: string;
-    nickname ?: string;
-    avatarURL ?: string;
-    selfSignature ?: string;
-    gender ?: GenderType;
-    role ?: number;
-    level ?: number;
-    birthday ?: number;
-    allowType ?: UserAllowType;
-    customInfo ?: Map<string, string>;
+  userID ?: string;
+  nickname ?: string;
+  avatarURL ?: string;
+  selfSignature ?: string;
+  gender ?: GenderType;
+  role ?: number;
+  level ?: number;
+  birthday ?: number;
+  allowType ?: UserAllowType;
+  // customInfo ?: Map<string, string>;
 };
 
 /**
@@ -247,77 +246,110 @@ export type UserProfileParam = {
  * @param {string} avatarURL - 头像URL（可选）
  */
 export type LiveUserInfoParam = {
-    userID ?: string;
-    userName ?: string;
-    avatarURL ?: string;
+  userID ?: string;
+  userName ?: string;
+  avatarURL ?: string;
 };
 
 /**
  * 直播间信息参数
  * @interface LiveInfoParam
  * @description 直播间信息结构
- * @param {string} liveID - 直播间ID（必填）
- * @param {string} liveName - 直播间名称（可选）
- * @param {string} notice - 直播间公告（可选）
- * @param {boolean} isMessageDisable - 是否禁用消息（可选）
- * @param {boolean} isPublicVisible - 是否公开可见（可选）
- * @param {boolean} isSeatEnabled - 是否启用座位功能（必填）
- * @param {boolean} keepOwnerOnSeat - 是否保持房主在座位上（必填）
- * @param {number} maxSeatCount - 最大座位数（必填）
- * @param {TakeSeatModeType} seatMode - 上麦模式类型（必填）
- * @param {number} seatLayoutTemplateID - 座位布局模板ID（可选，默认值：600）
- * @param {string} coverURL - 封面URL（可选）
- * @param {string} backgroundURL - 背景URL（可选）
- * @param {number[]} categoryList - 分类列表（可选）
- * @param {number} activityStatus - 活动状态（可选，默认值：0）
- * @param {number} totalViewerCount - 总观众数（必填）
+ * @param {string} liveID - 直播间ID（必填, 最大支持48个字节）
+ * @param {string} liveName - 直播间名称（可选, 默认房间ID，最大支持100个字节）
+ * @param {string} notice - 直播间公告（可选, 最大支持100个字节）
+ * @param {boolean} isMessageDisable - 是否禁用消息（可选，默认值为 false）
+ * @param {boolean} isPublicVisible - 是否公开可见（可选，默认值为 true）
+ * @param {boolean} isSeatEnabled - 是否启用麦位功能（可选，默认值为 true）
+ * @param {boolean} keepOwnerOnSeat - 是否保持房主在座位上（可选，默认值为 false）
+ * @param {number} maxSeatCount - 最大麦位数量（默认为 套餐包允许的最大麦位数）,不可与seatLayoutTemplateID同时传递; 若需手动指定 maxSeatCount, 必须将 seatLayoutTemplateID 设为 0。
+ * @param {TakeSeatModeType} seatMode - 上麦模式类型（可选，默认为 ‘APPLY’ 申请上麦模式, 只有麦位功能 isSeatEnabled= true 启用后生效）
+ * @param {number} seatLayoutTemplateID - 指定座位布局模板 ID（可选，默认值：600,对应默认最大麦位数为 9）, 不可与maxSeatCount同时传递; 若需使用maxSeatCount, 需将本参数设为 0。
+ * @param {string} coverURL - 封面 URL（可选, 最大支持 200 个字节）
+ * @param {string} backgroundURL - 背景 URL（可选, 最大支持 200 个字节）
+ * @param {number[]} categoryList - 直播间分类标签，单个房间最大支持3个标记（可选）
+ * @param {number} activityStatus - 直播间活跃状态: 用户自定义标记（可选，默认值：0）
+ * @param {number} totalViewerCount - 总观众数（只读）
+ * @param {LiveUserInfoParam} liveOwner - 创建直播间的用户信息（只读）
+ * @param {number} createTime - 直播间创建时间（只读）
  * @param {boolean} isGiftEnabled - 是否启用礼物功能（可选）
- * @param {Record<string, string>} metaData - 元数据（可选）
+ * @param {Map<string, string>} metaData - 元数据（可选）
  */
 export type LiveInfoParam = {
-    liveID : string;
-    liveName ?: string;
-    notice ?: string;
-    isMessageDisable ?: boolean;
-    isPublicVisible ?: boolean;
-    isSeatEnabled : boolean;
-    keepOwnerOnSeat : boolean;
-    maxSeatCount : number;
-    seatMode : TakeSeatModeType;
-    seatLayoutTemplateID ?: number;
-    coverURL ?: string;
-    backgroundURL ?: string;
-    categoryList ?: number[];
-    activityStatus ?: number;
-    totalViewerCount : number;
-    isGiftEnabled ?: boolean;
-    metaData ?: Map<string, string>;
+  liveID : string;
+  liveName ?: string;
+  notice ?: string;
+  isMessageDisable ?: boolean;
+  isPublicVisible ?: boolean;
+  isSeatEnabled ?: boolean;
+  keepOwnerOnSeat ?: boolean;
+  maxSeatCount ?: number;
+  seatMode ?: TakeSeatModeType;
+  seatLayoutTemplateID ?: number;
+  coverURL ?: string;
+  backgroundURL ?: string;
+  categoryList ?: number[];
+  activityStatus ?: number;
+  readonly totalViewerCount ?: number;
+  readonly liveOwner ?: LiveUserInfoParam;
+  readonly createTime ?: number;
+  isGiftEnabled ?: boolean;
+  metaData ?: Map<string, string>;
 };
 
 /**
  * 弹幕参数
  * @interface BarrageParam
- * @description 弹幕消息结构
- * @param {string} liveID - 直播间ID（必填）
- * @param {LiveUserInfoParam} sender - 发送者信息（必填）
- * @param {number} sequence - 消息序列号（必填）
- * @param {number} timestampInSecond - 时间戳（单位：秒）
- * @param {MessageType} messageType - 消息类型（必填）
- * @param {string} textContent - 文本内容（可选）
- * @param {Record<string, string>} extensionInfo - 扩展信息（可选）
- * @param {string} businessID - 业务ID（可选）
- * @param {string} data - 自定义数据（可选）
+ * @description 弹幕数据模型，包含单条弹幕的完整属性信息。
+ * @param {string} liveID - 弹幕所属直播间/语音聊天房的唯一标识 ID（必填）。
+ * @param {LiveUserInfoParam} sender - 弹幕发送者的用户信息（如用户ID、昵称、头像等）。
+ * @param {number} sequence - 弹幕消息的唯一序列ID，用于消息排序和去重。
+ * @param {number} timestampInSecond - 弹幕发送时间戳（单位：秒），用于展示发送时间顺序。
+ * @param {MessageType} messageType -  弹幕消息类型（文本或自定义）。
+ * @param {string} textContent - 文本类型弹幕的消息内容。
+ * @param {Map<string, string>} extensionInfo - 弹幕扩展信息，可自定义字段（如显示样式、优先级等）。当 messageType 为 TEXT 时有效。(可选)
+ * @param {string} businessID - 自定义类型弹幕的业务标识ID，用于区分不同业务场景的自定义弹幕。
+ * @param {string} data - 自定义类型弹幕的具体数据内容（通常为JSON格式字符串），当 messageType 为 CUSTOM 时有效。（可选）
  */
 export type BarrageParam = {
-    liveID : string;
-    sender : LiveUserInfoParam;
-    sequence : number;
-    timestampInSecond : number;
-    messageType : MessageType;
-    textContent ?: string;
-    extensionInfo ?: Map<string, string>;
-    businessID ?: string;
-    data ?: string;
+  liveID : string;
+  sender : LiveUserInfoParam;
+  sequence : number;
+  timestampInSecond : number;
+  messageType : MessageType;
+  textContent ?: string;
+  extensionInfo ?: Map<string, string>;
+  businessID ?: string;
+  data ?: string;
+};
+
+/**
+ * PK 配置参数
+ * @interface BattleConfigParam
+ * @description PK 配置
+ * @param {number} duration - PK 持续时间（秒）
+ * @param {boolean} needResponse - 是否需要对方响应(默认：false)
+ * @param {string} extensionInfo - 扩展信息
+ */
+export type BattleConfigParam = {
+  duration : number;
+  needResponse : boolean;
+  extensionInfo : string;
+}
+
+/**
+ * PK 信息参数
+ * @interface BattleInfoParam
+ * @param {string} battleID - PK ID
+ * @param {BattleConfigParam} config - PK 配置
+ * @param {number} startTime - 开始时间
+ * @param {number} endTime - 结束时间
+ */
+export type BattleInfoParam = {
+  battleID : string;
+  config : BattleConfigParam;
+  startTime : number;
+  endTime : number;
 };
 
 // ============== Options 接口类型 ==============
@@ -332,11 +364,11 @@ export type BarrageParam = {
  * @param {(errCode: number, errMsg: string) => void} fail - 失败回调（可选）
  */
 export type LoginOptions = {
-    sdkAppID : number;
-    userID : string;
-    userSig : string;
-    success ?: () => void;
-    fail ?: (errCode : number, errMsg : string) => void;
+  sdkAppID : number;
+  userID : string;
+  userSig : string;
+  success ?: () => void;
+  fail ?: (errCode : number, errMsg : string) => void;
 };
 
 /**
@@ -347,8 +379,8 @@ export type LoginOptions = {
  * @param {(errCode: number, errMsg: string) => void} fail - 失败回调（可选）
  */
 export type LogoutOptions = {
-    success ?: () => void;
-    fail ?: (errCode : number, errMsg : string) => void;
+  success ?: () => void;
+  fail ?: (errCode : number, errMsg : string) => void;
 };
 
 /**
@@ -360,26 +392,26 @@ export type LogoutOptions = {
  * @param {(errCode: number, errMsg: string) => void} fail - 失败回调（可选）
  */
 export type SetSelfInfoOptions = {
-    userProfile : UserProfileParam;
-    success ?: () => void;
-    fail ?: (errCode : number, errMsg : string) => void;
+  userProfile : UserProfileParam;
+  success ?: () => void;
+  fail ?: (errCode : number, errMsg : string) => void;
 };
 
 // ================= LiveListStore 相关 =================
 /**
  * 获取直播间列表参数
  * @interface FetchLiveListOptions
- * @description 获取直播间列表查询结构
+ * @description 获取直播间列表参数
  * @param {string} cursor - 游标，用于分页查询（必填）
  * @param {number} count - 每页数量（必填）
  * @param {() => void} success - 成功回调（可选）
  * @param {(errCode: number, errMsg: string) => void} fail - 失败回调（可选）
  */
 export type FetchLiveListOptions = {
-    cursor : string;
-    count : number;
-    success ?: () => void;
-    fail ?: (errCode : number, errMsg : string) => void;
+  cursor : string;
+  count : number;
+  success ?: () => void;
+  fail ?: (errCode : number, errMsg : string) => void;
 }
 
 /**
@@ -387,13 +419,13 @@ export type FetchLiveListOptions = {
  * @interface CreateLiveOptions
  * @description 创建直播间配置结构
  * @param {LiveInfoParam} liveInfo - 直播间信息（必填）
- * @param {(liveInfo: String) => void} success - 成功回调（可选）
+ * @param {(liveInfo: string) => void} success - 成功回调（可选，返回创建房间的信息）
  * @param {(errCode: number, errMsg: string) => void} fail - 失败回调（可选）
  */
 export type CreateLiveOptions = {
-    liveInfo : LiveInfoParam;
-    success ?: (liveInfo : String) => void;
-    fail ?: (errCode : number, errMsg : string) => void;
+  liveInfo : LiveInfoParam;
+  success ?: (liveInfo : string) => void;
+  fail ?: (errCode : number, errMsg : string) => void;
 }
 
 /**
@@ -401,13 +433,13 @@ export type CreateLiveOptions = {
  * @interface JoinLiveOptions
  * @description 加入直播间配置结构
  * @param {string} liveID - 直播间ID（必填）
- * @param {(liveInfo: String) => void} success - 成功回调（可选）
+ * @param {(liveInfo: string) => void} success - 成功回调（可选）
  * @param {(errCode: number, errMsg: string) => void} fail - 失败回调（可选）
  */
 export type JoinLiveOptions = {
-    liveID : string;
-    success ?: (liveInfo : String) => void;
-    fail ?: (errCode : number, errMsg : string) => void;
+  liveID : string;
+  success ?: (liveInfo : string) => void;
+  fail ?: (errCode : number, errMsg : string) => void;
 }
 
 /**
@@ -418,8 +450,8 @@ export type JoinLiveOptions = {
  * @param {(errCode: number, errMsg: string) => void} fail - 失败回调（可选）
  */
 export type LeaveLiveOptions = {
-    success ?: () => void;
-    fail ?: (errCode : number, errMsg : string) => void;
+  success ?: () => void;
+  fail ?: (errCode : number, errMsg : string) => void;
 }
 
 /**
@@ -430,8 +462,8 @@ export type LeaveLiveOptions = {
  * @param {(errCode: number, errMsg: string) => void} fail - 失败回调（可选）
  */
 export type EndLiveOptions = {
-    success ?: (data : string) => void;
-    fail ?: (errCode : number, errMsg : string) => void;
+  success ?: (data : string) => void;
+  fail ?: (errCode : number, errMsg : string) => void;
 }
 
 /**
@@ -439,15 +471,29 @@ export type EndLiveOptions = {
  * @interface UpdateLiveInfoOptions
  * @description 更新直播间信息配置结构
  * @param {LiveInfoParam} liveInfo - 更新的直播间信息（必填）
- * @param {number[]} modifyFlagList - 修改标志列表，标识需要更新的字段（必填）
+ * @param {LiveModifyFlag[]} modifyFlagList - 修改标志列表，标识需要更新的字段（必填）
  * @param {() => void} success - 成功回调（可选）
  * @param {(errCode: number, errMsg: string) => void} fail - 失败回调（可选）
  */
 export type UpdateLiveInfoOptions = {
-    liveInfo : LiveInfoParam;
-    modifyFlagList : number[]
-    success ?: () => void;
-    fail ?: (errCode : number, errMsg : string) => void;
+  liveInfo : LiveInfoParam;
+  modifyFlagList : LiveModifyFlag[]
+  success ?: () => void;
+  fail ?: (errCode : number, errMsg : string) => void;
+}
+
+/**
+ * 更新直播间元数据参数
+ * @interface UpdateLiveMetaDataOptions
+ * @description 更新直播间元数据参数
+ * @param {string} metaData - 更新的元数据（必填）
+ * @param {() => void} success - 成功回调（可选）
+ * @param {(errCode: number, errMsg: string) => void} fail - 失败回调（可选）
+ */
+export type UpdateLiveMetaDataOptions = {
+  metaData : string;
+  success ?: () => void;
+  fail ?: (errCode : number, errMsg : string) => void;
 }
 
 // ================= LiveSeatStore 相关 =================
@@ -461,10 +507,10 @@ export type UpdateLiveInfoOptions = {
  * @param {(errCode: number, errMsg: string) => void} fail - 失败回调（可选）
  */
 export type TakeSeatOptions = {
-    liveID : string;
-    seatIndex : number;
-    success ?: () => void;
-    fail ?: (errCode : number, errMsg : string) => void;
+  liveID : string;
+  seatIndex : number;
+  success ?: () => void;
+  fail ?: (errCode : number, errMsg : string) => void;
 }
 
 /**
@@ -476,9 +522,9 @@ export type TakeSeatOptions = {
  * @param {(errCode: number, errMsg: string) => void} fail - 失败回调（可选）
  */
 export type LeaveSeatOptions = {
-    liveID : string;
-    success ?: () => void;
-    fail ?: (errCode : number, errMsg : string) => void;
+  liveID : string;
+  success ?: () => void;
+  fail ?: (errCode : number, errMsg : string) => void;
 }
 
 /**
@@ -488,7 +534,7 @@ export type LeaveSeatOptions = {
  * @param {string} liveID - 直播间ID（必填）
  */
 export type MuteMicrophoneOptions = {
-    liveID : string;
+  liveID : string;
 }
 
 /**
@@ -500,9 +546,9 @@ export type MuteMicrophoneOptions = {
  * @param {(errCode: number, errMsg: string) => void} fail - 失败回调（可选）
  */
 export type UnmuteMicrophoneOptions = {
-    liveID : string;
-    success ?: () => void;
-    fail ?: (errCode : number, errMsg : string) => void;
+  liveID : string;
+  success ?: () => void;
+  fail ?: (errCode : number, errMsg : string) => void;
 }
 
 /**
@@ -515,10 +561,10 @@ export type UnmuteMicrophoneOptions = {
  * @param {(errCode: number, errMsg: string) => void} fail - 失败回调（可选）
  */
 export type KickUserOutOfSeatOptions = {
-    liveID : string;
-    userID : string;
-    success ?: () => void;
-    fail ?: (errCode : number, errMsg : string) => void;
+  liveID : string;
+  userID : string;
+  success ?: () => void;
+  fail ?: (errCode : number, errMsg : string) => void;
 }
 
 /**
@@ -533,12 +579,12 @@ export type KickUserOutOfSeatOptions = {
  * @param {(errCode: number, errMsg: string) => void} fail - 失败回调（可选）
  */
 export type MoveUserToSeatOptions = {
-    liveID : string;
-    userID : string;
-    targetIndex : number;
-    policy ?: MoveSeatPolicyType;
-    success ?: () => void;
-    fail ?: (errCode : number, errMsg : string) => void;
+  liveID : string;
+  userID : string;
+  targetIndex : number;
+  policy ?: MoveSeatPolicyType;
+  success ?: () => void;
+  fail ?: (errCode : number, errMsg : string) => void;
 }
 
 /**
@@ -551,10 +597,10 @@ export type MoveUserToSeatOptions = {
  * @param {(errCode: number, errMsg: string) => void} fail - 失败回调（可选）
  */
 export type LockSeatOptions = {
-    liveID : string
-    seatIndex : number;
-    success ?: () => void;
-    fail ?: (errCode : number, errMsg : string) => void;
+  liveID : string
+  seatIndex : number;
+  success ?: () => void;
+  fail ?: (errCode : number, errMsg : string) => void;
 }
 
 /**
@@ -567,10 +613,10 @@ export type LockSeatOptions = {
  * @param {(errCode: number, errMsg: string) => void} fail - 失败回调（可选）
  */
 export type UnlockSeatOptions = {
-    liveID : string;
-    seatIndex : number;
-    success ?: () => void;
-    fail ?: (errCode : number, errMsg : string) => void;
+  liveID : string;
+  seatIndex : number;
+  success ?: () => void;
+  fail ?: (errCode : number, errMsg : string) => void;
 }
 
 /**
@@ -584,11 +630,11 @@ export type UnlockSeatOptions = {
  * @param {(errCode: number, errMsg: string) => void} fail - 失败回调（可选）
  */
 export type OpenRemoteCameraOptions = {
-    liveID : string;
-    userID : string;
-    policy : DeviceControlPolicyType;
-    success ?: () => void;
-    fail ?: (errCode : number, errMsg : string) => void;
+  liveID : string;
+  userID : string;
+  policy : DeviceControlPolicyType;
+  success ?: () => void;
+  fail ?: (errCode : number, errMsg : string) => void;
 }
 
 /**
@@ -601,10 +647,10 @@ export type OpenRemoteCameraOptions = {
  * @param {(errCode: number, errMsg: string) => void} fail - 失败回调（可选）
  */
 export type CloseRemoteCameraOptions = {
-    liveID : string;
-    userID : string;
-    success ?: () => void;
-    fail ?: (errCode : number, errMsg : string) => void;
+  liveID : string;
+  userID : string;
+  success ?: () => void;
+  fail ?: (errCode : number, errMsg : string) => void;
 }
 
 /**
@@ -618,11 +664,11 @@ export type CloseRemoteCameraOptions = {
  * @param {(errCode: number, errMsg: string) => void} fail - 失败回调（可选）
  */
 export type OpenRemoteMicrophoneOptions = {
-    liveID : string;
-    userID : string;
-    policy : DeviceControlPolicyType;
-    success ?: () => void;
-    fail ?: (errCode : number, errMsg : string) => void;
+  liveID : string;
+  userID : string;
+  policy : DeviceControlPolicyType;
+  success ?: () => void;
+  fail ?: (errCode : number, errMsg : string) => void;
 }
 
 /**
@@ -635,10 +681,10 @@ export type OpenRemoteMicrophoneOptions = {
  * @param {(errCode: number, errMsg: string) => void} fail - 失败回调（可选）
  */
 export type CloseRemoteMicrophoneOptions = {
-    liveID : string;
-    userID : string;
-    success ?: () => void;
-    fail ?: (errCode : number, errMsg : string) => void;
+  liveID : string;
+  userID : string;
+  success ?: () => void;
+  fail ?: (errCode : number, errMsg : string) => void;
 }
 
 // ================= LiveAudienceStore 相关 =================
@@ -651,9 +697,9 @@ export type CloseRemoteMicrophoneOptions = {
  * @param {(errCode: number, errMsg: string) => void} fail - 失败回调（可选）
  */
 export type FetchAudienceListOptions = {
-    liveID : string
-    success ?: () => void;
-    fail ?: (errCode : number, errMsg : string) => void;
+  liveID : string
+  success ?: () => void;
+  fail ?: (errCode : number, errMsg : string) => void;
 }
 
 /**
@@ -666,10 +712,10 @@ export type FetchAudienceListOptions = {
  * @param {(errCode: number, errMsg: string) => void} fail - 失败回调（可选）
  */
 export type SetAdministratorOptions = {
-    liveID : string;
-    userID : string;
-    success ?: () => void;
-    fail ?: (errCode : number, errMsg : string) => void;
+  liveID : string;
+  userID : string;
+  success ?: () => void;
+  fail ?: (errCode : number, errMsg : string) => void;
 }
 
 /**
@@ -682,10 +728,10 @@ export type SetAdministratorOptions = {
  * @param {(errCode: number, errMsg: string) => void} fail - 失败回调（可选）
  */
 export type RevokeAdministratorOptions = {
-    liveID : string;
-    userID : string;
-    success ?: () => void;
-    fail ?: (errCode : number, errMsg : string) => void;
+  liveID : string;
+  userID : string;
+  success ?: () => void;
+  fail ?: (errCode : number, errMsg : string) => void;
 }
 
 /**
@@ -698,10 +744,10 @@ export type RevokeAdministratorOptions = {
  * @param {(errCode: number, errMsg: string) => void} fail - 失败回调（可选）
  */
 export type KickUserOutOfRoomOptions = {
-    liveID : string;
-    userID : string;
-    success ?: () => void;
-    fail ?: (errCode : number, errMsg : string) => void;
+  liveID : string;
+  userID : string;
+  success ?: () => void;
+  fail ?: (errCode : number, errMsg : string) => void;
 }
 
 /**
@@ -715,11 +761,11 @@ export type KickUserOutOfRoomOptions = {
  * @param {(errCode: number, errMsg: string) => void} fail - 失败回调（可选）
  */
 export type DisableSendMessageOptions = {
-    liveID : string;
-    userID : string;
-    isDisable : boolean;
-    success ?: () => void;
-    fail ?: (errCode : number, errMsg : string) => void;
+  liveID : string;
+  userID : string;
+  isDisable : boolean;
+  success ?: () => void;
+  fail ?: (errCode : number, errMsg : string) => void;
 }
 
 // ================= DeviceStore 相关 =================
@@ -731,8 +777,8 @@ export type DisableSendMessageOptions = {
  * @param {(errCode: number, errMsg: string) => void} fail - 失败回调（可选）
  */
 export type OpenLocalMicrophoneOptions = {
-    success ?: () => void;
-    fail ?: (errCode : number, errMsg : string) => void;
+  success ?: () => void;
+  fail ?: (errCode : number, errMsg : string) => void;
 }
 
 /**
@@ -742,7 +788,7 @@ export type OpenLocalMicrophoneOptions = {
  * @param {number} volume - 音量大小（必填）
  */
 export type VolumeOptions = {
-    volume : number
+  volume : number
 }
 
 /**
@@ -752,7 +798,7 @@ export type VolumeOptions = {
  * @param {AudioOutputType} route - 音频路由类型（必填）
  */
 export type SetAudioRouteOptions = {
-    route : AudioOutputType;
+  route : AudioOutputType;
 }
 
 /**
@@ -764,9 +810,9 @@ export type SetAudioRouteOptions = {
  * @param {(errCode: number, errMsg: string) => void} fail - 失败回调（可选）
  */
 export type OpenLocalCameraOptions = {
-    isFront : boolean;
-    success ?: () => void;
-    fail ?: (errCode : number, errMsg : string) => void;
+  isFront : boolean;
+  success ?: () => void;
+  fail ?: (errCode : number, errMsg : string) => void;
 }
 
 /**
@@ -776,7 +822,7 @@ export type OpenLocalCameraOptions = {
  * @param {boolean} isFront - 是否前置摄像头（必填）
  */
 export type SwitchCameraOptions = {
-    isFront : boolean;
+  isFront : boolean;
 }
 
 /**
@@ -786,7 +832,7 @@ export type SwitchCameraOptions = {
  * @param {DeviceMirrorType} mirrorType - 镜像类型（必填）
  */
 export type SwitchMirrorOptions = {
-    mirrorType : DeviceMirrorType;
+  mirrorType : DeviceMirrorType;
 }
 
 /**
@@ -796,7 +842,7 @@ export type SwitchMirrorOptions = {
  * @param {VideoQualityType} quality - 视频质量类型（必填）
  */
 export type UpdateVideoQualityOptions = {
-    quality : VideoQualityType;
+  quality : VideoQualityType;
 }
 
 /**
@@ -807,7 +853,7 @@ export type UpdateVideoQualityOptions = {
  */
 // only for iOS
 export type StartScreenShareOptions = {
-    appGroup : string;
+  appGroup : string;
 }
 
 // ================= CoHostStore 相关 =================
@@ -819,18 +865,18 @@ export type StartScreenShareOptions = {
  * @param {string} targetHostLiveID - 目标主播直播间ID（必填）
  * @param {CoHostLayoutTemplateType} layoutTemplate - 连麦布局模板（必填）
  * @param {number} timeout - 超时时间（毫秒，必填）
- * @param {Record<string, string>} extensionInfo - 扩展信息（可选）
+ * @param {Map<string, string>} extensionInfo - 扩展信息（可选）
  * @param {() => void} success - 成功回调（可选）
  * @param {(errCode: number, errMsg: string) => void} fail - 失败回调（可选）
  */
 export type RequestHostConnectionOptions = {
-    liveID : string;
-    targetHostLiveID : String;
-    layoutTemplate : CoHostLayoutTemplateType;
-    timeout : number;
-    extensionInfo ?: string;
-    success ?: () => void;
-    fail ?: (errCode : number, errMsg : string) => void;
+  liveID : string;
+  targetHostLiveID : string;
+  layoutTemplate : CoHostLayoutTemplateType;
+  timeout : number;
+  extensionInfo ?: string;
+  success ?: () => void;
+  fail ?: (errCode : number, errMsg : string) => void;
 }
 
 /**
@@ -843,10 +889,10 @@ export type RequestHostConnectionOptions = {
  * @param {(errCode: number, errMsg: string) => void} fail - 失败回调（可选）
  */
 export type CancelHostConnectionOptions = {
-    liveID : string;
-    toHostLiveID : String;
-    success ?: () => void;
-    fail ?: (errCode : number, errMsg : string) => void;
+  liveID : string;
+  toHostLiveID : string;
+  success ?: () => void;
+  fail ?: (errCode : number, errMsg : string) => void;
 }
 
 /**
@@ -859,10 +905,10 @@ export type CancelHostConnectionOptions = {
  * @param {(errCode: number, errMsg: string) => void} fail - 失败回调（可选）
  */
 export type AcceptHostConnectionOptions = {
-    liveID : string;
-    fromHostLiveID : String;
-    success ?: () => void;
-    fail ?: (errCode : number, errMsg : string) => void;
+  liveID : string;
+  fromHostLiveID : string;
+  success ?: () => void;
+  fail ?: (errCode : number, errMsg : string) => void;
 }
 
 /**
@@ -875,10 +921,10 @@ export type AcceptHostConnectionOptions = {
  * @param {(errCode: number, errMsg: string) => void} fail - 失败回调（可选）
  */
 export type RejectHostConnectionOptions = {
-    liveID : string;
-    fromHostLiveID : String;
-    success ?: () => void;
-    fail ?: (errCode : number, errMsg : string) => void;
+  liveID : string;
+  fromHostLiveID : string;
+  success ?: () => void;
+  fail ?: (errCode : number, errMsg : string) => void;
 }
 
 /**
@@ -890,9 +936,9 @@ export type RejectHostConnectionOptions = {
  * @param {(errCode: number, errMsg: string) => void} fail - 失败回调（可选）
  */
 export type ExitHostConnectionOptions = {
-    liveID : string;
-    success ?: () => void;
-    fail ?: (errCode : number, errMsg : string) => void;
+  liveID : string;
+  success ?: () => void;
+  fail ?: (errCode : number, errMsg : string) => void;
 }
 
 // ================= CoGuestStore 相关 =================
@@ -908,12 +954,12 @@ export type ExitHostConnectionOptions = {
  * @param {(errCode: number, errMsg: string) => void} fail - 失败回调（可选）
  */
 export type ApplyForSeatOptions = {
-    liveID : string;
-    seatIndex : number;
-    timeout : number;
-    extraInfo ?: string;
-    success ?: () => void;
-    fail ?: (errCode : number, errMsg : string) => void;
+  liveID : string;
+  seatIndex : number;
+  timeout : number;
+  extraInfo ?: string;
+  success ?: () => void;
+  fail ?: (errCode : number, errMsg : string) => void;
 }
 
 /**
@@ -925,9 +971,9 @@ export type ApplyForSeatOptions = {
  * @param {(errCode: number, errMsg: string) => void} fail - 失败回调（可选）
  */
 export type CancelApplicationOptions = {
-    liveID : string;
-    success ?: () => void;
-    fail ?: (errCode : number, errMsg : string) => void;
+  liveID : string;
+  success ?: () => void;
+  fail ?: (errCode : number, errMsg : string) => void;
 }
 
 /**
@@ -940,10 +986,10 @@ export type CancelApplicationOptions = {
  * @param {(errCode: number, errMsg: string) => void} fail - 失败回调（可选）
  */
 export type AcceptApplicationOptions = {
-    liveID : string;
-    userID : string;
-    success ?: () => void;
-    fail ?: (errCode : number, errMsg : string) => void;
+  liveID : string;
+  userID : string;
+  success ?: () => void;
+  fail ?: (errCode : number, errMsg : string) => void;
 }
 
 /**
@@ -956,10 +1002,10 @@ export type AcceptApplicationOptions = {
  * @param {(errCode: number, errMsg: string) => void} fail - 失败回调（可选）
  */
 export type RejectApplicationOptions = {
-    liveID : string;
-    userID : string;
-    success ?: () => void;
-    fail ?: (errCode : number, errMsg : string) => void;
+  liveID : string;
+  userID : string;
+  success ?: () => void;
+  fail ?: (errCode : number, errMsg : string) => void;
 }
 
 /**
@@ -975,13 +1021,13 @@ export type RejectApplicationOptions = {
  * @param {(errCode: number, errMsg: string) => void} fail - 失败回调（可选）
  */
 export type InviteToSeatOptions = {
-    liveID : string;
-    inviteeID : string;
-    seatIndex : number;
-    timeout : number;
-    extraInfo ?: string;
-    success ?: () => void;
-    fail ?: (errCode : number, errMsg : string) => void;
+  liveID : string;
+  inviteeID : string;
+  seatIndex : number;
+  timeout : number;
+  extraInfo ?: string;
+  success ?: () => void;
+  fail ?: (errCode : number, errMsg : string) => void;
 }
 
 /**
@@ -994,10 +1040,10 @@ export type InviteToSeatOptions = {
  * @param {(errCode: number, errMsg: string) => void} fail - 失败回调（可选）
  */
 export type CancelInvitationOptions = {
-    liveID : string;
-    inviteeID : string;
-    success ?: () => void;
-    fail ?: (errCode : number, errMsg : string) => void;
+  liveID : string;
+  inviteeID : string;
+  success ?: () => void;
+  fail ?: (errCode : number, errMsg : string) => void;
 }
 
 /**
@@ -1010,10 +1056,10 @@ export type CancelInvitationOptions = {
  * @param {(errCode: number, errMsg: string) => void} fail - 失败回调（可选）
  */
 export type AcceptInvitationOptions = {
-    liveID : string;
-    inviterID : string;
-    success ?: () => void;
-    fail ?: (errCode : number, errMsg : string) => void;
+  liveID : string;
+  inviterID : string;
+  success ?: () => void;
+  fail ?: (errCode : number, errMsg : string) => void;
 }
 
 /**
@@ -1026,10 +1072,10 @@ export type AcceptInvitationOptions = {
  * @param {(errCode: number, errMsg: string) => void} fail - 失败回调（可选）
  */
 export type RejectInvitationOptions = {
-    liveID : string;
-    inviterID : string;
-    success ?: () => void;
-    fail ?: (errCode : number, errMsg : string) => void;
+  liveID : string;
+  inviterID : string;
+  success ?: () => void;
+  fail ?: (errCode : number, errMsg : string) => void;
 }
 
 /**
@@ -1041,58 +1087,65 @@ export type RejectInvitationOptions = {
  * @param {(errCode: number, errMsg: string) => void} fail - 失败回调（可选）
  */
 export type DisconnectOptions = {
-    liveID : string;
-    success ?: () => void;
-    fail ?: (errCode : number, errMsg : string) => void;
+  liveID : string;
+  success ?: () => void;
+  fail ?: (errCode : number, errMsg : string) => void;
 }
 
 // ================= BarrageStore 相关 =================
 /**
- * 发送文本消息参数
+ * 发送文本弹幕参数
  * @interface SendTextMessageOptions
- * @description 发送文本消息配置结构
- * @param {string} liveID - 直播间ID（必填）
- * @param {string} text - 消息文本内容（必填）
- * @param {Map<string, string>} extensionInfo - 扩展信息（可选）
+ * @description 发送文本弹幕参数
+ * @param {string} liveID - 当前直播间 ID（必填）
+ * @param {string} text - 文本弹幕内容（必填）
+ * @param {string} extensionInfo - 扩展信息（可选）
  * @param {() => void} success - 成功回调（可选）
  * @param {(errCode: number, errMsg: string) => void} fail - 失败回调（可选）
  */
 export type SendTextMessageOptions = {
-    liveID : string;
-    text : string;
-    extensionInfo ?: Map<string, string>;
-    success ?: () => void;
-    fail ?: (errCode : number, errMsg : string) => void;
+  liveID : string;
+  text : string;
+  extensionInfo ?: string;
+  success ?: () => void;
+  fail ?: (errCode : number, errMsg : string) => void;
 }
 
 /**
- * 发送自定义消息参数
+ * 发送自定义类型弹幕参数
  * @interface SendCustomMessageOptions
- * @description 发送自定义消息配置结构
- * @param {string} liveID - 直播间ID（必填）
- * @param {string} businessID - 业务ID（必填）
- * @param {string} data - 自定义数据（必填）
+ * @description 发送自定义类型弹幕参数
+ * @param {string} liveID - 当前直播间 ID（必填）
+ * @param {string} businessID - 业务标识 ID（必填）
+ * @param {string} data - 自定义数据内容，通常为JSON格式字符串（必填）
  * @param {() => void} success - 成功回调（可选）
  * @param {(errCode: number, errMsg: string) => void} fail - 失败回调（可选）
  */
 export type SendCustomMessageOptions = {
-    liveID : string;
-    businessID : string;
-    data : string;
-    success ?: () => void;
-    fail ?: (errCode : number, errMsg : string) => void;
+  liveID : string;
+  businessID : string;
+  data : string;
+  success ?: () => void;
+  fail ?: (errCode : number, errMsg : string) => void;
 }
 
 /**
- * 添加本地提示参数
+ * 添加本地提示消息
  * @interface AppendLocalTipOptions
- * @description 添加本地提示配置结构
- * @param {string} liveID - 直播间ID（必填）
- * @param {BarrageParam} message - 提示消息参数（必填）
+ * @description 添加本地提示消息（在本地添加提示或操作反馈消息，仅当前客户端可见）。
+ * @param {string} liveID - 当前直播间 ID（必填）
+ * @param {BarrageParam} message - 本地弹幕消息（如系统提示、操作反馈等，仅当前用户可见）（必填）
  */
 export type AppendLocalTipOptions = {
-    liveID : string;
-    message : BarrageParam;
+  liveID : string;
+  sender : LiveUserInfoParam;
+  sequence : number;
+  timestampInSecond : number;
+  messageType : MessageType;
+  textContent ?: string;
+  extensionInfo ?: Map<string, string>;
+  businessID ?: string;
+  data ?: string;
 }
 
 // ================= GiftStore 相关接口 =================
@@ -1105,9 +1158,9 @@ export type AppendLocalTipOptions = {
  * @param {(errCode: number, errMsg: string) => void} fail - 失败回调（可选）
  */
 export type RefreshUsableGiftsOptions = {
-    liveID : string;
-    success ?: () => void;
-    fail ?: (errCode : number, errMsg : string) => void;
+  liveID : string;
+  success ?: () => void;
+  fail ?: (errCode : number, errMsg : string) => void;
 }
 
 /**
@@ -1121,42 +1174,54 @@ export type RefreshUsableGiftsOptions = {
  * @param {(errCode: number, errMsg: string) => void} fail - 失败回调（可选）
  */
 export type SendGiftOptions = {
-    liveID : string;
-    giftID : string;
-    count : number;
-    success ?: () => void;
-    fail ?: (errCode : number, errMsg : string) => void;
+  liveID : string;
+  giftID : string;
+  count : number;
+  success ?: () => void;
+  fail ?: (errCode : number, errMsg : string) => void;
+}
+
+/**
+ * 设置礼物语言参数
+ * @interface SetLanguageOptions
+ * @description 设置礼物语言配置结构
+ * @param {string} liveID - 直播间ID（必填）
+ * @param {string} language - 语言（必填）
+ */
+export type SetLanguageOptions = {
+  liveID : string;
+  language : string;
 }
 
 // ================= BaseBeautyStore 相关 =================
 /**
  * 设置美颜平滑等级参数
  * @interface SetSmoothLevelOptions
- * @description 设置美颜平滑等级配置结构
- * @param {number} smoothLevel - 平滑等级（必填）
+ * @description 设置美颜平滑级别
+ * @param {number} smoothLevel - 磨皮参数，取值范围[0,9]: 0 表示关闭，9 表示效果最明显）（必填）
  */
 export type SetSmoothLevelOptions = {
-    smoothLevel : number;
+  smoothLevel : number;
 }
 
 /**
  * 设置美白等级参数
  * @interface SetWhitenessLevelOptions
- * @description 设置美白等级配置结构
- * @param {number} whitenessLevel - 美白等级（必填）
+ * @description 设置美白级别
+ * @param {number} whitenessLevel - 美白参数，取值范围[0,9]: 0 表示关闭，9 表示效果最明显（必填）
  */
 export type SetWhitenessLevelOptions = {
-    whitenessLevel : number;
+  whitenessLevel : number;
 }
 
 /**
  * 设置红润等级参数
  * @interface SetRuddyLevelOptions
- * @description 设置红润等级配置结构
- * @param {number} ruddyLevel - 红润等级（必填）
+ * @description 设置红润级别
+ * @param {number} ruddyLevel - 红润参数，取值范围[0,9]: 0 表示关闭，9 表示效果最明显（必填）
  */
 export type SetRuddyLevelOptions = {
-    ruddyLevel : number;
+  ruddyLevel : number;
 }
 
 // ================= AudioEffectStore 相关 =================
@@ -1167,7 +1232,7 @@ export type SetRuddyLevelOptions = {
  * @param {AudioChangerTypeParam} changerType - 变声器类型（必填）
  */
 export type SetAudioChangerTypeOptions = {
-    changerType : AudioChangerTypeParam;
+  changerType : AudioChangerTypeParam;
 }
 
 /**
@@ -1177,7 +1242,7 @@ export type SetAudioChangerTypeOptions = {
  * @param {AudioReverbTypeParam} reverbType - 混响类型（必填）
  */
 export type SetAudioReverbTypeOptions = {
-    reverbType : AudioReverbTypeParam;
+  reverbType : AudioReverbTypeParam;
 }
 
 /**
@@ -1187,7 +1252,7 @@ export type SetAudioReverbTypeOptions = {
  * @param {boolean} enable - 是否开启耳返（必填）
  */
 export type SetVoiceEarMonitorEnableOptions = {
-    enable : boolean;
+  enable : boolean;
 }
 
 // ================= LikeStore 相关 =================
@@ -1201,21 +1266,108 @@ export type SetVoiceEarMonitorEnableOptions = {
  * @param {(errCode: number, errMsg: string) => void} fail - 失败回调（可选）
  */
 export type SendLikeOptions = {
-    liveID : string;
-    count : number;
-    success ?: () => void;
-    fail ?: (errCode : number, errMsg : string) => void;
+  liveID : string;
+  count : number;
+  success ?: () => void;
+  fail ?: (errCode : number, errMsg : string) => void;
+}
+
+// ================= BattleStore 相关 =================
+/**
+ * 发起 PK 请求参数
+ * @interface RequestBattleOptions
+ * @description PK 请求参数
+ * @param {string} liveID - 直播间 ID（必填）
+ * @param {BattleConfigParam} config - PK 配置（必填）
+ * @param {string[]} userIDList - 需要进入 PK 的用户 ID 列表（必填）
+ * @param {number} timeout - 请求超时时间（秒）（必填）
+ * @param {(battleInfo: string, resultMap : string) => void} success - 成功回调（可选）
+ * @param {(errCode: number, errMsg: string) => void} fail - 失败回调（可选）
+ */
+export type RequestBattleOptions = {
+  liveID : string;
+  config : BattleConfigParam;
+  userIDList : string[];
+  timeout : number;
+  success ?: (battleInfo : string, resultMap : string) => void;
+  fail ?: (errCode : number, errMsg : string) => void;
+}
+
+/**
+ * 取消 PK 请求参数
+ * @interface CancelBattleRequestOptions
+ * @description 取消 PK 请求参数
+ * @param {string} liveID - 直播间 ID（必填）
+ * @param {string} battleID -  PK ID（必填）
+ * @param {string[]} userIDList - 用户 ID 列表（必填）
+ * @param {() => void} success - 成功回调（可选）
+ * @param {(errCode: number, errMsg: string) => void} fail - 失败回调（可选）
+ */
+export type CancelBattleRequestOptions = {
+  liveID : string;
+  battleID : string;
+  userIDList : string[];
+  success ?: () => void;
+  fail ?: (errCode : number, errMsg : string) => void;
+}
+
+/**
+ * 接受 PK 请求参数
+ * @interface AcceptBattleOptions
+ * @description 接受 PK 请求参数
+ * @param {string} liveID - 直播间 ID（必填）
+ * @param {string} battleID -  PK ID（必填）
+ * @param {() => void} success - 成功回调（可选）
+ * @param {(errCode: number, errMsg: string) => void} fail - 失败回调（可选）
+ */
+export type AcceptBattleOptions = {
+  liveID : string;
+  battleID : string;
+  success ?: () => void;
+  fail ?: (errCode : number, errMsg : string) => void;
+}
+
+/**
+ * 拒绝 PK 请求参数
+ * @interface RejectBattleOptions
+ * @description 拒绝 PK 请求参数
+ * @param {string} liveID - 直播间ID（必填）
+ * @param {string} battleID -  PK ID（必填）
+ * @param {() => void} success - 成功回调（可选）
+ * @param {(errCode: number, errMsg: string) => void} fail - 失败回调（可选）
+ */
+export type RejectBattleOptions = {
+  liveID : string;
+  battleID : string;
+  success ?: () => void;
+  fail ?: (errCode : number, errMsg : string) => void;
+}
+
+/**
+ * 退出 PK 请求参数
+ * @interface ExitBattleOptions
+ * @description 退出 PK 请求参数
+ * @param {string} liveID - 直播间 ID（必填）
+ * @param {string} battleID -  PK ID（必填）
+ * @param {() => void} success - 成功回调（可选）
+ * @param {(errCode: number, errMsg: string) => void} fail - 失败回调（可选）
+ */
+export type ExitBattleOptions = {
+  liveID : string;
+  battleID : string;
+  success ?: () => void;
+  fail ?: (errCode : number, errMsg : string) => void;
 }
 
 // ================= 实验性接口 相关 =================
 export type CallExperimentalAPIOptions = {
-    jsonData : string;
-    onResponse ?: (jsonData : string) => void;
+  jsonData : string;
+  onResponse ?: (jsonData : string) => void;
 }
 
 // ================= Extension 接口 =================
 export type FetchLogfileListOptions = {
-    result : (jsonData ?: string) => void;
+  result : (jsonData ?: string) => void;
 }
 
 /**
@@ -1225,5 +1377,5 @@ export type FetchLogfileListOptions = {
  * @param {(res: string) => void} callback - 回调函数（必填）
  */
 export type ILiveListener = {
-    callback : (res : string) => void
+  callback : (res : string) => void
 }

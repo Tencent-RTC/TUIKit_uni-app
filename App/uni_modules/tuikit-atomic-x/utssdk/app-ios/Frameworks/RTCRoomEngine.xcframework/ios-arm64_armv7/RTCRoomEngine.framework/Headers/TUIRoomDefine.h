@@ -17,11 +17,11 @@
  */
 typedef NS_ENUM(NSUInteger, TUIRoomType) {
 
-    /// 会议类型房间，适用于会议，教育场景，该房间中可以开启自由发言，申请发言、上麦发言等不同模式。
-    TUIRoomTypeConference = 1,
+  /// 会议类型房间，适用于会议，教育场景，该房间中可以开启自由发言，申请发言、上麦发言等不同模式。
+  TUIRoomTypeConference = 1,
 
-    /// 直播类型房间，适用于直播场景，该房间可以开启自由发言，上麦发言模式。
-    TUIRoomTypeLive = 2,
+  /// 直播类型房间，适用于直播场景，该房间可以开启自由发言，上麦发言模式。
+  TUIRoomTypeLive = 2,
 
 };
 
@@ -30,11 +30,11 @@ typedef NS_ENUM(NSUInteger, TUIRoomType) {
  */
 typedef NS_ENUM(NSUInteger, TUISeatMode) {
 
-    /// 自由上麦模式，台下观众可以自由上麦，无需申请。
-    TUISeatModeFreeToTake = 1,
+  /// 自由上麦模式，台下观众可以自由上麦，无需申请。
+  TUISeatModeFreeToTake = 1,
 
-    /// 申请上麦模式，台下观众上麦需要房主或者管理员同意后才能上麦。
-    TUISeatModeApplyToTake = 2,
+  /// 申请上麦模式，台下观众上麦需要房主或者管理员同意后才能上麦。
+  TUISeatModeApplyToTake = 2,
 
 };
 
@@ -43,14 +43,14 @@ typedef NS_ENUM(NSUInteger, TUISeatMode) {
  */
 typedef NS_ENUM(NSUInteger, TUIMediaDevice) {
 
-    /// 麦克风。
-    TUIMediaDeviceMicrophone = 1,
+  /// 麦克风。
+  TUIMediaDeviceMicrophone = 1,
 
-    /// 摄像头。
-    TUIMediaDeviceCamera = 2,
+  /// 摄像头。
+  TUIMediaDeviceCamera = 2,
 
-    /// 屏幕共享。
-    TUIMediaDeviceScreenSharing = 3,
+  /// 屏幕共享。
+  TUIMediaDeviceScreenSharing = 3,
 
 };
 
@@ -59,14 +59,14 @@ typedef NS_ENUM(NSUInteger, TUIMediaDevice) {
  */
 typedef NS_ENUM(NSUInteger, TUIRole) {
 
-    /// 房主，一般指房间的创建者，房间内最高权限拥有者。
-    TUIRoleRoomOwner = 0,
+  /// 房主，一般指房间的创建者，房间内最高权限拥有者。
+  TUIRoleRoomOwner = 0,
 
-    /// 房间管理员。
-    TUIRoleAdministrator = 1,
+  /// 房间管理员。
+  TUIRoleAdministrator = 1,
 
-    /// 房间内普通成员。
-    TUIRoleGeneralUser = 2,
+  /// 房间内普通成员。
+  TUIRoleGeneralUser = 2,
 
 };
 
@@ -75,11 +75,11 @@ typedef NS_ENUM(NSUInteger, TUIRole) {
  */
 typedef NS_ENUM(NSUInteger, TUIRoomDismissedReason) {
 
-    /// 被房主解散。
-    TUIRoomDismissedReasonByOwner = 1,
+  /// 被房主解散。
+  TUIRoomDismissedReasonByOwner = 1,
 
-    /// 被服务器解散。
-    TUIRoomDismissedReasonByServer = 2,
+  /// 被服务器解散。
+  TUIRoomDismissedReasonByServer = 2,
 
 };
 
@@ -88,14 +88,14 @@ typedef NS_ENUM(NSUInteger, TUIRoomDismissedReason) {
  */
 typedef NS_ENUM(NSUInteger, TUISuspendStatus) {
 
-    /// 未挂起
-    TUISuspendStatusNone = 0,
+  /// 未挂起
+  TUISuspendStatusNone = 0,
 
-    /// 用户进入后台挂起
-    TUISuspendStatusInBackground = 1 << 0,
+  /// 用户进入后台挂起
+  TUISuspendStatusInBackground = 1 << 0,
 
-    /// 用户正在接听电话
-    TUISuspendStatusInCalling = 1 << 1,
+  /// 用户正在接听电话
+  TUISuspendStatusInCalling = 1 << 1,
 
 };
 
@@ -104,14 +104,14 @@ typedef NS_ENUM(NSUInteger, TUISuspendStatus) {
  */
 typedef NS_ENUM(NSUInteger, TUIDeviceStatus) {
 
-    /// 当前设备处于打开状态
-    TUIDeviceStatusOpened = 0,
+  /// 当前设备处于打开状态
+  TUIDeviceStatusOpened = 0,
 
-    /// 当前设备处于关闭状态，且是用户主动关闭
-    TUIDeviceStatusClosedBySelf = 1,
+  /// 当前设备处于关闭状态，且是用户主动关闭
+  TUIDeviceStatusClosedBySelf = 1,
 
-    /// 当前设备处于关闭状态，且是被房主/管理员强制关闭
-    TUIDeviceStatusClosedByAdmin = 2,
+  /// 当前设备处于关闭状态，且是被房主/管理员强制关闭
+  TUIDeviceStatusClosedByAdmin = 2,
 
 };
 
@@ -120,14 +120,34 @@ typedef NS_ENUM(NSUInteger, TUIDeviceStatus) {
  */
 typedef NS_ENUM(NSUInteger, TUIMoveSeatPolicy) {
 
-    /// 目标麦位有人时放弃移动（默认策略）​​
-    TUIMoveSeatPolicyAbortWhenOccupied = 0,
+  /// 目标麦位有人时放弃移动（默认策略）​​
+  TUIMoveSeatPolicyAbortWhenOccupied = 0,
 
-    /// 强制替换目标麦位上的用户​​，被替换的用户将会被踢下麦
-    TUIMoveSeatPolicyForceReplace = 1,
+  /// 强制替换目标麦位上的用户​​，被替换的用户将会被踢下麦
+  TUIMoveSeatPolicyForceReplace = 1,
 
-    /// ​与目标麦位用户交换位置​​
-    TUIMoveSeatPolicySwapPosition = 2,
+  /// ​与目标麦位用户交换位置​​
+  TUIMoveSeatPolicySwapPosition = 2,
+
+};
+
+/**
+ * 1.9 锁定麦位标记位
+ */
+typedef NS_OPTIONS(NSUInteger, TUISeatLockFlag) {
+
+  TUISeatLockFlagNone = 0x00,
+
+  /// 锁定麦位
+  TUISeatLockFlagSeat = 0x01 << 0,
+
+  /// 锁定麦位摄像头
+  TUISeatLockFlagVideo = 0x01 << 1,
+
+  /// 锁定麦位麦克风
+  TUISeatLockFlagAudio = 0x01 << 2,
+
+  TUISeatLockFlagAll = TUISeatLockFlagSeat | TUISeatLockFlagVideo | TUISeatLockFlagAudio,
 
 };
 
@@ -142,17 +162,17 @@ typedef NS_ENUM(NSUInteger, TUIMoveSeatPolicy) {
  */
 typedef NS_ENUM(NSUInteger, TUIVideoQuality) {
 
-    /// 低清360P。
-    TUIVideoQuality360P = 1,
+  /// 低清360P。
+  TUIVideoQuality360P = 1,
 
-    /// 标清540P。
-    TUIVideoQuality540P = 2,
+  /// 标清540P。
+  TUIVideoQuality540P = 2,
 
-    /// 高清720P。
-    TUIVideoQuality720P = 3,
+  /// 高清720P。
+  TUIVideoQuality720P = 3,
 
-    /// 超清1080P。
-    TUIVideoQuality1080P = 4,
+  /// 超清1080P。
+  TUIVideoQuality1080P = 4,
 
 };
 
@@ -161,14 +181,14 @@ typedef NS_ENUM(NSUInteger, TUIVideoQuality) {
  */
 typedef NS_ENUM(NSUInteger, TUIAudioQuality) {
 
-    /// 人声模式。
-    TUIAudioQualitySpeech = 0,
+  /// 人声模式。
+  TUIAudioQualitySpeech = 0,
 
-    /// 默认模式。
-    TUIAudioQualityDefault = 1,
+  /// 默认模式。
+  TUIAudioQualityDefault = 1,
 
-    /// 音乐模式。
-    TUIAudioQualityMusic = 2,
+  /// 音乐模式。
+  TUIAudioQualityMusic = 2,
 
 };
 
@@ -177,14 +197,14 @@ typedef NS_ENUM(NSUInteger, TUIAudioQuality) {
  */
 typedef NS_ENUM(NSUInteger, TUIVideoStreamType) {
 
-    /// 高清摄像头视频流。
-    TUIVideoStreamTypeCameraStream = 0,
+  /// 高清摄像头视频流。
+  TUIVideoStreamTypeCameraStream = 0,
 
-    /// 屏幕分享视频流。
-    TUIVideoStreamTypeScreenStream = 1,
+  /// 屏幕分享视频流。
+  TUIVideoStreamTypeScreenStream = 1,
 
-    /// 低清摄像头视频流。
-    TUIVideoStreamTypeCameraStreamLow = 2,
+  /// 低清摄像头视频流。
+  TUIVideoStreamTypeCameraStreamLow = 2,
 
 };
 
@@ -193,11 +213,11 @@ typedef NS_ENUM(NSUInteger, TUIVideoStreamType) {
  */
 typedef NS_ENUM(NSUInteger, TUIChangeReason) {
 
-    /// 自己操作。
-    TUIChangeReasonBySelf = 0,
+  /// 自己操作。
+  TUIChangeReasonBySelf = 0,
 
-    /// 房主或管理员操作。
-    TUIChangeReasonByAdmin = 1,
+  /// 房主或管理员操作。
+  TUIChangeReasonByAdmin = 1,
 
 };
 
@@ -206,23 +226,23 @@ typedef NS_ENUM(NSUInteger, TUIChangeReason) {
  */
 typedef NS_ENUM(NSUInteger, TUIKickedOutOfRoomReason) {
 
-    /// 被主持人或管理员踢出。
-    TUIKickedOutOfRoomReasonByAdmin = 0,
+  /// 被主持人或管理员踢出。
+  TUIKickedOutOfRoomReasonByAdmin = 0,
 
-    /// 在其它设备进入房间被踢出。
-    TUIKickedOutOfRoomReasonByLoggedOnOtherDevice = 1,
+  /// 在其它设备进入房间被踢出。
+  TUIKickedOutOfRoomReasonByLoggedOnOtherDevice = 1,
 
-    /// 被服务端踢出。
-    TUIKickedOutOfRoomReasonByServer = 2,
+  /// 被服务端踢出。
+  TUIKickedOutOfRoomReasonByServer = 2,
 
-    /// 网络中断超时退房。
-    TUIKickedOutOfRoomReasonForNetworkDisconnected = 3,
+  /// 网络中断超时退房。
+  TUIKickedOutOfRoomReasonForNetworkDisconnected = 3,
 
-    /// 离线期间态进房状发生变化（被踢出房间或者房间已解散）。
-    TUIKickedOutOfRoomReasonForJoinRoomStatusInvalidDuringOffline = 4,
+  /// 离线期间态进房状发生变化（被踢出房间或者房间已解散）。
+  TUIKickedOutOfRoomReasonForJoinRoomStatusInvalidDuringOffline = 4,
 
-    /// 超过了单设备最大可同时加入的房间个数，导致最早加入的房间自动退出
-    TUIKickedOutOfRoomReasonForCountOfJoinedRoomsExceedLimit = 5,
+  /// 超过了单设备最大可同时加入的房间个数，导致最早加入的房间自动退出
+  TUIKickedOutOfRoomReasonForCountOfJoinedRoomsExceedLimit = 5,
 
 };
 
@@ -231,11 +251,11 @@ typedef NS_ENUM(NSUInteger, TUIKickedOutOfRoomReason) {
  */
 typedef NS_ENUM(NSUInteger, TUIResolutionMode) {
 
-    /// 横屏。
-    TUIResolutionModeLandscape = 0,
+  /// 横屏。
+  TUIResolutionModeLandscape = 0,
 
-    /// 竖屏。
-    TUIResolutionModePortrait = 1,
+  /// 竖屏。
+  TUIResolutionModePortrait = 1,
 
 };
 
@@ -244,14 +264,14 @@ typedef NS_ENUM(NSUInteger, TUIResolutionMode) {
  */
 typedef NS_ENUM(NSInteger, TUICaptureSourceType) {
 
-    /// 未定义。
-    TUICaptureSourceTypeUnknown = -1,
+  /// 未定义。
+  TUICaptureSourceTypeUnknown = -1,
 
-    /// 窗口。
-    TUICaptureSourceTypeWindow = 0,
+  /// 窗口。
+  TUICaptureSourceTypeWindow = 0,
 
-    /// 屏幕。
-    TUICaptureSourceTypeScreen = 1,
+  /// 屏幕。
+  TUICaptureSourceTypeScreen = 1,
 
 };
 
@@ -266,29 +286,29 @@ typedef NS_ENUM(NSInteger, TUICaptureSourceType) {
  */
 typedef NS_ENUM(NSUInteger, TUIRequestAction) {
 
-    /// 无效请求。
-    TUIRequestActionInvalidAction = 0,
+  /// 无效请求。
+  TUIRequestActionInvalidAction = 0,
 
-    /// 请求远端用户打开摄像头。
-    TUIRequestActionOpenRemoteCamera = 1,
+  /// 请求远端用户打开摄像头。
+  TUIRequestActionOpenRemoteCamera = 1,
 
-    /// 请求远端用户打开麦克风。
-    TUIRequestActionOpenRemoteMicrophone = 2,
+  /// 请求远端用户打开麦克风。
+  TUIRequestActionOpenRemoteMicrophone = 2,
 
-    /// 请求上麦。
-    TUIRequestActionTakeSeat = 4,
+  /// 请求上麦。
+  TUIRequestActionTakeSeat = 4,
 
-    /// 请求远端用户上麦。
-    TUIRequestActionRemoteUserOnSeat = 5,
+  /// 请求远端用户上麦。
+  TUIRequestActionRemoteUserOnSeat = 5,
 
-    /// 向管理员请求打开本地摄像头。
-    TUIRequestActionApplyToAdminToOpenLocalCamera = 6,
+  /// 向管理员请求打开本地摄像头。
+  TUIRequestActionApplyToAdminToOpenLocalCamera = 6,
 
-    /// 向管理员请求打开本地麦克风。
-    TUIRequestActionApplyToAdminToOpenLocalMicrophone = 7,
+  /// 向管理员请求打开本地麦克风。
+  TUIRequestActionApplyToAdminToOpenLocalMicrophone = 7,
 
-    /// 向管理员请求打开屏幕分享。
-    TUIRequestActionApplyToAdminToOpenLocalScreenShare = 8,
+  /// 向管理员请求打开屏幕分享。
+  TUIRequestActionApplyToAdminToOpenLocalScreenShare = 8,
 
 };
 
@@ -379,7 +399,8 @@ TUIENGINE_EXPORT @interface TUILoginUserInfo : NSObject
 @property(nonatomic, assign) NSUInteger level;
 
 /// 自定义信息。
-@property(nonatomic, strong, nullable) NSDictionary<NSString*, NSData*>* customInfo __attribute__((deprecated("use customInfo in TUIUserInfo instead")));
+@property(nonatomic, strong, nullable) NSDictionary<NSString*, NSData*>* customInfo
+    __attribute__((deprecated("use customInfo in TUIUserInfo instead")));
 
 @end
 
@@ -400,7 +421,8 @@ TUIENGINE_EXPORT @interface TUIUserInfo : NSObject
 /// 用户头像URL。
 @property(nonatomic, copy, nonnull) NSString* avatarUrl;
 
-/// 用户角色类型，会议类型的房间角色仅存在于房间内，退房后再进入角色为普通用户。直播可以在进房前设置，房间不解散，角色依然存在。详情参见：{@link TUIRole}。
+/// 用户角色类型，会议类型的房间角色仅存在于房间内，退房后再进入角色为普通用户。直播可以在进房前设置，房间不解散，角色依然存在。详情参见：{@link
+/// TUIRole}。
 @property(nonatomic, assign) TUIRole userRole;
 
 /// 是否有音频流，默认值：{@link NO}。
@@ -428,13 +450,13 @@ TUIENGINE_EXPORT @interface TUIUserInfo : NSObject
  */
 typedef NS_OPTIONS(NSUInteger, TUIUserInfoModifyFlag) {
 
-    TUIUserInfoModifyFlagNone = 0x00,
+  TUIUserInfoModifyFlagNone = 0x00,
 
-    /// userRole 参数发生变更。
-    TUIUserInfoModifyFlagUserRole = 0x01 << 0,
+  /// userRole 参数发生变更。
+  TUIUserInfoModifyFlagUserRole = 0x01 << 0,
 
-    /// nameCard 参数发生变更。
-    TUIUserInfoModifyFlagNameCard = 0x01 << 1,
+  /// nameCard 参数发生变更。
+  TUIUserInfoModifyFlagNameCard = 0x01 << 1,
 
 };
 
@@ -554,6 +576,9 @@ TUIENGINE_EXPORT @interface TUISeatLockParams : NSObject
 /// 锁定麦位麦克风，默认值：{@link NO}。
 @property(nonatomic, assign) BOOL lockAudio;
 
+/// 锁定麦位标记位，默认值：{@link TUISeatLockFlagAll}。
+@property(nonatomic, assign) TUISeatLockFlag lockFlag;
+
 @end
 
 /**
@@ -597,6 +622,9 @@ TUIENGINE_EXPORT @interface TUIRequest : NSObject
 
 /// 时间戳。
 @property(nonatomic, assign) NSUInteger timestamp;
+
+/// 扩展信息。
+@property(nonatomic, copy, nonnull) NSString* extensionInfo;
 
 @end
 
@@ -714,7 +742,8 @@ typedef void (^TUIRoomListBlock)(NSArray* _Nonnull list);
 typedef void (^TUIRoomInfoBlock)(TUIRoomInfo* _Nullable roomInfo);
 typedef void (^TUIRoomListResponseBlock)(NSArray<TUIRoomInfo*>* _Nonnull list);
 typedef void (^TUIUserInfoBlock)(TUIUserInfo* _Nullable userInfo);
-typedef void (^TUIUserListResponseBlock)(NSArray<TUIUserInfo*>* _Nonnull list, NSInteger nextSequence);
+typedef void (^TUIUserListResponseBlock)(NSArray<TUIUserInfo*>* _Nonnull list,
+                                         NSInteger nextSequence);
 typedef void (^TUISeatListResponseBlock)(NSArray<TUISeatInfo*>* _Nonnull list);
 typedef void (^TUIRequestListResponseBlock)(NSArray<TUIRequest*>* _Nonnull list);
 typedef void (^TUIRoomMetadataResponseBlock)(NSDictionary<NSString*, NSString*>* _Nonnull metadata);
@@ -724,13 +753,38 @@ typedef void (^TUISendCustomMessageBlock)(TUIRoomCustomMessage* _Nonnull message
 
 typedef void (^TUIPlayOnPlayingBlock)(NSString* _Nonnull userId);
 typedef void (^TUIPlayOnLoadingBlock)(NSString* _Nonnull userId);
-typedef void (^TUIPlayOnErrorBlock)(NSString* _Nonnull userId, TUIError code, NSString* _Nonnull message);
+typedef void (^TUIPlayOnErrorBlock)(NSString* _Nonnull userId,
+                                    TUIError code,
+                                    NSString* _Nonnull message);
 
 typedef void (^TUIRequestAcceptedBlock)(NSString* _Nonnull requestId, NSString* _Nonnull userId);
-typedef void (^TUIRequestRejectedBlock)(NSString* _Nonnull requestId, NSString* _Nonnull userId, NSString* _Nonnull message);
+typedef void (^TUIRequestRejectedBlock)(NSString* _Nonnull requestId,
+                                        NSString* _Nonnull userId,
+                                        NSString* _Nonnull message);
 typedef void (^TUIRequestCancelledBlock)(NSString* _Nonnull requestId, NSString* _Nonnull userId);
 typedef void (^TUIRequestTimeoutBlock)(NSString* _Nonnull requestId, NSString* _Nonnull userId);
-typedef void (^TUIRequestErrorBlock)(NSString* _Nonnull requestId, NSString* _Nonnull userId, TUIError code, NSString* _Nonnull message);
+typedef void (^TUIRequestErrorBlock)(NSString* _Nonnull requestId,
+                                     NSString* _Nonnull userId,
+                                     TUIError code,
+                                     NSString* _Nonnull message);
+
+typedef void (^TUIRequestAcceptedCallback)(NSString* _Nonnull requestId,
+                                           TUIUserInfo* _Nonnull userInfo,
+                                           NSString* _Nonnull extensionInfo);
+typedef void (^TUIRequestRejectedCallback)(NSString* _Nonnull requestId,
+                                           TUIUserInfo* _Nonnull userInfo,
+                                           NSString* _Nonnull message,
+                                           NSString* _Nonnull extensionInfo);
+typedef void (^TUIRequestCancelledCallback)(NSString* _Nonnull requestId,
+                                            TUIUserInfo* _Nonnull userInfo);
+typedef void (^TUIRequestTimeoutCallback)(NSString* _Nonnull requestId,
+                                          TUIUserInfo* _Nonnull userInfo);
+typedef void (^TUIRequestSuccessCallback)(NSString* _Nonnull requestId,
+                                          TUIUserInfo* _Nonnull userInfo);
+typedef void (^TUIRequestErrorCallback)(NSString* _Nonnull requestId,
+                                        TUIUserInfo* _Nonnull userInfo,
+                                        TUIError code,
+                                        NSString* _Nonnull message);
 
 typedef void (^TUIExperimentalAPIResponseBlock)(NSString* _Nonnull jsonData);
 

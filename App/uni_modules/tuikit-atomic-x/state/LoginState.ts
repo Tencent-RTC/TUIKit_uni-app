@@ -1,6 +1,11 @@
 /**
- * 登录状态管理
  * @module LoginState
+ * @module_description
+ * 用户身份认证与登录管理模块
+ * 核心功能：负责用户身份验证、登录状态管理、用户信息维护等基础认证服务。
+ * 技术特点：支持多种认证方式、会话管理、权限验证等高级功能，确保用户身份的安全和有效。
+ * 业务价值：为直播平台提供基础的用户认证能力，是所有其他业务模块的前置条件。
+ * 应用场景：用户登录、身份验证、会话管理、权限控制等基础认证场景。
  */
 import { ref } from "vue";
 import { UserProfileParam, LoginOptions, LogoutOptions, SetSelfInfoOptions } from "@/uni_modules/tuikit-atomic-x";
@@ -11,6 +16,25 @@ import { callUTSFunction, safeJsonParse } from "../utils/utsUtils";
  * 当前登录用户信息
  * @type {Ref<UserProfileParam>}
  * @memberof module:LoginState
+ * @example
+ * import { useLoginState } from '@/uni_modules/tuikit-atomic-x/state/LoginState';
+ * const { loginUserInfo } = useLoginState();
+ * 
+ * // 监听用户信息变化
+ * watch(loginUserInfo, (newUserInfo) => {
+ *   if (newUserInfo) {
+ *     console.log('用户信息更新:', newUserInfo);
+ *     console.log('用户ID:', newUserInfo.userID);
+ *     console.log('用户昵称:', newUserInfo.nickname);
+ *     console.log('用户头像:', newUserInfo.avatarURL);
+ *   }
+ * });
+ * 
+ * // 获取当前用户信息
+ * const currentUser = loginUserInfo.value;
+ * if (currentUser) {
+ *   console.log('当前登录用户:', currentUser.nickname);
+ * }
  */
 const loginUserInfo = ref<UserProfileParam>();
 
@@ -18,15 +42,15 @@ const loginUserInfo = ref<UserProfileParam>();
  * 当前登录状态
  * @type {Ref<string>}
  * @memberof module:LoginState
+ * @example
+ * import { useLoginState } from '@/uni_modules/tuikit-atomic-x/state/LoginState';
+ * const { logout } = useLoginState();
+ * logout({
+ *   onSuccess: () => console.log('登出成功'),
+ *   onError: (error) => console.error('登出失败:', error)
+ * });
  */
 const loginStatus = ref<string>();
-
-/**
- * SDK应用ID
- * @type {Ref<number>}
- * @memberof module:LoginState
- */
-const sdkAppID = ref<number>();
 
 /**
  * 登录方法
@@ -111,7 +135,6 @@ export function useLoginState() {
     return {
         loginUserInfo,     // 当前登录用户信息
         loginStatus,       // 当前登录状态
-        sdkAppID,          // SDK应用ID
 
         login,             // 登录方法
         logout,            // 登出方法

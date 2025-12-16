@@ -1,33 +1,36 @@
 import {
-    LoginOptions, LogoutOptions, SetSelfInfoOptions,
-    FetchLiveListOptions, CreateLiveOptions, JoinLiveOptions, EndLiveOptions, LeaveLiveOptions, UpdateLiveInfoOptions,
-    TakeSeatOptions, LockSeatOptions, UnlockSeatOptions,
-    FetchAudienceListOptions, SetAdministratorOptions, RevokeAdministratorOptions, KickUserOutOfRoomOptions, DisableSendMessageOptions,
-    OpenLocalMicrophoneOptions, SetAudioRouteOptions, OpenLocalCameraOptions, SwitchCameraOptions,
-    SwitchMirrorOptions, UpdateVideoQualityOptions, StartScreenShareOptions,
-    RequestHostConnectionOptions, CancelHostConnectionOptions, AcceptHostConnectionOptions, RejectHostConnectionOptions, ExitHostConnectionOptions,
-    SendTextMessageOptions, SendCustomMessageOptions, AppendLocalTipOptions,
-    SendGiftOptions, RefreshUsableGiftsOptions,
-    SetSmoothLevelOptions, SetWhitenessLevelOptions, SetRuddyLevelOptions,
-    SetVoiceEarMonitorEnableOptions, VolumeOptions, SetAudioChangerTypeOptions, SetAudioReverbTypeOptions,
-    SendLikeOptions, CallExperimentalAPIOptions,
-    ApplyForSeatOptions, CancelApplicationOptions, AcceptApplicationOptions, RejectApplicationOptions,
-    OpenRemoteCameraOptions, CloseRemoteCameraOptions, OpenRemoteMicrophoneOptions, CloseRemoteMicrophoneOptions, LeaveSeatOptions, MuteMicrophoneOptions, UnmuteMicrophoneOptions,
-    KickUserOutOfSeatOptions, MoveUserToSeatOptions, InviteToSeatOptions, CancelInvitationOptions, AcceptInvitationOptions, RejectInvitationOptions, DisconnectOptions, ILiveListener,
+  LoginOptions, LogoutOptions, SetSelfInfoOptions,
+  FetchLiveListOptions, CreateLiveOptions, JoinLiveOptions, EndLiveOptions, LeaveLiveOptions, UpdateLiveInfoOptions, UpdateLiveMetaDataOptions, SetLanguageOptions,
+  TakeSeatOptions, LockSeatOptions, UnlockSeatOptions,
+  FetchAudienceListOptions, SetAdministratorOptions, RevokeAdministratorOptions, KickUserOutOfRoomOptions, DisableSendMessageOptions,
+  OpenLocalMicrophoneOptions, SetAudioRouteOptions, OpenLocalCameraOptions, SwitchCameraOptions,
+  SwitchMirrorOptions, UpdateVideoQualityOptions, StartScreenShareOptions,
+  RequestHostConnectionOptions, CancelHostConnectionOptions, AcceptHostConnectionOptions, RejectHostConnectionOptions, ExitHostConnectionOptions,
+  SendTextMessageOptions, SendCustomMessageOptions, AppendLocalTipOptions,
+  SendGiftOptions, RefreshUsableGiftsOptions,
+  SetSmoothLevelOptions, SetWhitenessLevelOptions, SetRuddyLevelOptions,
+  SetVoiceEarMonitorEnableOptions, VolumeOptions, SetAudioChangerTypeOptions, SetAudioReverbTypeOptions,
+  SendLikeOptions, CallExperimentalAPIOptions,
+  ApplyForSeatOptions, CancelApplicationOptions, AcceptApplicationOptions, RejectApplicationOptions,
+  OpenRemoteCameraOptions, CloseRemoteCameraOptions, OpenRemoteMicrophoneOptions, CloseRemoteMicrophoneOptions, LeaveSeatOptions, MuteMicrophoneOptions, UnmuteMicrophoneOptions,
+  KickUserOutOfSeatOptions, MoveUserToSeatOptions, InviteToSeatOptions, CancelInvitationOptions, AcceptInvitationOptions, RejectInvitationOptions, DisconnectOptions, ILiveListener,
+  RequestBattleOptions, CancelBattleRequestOptions, AcceptBattleOptions, RejectBattleOptions, ExitBattleOptions,
+  BattleConfigParam, BattleInfoParam
 } from '../interface.uts';
 import { ParamsCovert } from './utils/ParamsCovert.uts';
 import {
-    liveListListenerMap, liveSeatListenerMap, coHostListenerMap, coGuestHostListenerMap, coGuestGuestListenerMap, giftListenerMap,
-    likeListenerMap, audienceListenerMap, LiveListenerImpl, createLiveListEventDispatcher,
-    createCoHostEventDispatcher, createCoGuestHostEventDispatcher, createCoGuestGuestEventDispatcher,
-    createGiftEventDispatcher, createLikeEventDispatcher, createLiveSeatEventDispatcher, createAudienceEventDispatcher
+  liveListListenerMap, liveSeatListenerMap, coHostListenerMap, coGuestHostListenerMap, coGuestGuestListenerMap, giftListenerMap,
+  likeListenerMap, audienceListenerMap, battleListenerMap, LiveListenerImpl, createLiveListEventDispatcher,
+  createCoHostEventDispatcher, createCoGuestHostEventDispatcher, createCoGuestGuestEventDispatcher,
+  createGiftEventDispatcher, createLikeEventDispatcher, createLiveSeatEventDispatcher, createAudienceEventDispatcher,
+  createBattleEventDispatcher
 } from './LiveListener.uts';
 
 import { LiveInfo, TUIRoomEngine, TUIError } from "RTCRoomEngine";
 import {
-    AudioEffectStore, BarrageStore, BaseBeautyStore, CoGuestStore, CoHostStore, DeviceStore,
-    GiftStore, LikeStore, LiveAudienceStore, LiveListStore, LiveSeatStore, LiveSummaryStore, LoginStore,
-    DeviceControlPolicy, AudioRoute, CoHostLayoutTemplate, MirrorType
+  AudioEffectStore, BarrageStore, BaseBeautyStore, CoGuestStore, CoHostStore, DeviceStore,
+  GiftStore, LikeStore, LiveAudienceStore, LiveListStore, LiveSeatStore, LiveSummaryStore, LoginStore, BattleStore,
+  DeviceControlPolicy, AudioRoute, CoHostLayoutTemplate, MirrorType, BattleConfig
 } from "AtomicXCore";
 import { UTSiOS } from "DCloudUTSFoundation"
 
@@ -43,1407 +46,1575 @@ const BARRAGE_TAG = "UTS-Barrage: "
 const BEAUTY_TAG = "UTS-Beauty: "
 const AUDIOEFFECT_TAG = "UTS-AudioEffect: "
 const LIKE_TAG = "UTS-Like: "
+const BATTLE_TAG = "UTS-Battle: "
+const SUMMARY_TAG = "UTS-Summary: "
 
 export class RTCRoomEngineManager {
-    nativeGiftListener ?: LiveListenerImpl = null;
-    nativeLikeListener ?: LiveListenerImpl = null;
-    nativeAudienceListener ?: LiveListenerImpl = null;
-    nativeLiveListListener ?: LiveListenerImpl = null;
-    nativeLiveSeatListener ?: LiveListenerImpl = null;
-    nativeCoGuestHostListener ?: LiveListenerImpl = null;
-    nativeCoGuestGuestListener ?: LiveListenerImpl = null;
-    nativeCoHostListener ?: LiveListenerImpl = null;
+  nativeGiftListener ?: LiveListenerImpl = null;
+  nativeLikeListener ?: LiveListenerImpl = null;
+  nativeAudienceListener ?: LiveListenerImpl = null;
+  nativeLiveListListener ?: LiveListenerImpl = null;
+  nativeLiveSeatListener ?: LiveListenerImpl = null;
+  nativeCoGuestHostListener ?: LiveListenerImpl = null;
+  nativeCoGuestGuestListener ?: LiveListenerImpl = null;
+  nativeCoHostListener ?: LiveListenerImpl = null;
+  nativeBattleListener ?: LiveListenerImpl = null;
 
-    constructor() {
-        console.log(`${RTC_TAG} constructor.start`);
-    }
-    //================= LoginStore 相关接口 =================
-    public login(options : LoginOptions) {
-        DispatchQueue.main.async(execute = () : void => {
-            console.log(`${RTC_TAG} login, data: ${JSON.stringify(options)}`);
-            this.setFramework()
+  constructor() {
+    console.log(`${RTC_TAG} constructor.start`);
+  }
+  //================= LoginStore 相关接口 =================
+  public login(options : LoginOptions) {
+    DispatchQueue.main.async(execute = () : void => {
+      console.log(`${RTC_TAG} login, data: ${JSON.stringify(options)}`);
+      this.setFramework()
 
-            LoginStore.shared.login(
-                sdkAppID = options.sdkAppID.toInt32(),
-                userID = options.userID,
-                userSig = options.userSig,
-                completion = JsonUtil.toCompletionClosure(
-                    success = () : void => {
-                        TUIRoomEngine.login(
-                            sdkAppId = options.sdkAppID.toInt(),
-                            userId = options.userID,
-                            userSig = options.userSig,
-                            onSuccess = () : void => {
-                                console.log(`${RTC_TAG} login success`);
-                                options.success?.();
-                            },
-                            onError = (code : TUIError, message : String) : void => {
-                                console.error(`${RTC_TAG} login error, error: ${code}, errMsg: ${message}`);
-                                options.fail?.(Number.from(code.rawValue), message as string);
-                            }
+      LoginStore.shared.login(
+        sdkAppID = options.sdkAppID.toInt32(),
+        userID = options.userID,
+        userSig = options.userSig,
+        completion = JsonUtil.toCompletionClosure(
+          success = () : void => {
+            TUIRoomEngine.login(
+              sdkAppId = options.sdkAppID.toInt(),
+              userId = options.userID,
+              userSig = options.userSig,
+              onSuccess = () : void => {
+                console.log(`${RTC_TAG} login success`);
+                options.success?.();
+              },
+              onError = (code : TUIError, message : String) : void => {
+                console.error(`${RTC_TAG} login error, error: ${code}, errMsg: ${message}`);
+                options.fail?.(Number.from(code.rawValue), message as string);
+              }
                     },
-                    failure = (code : Int, message : String) : void => {
-                        console.error(`${RTC_TAG} login fail, error: ${code}, errMsg: ${message}`);
-                        options.fail?.(Number.from(code), message as string);
-                    }
-                )
-            )
+          failure = (code : Int, message : String) : void => {
+            console.error(`${RTC_TAG} login fail, error: ${code}, errMsg: ${message}`);
+            options.fail?.(Number.from(code), message as string);
+          }
+        )
+      )
+    }
+    }
+
+  public setFramework() {
+    const data = { "api": "setFramework", "params": { "framework": 11, "component": 21 } }
+    TUIRoomEngine.sharedInstance().callExperimentalAPI(
+      jsonStr = JSON.stringify(data) ?? "",
+      callback = (jsonData : string) : void => {
+      }
+    )
+  }
+
+  public logout(options : LogoutOptions) {
+    DispatchQueue.main.async(execute = () : void => {
+      console.log(`${RTC_TAG} logout, data: ${JSON.stringify(options)}`);
+      LoginStore.shared.logout(
+        completion = JsonUtil.toCompletionClosure(
+          success = () : void => {
+            options.success?.();
+          },
+          failure = (code : Int, message : String) : void => {
+            options.fail?.(Number.from(code), message as string);
+          }
+        )
+      )
+    });
+  }
+  public setSelfInfo(options : SetSelfInfoOptions) {
+    DispatchQueue.main.async(execute = () : void => {
+      console.log(`${RTC_TAG} setSelfInfo, data: ${JSON.stringify(options)}`);
+      let nativeUserInfo = ParamsCovert.convertUserProfile(options.userProfile)
+      LoginStore.shared.setSelfInfo(
+        userProfile = nativeUserInfo,
+        completion = JsonUtil.toCompletionClosure(
+          success = () : void => {
+            options.success?.();
+          },
+          failure = (code : Int, message : String) : void => {
+            options.fail?.(Number.from(code), message as string);
+          }
+        )
+      )
+    });
+  }
+
+  //================= LiveListStore 相关接口 =================
+  @UTSJS.keepAlive
+  public addLiveListListener(eventName : string, listener : ILiveListener) : void {
+    DispatchQueue.main.async(execute = () : void => {
+      if (this.nativeLiveListListener == null) {
+        this.nativeLiveListListener = new LiveListenerImpl(createLiveListEventDispatcher())
+      }
+      const listenerArray = liveListListenerMap.get(eventName) ?? []
+      if (!listenerArray.includes(listener)) {
+        listenerArray.push(listener)
+      }
+      liveListListenerMap.set(eventName, listenerArray);
+
+      let tempListener = this.nativeLiveListListener
+      LiveListStoreObserver.shared.setupLiveListEvent(function (key : string, data : string) {
+        console.log(`${LIVE_TAG} liveListStoreChanged, key: ${key}, data: ${data}`);
+        tempListener.dispatchEvent(key, data)
+      })
+    });
+  }
+
+  @UTSJS.keepAlive
+  public removeLiveListListener(eventName : string, listener : ILiveListener) : void {
+    DispatchQueue.main.async(execute = () : void => {
+      let listenerArray = liveListListenerMap.get(eventName) ?? []
+      let index = listenerArray.indexOf(listener)
+      if (index > -1) {
+        listenerArray.splice(index, 1)
+      }
+      if (listenerArray.length == 0) {
+        liveListListenerMap.delete(eventName);
+      }
+    });
+  }
+  public fetchLiveList(options : FetchLiveListOptions) {
+    DispatchQueue.main.async(execute = () : void => {
+      console.log(`${LIVE_TAG} fetchLiveList, data: ${JSON.stringify(options)}`);
+      LiveListStore.shared.fetchLiveList(
+        cursor = options.cursor,
+        count = options.count.toInt(),
+        completion = JsonUtil.toCompletionClosure(
+          success = () : void => {
+            console.log(`${LIVE_TAG} fetchLiveList success`);
+            options.success?.();
+          },
+          failure = (code : Int, message : String) : void => {
+            console.error(`${LIVE_TAG} fetchLiveList fail, error: ${code}, errMsg: ${message}`);
+            options.fail?.(Number.from(code), message as string);
+          }
+        )
+      )
+    });
+  }
+
+  public createLive(options : CreateLiveOptions) {
+    DispatchQueue.main.async(execute = () : void => {
+      console.log(`${LIVE_TAG} createLive, data: ${JSON.stringify(options)}`);
+
+      let nativeLiveInfo : LiveInfo = ParamsCovert.convertLiveInfo(options.liveInfo)
+      LiveListStore.shared.createLive(
+        nativeLiveInfo,
+        completion = JsonUtil.toLiveInfoCompletionClosure(
+          success = (liveInfo : string) : void => {
+            console.log(`${LIVE_TAG} createLive success`);
+            options.success?.(liveInfo);
+          },
+          failure = (code : Int, message : String) : void => {
+            console.error(`${LIVE_TAG} createLive fail, error: ${code}, errMsg: ${message}`);
+            options.fail?.(Number.from(code), message as string);
+          }
+        )
+      )
+    });
+  }
+
+  public joinLive(options : JoinLiveOptions) {
+    DispatchQueue.main.async(execute = () : void => {
+      console.log(`${LIVE_TAG} joinLive, data: ${JSON.stringify(options)}`);
+
+      LiveListStore.shared.joinLive(
+        liveID = options.liveID,
+        completion = JsonUtil.toLiveInfoCompletionClosure(
+          success = (liveInfo : string) : void => {
+            console.log(`${LIVE_TAG} joinLive success`);
+            options.success?.(liveInfo);
+          },
+          failure = (code : Int, message : String) : void => {
+            console.error(`${LIVE_TAG} joinLive fail, error: ${code}, errMsg: ${message}`);
+            options.fail?.(Number.from(code), message as string);
+          }
+        )
+      )
+    });
+  }
+
+  public leaveLive(options : LeaveLiveOptions) {
+    DispatchQueue.main.async(execute = () : void => {
+      console.log(`${LIVE_TAG} leaveLive, data: ${JSON.stringify(options)}`);
+      LiveListStore.shared.leaveLive(
+        completion = JsonUtil.toCompletionClosure(
+          success = () : void => {
+            console.log(`${LIVE_TAG} leaveLive success`);
+            options.success?.();
+          },
+          failure = (code : Int, message : String) : void => {
+            console.error(`${LIVE_TAG} leaveLive fail, error: ${code}, errMsg: ${message}`);
+            options.fail?.(Number.from(code), message as string);
+          }
+        )
+      )
+    });
+  }
+
+  public endLive(options : EndLiveOptions) {
+    DispatchQueue.main.async(execute = () : void => {
+      console.log(`${LIVE_TAG} endLive, data: ${JSON.stringify(options)}`);
+      LiveListStore.shared.endLive(
+        completion = JsonUtil.toStopLiveCompletionClosure(
+          success = (data : string) : void => {
+            console.log(`${LIVE_TAG} endLive success`);
+            options.success?.(data);
+          },
+          failure = (code : Int, message : String) : void => {
+            console.error(`${LIVE_TAG} endLive fail, error: ${code}, errMsg: ${message}`);
+            options.fail?.(Number.from(code), message as string);
+          }
+        )
+      )
+    });
+  }
+
+  public updateLiveInfo(options : UpdateLiveInfoOptions) {
+    DispatchQueue.main.async(execute = () : void => {
+      console.log(`${LIVE_TAG} updateLiveInfo, data: ${JSON.stringify(options)}`);
+      let nativeLiveInfo : LiveInfo = ParamsCovert.convertLiveInfo(options.liveInfo)
+      let modifyFlagList = ParamsCovert.convertModifyFlagList(options.modifyFlagList)
+      LiveListStore.shared.updateLiveInfo(
+        nativeLiveInfo,
+        modifyFlag = modifyFlagList,
+        completion = JsonUtil.toCompletionClosure(
+          success = () : void => {
+            options.success?.();
+          },
+          failure = (code : Int, message : String) : void => {
+            options.fail?.(Number.from(code), message as string);
+          }
+        )
+      )
+    });
+    public updateLiveMetaData(options : UpdateLiveMetaDataOptions) {
+      DispatchQueue.main.async(execute = () : void => {
+        console.log(`${LIVE_TAG} updateLiveMetaData, data: ${JSON.stringify(options)}`);
+        
+        let jsonObject = ParamsCovert.convertJsonToUTSJSONObject(options.metaData)
+        let metaData = new Map<string,string>()
+        jsonObject.toMap().forEach(function (value: any | null, key: string) {
+            metaData.set(key, JSON.stringify(value) ?? "")
+        })
+        LiveListStore.shared.updateLiveMetaData(
+          metaData,
+          completion = JsonUtil.toCompletionClosure(
+            success = () : void => {
+              options.success?.();
+            },
+            failure = (code : Int, message : String) : void => {
+              options.fail?.(Number.from(code), message as string);
+            }
+          )
+        )
+      });
+  }
+
+  // ================= LiveSeatStore 相关接口 =================
+  @UTSJS.keepAlive
+  public addLiveSeatEventListener(liveID : string, eventName : string, listener : ILiveListener) : void {
+    DispatchQueue.main.async(execute = () : void => {
+      if (this.nativeLiveSeatListener == null) {
+        this.nativeLiveSeatListener = new LiveListenerImpl(createLiveSeatEventDispatcher())
+      }
+      const listenerArray = liveSeatListenerMap.get(eventName) ?? []
+      if (!listenerArray.includes(listener)) {
+        listenerArray.push(listener)
+      }
+      liveSeatListenerMap.set(eventName, listenerArray);
+
+      let tempListener = this.nativeLiveSeatListener
+      LiveSeatStoreObserver.shared.setupLiveSeatEvent(liveID, function (key : string, data : string) {
+        console.log(`${SEAT_TAG} setupLiveSeatEvent, key: ${key}, data: ${data}`);
+        tempListener.dispatchEvent(key, data)
+      })
+    });
+  }
+
+  @UTSJS.keepAlive
+  public removeLiveSeatEventListener(liveID : string, eventName : string, listener : ILiveListener) : void {
+    DispatchQueue.main.async(execute = () : void => {
+      let listenerArray = liveSeatListenerMap.get(eventName) ?? []
+      let index = listenerArray.indexOf(listener)
+      if (index > -1) {
+        listenerArray.splice(index, 1)
+      }
+      if (listenerArray.length == 0) {
+        liveSeatListenerMap.delete(eventName);
+      }
+    });
+  }
+  public takeSeat(options : TakeSeatOptions) {
+    DispatchQueue.main.async(execute = () : void => {
+      console.log(`${SEAT_TAG} takeSeat, data: ${JSON.stringify(options)}`);
+      LiveSeatStore.create(liveID = options.liveID).takeSeat(
+        seatIndex = options.seatIndex.toInt(),
+        completion = JsonUtil.toCompletionClosure(
+          success = () : void => {
+            console.log(`${SEAT_TAG} takeSeat success`);
+            options.success?.();
+          },
+          failure = (code : Int, message : String) : void => {
+            console.error(`${SEAT_TAG} takeSeat fail, error: ${code}, errMsg: ${message}`);
+            options.fail?.(Number.from(code), message as string);
+          }
+        )
+      )
+    });
+  }
+
+  public leaveSeat(options : LeaveSeatOptions) {
+    DispatchQueue.main.async(execute = () : void => {
+      console.log(`${SEAT_TAG} leaveSeat, data: ${JSON.stringify(options)}`);
+      LiveSeatStore.create(liveID = options.liveID).leaveSeat(
+        completion = JsonUtil.toCompletionClosure(
+          success = () : void => {
+            options.success?.();
+          },
+          failure = (code : Int, message : String) : void => {
+            options.fail?.(Number.from(code), message as string);
+          }
+        )
+      );
+    });
+  }
+
+  public muteMicrophone(options : MuteMicrophoneOptions) {
+    DispatchQueue.main.async(execute = () : void => {
+      console.log(`${SEAT_TAG} muteMicrophone, data: ${JSON.stringify(options)}`);
+      LiveSeatStore.create(liveID = options.liveID).muteMicrophone();
+    });
+  }
+
+  public unmuteMicrophone(options : UnmuteMicrophoneOptions) {
+    DispatchQueue.main.async(execute = () : void => {
+      console.log(`${SEAT_TAG} unmuteMicrophone, data: ${JSON.stringify(options)}`);
+      LiveSeatStore.create(liveID = options.liveID).unmuteMicrophone(
+        completion = JsonUtil.toCompletionClosure(
+          success = () : void => {
+            options.success?.();
+          },
+          failure = (code : Int, message : String) : void => {
+            console.error(`${SEAT_TAG} unmuteMicrophone fail, error: ${code}, errMsg: ${message}`);
+            options.fail?.(Number.from(code), message as string);
+          }
+        )
+      )
+    });
+  }
+
+  public kickUserOutOfSeat(options : KickUserOutOfSeatOptions) {
+    DispatchQueue.main.async(execute = () : void => {
+      console.log(`${SEAT_TAG} kickUserOutOfSeat, data: ${JSON.stringify(options)}`);
+      LiveSeatStore.create(liveID = options.liveID).kickUserOutOfSeat(
+        userID = options.userID,
+        completion = JsonUtil.toCompletionClosure(
+          success = () : void => {
+            options.success?.();
+          },
+          failure = (code : Int, message : String) : void => {
+            console.error(`${SEAT_TAG} kickUserOutOfSeat fail, error: ${code}, errMsg: ${message}`);
+            options.fail?.(Number.from(code), message as string);
+          }
+        )
+      )
+    });
+  }
+
+  public moveUserToSeat(options : MoveUserToSeatOptions) {
+    DispatchQueue.main.async(execute = () : void => {
+      console.log(`${SEAT_TAG} moveUserToSeat, data: ${JSON.stringify(options)}`);
+      let policy = ParamsCovert.convertMoveSeatPolicy(options.policy)
+      LiveSeatStore.create(liveID = options.liveID).moveUserToSeat(
+        userID = options.userID,
+        targetIndex = options.targetIndex.toInt(),
+        policy = policy,
+        completion = JsonUtil.toCompletionClosure(
+          success = () : void => {
+            options.success?.();
+          },
+          failure = (code : Int, message : String) : void => {
+            console.error(`${SEAT_TAG} moveUserToSeat fail, error: ${code}, errMsg: ${message}`);
+            options.fail?.(Number.from(code), message as string);
+          }
+        )
+      )
+    });
+  }
+
+  public lockSeat(options : LockSeatOptions) {
+    DispatchQueue.main.async(execute = () : void => {
+      console.log(`${SEAT_TAG} lockSeat, data: ${JSON.stringify(options)}`);
+      LiveSeatStore.create(liveID = options.liveID).lockSeat(
+        seatIndex = options.seatIndex.toInt(),
+        completion = JsonUtil.toCompletionClosure(
+          success = () : void => {
+            options.success?.();
+          },
+          failure = (code : Int, message : String) : void => {
+            console.error(`${SEAT_TAG} lockSeat fail, error: ${code}, errMsg: ${message}`);
+            options.fail?.(Number.from(code), message as string);
+          }
+        )
+      )
+    });
+  }
+
+  public unlockSeat(options : UnlockSeatOptions) {
+    DispatchQueue.main.async(execute = () : void => {
+      console.log(`${SEAT_TAG} unlockSeat, data: ${JSON.stringify(options)}`);
+      LiveSeatStore.create(liveID = options.liveID).unlockSeat(
+        seatIndex = options.seatIndex.toInt(),
+        completion = JsonUtil.toCompletionClosure(
+          success = () : void => {
+            options.success?.();
+          },
+          failure = (code : Int, message : String) : void => {
+            console.error(`${SEAT_TAG} unlockSeat fail, error: ${code}, errMsg: ${message}`);
+            options.fail?.(Number.from(code), message as string);
+          }
+        )
+      )
+    });
+  }
+
+  public openRemoteCamera(options : OpenRemoteCameraOptions) {
+    DispatchQueue.main.async(execute = () : void => {
+      console.log(`${SEAT_TAG} openRemoteCamera, data: ${JSON.stringify(options)}`);
+      // TODO: 待实现
+      // let devicePolicy = DeviceControlPolicy.forceOpen
+      // if (options.policy == 'UNLOCK_ONLY') {
+      //     devicePolicy = DeviceControlPolicy.unlockOnly
+      // }
+      let devicePolicy = DeviceControlPolicy.unlockOnly
+      LiveSeatStore.create(liveID = options.liveID).openRemoteCamera(
+        userID = options.userID,
+        policy = devicePolicy,
+        completion = JsonUtil.toCompletionClosure(
+          success = () : void => {
+            options.success?.();
+          },
+          failure = (code : Int, message : String) : void => {
+            console.error(`${SEAT_TAG} openRemoteCamera fail, error: ${code}, errMsg: ${message}`);
+            options.fail?.(Number.from(code), message as string);
+          }
+        )
+      )
+    });
+  }
+
+  public closeRemoteCamera(options : CloseRemoteCameraOptions) {
+    DispatchQueue.main.async(execute = () : void => {
+      console.log(`${SEAT_TAG} closeRemoteCamera, data: ${JSON.stringify(options)}`);
+      LiveSeatStore.create(liveID = options.liveID).closeRemoteCamera(
+        userID = options.userID,
+        completion = JsonUtil.toCompletionClosure(
+          success = () : void => {
+            options.success?.();
+          },
+          failure = (code : Int, message : String) : void => {
+            console.error(`${SEAT_TAG} closeRemoteCamera fail, error: ${code}, errMsg: ${message}`);
+            options.fail?.(Number.from(code), message as string);
+          }
+        )
+      )
+    });
+  }
+
+  public openRemoteMicrophone(options : OpenRemoteMicrophoneOptions) {
+    DispatchQueue.main.async(execute = () : void => {
+      console.log(`${SEAT_TAG} openRemoteMicrophone, data: ${JSON.stringify(options)}`);
+      //TODO: 待实现
+      // let devicePolicy = DeviceControlPolicy.forceOpen
+      // if (options.policy == 'UNLOCK_ONLY') {
+      //     devicePolicy = DeviceControlPolicy.unlockOnly
+      // }
+      let devicePolicy = DeviceControlPolicy.unlockOnly
+      LiveSeatStore.create(liveID = options.liveID).openRemoteMicrophone(
+        userID = options.userID,
+        policy = devicePolicy,
+        completion = JsonUtil.toCompletionClosure(
+          success = () : void => {
+            console.log(`${SEAT_TAG} openRemoteMicrophone success`);
+            options.success?.();
+          },
+          failure = (code : Int, message : String) : void => {
+            console.error(`${SEAT_TAG} openRemoteMicrophone fail, error: ${code}, errMsg: ${message}`);
+            options.fail?.(Number.from(code), message as string);
+          }
+        )
+      )
+    });
+  }
+
+  public closeRemoteMicrophone(options : CloseRemoteMicrophoneOptions) {
+    DispatchQueue.main.async(execute = () : void => {
+      console.log(`${SEAT_TAG} closeRemoteMicrophone, data: ${JSON.stringify(options)}`);
+      LiveSeatStore.create(liveID = options.liveID).closeRemoteMicrophone(
+        userID = options.userID,
+        completion = JsonUtil.toCompletionClosure(
+          success = () : void => {
+            options.success?.();
+          },
+          failure = (code : Int, message : String) : void => {
+            console.error(`${SEAT_TAG} closeRemoteMicrophone fail, error: ${code}, errMsg: ${message}`);
+            options.fail?.(Number.from(code), message as string);
+          }
+        )
+      )
+    });
+  }
+  // ================= LiveAudienceStore 相关接口 =================
+  @UTSJS.keepAlive
+  public addAudienceListener(liveID : string, eventName : string, listener : ILiveListener) : void {
+    DispatchQueue.main.async(execute = () : void => {
+      if (this.nativeAudienceListener == null) {
+        this.nativeAudienceListener = new LiveListenerImpl(createAudienceEventDispatcher())
+      }
+      const listenerArray = audienceListenerMap.get(eventName) ?? []
+      if (!listenerArray.includes(listener)) {
+        listenerArray.push(listener)
+      }
+      audienceListenerMap.set(eventName, listenerArray);
+
+      let tempListener = this.nativeAudienceListener
+      LiveAudienceStoreObserver.shared.setupAudienceEvent(liveID, function (key : string, data : string) {
+        console.log(`${AUDIENCE_TAG} setupAudienceEvent, key: ${key}, data: ${data}`);
+        tempListener.dispatchEvent(key, data)
+      })
+    });
+  }
+
+  @UTSJS.keepAlive
+  public removeAudienceListener(liveID : string, eventName : string, listener : ILiveListener) : void {
+    DispatchQueue.main.async(execute = () : void => {
+      let listenerArray = audienceListenerMap.get(eventName) ?? []
+      let index = listenerArray.indexOf(listener)
+      if (index > -1) {
+        listenerArray.splice(index, 1)
+      }
+      if (listenerArray.length == 0) {
+        audienceListenerMap.delete(eventName);
+      }
+    });
+  }
+  public fetchAudienceList(options : FetchAudienceListOptions) {
+    DispatchQueue.main.async(execute = () : void => {
+      console.log(`${AUDIENCE_TAG} fetchAudienceList, data: ${JSON.stringify(options)}`);
+      LiveAudienceStore.create(liveID = options.liveID).fetchAudienceList(
+        completion = JsonUtil.toCompletionClosure(
+          success = () : void => {
+            options.success?.();
+          },
+          failure = (code : Int, message : String) : void => {
+            console.error(`${AUDIENCE_TAG} fetchAudienceList fail, error: ${code}, errMsg: ${message}`);
+            options.fail?.(Number.from(code), message as string);
+          }
+        )
+      )
+    });
+  }
+  public setAdministrator(options : SetAdministratorOptions) {
+    DispatchQueue.main.async(execute = () : void => {
+      console.log(`${AUDIENCE_TAG} setAdministrator, data: ${JSON.stringify(options)}`);
+      LiveAudienceStore.create(liveID = options.liveID).setAdministrator(
+        userID = options.userID,
+        completion = JsonUtil.toCompletionClosure(
+          success = () : void => {
+            console.log(`${AUDIENCE_TAG} setAdministrator success`);
+            options.success?.();
+          },
+          failure = (code : Int, message : String) : void => {
+            console.error(`${AUDIENCE_TAG} setAdministrator fail, error: ${code}, errMsg: ${message}`);
+            options.fail?.(Number.from(code), message as string);
+          }
+        )
+      )
+    });
+  }
+  public revokeAdministrator(options : RevokeAdministratorOptions) {
+    DispatchQueue.main.async(execute = () : void => {
+      console.log(`${AUDIENCE_TAG} revokeAdministrator, data: ${JSON.stringify(options)}`);
+      LiveAudienceStore.create(liveID = options.liveID).revokeAdministrator(
+        userID = options.userID,
+        completion = JsonUtil.toCompletionClosure(
+          success = () : void => {
+            console.log(`${AUDIENCE_TAG} revokeAdministrator success`);
+            options.success?.();
+          },
+          failure = (code : Int, message : String) : void => {
+            console.error(`${AUDIENCE_TAG} revokeAdministrator fail, error: ${code}, errMsg: ${message}`);
+            options.fail?.(Number.from(code), message as string);
+          }
+        )
+      )
+    });
+  }
+  public kickUserOutOfRoom(options : KickUserOutOfRoomOptions) {
+    DispatchQueue.main.async(execute = () : void => {
+      console.log(`${AUDIENCE_TAG} kickUserOutOfRoom, data: ${JSON.stringify(options)}`);
+      LiveAudienceStore.create(liveID = options.liveID).kickUserOutOfRoom(
+        userID = options.userID,
+        completion = JsonUtil.toCompletionClosure(
+          success = () : void => {
+            console.log(`${AUDIENCE_TAG} kickUserOutOfRoom success`);
+            options.success?.();
+          },
+          failure = (code : Int, message : String) : void => {
+            console.error(`${AUDIENCE_TAG} kickUserOutOfRoom fail, error: ${code}, errMsg: ${message}`);
+            options.fail?.(Number.from(code), message as string);
+          }
+        )
+      )
+    });
+  }
+  public disableSendMessage(options : DisableSendMessageOptions) {
+    DispatchQueue.main.async(execute = () : void => {
+      console.log(`${AUDIENCE_TAG} disableSendMessage, data: ${JSON.stringify(options)}`);
+      LiveAudienceStore.create(liveID = options.liveID).disableSendMessage(
+        userID = options.userID,
+        isDisable = options.isDisable,
+        completion = JsonUtil.toCompletionClosure(
+          success = () : void => {
+            options.success?.();
+          },
+          failure = (code : Int, message : String) : void => {
+            console.error(`${AUDIENCE_TAG} disableSendMessage fail, error: ${code}, errMsg: ${message}`);
+            options.fail?.(Number.from(code), message as string);
+          }
+        )
+      )
+    });
+  }
+  // ================= DeviceStore 相关接口 =================
+  public openLocalMicrophone(options : OpenLocalMicrophoneOptions) {
+    DispatchQueue.main.async(execute = () : void => {
+      console.log(`${DEVICE_TAG} openLocalMicrophone, data: ${JSON.stringify(options)}`);
+      DeviceStore.shared.openLocalMicrophone(
+        completion = JsonUtil.toCompletionClosure(
+          success = () : void => {
+            options.success?.();
+          },
+          failure = (code : Int, message : String) : void => {
+            options.fail?.(Number.from(code), message as string);
+          }
+        )
+      )
+    });
+  }
+  public closeLocalMicrophone() {
+    DispatchQueue.main.async(execute = () : void => {
+      console.log(`${DEVICE_TAG} closeLocalMicrophone`);
+      DeviceStore.shared.closeLocalMicrophone();
+    });
+  }
+  public setCaptureVolume(options : VolumeOptions) {
+    DispatchQueue.main.async(execute = () : void => {
+      console.log(`${DEVICE_TAG} setCaptureVolume, data: ${JSON.stringify(options)}`);
+      DeviceStore.shared.setCaptureVolume(volume = options.volume.toInt());
+    });
+  }
+  public setOutputVolume(options : VolumeOptions) {
+    DispatchQueue.main.async(execute = () : void => {
+      console.log(`${DEVICE_TAG} setOutputVolume, data: ${JSON.stringify(options)}`);
+      DeviceStore.shared.setOutputVolume(options.volume.toInt());
+    });
+  }
+  public setAudioRoute(options : SetAudioRouteOptions) {
+    DispatchQueue.main.async(execute = () : void => {
+      console.log(`${DEVICE_TAG} setAudioRoute, data: ${JSON.stringify(options)}`);
+      let audioRoute = AudioRoute.speakerphone
+      if (options.route == 'EARPIECE') {
+        audioRoute = AudioRoute.earpiece
+      }
+      DeviceStore.shared.setAudioRoute(audioRoute);
+    });
+  }
+  public openLocalCamera(options : OpenLocalCameraOptions) {
+    DispatchQueue.main.async(execute = () : void => {
+      console.log(`${DEVICE_TAG} openLocalCamera, data: ${JSON.stringify(options)}`);
+      DeviceStore.shared.openLocalCamera(
+        isFront = options.isFront ?? true,
+        completion = JsonUtil.toCompletionClosure(
+          success = () : void => {
+            options.success?.();
+          },
+          failure = (code : Int, message : String) : void => {
+            options.fail?.(Number.from(code), message as string);
+          }
+        )
+      )
+    });
+  }
+  public closeLocalCamera() {
+    DispatchQueue.main.async(execute = () : void => {
+      console.log(`${DEVICE_TAG} closeLocalCamera`);
+      DeviceStore.shared.closeLocalCamera();
+    });
+  }
+  public switchCamera(options : SwitchCameraOptions) {
+    DispatchQueue.main.async(execute = () : void => {
+      console.log(`${DEVICE_TAG} switchCamera, data: ${JSON.stringify(options)}`);
+      DeviceStore.shared.switchCamera(isFront = options.isFront ?? false);
+    });
+  }
+  public switchMirror(options : SwitchMirrorOptions) {
+    DispatchQueue.main.async(execute = () : void => {
+      console.log(`${DEVICE_TAG} switchMirror, data: ${JSON.stringify(options)}`);
+      let type = MirrorType.auto
+      if (options.mirrorType == 'DISABLE') {
+        type = MirrorType.disable
+      } else if (options.mirrorType == 'ENABLE') {
+        type = MirrorType.enable
+      }
+      DeviceStore.shared.switchMirror(mirrorType = type);
+    });
+  }
+  public updateVideoQuality(options : UpdateVideoQualityOptions) {
+    DispatchQueue.main.async(execute = () : void => {
+      console.log(`${DEVICE_TAG} updateVideoQuality, data: ${JSON.stringify(options)}`);
+      DeviceStore.shared.updateVideoQuality(
+        ParamsCovert.covertVideoQuality(options.quality)
+      )
+    });
+  }
+  public startScreenShare(options : StartScreenShareOptions) {
+    DispatchQueue.main.async(execute = () : void => {
+      console.log(`${DEVICE_TAG} startScreenShare, data: ${JSON.stringify(options)}`);
+      DeviceStore.shared.startScreenShare(appGroup = options.appGroup);
+    });
+  }
+  public stopScreenShare() {
+    DispatchQueue.main.async(execute = () : void => {
+      console.log(`${DEVICE_TAG} stopScreenShare`);
+      DeviceStore.shared.stopScreenShare();
+    });
+  }
+
+  // ================= CoHostStore 相关接口 =================
+  @UTSJS.keepAlive
+  public addCoHostListener(liveID : string, eventName : string, listener : ILiveListener) : void {
+    DispatchQueue.main.async(execute = () : void => {
+      if (this.nativeCoHostListener == null) {
+        this.nativeCoHostListener = new LiveListenerImpl(createCoHostEventDispatcher())
+      }
+      const listenerArray = coHostListenerMap.get(eventName) ?? []
+      if (!listenerArray.includes(listener)) {
+        listenerArray.push(listener)
+      }
+      coHostListenerMap.set(eventName, listenerArray);
+
+      let tempListener = this.nativeCoHostListener
+      CoHostStoreObserver.shared.setupCoHostEvent(liveID, function (key : string, data : string) {
+        console.log(`${COHOST_TAG} setupCoHostEvent, key: ${key}, data: ${data}`);
+        tempListener.dispatchEvent(key, data)
+      })
+    });
+  }
+
+  @UTSJS.keepAlive
+  public removeCoHostListener(liveID : string, eventName : string, listener : ILiveListener) : void {
+    DispatchQueue.main.async(execute = () : void => {
+      let listenerArray = coHostListenerMap.get(eventName) ?? []
+      let index = listenerArray.indexOf(listener)
+      if (index > -1) {
+        listenerArray.splice(index, 1)
+      }
+      if (listenerArray.length == 0) {
+        coHostListenerMap.delete(eventName);
+      }
+    });
+  }
+  public requestHostConnection(options : RequestHostConnectionOptions) {
+    DispatchQueue.main.async(execute = () : void => {
+      console.log(`${COHOST_TAG} requestHostConnection, data: ${JSON.stringify(options)}`);
+      let template = CoHostLayoutTemplate.hostDynamicGrid
+      if (options.layoutTemplate == 'HOST_DYNAMIC_1V6') {
+        template = CoHostLayoutTemplate.hostDynamic1v6
+      }
+      CoHostStore.create(liveID = options.liveID).requestHostConnection(
+        targetHost = options.targetHostLiveID,
+        layoutTemplate = template,
+        timeout = options.timeout.toDouble(),
+        extraInfo = options.extensionInfo ?? "",
+        completion = JsonUtil.toCompletionClosure(
+          success = () : void => {
+            options.success?.();
+          },
+          failure = (code : Int, message : String) : void => {
+            options.fail?.(Number.from(code), message as string);
+          }
+        )
+      );
+    });
+  }
+
+  public cancelHostConnection(options : CancelHostConnectionOptions) {
+    DispatchQueue.main.async(execute = () : void => {
+      console.log(`${COHOST_TAG} cancelHostConnection, data: ${JSON.stringify(options)}`);
+      CoHostStore.create(liveID = options.liveID).cancelHostConnection(
+        toHostLiveID = options.toHostLiveID,
+        completion = JsonUtil.toCompletionClosure(
+          success = () : void => {
+            options.success?.();
+          },
+          failure = (code : Int, message : String) : void => {
+            options.fail?.(Number.from(code), message as string);
+          }
+        )
+      );
+    });
+  }
+
+  public acceptHostConnection(options : AcceptHostConnectionOptions) {
+    DispatchQueue.main.async(execute = () : void => {
+      console.log(`${COHOST_TAG} acceptHostConnection, data: ${JSON.stringify(options)}`);
+      CoHostStore.create(liveID = options.liveID).acceptHostConnection(
+        fromHostLiveID = options.fromHostLiveID,
+        completion = JsonUtil.toCompletionClosure(
+          success = () : void => {
+            options.success?.();
+          },
+          failure = (code : Int, message : String) : void => {
+            options.fail?.(Number.from(code), message as string);
+          }
+        )
+      );
+    });
+  }
+
+  public rejectHostConnection(options : RejectHostConnectionOptions) {
+    DispatchQueue.main.async(execute = () : void => {
+      console.log(`${COHOST_TAG} rejectHostConnection, data: ${JSON.stringify(options)}`);
+      CoHostStore.create(liveID = options.liveID).rejectHostConnection(
+        fromHostLiveID = options.fromHostLiveID,
+        completion = JsonUtil.toCompletionClosure(
+          success = () : void => {
+            options.success?.();
+          },
+          failure = (code : Int, message : String) : void => {
+            options.fail?.(Number.from(code), message as string);
+          }
+        )
+      );
+    });
+  }
+
+  public exitHostConnection(options : ExitHostConnectionOptions) {
+    DispatchQueue.main.async(execute = () : void => {
+      console.log(`${COHOST_TAG} exitHostConnection, data: ${JSON.stringify(options)}`);
+      CoHostStore.create(liveID = options.liveID).exitHostConnection(
+        completion = JsonUtil.toCompletionClosure(
+          success = () : void => {
+            options.success?.();
+          },
+          failure = (code : Int, message : String) : void => {
+            options.fail?.(Number.from(code), message as string);
+          }
+        )
+      );
+    });
+  }
+
+  // ================= CoGuestStore 相关接口 =================
+  @UTSJS.keepAlive
+  public addCoGuestHostListener(liveID : string, eventName : string, listener : ILiveListener) : void {
+    DispatchQueue.main.async(execute = () : void => {
+      if (this.nativeCoGuestHostListener == null) {
+        this.nativeCoGuestHostListener = new LiveListenerImpl(createCoGuestHostEventDispatcher())
+      }
+      const listenerArray = coGuestHostListenerMap.get(eventName) ?? []
+      if (!listenerArray.includes(listener)) {
+        listenerArray.push(listener)
+      }
+      coGuestHostListenerMap.set(eventName, listenerArray);
+
+      let tempListener = this.nativeCoGuestHostListener
+      CoGuestStoreObserver.shared.setupHostEvent(liveID, function (key : string, data : string) {
+        console.log(`${COGUEST_TAG} setupHostEvent, key: ${key}, data: ${data}`);
+        tempListener.dispatchEvent(key, data)
+      })
+    });
+  }
+
+  @UTSJS.keepAlive
+  public removeCoGuestHostListener(liveID : string, eventName : string, listener : ILiveListener) : void {
+    DispatchQueue.main.async(execute = () : void => {
+      let listenerArray = coGuestHostListenerMap.get(eventName) ?? []
+      let index = listenerArray.indexOf(listener)
+      if (index > -1) {
+        listenerArray.splice(index, 1)
+      }
+      if (listenerArray.length == 0) {
+        coGuestHostListenerMap.delete(eventName);
+      }
+    });
+  }
+
+  @UTSJS.keepAlive
+  public addCoGuestGuestListener(liveID : string, eventName : string, listener : ILiveListener) : void {
+    DispatchQueue.main.async(execute = () : void => {
+      if (this.nativeCoGuestGuestListener == null) {
+        this.nativeCoGuestGuestListener = new LiveListenerImpl(createCoGuestGuestEventDispatcher())
+      }
+      const listenerArray = coGuestGuestListenerMap.get(eventName) ?? []
+      if (!listenerArray.includes(listener)) {
+        listenerArray.push(listener)
+      }
+      coGuestGuestListenerMap.set(eventName, listenerArray);
+
+      let tempListener = this.nativeCoGuestGuestListener
+      CoGuestStoreObserver.shared.setupGuestEvent(liveID, function (key : string, data : string) {
+        console.log(`${COGUEST_TAG} setupGuestEvent, key: ${key}, data: ${data}`);
+        tempListener.dispatchEvent(key, data)
+      })
+    });
+  }
+
+  @UTSJS.keepAlive
+  public removeCoGuestGuestListener(liveID : string, eventName : string, listener : ILiveListener) : void {
+    DispatchQueue.main.async(execute = () : void => {
+      let listenerArray = coGuestGuestListenerMap.get(eventName) ?? []
+      let index = listenerArray.indexOf(listener)
+      if (index > -1) {
+        listenerArray.splice(index, 1)
+      }
+      if (listenerArray.length == 0) {
+        coGuestGuestListenerMap.delete(eventName);
+      }
+    });
+  }
+  public applyForSeat(options : ApplyForSeatOptions) {
+    DispatchQueue.main.async(execute = () : void => {
+      console.log(`${COGUEST_TAG} applyForSeat, data: ${JSON.stringify(options)}`);
+      CoGuestStore.create(liveID = options.liveID).applyForSeat(
+        seatIndex = options.seatIndex.toInt(),
+        timeout = options.timeout.toDouble(),
+        extraInfo = options.extraInfo,
+        completion = JsonUtil.toCompletionClosure(
+          success = () : void => {
+            options.success?.();
+          },
+          failure = (code : Int, message : String) : void => {
+            options.fail?.(Number.from(code), message as string);
+          }
+        )
+      );
+    });
+  }
+
+  public cancelApplication(options : CancelApplicationOptions) {
+    DispatchQueue.main.async(execute = () : void => {
+      console.log(`${COGUEST_TAG} cancelApplication, data: ${JSON.stringify(options)}`);
+      CoGuestStore.create(liveID = options.liveID).cancelApplication(
+        completion = JsonUtil.toCompletionClosure(
+          success = () : void => {
+            options.success?.();
+          },
+          failure = (code : Int, message : String) : void => {
+            options.fail?.(Number.from(code), message as string);
+          }
+        )
+      );
+    });
+  }
+
+  public acceptApplication(options : AcceptApplicationOptions) {
+    DispatchQueue.main.async(execute = () : void => {
+      console.log(`${COGUEST_TAG} acceptApplication, data: ${JSON.stringify(options)}`);
+      CoGuestStore.create(liveID = options.liveID).acceptApplication(
+        userID = options.userID,
+        completion = JsonUtil.toCompletionClosure(
+          success = () : void => {
+            options.success?.();
+          },
+          failure = (code : Int, message : String) : void => {
+            options.fail?.(Number.from(code), message as string);
+          }
+        )
+      );
+    });
+  }
+
+  public rejectApplication(options : RejectApplicationOptions) {
+    DispatchQueue.main.async(execute = () : void => {
+      console.log(`${COGUEST_TAG} rejectApplication, data: ${JSON.stringify(options)}`);
+      CoGuestStore.create(liveID = options.liveID).rejectApplication(
+        userID = options.userID,
+        completion = JsonUtil.toCompletionClosure(
+          success = () : void => {
+            options.success?.();
+          },
+          failure = (code : Int, message : String) : void => {
+            options.fail?.(Number.from(code), message as string);
+          }
+        )
+      );
+    });
+  }
+  public inviteToSeat(options : InviteToSeatOptions) {
+    DispatchQueue.main.async(execute = () : void => {
+      console.log(`${COGUEST_TAG} inviteToSeat, data: ${JSON.stringify(options)} `);
+      CoGuestStore.create(liveID = options.liveID).inviteToSeat(
+        userID = options.inviteeID,
+        seatIndex = options.seatIndex.toInt(),
+        timeout = options.timeout.toDouble(),
+        extraInfo = options.extraInfo,
+        completion = JsonUtil.toCompletionClosure(
+          success = () : void => {
+            options.success?.();
+          },
+          failure = (code : Int, message : String) : void => {
+            options.fail?.(Number.from(code), message as string);
+          }
+        )
+      );
+    });
+  }
+
+  public cancelInvitation(options : CancelInvitationOptions) {
+    DispatchQueue.main.async(execute = () : void => {
+      console.log(`${COGUEST_TAG} cancelInvitation, data: ${JSON.stringify(options)} `);
+      CoGuestStore.create(liveID = options.liveID).cancelInvitation(
+        inviteeID = options.inviteeID,
+        completion = JsonUtil.toCompletionClosure(
+          success = () : void => {
+            options.success?.();
+          },
+          failure = (code : Int, message : String) : void => {
+            options.fail?.(Number.from(code), message as string);
+          }
+        )
+      );
+    });
+  }
+
+  public acceptInvitation(options : AcceptInvitationOptions) {
+    DispatchQueue.main.async(execute = () : void => {
+      console.log(`${COGUEST_TAG} acceptInvitation, data: ${JSON.stringify(options)} `);
+      CoGuestStore.create(liveID = options.liveID).acceptInvitation(
+        inviterID = options.inviterID,
+        completion = JsonUtil.toCompletionClosure(
+          success = () : void => {
+            options.success?.();
+          },
+          failure = (code : Int, message : String) : void => {
+            options.fail?.(Number.from(code), message as string);
+          }
+        )
+      );
+    });
+  }
+
+  public rejectInvitation(options : RejectInvitationOptions) {
+    DispatchQueue.main.async(execute = () : void => {
+      console.log(`${COGUEST_TAG} rejectInvitation, data: ${JSON.stringify(options)} `);
+      CoGuestStore.create(liveID = options.liveID).rejectInvitation(
+        inviterID = options.inviterID,
+        completion = JsonUtil.toCompletionClosure(
+          success = () : void => {
+            options.success?.();
+          },
+          failure = (code : Int, message : String) : void => {
+            options.fail?.(Number.from(code), message as string);
+          }
+        )
+      );
+    });
+  }
+
+  public disconnect(options : DisconnectOptions) {
+    DispatchQueue.main.async(execute = () : void => {
+      console.log(`${COGUEST_TAG} disconnect, data: ${JSON.stringify(options)} `);
+      CoGuestStore.create(liveID = options.liveID).disConnect(
+        completion = JsonUtil.toCompletionClosure(
+          success = () : void => {
+            options.success?.();
+          },
+          failure = (code : Int, message : String) : void => {
+            options.fail?.(Number.from(code), message as string);
+          }
+        )
+      );
+    });
+  }
+
+  // ================= BarrageStore 相关接口 =================
+  public sendTextMessage(options : SendTextMessageOptions) {
+    DispatchQueue.main.async(execute = () : void => {
+      console.log(`${BARRAGE_TAG} sendTextMessage, data: ${JSON.stringify(options)}`);
+      
+      let jsonObject = ParamsCovert.convertJsonToUTSJSONObject(options.extensionInfo)
+      let mapData = new Map<string,string>()
+      jsonObject.toMap().forEach(function (value: any | null, key: string) {
+          mapData.set(key, JSON.stringify(value) ?? "")
+      })
+
+      BarrageStore.create(liveID = options.liveID).sendTextMessage(
+        text = options.text,
+        extensionInfo = mapData,
+        completion = JsonUtil.toCompletionClosure(
+          success = () : void => {
+            options.success?.();
+          },
+          failure = (code : Int, message : String) : void => {
+            console.error(`${BARRAGE_TAG} sendTextMessage fail, error: ${code}, errMsg: ${message}`);
+            options.fail?.(Number.from(code), message as string);
+          }
+        )
+      )
+    });
+  }
+
+  public sendCustomMessage(options : SendCustomMessageOptions) {
+    DispatchQueue.main.async(execute = () : void => {
+      console.log(`${BARRAGE_TAG} sendCustomMessage, data: ${JSON.stringify(options)}`);
+      BarrageStore.create(liveID = options.liveID).sendCustomMessage(
+        businessID = options.businessID,
+        data = options.data,
+        completion = JsonUtil.toCompletionClosure(
+          success = () : void => {
+            options.success?.();
+          },
+          failure = (code : Int, message : String) : void => {
+            console.error(`${BARRAGE_TAG} sendCustomMessage fail, error: ${code}, errMsg: ${message}`);
+            options.fail?.(Number.from(code), message as string);
+          }
+        )
+      )
+    });
+  }
+
+  public appendLocalTip(options : AppendLocalTipOptions) {
+    DispatchQueue.main.async(execute = () : void => {
+      console.log(`${BARRAGE_TAG} appendLocalTip, data: ${JSON.stringify(options)}`);
+      BarrageStore.create(liveID = options.liveID).appendLocalTip(
+        message = ParamsCovert.convertBarrage(options)
+      );
+    });
+  }
+
+  // ================= BattleStore 相关接口 =================
+  @UTSJS.keepAlive
+  public addBattleListener(liveID : string, eventName : string, listener : ILiveListener) : void {
+    DispatchQueue.main.async(execute = () : void => {
+      if (this.nativeBattleListener == null) {
+        this.nativeBattleListener = new LiveListenerImpl(createBattleEventDispatcher())
+      }
+      const listenerArray = battleListenerMap.get(eventName) ?? []
+      if (!listenerArray.includes(listener)) {
+        listenerArray.push(listener)
+      }
+      battleListenerMap.set(eventName, listenerArray);
+
+      let tempListener = this.nativeBattleListener
+      BattleStoreObserver.shared.setupBattleEvent(liveID, function (key : string, data : string) {
+        console.log(`${BATTLE_TAG} setupBattleEvent, key: ${key}, data: ${data}`);
+        tempListener.dispatchEvent(key, data)
+      })
+    });
+  }
+
+  @UTSJS.keepAlive
+  public removeBattleListener(liveID : string, eventName : string, listener : ILiveListener) : void {
+    DispatchQueue.main.async(execute = () : void => {
+      let listenerArray = battleListenerMap.get(eventName) ?? []
+      let index = listenerArray.indexOf(listener)
+      if (index > -1) {
+        listenerArray.splice(index, 1)
+      }
+      if (listenerArray.length == 0) {
+        battleListenerMap.delete(eventName);
+      }
+    });
+  }
+
+  public requestBattle(options : RequestBattleOptions) {
+    DispatchQueue.main.async(execute = () : void => {
+      console.log(`${BATTLE_TAG} requestBattle, data: ${JSON.stringify(options)}`);
+
+      let battleConfig = new BattleConfig()
+      battleConfig.duration = options.config.duration.toDouble()
+      battleConfig.needResponse = options.config.needResponse
+      battleConfig.extensionInfo = options.config.extensionInfo
+
+      BattleStore.create(liveID = options.liveID).requestBattle(
+        config = battleConfig,
+        userIDList = options.userIDList,
+        timeout = options.timeout.toDouble(),
+        completion = JsonUtil.toBattleRequestClosure(
+          success = (battleInfo : string, resultMap : string) : void => {
+            options.success?.(battleInfo, resultMap);
+          },
+          failure = (code : Int, message : String) : void => {
+            console.error(`${BATTLE_TAG} requestBattle fail, error: ${code}, errMsg: ${message}`);
+            options.fail?.(Number.from(code), message as string);
+          }
+        )
+      )
+    });
+  }
+
+  public cancelBattleRequest(options : CancelBattleRequestOptions) {
+    DispatchQueue.main.async(execute = () : void => {
+      console.log(`${BATTLE_TAG} cancelBattleRequest, data: ${JSON.stringify(options)}`);
+      BattleStore.create(liveID = options.liveID).cancelBattleRequest(
+        battleId = options.battleID,
+        userIdList = options.userIDList,
+        completion = JsonUtil.toCompletionClosure(
+          success = () : void => {
+            options.success?.();
+          },
+          failure = (code : Int, message : String) : void => {
+            console.error(`${BATTLE_TAG} cancelBattleRequest fail, error: ${code}, errMsg: ${message}`);
+            options.fail?.(Number.from(code), message as string);
+          }
+        )
+      )
+    });
+  }
+
+  public acceptBattle(options : AcceptBattleOptions) {
+    DispatchQueue.main.async(execute = () : void => {
+      console.log(`${BATTLE_TAG} acceptBattle, data: ${JSON.stringify(options)}`);
+      BattleStore.create(liveID = options.liveID).acceptBattle(
+        battleID = options.battleID,
+        completion = JsonUtil.toCompletionClosure(
+          success = () : void => {
+            options.success?.();
+          },
+          failure = (code : Int, message : String) : void => {
+            console.error(`${BATTLE_TAG} acceptBattle fail, error: ${code}, errMsg: ${message}`);
+            options.fail?.(Number.from(code), message as string);
+          }
+        )
+      )
+    });
+  }
+
+  public rejectBattle(options : RejectBattleOptions) {
+    DispatchQueue.main.async(execute = () : void => {
+      console.log(`${BATTLE_TAG} rejectBattle, data: ${JSON.stringify(options)}`);
+      BattleStore.create(liveID = options.liveID).rejectBattle(
+        battleID = options.battleID,
+        completion = JsonUtil.toCompletionClosure(
+          success = () : void => {
+            options.success?.();
+          },
+          failure = (code : Int, message : String) : void => {
+            console.error(`${BATTLE_TAG} rejectBattle fail, error: ${code}, errMsg: ${message}`);
+            options.fail?.(Number.from(code), message as string);
+          }
+        )
+      )
+    });
+  }
+
+  public exitBattle(options : ExitBattleOptions) {
+    DispatchQueue.main.async(execute = () : void => {
+      console.log(`${BATTLE_TAG} exitBattle, data: ${JSON.stringify(options)}`);
+      BattleStore.create(liveID = options.liveID).exitBattle(
+        battleID = options.battleID,
+        completion = JsonUtil.toCompletionClosure(
+          success = () : void => {
+            options.success?.();
+          },
+          failure = (code : Int, message : String) : void => {
+            console.error(`${BATTLE_TAG} exitBattle fail, error: ${code}, errMsg: ${message}`);
+            options.fail?.(Number.from(code), message as string);
+          }
+        )
+      )
+    });
+  }
+
+  // ================= GiftStore 相关接口 =================
+  @UTSJS.keepAlive
+  public addGiftListener(liveID : string, eventName : string, listener : ILiveListener) : void {
+    DispatchQueue.main.async(execute = () : void => {
+      if (this.nativeGiftListener == null) {
+        this.nativeGiftListener = new LiveListenerImpl(createGiftEventDispatcher())
+      }
+      const listenerArray = giftListenerMap.get(eventName) ?? []
+      if (!listenerArray.includes(listener)) {
+        listenerArray.push(listener)
+      }
+      giftListenerMap.set(eventName, listenerArray);
+
+      let tempListener = this.nativeGiftListener
+      GiftStoreObserver.shared.setupGiftEvent(liveID, function (key : string, data : string) {
+        console.log(`${GIFT_TAG} setupGiftEvent, key: ${key}, data: ${data}`);
+        tempListener.dispatchEvent(key, data)
+      })
+    });
+  }
+
+  @UTSJS.keepAlive
+  public removeGiftListener(liveID : string, eventName : string, listener : ILiveListener) : void {
+    DispatchQueue.main.async(execute = () : void => {
+      let listenerArray = giftListenerMap.get(eventName) ?? []
+      let index = listenerArray.indexOf(listener)
+      if (index > -1) {
+        listenerArray.splice(index, 1)
+      }
+      if (listenerArray.length == 0) {
+        giftListenerMap.delete(eventName);
+      }
+    });
+  }
+
+  public refreshUsableGifts(options : RefreshUsableGiftsOptions) {
+    DispatchQueue.main.async(execute = () : void => {
+      console.log(`${GIFT_TAG} refreshUsableGifts, data: ${JSON.stringify(options)}`);
+      GiftStore.create(liveID = options.liveID).refreshUsableGifts(
+        completion = JsonUtil.toCompletionClosure(
+          success = () : void => {
+            options.success?.();
+          },
+          failure = (code : Int, message : String) : void => {
+            console.error(`${GIFT_TAG} refreshUsableGifts fail, error: ${code}, errMsg: ${message}`);
+            options.fail?.(Number.from(code), message as string);
+          }
+        )
+      )
+    });
+  }
+
+  public sendGift(options : SendGiftOptions) {
+    DispatchQueue.main.async(execute = () : void => {
+      console.log(`${GIFT_TAG} sendGift, data: ${JSON.stringify(options)}`);
+      GiftStore.create(liveID = options.liveID).sendGift(
+        giftID = options.giftID,
+        count = options.count.toUInt(),
+        completion = JsonUtil.toCompletionClosure(
+          success = () : void => {
+            options.success?.();
+          },
+          failure = (code : Int, message : String) : void => {
+            console.error(`${GIFT_TAG} sendGift fail, error: ${code}, errMsg: ${message}`);
+            options.fail?.(Number.from(code), message as string);
+          }
+        )
+      )
+    });
+  }
+
+  public setLanguage(options : SetLanguageOptions) {
+    DispatchQueue.main.async(execute = () : void => {
+      console.log(`${GIFT_TAG} setLanguage, data: ${JSON.stringify(options)}`);
+      GiftStore.create(liveID = options.liveID).setLanguage(options.language);
+    });
+  }
+
+  // ================= BaseBeautyStore 相关接口 =================
+  public setSmoothLevel(options : SetSmoothLevelOptions) {
+    DispatchQueue.main.async(execute = () : void => {
+      console.warn(`${BEAUTY_TAG} setSmoothLevel, data: ${JSON.stringify(options)}`);
+      BaseBeautyStore.shared.setSmoothLevel(smoothLevel = options.smoothLevel.toFloat());
+    });
+  }
+
+  public setWhitenessLevel(options : SetWhitenessLevelOptions) {
+    DispatchQueue.main.async(execute = () : void => {
+      console.warn(`${BEAUTY_TAG} setWhitenessLevel, data: ${JSON.stringify(options)}`);
+      BaseBeautyStore.shared.setWhitenessLevel(whitenessLevel = options.whitenessLevel.toFloat());
+    });
+  }
+
+  public setRuddyLevel(options : SetRuddyLevelOptions) {
+    DispatchQueue.main.async(execute = () : void => {
+      console.warn(`${BEAUTY_TAG} setRuddyLevel, data: ${JSON.stringify(options)}`);
+      BaseBeautyStore.shared.setRuddyLevel(ruddyLevel = options.ruddyLevel.toFloat());
+    });
+  }
+
+  // ================= AudioEffectStore 相关接口 =================
+  public setAudioChangerType(options : SetAudioChangerTypeOptions) {
+    DispatchQueue.main.async(execute = () : void => {
+      console.log(`${AUDIOEFFECT_TAG} setAudioChangerType, data: ${JSON.stringify(options)}`);
+      let type = ParamsCovert.convertAudioChangerType(options.changerType)
+      AudioEffectStore.shared.setAudioChangerType(type = type);
+    });
+  }
+
+  public setAudioReverbType(options : SetAudioReverbTypeOptions) {
+    DispatchQueue.main.async(execute = () : void => {
+      console.log(`${AUDIOEFFECT_TAG} setAudioReverbType, data: ${JSON.stringify(options)}`);
+      let type = ParamsCovert.convertAudioReverbType(options.reverbType)
+      AudioEffectStore.shared.setAudioReverbType(type = type);
+    });
+  }
+  public setVoiceEarMonitorEnable(options : SetVoiceEarMonitorEnableOptions) {
+    DispatchQueue.main.async(execute = () : void => {
+      console.log(`${DEVICE_TAG} setVoiceEarMonitorEnable, data: ${JSON.stringify(options)}`);
+      AudioEffectStore.shared.setVoiceEarMonitorEnable(enable = options.enable);
+    });
+  }
+  public setVoiceEarMonitorVolume(options : VolumeOptions) {
+    DispatchQueue.main.async(execute = () : void => {
+      console.log(`${AUDIOEFFECT_TAG} setVoiceEarMonitorVolume, data: ${JSON.stringify(options)}`);
+      AudioEffectStore.shared.setVoiceEarMonitorVolume(volume = options.volume.toInt());
+    });
+  }
+
+  // ================= LikeStore 相关接口 =================
+  @UTSJS.keepAlive
+  public addLikeListener(liveID : string, eventName : string, listener : ILiveListener) : void {
+    DispatchQueue.main.async(execute = () : void => {
+      if (this.nativeLikeListener == null) {
+        this.nativeLikeListener = new LiveListenerImpl(createLikeEventDispatcher())
+      }
+      const listenerArray = likeListenerMap.get(eventName) ?? []
+      if (!listenerArray.includes(listener)) {
+        listenerArray.push(listener)
+      }
+      likeListenerMap.set(eventName, listenerArray);
+
+      let tempListener = this.nativeLikeListener
+      LikeStoreObserver.shared.setupLikeEvent(liveID, function (key : string, data : string) {
+        console.log(`${LIKE_TAG} setupLikeEvent, key: ${key}, data: ${data}`);
+        tempListener.dispatchEvent(key, data)
+      })
+    });
+  }
+
+  @UTSJS.keepAlive
+  public removeLikeListener(liveID : string, eventName : string, listener : ILiveListener) : void {
+    DispatchQueue.main.async(execute = () : void => {
+      let listenerArray = likeListenerMap.get(eventName) ?? []
+      let index = listenerArray.indexOf(listener)
+      if (index > -1) {
+        listenerArray.splice(index, 1)
+      }
+      if (listenerArray.length == 0) {
+        likeListenerMap.delete(eventName);
+      }
+    });
+  }
+
+  public sendLike(options : SendLikeOptions) {
+    DispatchQueue.main.async(execute = () : void => {
+      console.log(`${LIKE_TAG} sendLike, data: ${JSON.stringify(options)}`);
+      LikeStore.create(liveID = options.liveID).sendLike(
+        count = options.count.toUInt(),
+        completion = JsonUtil.toCompletionClosure(
+          success = () : void => {
+            console.log(`${LIKE_TAG} sendLike success`);
+            options.success?.();
+          },
+          failure = (code : Int, message : String) : void => {
+            console.error(`${LIKE_TAG} sendLike fail, error: ${code}, errMsg: ${message}`);
+            options.fail?.(Number.from(code), message as string);
+          }
+        )
+      )
+    });
+  }
+
+  // ================= 实验性接口 =================
+  public callExperimentalAPI(options : CallExperimentalAPIOptions) {
+    DispatchQueue.main.async(execute = () : void => {
+      console.log(`${RTC_TAG} callExperimentalAPI, data: ${JSON.stringify(options)}`);
+      ExperimentalApiInvoker.shared.callExperimentalAPI(
+        options.jsonData,
+        callback = (jsonData : string) : void => {
+          console.log(`${RTC_TAG} callExperimentalAPI, jsonData: ${jsonData}`)
         }
-    }
-
-    public setFramework() {
-        const data = { "api": "setFramework", "params": { "framework": 11, "component": 21 } }
-        TUIRoomEngine.sharedInstance().callExperimentalAPI(
-            jsonStr = JSON.stringify(data) ?? "",
-            callback = (jsonData : string) : void => {
-            }
-        )
-    }
-
-    public logout(options : LogoutOptions) {
-        DispatchQueue.main.async(execute = () : void => {
-            console.log(`${RTC_TAG} logout, data: ${JSON.stringify(options)}`);
-            LoginStore.shared.logout(
-                completion = JsonUtil.toCompletionClosure(
-                    success = () : void => {
-                        options.success?.();
-                    },
-                    failure = (code : Int, message : String) : void => {
-                        options.fail?.(Number.from(code), message as string);
-                    }
-                )
-            )
-        });
-    }
-    public setSelfInfo(options : SetSelfInfoOptions) {
-        DispatchQueue.main.async(execute = () : void => {
-            console.log(`${RTC_TAG} setSelfInfo, data: ${JSON.stringify(options)}`);
-            let nativeUserInfo = ParamsCovert.convertUserProfile(options.userProfile)
-            LoginStore.shared.setSelfInfo(
-                userProfile = nativeUserInfo,
-                completion = JsonUtil.toCompletionClosure(
-                    success = () : void => {
-                        options.success?.();
-                    },
-                    failure = (code : Int, message : String) : void => {
-                        options.fail?.(Number.from(code), message as string);
-                    }
-                )
-            )
-        });
-    }
-
-    //================= LiveListStore 相关接口 =================
-    @UTSJS.keepAlive
-    public addLiveListListener(eventName : string, listener : ILiveListener) : void {
-        DispatchQueue.main.async(execute = () : void => {
-            if (this.nativeLiveListListener == null) {
-                this.nativeLiveListListener = new LiveListenerImpl(createLiveListEventDispatcher())
-            }
-            const listenerArray = liveListListenerMap.get(eventName) ?? []
-            if (!listenerArray.includes(listener)) {
-                listenerArray.push(listener)
-            }
-            liveListListenerMap.set(eventName, listenerArray);
-
-            let tempListener = this.nativeLiveListListener
-            LiveListStoreObserver.shared.setupLiveListEvent(function (key : string, data : string) {
-                console.log(`${LIVE_TAG} liveListStoreChanged, key: ${key}, data: ${data}`);
-                tempListener.dispatchEvent(key, data)
-            })
-        });
-    }
-
-    @UTSJS.keepAlive
-    public removeLiveListListener(eventName : string, listener : ILiveListener) : void {
-        DispatchQueue.main.async(execute = () : void => {
-            let listenerArray = liveListListenerMap.get(eventName) ?? []
-            let index = listenerArray.indexOf(listener)
-            if (index > -1) {
-                listenerArray.splice(index, 1)
-            }
-            if (listenerArray.length == 0) {
-                liveListListenerMap.delete(eventName);
-            }
-        });
-    }
-    public fetchLiveList(options : FetchLiveListOptions) {
-        DispatchQueue.main.async(execute = () : void => {
-            console.log(`${LIVE_TAG} fetchLiveList, data: ${JSON.stringify(options)}`);
-            LiveListStore.shared.fetchLiveList(
-                cursor = options.cursor,
-                count = options.count.toInt(),
-                completion = JsonUtil.toCompletionClosure(
-                    success = () : void => {
-                        console.log(`${LIVE_TAG} fetchLiveList success`);
-                        options.success?.();
-                    },
-                    failure = (code : Int, message : String) : void => {
-                        console.error(`${LIVE_TAG} fetchLiveList fail, error: ${code}, errMsg: ${message}`);
-                        options.fail?.(Number.from(code), message as string);
-                    }
-                )
-            )
-        });
-    }
-    private enableUnlimitedRoom() : void {
-        const enableUnlimitedRoom = { "api": "enableUnlimitedRoom", "params": { "enable": true } }
-        TUIRoomEngine.sharedInstance().callExperimentalAPI(
-            jsonStr = JSON.stringify(enableUnlimitedRoom) ?? "",
-            callback = (jsonData : string) : void => {
-                console.error(`${RTC_TAG}, enableUnlimitedRoom, jsonData: ${jsonData}`)
-            }
-        )
-    }
-
-    public createLive(options : CreateLiveOptions) {
-        DispatchQueue.main.async(execute = () : void => {
-            console.log(`${LIVE_TAG} createLive, data: ${JSON.stringify(options)}`);
-            this.enableUnlimitedRoom()
-
-            let nativeLiveInfo : LiveInfo = ParamsCovert.convertLiveInfo(options.liveInfo)
-            LiveListStore.shared.createLive(
-                nativeLiveInfo,
-                completion = JsonUtil.toLiveInfoCompletionClosure(
-                    success = (liveInfo : string) : void => {
-                        console.log(`${LIVE_TAG} createLive success`);
-                        options.success?.(liveInfo);
-                    },
-                    failure = (code : Int, message : String) : void => {
-                        console.error(`${LIVE_TAG} createLive fail, error: ${code}, errMsg: ${message}`);
-                        options.fail?.(Number.from(code), message as string);
-                    }
-                )
-            )
-        });
-    }
-
-    public joinLive(options : JoinLiveOptions) {
-        DispatchQueue.main.async(execute = () : void => {
-            console.log(`${LIVE_TAG} joinLive, data: ${JSON.stringify(options)}`);
-            this.enableUnlimitedRoom()
-
-            LiveListStore.shared.joinLive(
-                liveID = options.liveID,
-                completion = JsonUtil.toLiveInfoCompletionClosure(
-                    success = (liveInfo : string) : void => {
-                        console.log(`${LIVE_TAG} joinLive success`);
-                        options.success?.(liveInfo);
-                    },
-                    failure = (code : Int, message : String) : void => {
-                        console.error(`${LIVE_TAG} joinLive fail, error: ${code}, errMsg: ${message}`);
-                        options.fail?.(Number.from(code), message as string);
-                    }
-                )
-            )
-        });
-    }
-
-    public leaveLive(options : LeaveLiveOptions) {
-        DispatchQueue.main.async(execute = () : void => {
-            console.log(`${LIVE_TAG} leaveLive, data: ${JSON.stringify(options)}`);
-            LiveListStore.shared.leaveLive(
-                completion = JsonUtil.toCompletionClosure(
-                    success = () : void => {
-                        console.log(`${LIVE_TAG} leaveLive success`);
-                        options.success?.();
-                    },
-                    failure = (code : Int, message : String) : void => {
-                        console.error(`${LIVE_TAG} leaveLive fail, error: ${code}, errMsg: ${message}`);
-                        options.fail?.(Number.from(code), message as string);
-                    }
-                )
-            )
-        });
-    }
-
-    public endLive(options : EndLiveOptions) {
-        DispatchQueue.main.async(execute = () : void => {
-            console.log(`${LIVE_TAG} endLive, data: ${JSON.stringify(options)}`);
-            LiveListStore.shared.endLive(
-                completion = JsonUtil.toStopLiveCompletionClosure(
-                    success = (data : string) : void => {
-                        console.log(`${LIVE_TAG} endLive success`);
-                        options.success?.(data);
-                    },
-                    failure = (code : Int, message : String) : void => {
-                        console.error(`${LIVE_TAG} endLive fail, error: ${code}, errMsg: ${message}`);
-                        options.fail?.(Number.from(code), message as string);
-                    }
-                )
-            )
-        });
-    }
-
-    public updateLiveInfo(options : UpdateLiveInfoOptions) {
-        DispatchQueue.main.async(execute = () : void => {
-            console.log(`${LIVE_TAG} updateLiveInfo, data: ${JSON.stringify(options)}`);
-            let nativeLiveInfo : LiveInfo = ParamsCovert.convertLiveInfo(options.liveInfo)
-            let modifyFlagList = ParamsCovert.convertModifyFlagList(options.modifyFlagList)
-            LiveListStore.shared.updateLiveInfo(
-                nativeLiveInfo,
-                modifyFlag = modifyFlagList,
-                completion = JsonUtil.toCompletionClosure(
-                    success = () : void => {
-                        options.success?.();
-                    },
-                    failure = (code : Int, message : String) : void => {
-                        options.fail?.(Number.from(code), message as string);
-                    }
-                )
-            )
-        });
-    }
-
-    // ================= LiveSeatStore 相关接口 =================
-    @UTSJS.keepAlive
-    public addLiveSeatEventListener(liveID : string, eventName : string, listener : ILiveListener) : void {
-        DispatchQueue.main.async(execute = () : void => {
-            if (this.nativeLiveSeatListener == null) {
-                this.nativeLiveSeatListener = new LiveListenerImpl(createLiveSeatEventDispatcher())
-            }
-            const listenerArray = liveSeatListenerMap.get(eventName) ?? []
-            if (!listenerArray.includes(listener)) {
-                listenerArray.push(listener)
-            }
-            liveSeatListenerMap.set(eventName, listenerArray);
-
-            let tempListener = this.nativeLiveSeatListener
-            LiveSeatStoreObserver.shared.setupLiveSeatEvent(liveID, function (key : string, data : string) {
-                console.log(`${SEAT_TAG} setupLiveSeatEvent, key: ${key}, data: ${data}`);
-                tempListener.dispatchEvent(key, data)
-            })
-        });
-    }
-
-    @UTSJS.keepAlive
-    public removeLiveSeatEventListener(liveID : string, eventName : string, listener : ILiveListener) : void {
-        DispatchQueue.main.async(execute = () : void => {
-            let listenerArray = liveSeatListenerMap.get(eventName) ?? []
-            let index = listenerArray.indexOf(listener)
-            if (index > -1) {
-                listenerArray.splice(index, 1)
-            }
-            if (listenerArray.length == 0) {
-                liveSeatListenerMap.delete(eventName);
-            }
-        });
-    }
-    public takeSeat(options : TakeSeatOptions) {
-        DispatchQueue.main.async(execute = () : void => {
-            console.log(`${SEAT_TAG} takeSeat, data: ${JSON.stringify(options)}`);
-            LiveSeatStore.create(liveID = options.liveID).takeSeat(
-                seatIndex = options.seatIndex.toInt(),
-                completion = JsonUtil.toCompletionClosure(
-                    success = () : void => {
-                        console.log(`${SEAT_TAG} takeSeat success`);
-                        options.success?.();
-                    },
-                    failure = (code : Int, message : String) : void => {
-                        console.error(`${SEAT_TAG} takeSeat fail, error: ${code}, errMsg: ${message}`);
-                        options.fail?.(Number.from(code), message as string);
-                    }
-                )
-            )
-        });
-    }
-
-    public leaveSeat(options : LeaveSeatOptions) {
-        DispatchQueue.main.async(execute = () : void => {
-            console.log(`${SEAT_TAG} leaveSeat, data: ${JSON.stringify(options)}`);
-            LiveSeatStore.create(liveID = options.liveID).leaveSeat(
-                completion = JsonUtil.toCompletionClosure(
-                    success = () : void => {
-                        options.success?.();
-                    },
-                    failure = (code : Int, message : String) : void => {
-                        options.fail?.(Number.from(code), message as string);
-                    }
-                )
-            );
-        });
-    }
-
-    public muteMicrophone(options : MuteMicrophoneOptions) {
-        DispatchQueue.main.async(execute = () : void => {
-            console.log(`${SEAT_TAG} muteMicrophone, data: ${JSON.stringify(options)}`);
-            LiveSeatStore.create(liveID = options.liveID).muteMicrophone();
-        });
-    }
-
-    public unmuteMicrophone(options : UnmuteMicrophoneOptions) {
-        DispatchQueue.main.async(execute = () : void => {
-            console.log(`${SEAT_TAG} unmuteMicrophone, data: ${JSON.stringify(options)}`);
-            LiveSeatStore.create(liveID = options.liveID).unmuteMicrophone(
-                completion = JsonUtil.toCompletionClosure(
-                    success = () : void => {
-                        options.success?.();
-                    },
-                    failure = (code : Int, message : String) : void => {
-                        console.error(`${SEAT_TAG} unmuteMicrophone fail, error: ${code}, errMsg: ${message}`);
-                        options.fail?.(Number.from(code), message as string);
-                    }
-                )
-            )
-        });
-    }
-
-    public kickUserOutOfSeat(options : KickUserOutOfSeatOptions) {
-        DispatchQueue.main.async(execute = () : void => {
-            console.log(`${SEAT_TAG} kickUserOutOfSeat, data: ${JSON.stringify(options)}`);
-            LiveSeatStore.create(liveID = options.liveID).kickUserOutOfSeat(
-                userID = options.userID,
-                completion = JsonUtil.toCompletionClosure(
-                    success = () : void => {
-                        options.success?.();
-                    },
-                    failure = (code : Int, message : String) : void => {
-                        console.error(`${SEAT_TAG} kickUserOutOfSeat fail, error: ${code}, errMsg: ${message}`);
-                        options.fail?.(Number.from(code), message as string);
-                    }
-                )
-            )
-        });
-    }
-
-    public moveUserToSeat(options : MoveUserToSeatOptions) {
-        DispatchQueue.main.async(execute = () : void => {
-            console.log(`${SEAT_TAG} moveUserToSeat, data: ${JSON.stringify(options)}`);
-            let policy = ParamsCovert.convertMoveSeatPolicy(options.policy)
-            LiveSeatStore.create(liveID = options.liveID).moveUserToSeat(
-                userID = options.userID,
-                targetIndex = options.targetIndex.toInt(),
-                policy = policy,
-                completion = JsonUtil.toCompletionClosure(
-                    success = () : void => {
-                        options.success?.();
-                    },
-                    failure = (code : Int, message : String) : void => {
-                        console.error(`${SEAT_TAG} moveUserToSeat fail, error: ${code}, errMsg: ${message}`);
-                        options.fail?.(Number.from(code), message as string);
-                    }
-                )
-            )
-        });
-    }
-
-    public lockSeat(options : LockSeatOptions) {
-        DispatchQueue.main.async(execute = () : void => {
-            console.log(`${SEAT_TAG} lockSeat, data: ${JSON.stringify(options)}`);
-            LiveSeatStore.create(liveID = options.liveID).lockSeat(
-                seatIndex = options.seatIndex.toInt(),
-                completion = JsonUtil.toCompletionClosure(
-                    success = () : void => {
-                        options.success?.();
-                    },
-                    failure = (code : Int, message : String) : void => {
-                        console.error(`${SEAT_TAG} lockSeat fail, error: ${code}, errMsg: ${message}`);
-                        options.fail?.(Number.from(code), message as string);
-                    }
-                )
-            )
-        });
-    }
-
-    public unlockSeat(options : UnlockSeatOptions) {
-        DispatchQueue.main.async(execute = () : void => {
-            console.log(`${SEAT_TAG} unlockSeat, data: ${JSON.stringify(options)}`);
-            LiveSeatStore.create(liveID = options.liveID).unlockSeat(
-                seatIndex = options.seatIndex.toInt(),
-                completion = JsonUtil.toCompletionClosure(
-                    success = () : void => {
-                        options.success?.();
-                    },
-                    failure = (code : Int, message : String) : void => {
-                        console.error(`${SEAT_TAG} unlockSeat fail, error: ${code}, errMsg: ${message}`);
-                        options.fail?.(Number.from(code), message as string);
-                    }
-                )
-            )
-        });
-    }
-
-    public openRemoteCamera(options : OpenRemoteCameraOptions) {
-        DispatchQueue.main.async(execute = () : void => {
-            console.log(`${SEAT_TAG} openRemoteCamera, data: ${JSON.stringify(options)}`);
-            // TODO: 待实现
-            // let devicePolicy = DeviceControlPolicy.forceOpen
-            // if (options.policy == 'UNLOCK_ONLY') {
-            //     devicePolicy = DeviceControlPolicy.unlockOnly
-            // }
-            let devicePolicy = DeviceControlPolicy.unlockOnly
-            LiveSeatStore.create(liveID = options.liveID).openRemoteCamera(
-                userID = options.userID,
-                policy = devicePolicy,
-                completion = JsonUtil.toCompletionClosure(
-                    success = () : void => {
-                        options.success?.();
-                    },
-                    failure = (code : Int, message : String) : void => {
-                        console.error(`${SEAT_TAG} openRemoteCamera fail, error: ${code}, errMsg: ${message}`);
-                        options.fail?.(Number.from(code), message as string);
-                    }
-                )
-            )
-        });
-    }
-
-    public closeRemoteCamera(options : CloseRemoteCameraOptions) {
-        DispatchQueue.main.async(execute = () : void => {
-            console.log(`${SEAT_TAG} closeRemoteCamera, data: ${JSON.stringify(options)}`);
-            LiveSeatStore.create(liveID = options.liveID).closeRemoteCamera(
-                userID = options.userID,
-                completion = JsonUtil.toCompletionClosure(
-                    success = () : void => {
-                        options.success?.();
-                    },
-                    failure = (code : Int, message : String) : void => {
-                        console.error(`${SEAT_TAG} closeRemoteCamera fail, error: ${code}, errMsg: ${message}`);
-                        options.fail?.(Number.from(code), message as string);
-                    }
-                )
-            )
-        });
-    }
-
-    public openRemoteMicrophone(options : OpenRemoteMicrophoneOptions) {
-        DispatchQueue.main.async(execute = () : void => {
-            console.log(`${SEAT_TAG} openRemoteMicrophone, data: ${JSON.stringify(options)}`);
-            //TODO: 待实现
-            // let devicePolicy = DeviceControlPolicy.forceOpen
-            // if (options.policy == 'UNLOCK_ONLY') {
-            //     devicePolicy = DeviceControlPolicy.unlockOnly
-            // }
-            let devicePolicy = DeviceControlPolicy.unlockOnly
-            LiveSeatStore.create(liveID = options.liveID).openRemoteMicrophone(
-                userID = options.userID,
-                policy = devicePolicy,
-                completion = JsonUtil.toCompletionClosure(
-                    success = () : void => {
-                        console.log(`${SEAT_TAG} openRemoteMicrophone success`);
-                        options.success?.();
-                    },
-                    failure = (code : Int, message : String) : void => {
-                        console.error(`${SEAT_TAG} openRemoteMicrophone fail, error: ${code}, errMsg: ${message}`);
-                        options.fail?.(Number.from(code), message as string);
-                    }
-                )
-            )
-        });
-    }
-
-    public closeRemoteMicrophone(options : CloseRemoteMicrophoneOptions) {
-        DispatchQueue.main.async(execute = () : void => {
-            console.log(`${SEAT_TAG} closeRemoteMicrophone, data: ${JSON.stringify(options)}`);
-            LiveSeatStore.create(liveID = options.liveID).closeRemoteMicrophone(
-                userID = options.userID,
-                completion = JsonUtil.toCompletionClosure(
-                    success = () : void => {
-                        options.success?.();
-                    },
-                    failure = (code : Int, message : String) : void => {
-                        console.error(`${SEAT_TAG} closeRemoteMicrophone fail, error: ${code}, errMsg: ${message}`);
-                        options.fail?.(Number.from(code), message as string);
-                    }
-                )
-            )
-        });
-    }
-    // ================= LiveAudienceStore 相关接口 =================
-    @UTSJS.keepAlive
-    public addAudienceListener(liveID : string, eventName : string, listener : ILiveListener) : void {
-        DispatchQueue.main.async(execute = () : void => {
-            if (this.nativeAudienceListener == null) {
-                this.nativeAudienceListener = new LiveListenerImpl(createAudienceEventDispatcher())
-            }
-            const listenerArray = audienceListenerMap.get(eventName) ?? []
-            if (!listenerArray.includes(listener)) {
-                listenerArray.push(listener)
-            }
-            audienceListenerMap.set(eventName, listenerArray);
-
-            let tempListener = this.nativeAudienceListener
-            LiveAudienceStoreObserver.shared.setupAudienceEvent(liveID, function (key : string, data : string) {
-                console.log(`${AUDIENCE_TAG} setupAudienceEvent, key: ${key}, data: ${data}`);
-                tempListener.dispatchEvent(key, data)
-            })
-        });
-    }
-
-    @UTSJS.keepAlive
-    public removeAudienceListener(liveID : string, eventName : string, listener : ILiveListener) : void {
-        DispatchQueue.main.async(execute = () : void => {
-            let listenerArray = audienceListenerMap.get(eventName) ?? []
-            let index = listenerArray.indexOf(listener)
-            if (index > -1) {
-                listenerArray.splice(index, 1)
-            }
-            if (listenerArray.length == 0) {
-                audienceListenerMap.delete(eventName);
-            }
-        });
-    }
-    public fetchAudienceList(options : FetchAudienceListOptions) {
-        DispatchQueue.main.async(execute = () : void => {
-            console.log(`${AUDIENCE_TAG} fetchAudienceList, data: ${JSON.stringify(options)}`);
-            LiveAudienceStore.create(liveID = options.liveID).fetchAudienceList(
-                completion = JsonUtil.toCompletionClosure(
-                    success = () : void => {
-                        options.success?.();
-                    },
-                    failure = (code : Int, message : String) : void => {
-                        console.error(`${AUDIENCE_TAG} fetchAudienceList fail, error: ${code}, errMsg: ${message}`);
-                        options.fail?.(Number.from(code), message as string);
-                    }
-                )
-            )
-        });
-    }
-    public setAdministrator(options : SetAdministratorOptions) {
-        DispatchQueue.main.async(execute = () : void => {
-            console.log(`${AUDIENCE_TAG} setAdministrator, data: ${JSON.stringify(options)}`);
-            LiveAudienceStore.create(liveID = options.liveID).setAdministrator(
-                userID = options.userID,
-                completion = JsonUtil.toCompletionClosure(
-                    success = () : void => {
-                        console.log(`${AUDIENCE_TAG} setAdministrator success`);
-                        options.success?.();
-                    },
-                    failure = (code : Int, message : String) : void => {
-                        console.error(`${AUDIENCE_TAG} setAdministrator fail, error: ${code}, errMsg: ${message}`);
-                        options.fail?.(Number.from(code), message as string);
-                    }
-                )
-            )
-        });
-    }
-    public revokeAdministrator(options : RevokeAdministratorOptions) {
-        DispatchQueue.main.async(execute = () : void => {
-            console.log(`${AUDIENCE_TAG} revokeAdministrator, data: ${JSON.stringify(options)}`);
-            LiveAudienceStore.create(liveID = options.liveID).revokeAdministrator(
-                userID = options.userID,
-                completion = JsonUtil.toCompletionClosure(
-                    success = () : void => {
-                        console.log(`${AUDIENCE_TAG} revokeAdministrator success`);
-                        options.success?.();
-                    },
-                    failure = (code : Int, message : String) : void => {
-                        console.error(`${AUDIENCE_TAG} revokeAdministrator fail, error: ${code}, errMsg: ${message}`);
-                        options.fail?.(Number.from(code), message as string);
-                    }
-                )
-            )
-        });
-    }
-    public kickUserOutOfRoom(options : KickUserOutOfRoomOptions) {
-        DispatchQueue.main.async(execute = () : void => {
-            console.log(`${AUDIENCE_TAG} kickUserOutOfRoom, data: ${JSON.stringify(options)}`);
-            LiveAudienceStore.create(liveID = options.liveID).kickUserOutOfRoom(
-                userID = options.userID,
-                completion = JsonUtil.toCompletionClosure(
-                    success = () : void => {
-                        console.log(`${AUDIENCE_TAG} kickUserOutOfRoom success`);
-                        options.success?.();
-                    },
-                    failure = (code : Int, message : String) : void => {
-                        console.error(`${AUDIENCE_TAG} kickUserOutOfRoom fail, error: ${code}, errMsg: ${message}`);
-                        options.fail?.(Number.from(code), message as string);
-                    }
-                )
-            )
-        });
-    }
-    public disableSendMessage(options : DisableSendMessageOptions) {
-        DispatchQueue.main.async(execute = () : void => {
-            console.log(`${AUDIENCE_TAG} disableSendMessage, data: ${JSON.stringify(options)}`);
-            LiveAudienceStore.create(liveID = options.liveID).disableSendMessage(
-                userID = options.userID,
-                isDisable = options.isDisable,
-                completion = JsonUtil.toCompletionClosure(
-                    success = () : void => {
-                        options.success?.();
-                    },
-                    failure = (code : Int, message : String) : void => {
-                        console.error(`${AUDIENCE_TAG} disableSendMessage fail, error: ${code}, errMsg: ${message}`);
-                        options.fail?.(Number.from(code), message as string);
-                    }
-                )
-            )
-        });
-    }
-    // ================= DeviceStore 相关接口 =================
-    public openLocalMicrophone(options : OpenLocalMicrophoneOptions) {
-        DispatchQueue.main.async(execute = () : void => {
-            console.log(`${DEVICE_TAG} openLocalMicrophone, data: ${JSON.stringify(options)}`);
-            DeviceStore.shared.openLocalMicrophone(
-                completion = JsonUtil.toCompletionClosure(
-                    success = () : void => {
-                        options.success?.();
-                    },
-                    failure = (code : Int, message : String) : void => {
-                        options.fail?.(Number.from(code), message as string);
-                    }
-                )
-            )
-        });
-    }
-    public closeLocalMicrophone() {
-        DispatchQueue.main.async(execute = () : void => {
-            console.log(`${DEVICE_TAG} closeLocalMicrophone`);
-            DeviceStore.shared.closeLocalMicrophone();
-        });
-    }
-    public setCaptureVolume(options : VolumeOptions) {
-        DispatchQueue.main.async(execute = () : void => {
-            console.log(`${DEVICE_TAG} setCaptureVolume, data: ${JSON.stringify(options)}`);
-            DeviceStore.shared.setCaptureVolume(volume = options.volume.toInt());
-        });
-    }
-    public setOutputVolume(options : VolumeOptions) {
-        DispatchQueue.main.async(execute = () : void => {
-            console.log(`${DEVICE_TAG} setOutputVolume, data: ${JSON.stringify(options)}`);
-            DeviceStore.shared.setOutputVolume(options.volume.toInt());
-        });
-    }
-    public setAudioRoute(options : SetAudioRouteOptions) {
-        DispatchQueue.main.async(execute = () : void => {
-            console.log(`${DEVICE_TAG} setAudioRoute, data: ${JSON.stringify(options)}`);
-            let audioRoute = AudioRoute.speakerphone
-            if (options.route == 'EARPIECE') {
-                audioRoute = AudioRoute.earpiece
-            }
-            DeviceStore.shared.setAudioRoute(audioRoute);
-        });
-    }
-    public openLocalCamera(options : OpenLocalCameraOptions) {
-        DispatchQueue.main.async(execute = () : void => {
-            console.log(`${DEVICE_TAG} openLocalCamera, data: ${JSON.stringify(options)}`);
-            DeviceStore.shared.openLocalCamera(
-                isFront = options.isFront ?? true,
-                completion = JsonUtil.toCompletionClosure(
-                    success = () : void => {
-                        options.success?.();
-                    },
-                    failure = (code : Int, message : String) : void => {
-                        options.fail?.(Number.from(code), message as string);
-                    }
-                )
-            )
-        });
-    }
-    public closeLocalCamera() {
-        DispatchQueue.main.async(execute = () : void => {
-            console.log(`${DEVICE_TAG} closeLocalCamera`);
-            DeviceStore.shared.closeLocalCamera();
-        });
-    }
-    public switchCamera(options : SwitchCameraOptions) {
-        DispatchQueue.main.async(execute = () : void => {
-            console.log(`${DEVICE_TAG} switchCamera, data: ${JSON.stringify(options)}`);
-            DeviceStore.shared.switchCamera(isFront = options.isFront ?? false);
-        });
-    }
-    public switchMirror(options : SwitchMirrorOptions) {
-        DispatchQueue.main.async(execute = () : void => {
-            console.log(`${DEVICE_TAG} switchMirror, data: ${JSON.stringify(options)}`);
-            let type = MirrorType.auto
-            if (options.mirrorType == 'DISABLE') {
-                type = MirrorType.disable
-            } else if (options.mirrorType == 'ENABLE') {
-                type = MirrorType.enable
-            }
-            DeviceStore.shared.switchMirror(mirrorType = type);
-        });
-    }
-    public updateVideoQuality(options : UpdateVideoQualityOptions) {
-        DispatchQueue.main.async(execute = () : void => {
-            console.log(`${DEVICE_TAG} updateVideoQuality, data: ${JSON.stringify(options)}`);
-            DeviceStore.shared.updateVideoQuality(
-                ParamsCovert.covertVideoQuality(options.quality)
-            )
-        });
-    }
-    public startScreenShare(options : StartScreenShareOptions) {
-        DispatchQueue.main.async(execute = () : void => {
-            console.log(`${DEVICE_TAG} startScreenShare, data: ${JSON.stringify(options)}`);
-            DeviceStore.shared.startScreenShare(appGroup = options.appGroup);
-        });
-    }
-    public stopScreenShare() {
-        DispatchQueue.main.async(execute = () : void => {
-            console.log(`${DEVICE_TAG} stopScreenShare`);
-            DeviceStore.shared.stopScreenShare();
-        });
-    }
-
-    // ================= CoHostStore 相关接口 =================
-    @UTSJS.keepAlive
-    public addCoHostListener(liveID : string, eventName : string, listener : ILiveListener) : void {
-        DispatchQueue.main.async(execute = () : void => {
-            if (this.nativeCoHostListener == null) {
-                this.nativeCoHostListener = new LiveListenerImpl(createCoHostEventDispatcher())
-            }
-            const listenerArray = coHostListenerMap.get(eventName) ?? []
-            if (!listenerArray.includes(listener)) {
-                listenerArray.push(listener)
-            }
-            coHostListenerMap.set(eventName, listenerArray);
-
-            let tempListener = this.nativeCoHostListener
-            CoHostStoreObserver.shared.setupCoHostEvent(liveID, function (key : string, data : string) {
-                console.log(`${COHOST_TAG} setupCoHostEvent, key: ${key}, data: ${data}`);
-                tempListener.dispatchEvent(key, data)
-            })
-        });
-    }
-
-    @UTSJS.keepAlive
-    public removeCoHostListener(liveID : string, eventName : string, listener : ILiveListener) : void {
-        DispatchQueue.main.async(execute = () : void => {
-            let listenerArray = coHostListenerMap.get(eventName) ?? []
-            let index = listenerArray.indexOf(listener)
-            if (index > -1) {
-                listenerArray.splice(index, 1)
-            }
-            if (listenerArray.length == 0) {
-                coHostListenerMap.delete(eventName);
-            }
-        });
-    }
-    public requestHostConnection(options : RequestHostConnectionOptions) {
-        DispatchQueue.main.async(execute = () : void => {
-            console.log(`${COHOST_TAG} requestHostConnection, data: ${JSON.stringify(options)}`);
-            let template = CoHostLayoutTemplate.hostDynamicGrid
-            if (options.layoutTemplate == 'HOST_DYNAMIC_1V6') {
-                template = CoHostLayoutTemplate.hostDynamic1v6
-            }
-            CoHostStore.create(liveID = options.liveID).requestHostConnection(
-                targetHost = options.targetHostLiveID,
-                layoutTemplate = template,
-                timeout = options.timeout.toDouble(),
-                extraInfo = options.extensionInfo ?? "",
-                completion = JsonUtil.toCompletionClosure(
-                    success = () : void => {
-                        options.success?.();
-                    },
-                    failure = (code : Int, message : String) : void => {
-                        options.fail?.(Number.from(code), message as string);
-                    }
-                )
-            );
-        });
-    }
-
-    public cancelHostConnection(options : CancelHostConnectionOptions) {
-        DispatchQueue.main.async(execute = () : void => {
-            console.log(`${COHOST_TAG} cancelHostConnection, data: ${JSON.stringify(options)}`);
-            CoHostStore.create(liveID = options.liveID).cancelHostConnection(
-                toHostLiveID = options.toHostLiveID,
-                completion = JsonUtil.toCompletionClosure(
-                    success = () : void => {
-                        options.success?.();
-                    },
-                    failure = (code : Int, message : String) : void => {
-                        options.fail?.(Number.from(code), message as string);
-                    }
-                )
-            );
-        });
-    }
-
-    public acceptHostConnection(options : AcceptHostConnectionOptions) {
-        DispatchQueue.main.async(execute = () : void => {
-            console.log(`${COHOST_TAG} acceptHostConnection, data: ${JSON.stringify(options)}`);
-            CoHostStore.create(liveID = options.liveID).acceptHostConnection(
-                fromHostLiveID = options.fromHostLiveID,
-                completion = JsonUtil.toCompletionClosure(
-                    success = () : void => {
-                        options.success?.();
-                    },
-                    failure = (code : Int, message : String) : void => {
-                        options.fail?.(Number.from(code), message as string);
-                    }
-                )
-            );
-        });
-    }
-
-    public rejectHostConnection(options : RejectHostConnectionOptions) {
-        DispatchQueue.main.async(execute = () : void => {
-            console.log(`${COHOST_TAG} rejectHostConnection, data: ${JSON.stringify(options)}`);
-            CoHostStore.create(liveID = options.liveID).rejectHostConnection(
-                fromHostLiveID = options.fromHostLiveID,
-                completion = JsonUtil.toCompletionClosure(
-                    success = () : void => {
-                        options.success?.();
-                    },
-                    failure = (code : Int, message : String) : void => {
-                        options.fail?.(Number.from(code), message as string);
-                    }
-                )
-            );
-        });
-    }
-
-    public exitHostConnection(options : ExitHostConnectionOptions) {
-        DispatchQueue.main.async(execute = () : void => {
-            console.log(`${COHOST_TAG} exitHostConnection, data: ${JSON.stringify(options)}`);
-            CoHostStore.create(liveID = options.liveID).exitHostConnection(
-                completion = JsonUtil.toCompletionClosure(
-                    success = () : void => {
-                        options.success?.();
-                    },
-                    failure = (code : Int, message : String) : void => {
-                        options.fail?.(Number.from(code), message as string);
-                    }
-                )
-            );
-        });
-    }
-
-    // ================= CoGuestStore 相关接口 =================
-    @UTSJS.keepAlive
-    public addCoGuestHostListener(liveID : string, eventName : string, listener : ILiveListener) : void {
-        DispatchQueue.main.async(execute = () : void => {
-            if (this.nativeCoGuestHostListener == null) {
-                this.nativeCoGuestHostListener = new LiveListenerImpl(createCoGuestHostEventDispatcher())
-            }
-            const listenerArray = coGuestHostListenerMap.get(eventName) ?? []
-            if (!listenerArray.includes(listener)) {
-                listenerArray.push(listener)
-            }
-            coGuestHostListenerMap.set(eventName, listenerArray);
-
-            let tempListener = this.nativeCoGuestHostListener
-            CoGuestStoreObserver.shared.setupHostEvent(liveID, function (key : string, data : string) {
-                console.log(`${COGUEST_TAG} setupHostEvent, key: ${key}, data: ${data}`);
-                tempListener.dispatchEvent(key, data)
-            })
-        });
-    }
-
-    @UTSJS.keepAlive
-    public removeCoGuestHostListener(liveID : string, eventName : string, listener : ILiveListener) : void {
-        DispatchQueue.main.async(execute = () : void => {
-            let listenerArray = coGuestHostListenerMap.get(eventName) ?? []
-            let index = listenerArray.indexOf(listener)
-            if (index > -1) {
-                listenerArray.splice(index, 1)
-            }
-            if (listenerArray.length == 0) {
-                coGuestHostListenerMap.delete(eventName);
-            }
-        });
-    }
-
-    @UTSJS.keepAlive
-    public addCoGuestGuestListener(liveID : string, eventName : string, listener : ILiveListener) : void {
-        DispatchQueue.main.async(execute = () : void => {
-            if (this.nativeCoGuestGuestListener == null) {
-                this.nativeCoGuestGuestListener = new LiveListenerImpl(createCoGuestGuestEventDispatcher())
-            }
-            const listenerArray = coGuestGuestListenerMap.get(eventName) ?? []
-            if (!listenerArray.includes(listener)) {
-                listenerArray.push(listener)
-            }
-            coGuestGuestListenerMap.set(eventName, listenerArray);
-
-            let tempListener = this.nativeCoGuestGuestListener
-            CoGuestStoreObserver.shared.setupGuestEvent(liveID, function (key : string, data : string) {
-                console.log(`${COGUEST_TAG} setupGuestEvent, key: ${key}, data: ${data}`);
-                tempListener.dispatchEvent(key, data)
-            })
-        });
-    }
-
-    @UTSJS.keepAlive
-    public removeCoGuestGuestListener(liveID : string, eventName : string, listener : ILiveListener) : void {
-        DispatchQueue.main.async(execute = () : void => {
-            let listenerArray = coGuestGuestListenerMap.get(eventName) ?? []
-            let index = listenerArray.indexOf(listener)
-            if (index > -1) {
-                listenerArray.splice(index, 1)
-            }
-            if (listenerArray.length == 0) {
-                coGuestGuestListenerMap.delete(eventName);
-            }
-        });
-    }
-    public applyForSeat(options : ApplyForSeatOptions) {
-        DispatchQueue.main.async(execute = () : void => {
-            console.log(`${COGUEST_TAG} applyForSeat, data: ${JSON.stringify(options)}`);
-            CoGuestStore.create(liveID = options.liveID).applyForSeat(
-                seatIndex = options.seatIndex.toInt(),
-                timeout = options.timeout.toDouble(),
-                extraInfo = options.extraInfo,
-                completion = JsonUtil.toCompletionClosure(
-                    success = () : void => {
-                        options.success?.();
-                    },
-                    failure = (code : Int, message : String) : void => {
-                        options.fail?.(Number.from(code), message as string);
-                    }
-                )
-            );
-        });
-    }
-
-    public cancelApplication(options : CancelApplicationOptions) {
-        DispatchQueue.main.async(execute = () : void => {
-            console.log(`${COGUEST_TAG} cancelApplication, data: ${JSON.stringify(options)}`);
-            CoGuestStore.create(liveID = options.liveID).cancelApplication(
-                completion = JsonUtil.toCompletionClosure(
-                    success = () : void => {
-                        options.success?.();
-                    },
-                    failure = (code : Int, message : String) : void => {
-                        options.fail?.(Number.from(code), message as string);
-                    }
-                )
-            );
-        });
-    }
-
-    public acceptApplication(options : AcceptApplicationOptions) {
-        DispatchQueue.main.async(execute = () : void => {
-            console.log(`${COGUEST_TAG} acceptApplication, data: ${JSON.stringify(options)}`);
-            CoGuestStore.create(liveID = options.liveID).acceptApplication(
-                userID = options.userID,
-                completion = JsonUtil.toCompletionClosure(
-                    success = () : void => {
-                        options.success?.();
-                    },
-                    failure = (code : Int, message : String) : void => {
-                        options.fail?.(Number.from(code), message as string);
-                    }
-                )
-            );
-        });
-    }
-
-    public rejectApplication(options : RejectApplicationOptions) {
-        DispatchQueue.main.async(execute = () : void => {
-            console.log(`${COGUEST_TAG} rejectApplication, data: ${JSON.stringify(options)}`);
-            CoGuestStore.create(liveID = options.liveID).rejectApplication(
-                userID = options.userID,
-                completion = JsonUtil.toCompletionClosure(
-                    success = () : void => {
-                        options.success?.();
-                    },
-                    failure = (code : Int, message : String) : void => {
-                        options.fail?.(Number.from(code), message as string);
-                    }
-                )
-            );
-        });
-    }
-    public inviteToSeat(options : InviteToSeatOptions) {
-        DispatchQueue.main.async(execute = () : void => {
-            console.log(`${COGUEST_TAG} inviteToSeat, data: ${JSON.stringify(options)} `);
-            CoGuestStore.create(liveID = options.liveID).inviteToSeat(
-                userID = options.inviteeID,
-                seatIndex = options.seatIndex.toInt(),
-                timeout = options.timeout.toDouble(),
-                extraInfo = options.extraInfo,
-                completion = JsonUtil.toCompletionClosure(
-                    success = () : void => {
-                        options.success?.();
-                    },
-                    failure = (code : Int, message : String) : void => {
-                        options.fail?.(Number.from(code), message as string);
-                    }
-                )
-            );
-        });
-    }
-
-    public cancelInvitation(options : CancelInvitationOptions) {
-        DispatchQueue.main.async(execute = () : void => {
-            console.log(`${COGUEST_TAG} cancelInvitation, data: ${JSON.stringify(options)} `);
-            CoGuestStore.create(liveID = options.liveID).cancelInvitation(
-                inviteeID = options.inviteeID,
-                completion = JsonUtil.toCompletionClosure(
-                    success = () : void => {
-                        options.success?.();
-                    },
-                    failure = (code : Int, message : String) : void => {
-                        options.fail?.(Number.from(code), message as string);
-                    }
-                )
-            );
-        });
-    }
-
-    public acceptInvitation(options : AcceptInvitationOptions) {
-        DispatchQueue.main.async(execute = () : void => {
-            console.log(`${COGUEST_TAG} acceptInvitation, data: ${JSON.stringify(options)} `);
-            CoGuestStore.create(liveID = options.liveID).acceptInvitation(
-                inviterID = options.inviterID,
-                completion = JsonUtil.toCompletionClosure(
-                    success = () : void => {
-                        options.success?.();
-                    },
-                    failure = (code : Int, message : String) : void => {
-                        options.fail?.(Number.from(code), message as string);
-                    }
-                )
-            );
-        });
-    }
-
-    public rejectInvitation(options : RejectInvitationOptions) {
-        DispatchQueue.main.async(execute = () : void => {
-            console.log(`${COGUEST_TAG} rejectInvitation, data: ${JSON.stringify(options)} `);
-            CoGuestStore.create(liveID = options.liveID).rejectInvitation(
-                inviterID = options.inviterID,
-                completion = JsonUtil.toCompletionClosure(
-                    success = () : void => {
-                        options.success?.();
-                    },
-                    failure = (code : Int, message : String) : void => {
-                        options.fail?.(Number.from(code), message as string);
-                    }
-                )
-            );
-        });
-    }
-
-    public disconnect(options : DisconnectOptions) {
-        DispatchQueue.main.async(execute = () : void => {
-            console.log(`${COGUEST_TAG} disconnect, data: ${JSON.stringify(options)} `);
-            CoGuestStore.create(liveID = options.liveID).disConnect(
-                completion = JsonUtil.toCompletionClosure(
-                    success = () : void => {
-                        options.success?.();
-                    },
-                    failure = (code : Int, message : String) : void => {
-                        options.fail?.(Number.from(code), message as string);
-                    }
-                )
-            );
-        });
-    }
-
-    // ================= BarrageStore 相关接口 =================
-    public sendTextMessage(options : SendTextMessageOptions) {
-        DispatchQueue.main.async(execute = () : void => {
-            console.log(`${BARRAGE_TAG} sendTextMessage, data: ${JSON.stringify(options)}`);
-            BarrageStore.create(liveID = options.liveID).sendTextMessage(
-                text = options.text,
-                extensionInfo = options.extensionInfo,
-                completion = JsonUtil.toCompletionClosure(
-                    success = () : void => {
-                        options.success?.();
-                    },
-                    failure = (code : Int, message : String) : void => {
-                        console.error(`${BARRAGE_TAG} sendTextMessage fail, error: ${code}, errMsg: ${message}`);
-                        options.fail?.(Number.from(code), message as string);
-                    }
-                )
-            )
-        });
-    }
-
-    public sendCustomMessage(options : SendCustomMessageOptions) {
-        DispatchQueue.main.async(execute = () : void => {
-            console.log(`${BARRAGE_TAG} sendCustomMessage, data: ${JSON.stringify(options)}`);
-            BarrageStore.create(liveID = options.liveID).sendCustomMessage(
-                businessID = options.businessID,
-                data = options.data,
-                completion = JsonUtil.toCompletionClosure(
-                    success = () : void => {
-                        options.success?.();
-                    },
-                    failure = (code : Int, message : String) : void => {
-                        console.error(`${BARRAGE_TAG} sendCustomMessage fail, error: ${code}, errMsg: ${message}`);
-                        options.fail?.(Number.from(code), message as string);
-                    }
-                )
-            )
-        });
-    }
-
-    public appendLocalTip(options : AppendLocalTipOptions) {
-        DispatchQueue.main.async(execute = () : void => {
-            console.log(`${BARRAGE_TAG} appendLocalTip, data: ${JSON.stringify(options)}`);
-            BarrageStore.create(liveID = options.liveID).appendLocalTip(
-                message = ParamsCovert.convertBarrage(options.message)
-            );
-        });
-    }
-
-    // ================= GiftStore 相关接口 =================
-    @UTSJS.keepAlive
-    public addGiftListener(liveID : string, eventName : string, listener : ILiveListener) : void {
-        DispatchQueue.main.async(execute = () : void => {
-            if (this.nativeGiftListener == null) {
-                this.nativeGiftListener = new LiveListenerImpl(createGiftEventDispatcher())
-            }
-            const listenerArray = giftListenerMap.get(eventName) ?? []
-            if (!listenerArray.includes(listener)) {
-                listenerArray.push(listener)
-            }
-            giftListenerMap.set(eventName, listenerArray);
-
-            let tempListener = this.nativeGiftListener
-            GiftStoreObserver.shared.setupGiftEvent(liveID, function (key : string, data : string) {
-                console.log(`${GIFT_TAG} setupGiftEvent, key: ${key}, data: ${data}`);
-                tempListener.dispatchEvent(key, data)
-            })
-        });
-    }
-
-    @UTSJS.keepAlive
-    public removeGiftListener(liveID : string, eventName : string, listener : ILiveListener) : void {
-        DispatchQueue.main.async(execute = () : void => {
-            let listenerArray = giftListenerMap.get(eventName) ?? []
-            let index = listenerArray.indexOf(listener)
-            if (index > -1) {
-                listenerArray.splice(index, 1)
-            }
-            if (listenerArray.length == 0) {
-                giftListenerMap.delete(eventName);
-            }
-        });
-    }
-
-    public refreshUsableGifts(options : RefreshUsableGiftsOptions) {
-        DispatchQueue.main.async(execute = () : void => {
-            console.log(`${GIFT_TAG} refreshUsableGifts, data: ${JSON.stringify(options)}`);
-            GiftStore.create(liveID = options.liveID).refreshUsableGifts(
-                completion = JsonUtil.toCompletionClosure(
-                    success = () : void => {
-                        options.success?.();
-                    },
-                    failure = (code : Int, message : String) : void => {
-                        console.error(`${GIFT_TAG} refreshUsableGifts fail, error: ${code}, errMsg: ${message}`);
-                        options.fail?.(Number.from(code), message as string);
-                    }
-                )
-            )
-        });
-    }
-
-    public sendGift(options : SendGiftOptions) {
-        DispatchQueue.main.async(execute = () : void => {
-            console.log(`${GIFT_TAG} sendGift, data: ${JSON.stringify(options)}`);
-            GiftStore.create(liveID = options.liveID).sendGift(
-                giftID = options.giftID,
-                count = options.count.toUInt(),
-                completion = JsonUtil.toCompletionClosure(
-                    success = () : void => {
-                        options.success?.();
-                    },
-                    failure = (code : Int, message : String) : void => {
-                        console.error(`${GIFT_TAG} sendGift fail, error: ${code}, errMsg: ${message}`);
-                        options.fail?.(Number.from(code), message as string);
-                    }
-                )
-            )
-        });
-    }
-
-    // ================= BaseBeautyStore 相关接口 =================
-    public setSmoothLevel(options : SetSmoothLevelOptions) {
-        DispatchQueue.main.async(execute = () : void => {
-            console.warn(`${BEAUTY_TAG} setSmoothLevel, data: ${JSON.stringify(options)}`);
-            BaseBeautyStore.shared.setSmoothLevel(smoothLevel = options.smoothLevel.toFloat());
-        });
-    }
-
-    public setWhitenessLevel(options : SetWhitenessLevelOptions) {
-        DispatchQueue.main.async(execute = () : void => {
-            console.warn(`${BEAUTY_TAG} setWhitenessLevel, data: ${JSON.stringify(options)}`);
-            BaseBeautyStore.shared.setWhitenessLevel(whitenessLevel = options.whitenessLevel.toFloat());
-        });
-    }
-
-    public setRuddyLevel(options : SetRuddyLevelOptions) {
-        DispatchQueue.main.async(execute = () : void => {
-            console.warn(`${BEAUTY_TAG} setRuddyLevel, data: ${JSON.stringify(options)}`);
-            BaseBeautyStore.shared.setRuddyLevel(ruddyLevel = options.ruddyLevel.toFloat());
-        });
-    }
-
-    // ================= AudioEffectStore 相关接口 =================
-    public setAudioChangerType(options : SetAudioChangerTypeOptions) {
-        DispatchQueue.main.async(execute = () : void => {
-            console.log(`${AUDIOEFFECT_TAG} setAudioChangerType, data: ${JSON.stringify(options)}`);
-            let type = ParamsCovert.convertAudioChangerType(options.changerType)
-            AudioEffectStore.shared.setAudioChangerType(type = type);
-        });
-    }
-
-    public setAudioReverbType(options : SetAudioReverbTypeOptions) {
-        DispatchQueue.main.async(execute = () : void => {
-            console.log(`${AUDIOEFFECT_TAG} setAudioReverbType, data: ${JSON.stringify(options)}`);
-            let type = ParamsCovert.convertAudioReverbType(options.reverbType)
-            AudioEffectStore.shared.setAudioReverbType(type = type);
-        });
-    }
-    public setVoiceEarMonitorEnable(options : SetVoiceEarMonitorEnableOptions) {
-        DispatchQueue.main.async(execute = () : void => {
-            console.log(`${DEVICE_TAG} setVoiceEarMonitorEnable, data: ${JSON.stringify(options)}`);
-            AudioEffectStore.shared.setVoiceEarMonitorEnable(enable = options.enable);
-        });
-    }
-    public setVoiceEarMonitorVolume(options : VolumeOptions) {
-        DispatchQueue.main.async(execute = () : void => {
-            console.log(`${AUDIOEFFECT_TAG} setVoiceEarMonitorVolume, data: ${JSON.stringify(options)}`);
-            AudioEffectStore.shared.setVoiceEarMonitorVolume(volume = options.volume.toInt());
-        });
-    }
-
-    // ================= LikeStore 相关接口 =================
-    @UTSJS.keepAlive
-    public addLikeListener(liveID : string, eventName : string, listener : ILiveListener) : void {
-        DispatchQueue.main.async(execute = () : void => {
-            if (this.nativeLikeListener == null) {
-                this.nativeLikeListener = new LiveListenerImpl(createLikeEventDispatcher())
-            }
-            const listenerArray = likeListenerMap.get(eventName) ?? []
-            if (!listenerArray.includes(listener)) {
-                listenerArray.push(listener)
-            }
-            likeListenerMap.set(eventName, listenerArray);
-
-            let tempListener = this.nativeLikeListener
-            LikeStoreObserver.shared.setupLikeEvent(liveID, function (key : string, data : string) {
-                console.log(`${LIKE_TAG} setupLikeEvent, key: ${key}, data: ${data}`);
-                tempListener.dispatchEvent(key, data)
-            })
-        });
-    }
-
-    @UTSJS.keepAlive
-    public removeLikeListener(liveID : string, eventName : string, listener : ILiveListener) : void {
-        DispatchQueue.main.async(execute = () : void => {
-            let listenerArray = likeListenerMap.get(eventName) ?? []
-            let index = listenerArray.indexOf(listener)
-            if (index > -1) {
-                listenerArray.splice(index, 1)
-            }
-            if (listenerArray.length == 0) {
-                likeListenerMap.delete(eventName);
-            }
-        });
-    }
-
-    public sendLike(options : SendLikeOptions) {
-        DispatchQueue.main.async(execute = () : void => {
-            console.log(`${LIKE_TAG} sendLike, data: ${JSON.stringify(options)}`);
-            LikeStore.create(liveID = options.liveID).sendLike(
-                count = options.count.toUInt(),
-                completion = JsonUtil.toCompletionClosure(
-                    success = () : void => {
-                        console.log(`${LIKE_TAG} sendLike success`);
-                        options.success?.();
-                    },
-                    failure = (code : Int, message : String) : void => {
-                        console.error(`${LIKE_TAG} sendLike fail, error: ${code}, errMsg: ${message}`);
-                        options.fail?.(Number.from(code), message as string);
-                    }
-                )
-            )
-        });
-    }
-
-    // ================= 实验性接口 =================
-    public callExperimentalAPI(options : CallExperimentalAPIOptions) {
-        DispatchQueue.main.async(execute = () : void => {
-            console.log(`${RTC_TAG} callExperimentalAPI, data: ${JSON.stringify(options)}`);
-            ExperimentalApiInvoker.shared.callExperimentalAPI(
-                options.jsonData,
-                callback = (jsonData : string) : void => {
-                    console.log(`${RTC_TAG} callExperimentalAPI, jsonData: ${jsonData}`)
-                }
-            )
-        });
-    }
-
-    // ================= State event listener =================
-    @UTSJS.keepAlive
-    public on(eventName : string, listener : (key : string, res : string) => void, liveID : string) : void {
-        DispatchQueue.main.async(execute = () : void => {
-            console.log(`${RTC_TAG} observer, eventName: ${eventName}, liveID: ${liveID}`);
-
-            if (eventName == "loginStoreChanged") {
-                LoginStoreObserver.shared.loginStoreChanged(function (key : string, data : string) {
-                    console.log(`${RTC_TAG} loginStoreChanged, key: ${key}, data: ${data}`);
-                    listener(key, data)
-                })
-            }
-            if (eventName == "liveStoreChanged") {
-                LiveListStoreObserver.shared.liveStoreChanged(function (key : string, data : string) {
-                    console.log(`${LIVE_TAG} liveStoreChanged, key: ${key}, data: ${data}`);
-                    listener(key, data)
-                })
-            }
-            if (eventName == "liveSeatStoreChanged" && liveID.length > 0) {
-                LiveSeatStoreObserver.shared.liveSeatStoreChanged(liveID, function (key : string, data : string) {
-                    // console.log(`${LIVE_TAG} liveSeatStoreChanged, key: ${key}, data: ${data}`);
-                    listener(key, data)
-                })
-            }
-            if (eventName == "liveAudienceStoreChanged" && liveID.length > 0) {
-                LiveAudienceStoreObserver.shared.liveAudienceStoreChanged(liveID, function (key : string, data : string) {
-                    console.log(`${LIVE_TAG} liveAudienceStoreChanged, key: ${key}, data: ${data}`)
-                    listener(key, data)
-                })
-            }
-            if (eventName == "giftStoreChanged" && liveID.length > 0) {
-                GiftStoreObserver.shared.giftStoreChanged(liveID, function (key : string, data : string) {
-                    console.log(`${GIFT_TAG} giftStoreChanged, key: ${key}, data: ${data}`);
-                    listener(key, data)
-                })
-            }
-            if (eventName == "deviceStoreChanged") {
-                DeviceStoreObserver.shared.deviceStoreChanged(function (key : string, data : string) {
-                    // console.log(`${DEVICE_TAG} deviceStoreChanged, key: ${key}, data: ${data}`);
-                    listener(key, data)
-                })
-            }
-            if (eventName == "coHostStoreChanged" && liveID.length > 0) {
-                CoHostStoreObserver.shared.coHostStoreChanged(liveID, function (key : string, data : string) {
-                    console.log(`${COHOST_TAG} coHostStoreChanged, key: ${key}, data: ${data}`);
-                    listener(key, data)
-                })
-            }
-            if (eventName == "coGuestStoreChanged" && liveID.length > 0) {
-                CoGuestStoreObserver.shared.coGuestStoreChanged(liveID, function (key : string, data : string) {
-                    console.log(`${COGUEST_TAG} coGuestStoreChanged, key: ${key}, data: ${data}`);
-                    listener(key, data)
-                })
-            }
-            if (eventName == "barrageStoreChanged" && liveID.length > 0) {
-                BarrageStoreObserver.shared.barrageStoreChanged(liveID, function (key : string, data : string) {
-                    console.log(`${BARRAGE_TAG} barrageStoreChanged, key: ${key}, data: ${data}`);
-                    listener(key, data)
-                })
-            }
-            if (eventName == "beautyStoreChanged") {
-                BaseBeautyStoreObserver.shared.beautyStoreChanged(function (key : string, data : string) {
-                    console.log(`${BEAUTY_TAG} beautyStoreChanged, key: ${key}, data: ${data}`);
-                    listener(key, data)
-                })
-            }
-            if (eventName == "audioEffectStoreChanged") {
-                AudioEffectStoreObserver.shared.audioEffectStoreChanged(function (key : string, data : string) {
-                    console.log(`${AUDIOEFFECT_TAG} audioEffectStoreChanged, key: ${key}, data: ${data}`);
-                    listener(key, data)
-                })
-            }
-            if (eventName == "liveSummaryStoreChanged" && liveID.length > 0) {
-                LiveSummaryStoreObserver.shared.liveSummaryStoreChanged(liveID, function (key : string, data : string) {
-                    listener(key, data)
-                })
-            }
-            if (eventName == "likeStoreChanged" && liveID.length > 0) {
-                LikeStoreObserver.shared.likeStoreChanged(liveID, function (key : string, data : string) {
-                    console.log(`${LIKE_TAG} likeStoreChanged, key: ${key}, data: ${data}`);
-                    listener(key, data)
-                })
-            }
-        });
-    }
+      )
+    });
+  }
+
+  // ================= State event listener =================
+  @UTSJS.keepAlive
+  public on(eventName : string, listener : (key : string, res : string) => void, liveID : string) : void {
+    DispatchQueue.main.async(execute = () : void => {
+      console.log(`${RTC_TAG} observer, eventName: ${eventName}, liveID: ${liveID}`);
+
+      if (eventName == "loginStoreChanged") {
+        LoginStoreObserver.shared.loginStoreChanged(function (key : string, data : string) {
+          console.log(`${RTC_TAG} loginStoreChanged, key: ${key}, data: ${data}`);
+          listener(key, data)
+        })
+      }
+      if (eventName == "liveStoreChanged") {
+        LiveListStoreObserver.shared.liveStoreChanged(function (key : string, data : string) {
+          console.log(`${LIVE_TAG} liveStoreChanged, key: ${key}, data: ${data}`);
+          listener(key, data)
+        })
+      }
+      if (eventName == "liveSeatStoreChanged" && liveID.length > 0) {
+        LiveSeatStoreObserver.shared.liveSeatStoreChanged(liveID, function (key : string, data : string) {
+          // console.log(`${LIVE_TAG} liveSeatStoreChanged, key: ${key}, data: ${data}`);
+          listener(key, data)
+        })
+      }
+      if (eventName == "liveAudienceStoreChanged" && liveID.length > 0) {
+        LiveAudienceStoreObserver.shared.liveAudienceStoreChanged(liveID, function (key : string, data : string) {
+          console.log(`${LIVE_TAG} liveAudienceStoreChanged, key: ${key}, data: ${data}`)
+          listener(key, data)
+        })
+      }
+      if (eventName == "giftStoreChanged" && liveID.length > 0) {
+        GiftStoreObserver.shared.giftStoreChanged(liveID, function (key : string, data : string) {
+          console.log(`${GIFT_TAG} giftStoreChanged, key: ${key}, data: ${data}`);
+          listener(key, data)
+        })
+      }
+      if (eventName == "deviceStoreChanged") {
+        DeviceStoreObserver.shared.deviceStoreChanged(function (key : string, data : string) {
+          // console.log(`${DEVICE_TAG} deviceStoreChanged, key: ${key}, data: ${data}`);
+          listener(key, data)
+        })
+      }
+      if (eventName == "coHostStoreChanged" && liveID.length > 0) {
+        CoHostStoreObserver.shared.coHostStoreChanged(liveID, function (key : string, data : string) {
+          console.log(`${COHOST_TAG} coHostStoreChanged, key: ${key}, data: ${data}`);
+          listener(key, data)
+        })
+      }
+      if (eventName == "coGuestStoreChanged" && liveID.length > 0) {
+        CoGuestStoreObserver.shared.coGuestStoreChanged(liveID, function (key : string, data : string) {
+          console.log(`${COGUEST_TAG} coGuestStoreChanged, key: ${key}, data: ${data}`);
+          listener(key, data)
+        })
+      }
+      if (eventName == "barrageStoreChanged" && liveID.length > 0) {
+        BarrageStoreObserver.shared.barrageStoreChanged(liveID, function (key : string, data : string) {
+          console.log(`${BARRAGE_TAG} barrageStoreChanged, key: ${key}, data: ${data}`);
+          listener(key, data)
+        })
+      }
+      if (eventName == "beautyStoreChanged") {
+        BaseBeautyStoreObserver.shared.beautyStoreChanged(function (key : string, data : string) {
+          console.log(`${BEAUTY_TAG} beautyStoreChanged, key: ${key}, data: ${data}`);
+          listener(key, data)
+        })
+      }
+      if (eventName == "audioEffectStoreChanged") {
+        AudioEffectStoreObserver.shared.audioEffectStoreChanged(function (key : string, data : string) {
+          console.log(`${AUDIOEFFECT_TAG} audioEffectStoreChanged, key: ${key}, data: ${data}`);
+          listener(key, data)
+        })
+      }
+      if (eventName == "liveSummaryStoreChanged" && liveID.length > 0) {
+        LiveSummaryStoreObserver.shared.liveSummaryStoreChanged(liveID, function (key : string, data : string) {
+          console.log(`${SUMMARY_TAG} liveSummaryStoreChanged, key: ${key}, data: ${data}`);
+          listener(key, data)
+        })
+      }
+      if (eventName == "likeStoreChanged" && liveID.length > 0) {
+        LikeStoreObserver.shared.likeStoreChanged(liveID, function (key : string, data : string) {
+          console.log(`${LIKE_TAG} likeStoreChanged, key: ${key}, data: ${data}`);
+          listener(key, data)
+        })
+      }
+      if (eventName == "battleStoreChanged" && liveID.length > 0) {
+        BattleStoreObserver.shared.battleStoreChanged(liveID, function (key : string, data : string) {
+          console.log(`${BATTLE_TAG} battleStoreChanged, key: ${key}, data: ${data}`);
+          listener(key, data)
+        })
+      }
+    });
+  }
 }

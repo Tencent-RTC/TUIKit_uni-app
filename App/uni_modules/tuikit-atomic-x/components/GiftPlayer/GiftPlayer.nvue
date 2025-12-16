@@ -1,7 +1,7 @@
 <template>
   <svga-player ref="playerRef" :url="computedUrl" style="position: absolute; z-index: -1;" @onFinished="handleFinished"
     :style="modelValue ? {
-      top: (safeArea?.top || 0) + 'px',
+      top: 100 + 'px',
       left: (safeArea?.left || 0) + 'px',
       width: (safeArea?.width || 0) + 'px',
       height: (safeArea?.height || 0) + 'px',
@@ -12,7 +12,7 @@
 </template>
 
 <script setup lang="ts">
-  import { ref, watch, onMounted, computed } from 'vue';
+  import { ref, watch, computed, reactive } from 'vue';
   import { downloadAndSaveToPath } from '@/uni_modules/tuikit-atomic-x/components/GiftPlayer/giftService';
 
   interface SafeAreaLike {
@@ -21,64 +21,306 @@
     width ?: number;
     height ?: number;
   }
-
+  interface GiftModel {
+    resourceURL : string;
+    name : string;
+    giftID : string | number;
+    isFromSelf : boolean;
+    timestamp : number;
+    cacheKey ?: string;
+  }
   const props = defineProps<{
     modelValue : boolean;
     url ?: string;
     safeArea ?: SafeAreaLike;
     autoHideMs ?: number;
+    maxQueueSize ?: number;
   }>();
-
   const emit = defineEmits<{
     (e : 'update:modelValue', value : boolean) : void
     (e : 'finished') : void
   }>();
-
   const playerRef = ref<any>(null);
   const internalUrl = ref<string>('');
-  const computedUrl = computed(() => props.url || internalUrl.value || '');
+  const computedUrl = computed(() => internalUrl.value || props.url || '');
+  const MAX_CACHE_SIZE = props.maxQueueSize !== undefined ? props.maxQueueSize : 50;
+  const ABSOLUTE_MAX_SIZE = 1000;
+  const effectiveMaxSize = MAX_CACHE_SIZE === 0 ? ABSOLUTE_MAX_SIZE : Math.min(MAX_CACHE_SIZE, ABSOLUTE_MAX_SIZE);
+  const giftPrepareList = reactive<GiftModel[]>([]);
+  const isPlaying = ref<boolean>(false);
+  const currentPlayingGift = ref<GiftModel | null>(null);
+
+  async function resetPlayer() {
+    if (playerRef.value) {
+      try {
+        playerRef.value.stopPlay && playerRef.value.stopPlay();
+      } catch (e) {
+        // ignore
+      }
+    }
+    internalUrl.value = '';
+    await new Promise(resolve => setTimeout(resolve, 100));
+    if (playerRef.value) {
+      try {
+        playerRef.value.stopPlay && playerRef.value.stopPlay();
+      } catch (e) {
+        // ignore
+      }
+    }
+  }
+
+  async function resolveSvgaLocalPath(resourceURL : string, cacheKey : string) : Promise<string> {
+    let cachedPath = plus.storage.getItem(cacheKey);
+    if (!cachedPath) {
+      try {
+        const filePath = await downloadAndSaveToPath(resourceURL);
+        if (!filePath || filePath.startsWith('http://') || filePath.startsWith('https://')) {
+          throw new Error(`Invalid local path: ${filePath}`);
+        }
+        plus.storage.setItem(cacheKey, filePath as string);
+        return filePath as string;
+      } catch (_) {
+        return resourceURL;
+      }
+    } else {
+      if (cachedPath.startsWith('http://') || cachedPath.startsWith('https://')) {
+        plus.storage.removeItem(cacheKey);
+        try {
+          const filePath = await downloadAndSaveToPath(resourceURL);
+          if (filePath && !filePath.startsWith('http')) {
+            plus.storage.setItem(cacheKey, filePath as string);
+            return filePath as string;
+          } else {
+            throw new Error(`Invalid local path: ${filePath}`);
+          }
+        } catch (_) {
+          return resourceURL;
+        }
+      }
+      return cachedPath;
+    }
+  }
+
+  function addGiftToQueue(giftData : { resourceURL ?: string; name ?: string; giftID ?: string | number }, isFromSelf = false) {
+    if (!giftData || !giftData.resourceURL) return;
+    const giftDataCopy = {
+      resourceURL: String(giftData.resourceURL || ''),
+      name: String(giftData.name || ''),
+      giftID: giftData.giftID || 0,
+    };
+    const buildCacheKey = (resourceURL : string, name : string, giftID : string | number) => {
+      const giftIdStr = String(giftID || '');
+      let urlHash = '';
+      try {
+        const urlObj = new URL(resourceURL);
+        const fileName = (urlObj.pathname.split('/').pop() || '').replace(/\.(svga|SVGA)$/, '');
+        urlHash = fileName;
+      } catch (_) {
+        urlHash = resourceURL.substring(resourceURL.lastIndexOf('/') + 1).replace(/\.(svga|SVGA)$/i, '');
+      }
+      const fallbackName = (name || '').replace(/\s+/g, '').substring(0, 10);
+      return `${giftIdStr}-${(urlHash || fallbackName)}`;
+    };
+    const giftModel : GiftModel = {
+      resourceURL: giftDataCopy.resourceURL,
+      name: giftDataCopy.name,
+      giftID: giftDataCopy.giftID,
+      isFromSelf,
+      timestamp: Date.now(),
+      cacheKey: buildCacheKey(giftDataCopy.resourceURL, giftDataCopy.name, giftDataCopy.giftID),
+    };
+    if (isFromSelf) {
+      let hasNonSelfGift = false;
+      for (let i = 0; i < giftPrepareList.length; i++) {
+        if (!giftPrepareList[i].isFromSelf) {
+          hasNonSelfGift = true;
+          break;
+        }
+      }
+      if (hasNonSelfGift) {
+        let insertIndex = 0;
+        for (let i = giftPrepareList.length - 1; i >= 0; i--) {
+          if (giftPrepareList[i].isFromSelf) {
+            insertIndex = i + 1;
+            break;
+          }
+        }
+        giftPrepareList.splice(insertIndex, 0, giftModel);
+      } else {
+        giftPrepareList.push(giftModel);
+      }
+    } else {
+      giftPrepareList.push(giftModel);
+    }
+    while (giftPrepareList.length > effectiveMaxSize) {
+      let removed = false;
+      for (let i = 0; i < giftPrepareList.length; i++) {
+        if (!giftPrepareList[i].isFromSelf) {
+          giftPrepareList.splice(i, 1);
+          removed = true;
+          break;
+        }
+      }
+      if (!removed && giftPrepareList.length > effectiveMaxSize) {
+        giftPrepareList.shift();
+      }
+    }
+    if (giftPrepareList.length === 1 && !isPlaying.value) {
+      preparePlay();
+    }
+  }
+
+  async function preparePlay() {
+    if (giftPrepareList.length === 0) {
+      isPlaying.value = false;
+      return;
+    }
+    if (isPlaying.value) {
+      return;
+    }
+    await resetPlayer();
+    if (isPlaying.value) {
+      return;
+    }
+    isPlaying.value = true;
+    const queueGift = giftPrepareList[0];
+    const gift : GiftModel = {
+      resourceURL: String(queueGift.resourceURL || ''),
+      name: String(queueGift.name || ''),
+      giftID: queueGift.giftID || 0,
+      isFromSelf: queueGift.isFromSelf,
+      timestamp: queueGift.timestamp,
+      cacheKey: String(queueGift.cacheKey || ''),
+    };
+    currentPlayingGift.value = gift;
+    if (!gift || !gift.resourceURL) {
+      onPlayFinished();
+      return;
+    }
+    try {
+      const giftResourceURL = String(gift.resourceURL || '');
+      const giftCacheKey = String(gift.cacheKey || '');
+      const giftID = gift.giftID || 0;
+      let svgaGiftSourceUrl = await resolveSvgaLocalPath(giftResourceURL, giftCacheKey);
+      await new Promise(resolve => setTimeout(resolve, 50));
+      let newUrl = svgaGiftSourceUrl as string;
+      if (internalUrl.value === newUrl) {
+        internalUrl.value = '';
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
+      if (newUrl.startsWith('http://') || newUrl.startsWith('https://')) {
+        try {
+          const filePath = await downloadAndSaveToPath(giftResourceURL);
+          if (filePath && !filePath.startsWith('http')) {
+            plus.storage.setItem(giftCacheKey, filePath);
+            newUrl = filePath;
+          }
+        } catch (e) {
+        }
+      }
+      internalUrl.value = newUrl;
+      emit('update:modelValue', true);
+      setTimeout(() => {
+        const currentGift = currentPlayingGift.value;
+        if (props.modelValue && computedUrl.value && playerRef.value && isPlaying.value &&
+          currentGift && currentGift.giftID === giftID && currentGift.cacheKey === giftCacheKey) {
+          tryStart();
+        } else {
+          setTimeout(() => {
+            const retryGift = currentPlayingGift.value;
+            if (props.modelValue && computedUrl.value && playerRef.value && isPlaying.value &&
+              retryGift && retryGift.giftID === giftID && retryGift.cacheKey === giftCacheKey) {
+              tryStart();
+            }
+          }, 100);
+        }
+      }, 200);
+    } catch (e) {
+      onPlayFinished();
+    }
+  }
+
+  function onPlayFinished() {
+    isHandlingFinished = false;
+    if (playerRef.value) {
+      try {
+        playerRef.value.stopPlay && playerRef.value.stopPlay();
+      } catch (e) {
+        // ignore
+      }
+    }
+    isPlaying.value = false;
+    if (giftPrepareList.length > 0) {
+      giftPrepareList.shift();
+    }
+    currentPlayingGift.value = null;
+    internalUrl.value = '';
+    if (giftPrepareList.length > 0) {
+      setTimeout(() => {
+        if (playerRef.value) {
+          try {
+            playerRef.value.stopPlay && playerRef.value.stopPlay();
+          } catch (e) {
+            // ignore
+          }
+        }
+        if (!isPlaying.value) {
+          preparePlay();
+        }
+      }, 300);
+    } else {
+      emit('finished');
+      emit('update:modelValue', false);
+    }
+  }
 
   const tryStart = () => {
     if (props.modelValue && computedUrl.value && playerRef.value) {
+      const urlToPlay = computedUrl.value;
+      if (urlToPlay.startsWith('http://') || urlToPlay.startsWith('https://')) {
+        return;
+      }
       try {
-        playerRef.value.startPlay(computedUrl.value);
+        playerRef.value.startPlay(urlToPlay);
       } catch (e) {
-        // swallow to avoid crashing UI if native not ready
+        // ignore
       }
     }
   }
 
-  watch(() => computedUrl.value, () => {
-    tryStart();
+  watch(() => computedUrl.value, (newUrl) => {
+    if (!isPlaying.value && newUrl === computedUrl.value) {
+      tryStart();
+    }
   });
-
+  let finishedTimer : NodeJS.Timer | null = null;
+  let isHandlingFinished = false;
 
   const handleFinished = () => {
-    emit('finished');
-    emit('update:modelValue', false);
-  }
-
-  async function playGift(giftData : { resourceURL ?: string; name ?: string; giftID ?: string | number }) {
-    if (!giftData || !giftData.resourceURL) return;
-    try {
-      const giftKey = `${(giftData.name || '').split(' ').join('')}-${giftData.giftID}`;
-      let svgaGiftSourceUrl = plus.storage.getItem(giftKey);
-      if (!svgaGiftSourceUrl) {
-        const filePath = await downloadAndSaveToPath(`${giftData.resourceURL}`);
-        plus.storage.setItem(giftKey, filePath as string);
-      }
-      svgaGiftSourceUrl = plus.storage.getItem(giftKey);
-      internalUrl.value = svgaGiftSourceUrl as string;
-      emit('update:modelValue', true);
-      tryStart();
-      const autoHide = typeof props.autoHideMs === 'number' ? props.autoHideMs : 10000;
-      setTimeout(() => emit('update:modelValue', false), autoHide);
-    } catch (e) {
-      // ignore
+    if (isHandlingFinished) {
+      return;
     }
+    if (finishedTimer) {
+      clearTimeout(finishedTimer);
+    }
+    isHandlingFinished = true;
+    finishedTimer = setTimeout(() => {
+      onPlayFinished();
+      isHandlingFinished = false;
+      finishedTimer = null;
+    }, 50);
   }
 
-  defineExpose({ playGift });
+  async function playGift(
+    giftData : { resourceURL ?: string; name ?: string; giftID ?: string | number },
+    isFromSelf = false
+  ) {
+    addGiftToQueue(giftData, isFromSelf);
+  }
+  
+  defineExpose({
+    playGift,
+  });
 </script>
 
 <style>

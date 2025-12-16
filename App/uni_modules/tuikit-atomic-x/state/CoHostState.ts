@@ -1,6 +1,11 @@
 /**
- * 连麦主播状态管理
  * @module CoHostState
+ * @module_description
+ * 连线主播管理模块
+ * 核心功能：实现主播间的连线功能，支持主播邀请、连线申请、连线状态管理等主播间互动功能。
+ * 技术特点：支持多主播音视频同步、画中画显示、音视频质量优化等高级技术，确保连线体验的流畅性。
+ * 业务价值：为直播平台提供主播间协作的核心能力，支持PK、合作直播等高级业务场景。
+ * 应用场景：主播连线、合作直播、跨平台连线、主播互动等高级直播场景。
  */
 import { ref } from "vue";
 import {
@@ -12,43 +17,113 @@ import { getRTCRoomEngineManager } from "./rtcRoomEngine";
 import { callUTSFunction, safeJsonParse } from "../utils/utsUtils";
 
 /**
- * 已连接的连麦主播列表
+ * 已连接的连线主播列表
  * @type {Ref<LiveUserInfoParam[]>}
  * @memberof module:CoHostState
+ * @example
+ * import { useCoHostState } from '@/uni_modules/tuikit-atomic-x/state/CoHostState';
+ * const { connected } = useCoHostState('your_live_id');
+ * 
+ * // 监听已连接的连线主播列表变化
+ * watch(connected, (newConnected) => {
+ *   if (newConnected && newConnected.length > 0) {
+ *     console.log('已连接的主播列表:', newConnected);
+ *   }
+ * });
+ * 
+ * // 获取当前已连接的连线主播数量
+ * const coHosts = connected.value;
+ * console.log('已连接的主播数:', coHosts.length);
  */
 const connected = ref<LiveUserInfoParam[]>([]);
 
 /**
- * 被邀请连麦的主播列表
+ * 被邀请连线的主播列表
  * @type {Ref<LiveUserInfoParam[]>}
  * @memberof module:CoHostState
+ * @example
+ * import { useCoHostState } from '@/uni_modules/tuikit-atomic-x/state/CoHostState';
+ * const { invitees } = useCoHostState('your_live_id');
+ * 
+ * // 监听被邀请的主播列表变化
+ * watch(invitees, (newInvitees) => {
+ *   if (newInvitees && newInvitees.length > 0) {
+ *     console.log('被邀请的主播列表:', newInvitees);
+ *   }
+ * });
+ * 
+ * // 获取当前被邀请的主播列表
+ * const invitedHosts = invitees.value;
+ * console.log('被邀请的主播数:', invitedHosts.length);
  */
 const invitees = ref<LiveUserInfoParam[]>([]);
 
 /**
- * 当前申请连麦的主播信息
+ * 当前申请连线的主播信息
  * @type {Ref<LiveUserInfoParam | undefined>}
  * @memberof module:CoHostState
+ * @example
+ * import { useCoHostState } from '@/uni_modules/tuikit-atomic-x/state/CoHostState';
+ * const { applicant } = useCoHostState('your_live_id');
+ * 
+ * // 监听申请连线的主播信息变化
+ * watch(applicant, (newApplicant) => {
+ *   if (newApplicant) {
+ *     console.log('申请主播:', newApplicant.userID);
+ *   }
+ * });
+ * 
+ * // 获取当前申请连线的主播信息
+ * const currentApplicant = applicant.value;
+ * if (currentApplicant) {
+ *   console.log('当前申请连线的主播:', currentApplicant.nickname);
+ * }
  */
 const applicant = ref<LiveUserInfoParam | undefined>();
 
 /**
- * 可邀请连麦的候选主播列表
+ * 可邀请连线的候选主播列表
  * @type {Ref<LiveUserInfoParam[]>}
  * @memberof module:CoHostState
+ * @example
+ * import { useCoHostState } from '@/uni_modules/tuikit-atomic-x/state/CoHostState';
+ * const { candidates } = useCoHostState('your_live_id');
+ * 
+ * // 监听候选主播列表变化
+ * watch(candidates, (newCandidates) => {
+ *   if (newCandidates && newCandidates.length > 0) {
+ *     console.log('候选主播列表:', newCandidates);
+ *   }
+ * });
+ * 
+ * // 获取当前候选主播列表
+ * const candidateHosts = candidates.value;
+ * console.log('候选主播数:', candidateHosts.length);
  */
 const candidates = ref<LiveUserInfoParam[]>([]);
 
 /**
- * 当前连麦状态
+ * 当前连线状态
  * @type {Ref<string>}
  * @memberof module:CoHostState
+ * @example
+ * import { useCoHostState } from '@/uni_modules/tuikit-atomic-x/state/CoHostState';
+ * const { coHostStatus } = useCoHostState('your_live_id');
+ * 
+ * // 监听连线状态变化
+ * watch(coHostStatus, (newStatus) => {
+ *   console.log('连线状态:', newStatus);
+ * });
+ * 
+ * // 获取当前连线状态
+ * const status = coHostStatus.value;
+ * console.log('当前连线状态:', status);
  */
 const coHostStatus = ref<string>('')
 
 /**
- * 请求连麦
- * @param {RequestHostConnectionOptions} params - 请求连麦参数
+ * 请求连线
+ * @param {RequestHostConnectionOptions} params - 请求连线参数
  * @returns {void}
  * @memberof module:CoHostState
  * @example
@@ -61,8 +136,8 @@ function requestHostConnection(params: RequestHostConnectionOptions): void {
 }
 
 /**
- * 取消连麦请求
- * @param {CancelHostConnectionOptions} params - 取消连麦请求参数
+ * 取消连线请求
+ * @param {CancelHostConnectionOptions} params - 取消连线请求参数
  * @returns {void}
  * @memberof module:CoHostState
  * @example
@@ -75,8 +150,8 @@ function cancelHostConnection(params: CancelHostConnectionOptions): void {
 }
 
 /**
- * 接受连麦请求
- * @param {AcceptHostConnectionOptions} params - 接受连麦请求参数
+ * 接受连线请求
+ * @param {AcceptHostConnectionOptions} params - 接受连线请求参数
  * @returns {void}
  * @memberof module:CoHostState
  * @example
@@ -89,8 +164,8 @@ function acceptHostConnection(params: AcceptHostConnectionOptions): void {
 }
 
 /**
- * 拒绝连麦请求
- * @param {RejectHostConnectionOptions} params - 拒绝连麦请求参数
+ * 拒绝连线请求
+ * @param {RejectHostConnectionOptions} params - 拒绝连线请求参数
  * @returns {void}
  * @memberof module:CoHostState
  * @example
@@ -103,8 +178,8 @@ function rejectHostConnection(params: RejectHostConnectionOptions): void {
 }
 
 /**
- * 退出连麦
- * @param {ExitHostConnectionOptions} params - 退出连麦参数
+ * 退出连线
+ * @param {ExitHostConnectionOptions} params - 退出连线参数
  * @returns {void}
  * @memberof module:CoHostState
  * @example
@@ -117,17 +192,19 @@ function exitHostConnection(params: ExitHostConnectionOptions): void {
 }
 
 /**
- * 添加连麦主播事件监听
+ * 添加连线主播事件监听
  * @param {string} liveID - 直播间ID
- * @param {string} eventName - 事件名称，可选值: 'onCoHostRequestReceived'(收到连麦请求)<br>'onCoHostRequestCancelled'(连麦请求被取消)<br>'onCoHostRequestAccepted'(连麦请求被接受)<br>'onCoHostRequestRejected'(连麦请求被拒绝)<br>'onCoHostRequestTimeout'(连麦请求超时)<br>'onCoHostUserJoined'(连麦用户加入)<br>'onCoHostUserLeft'(连麦用户离开)
+ * @param {string} eventName - 事件名称，可选值: 'onCoHostRequestReceived'(收到连线请求)<br>'onCoHostRequestCancelled'(连线请求被取消)<br>'onCoHostRequestAccepted'(连线请求被接受)<br>'onCoHostRequestRejected'(连线请求被拒绝)<br>'onCoHostRequestTimeout'(连线请求超时)<br>'onCoHostUserJoined'(连线用户加入)<br>'onCoHostUserLeft'(连线用户离开)
  * @param {ILiveListener} listener - 事件回调函数
  * @returns {void}
  * @memberof module:CoHostState
  * @example
  * import { useCoHostState } from '@/uni_modules/tuikit-atomic-x/state/CoHostState';
  * const { addCoHostListener } = useCoHostState("your_live_id");
- * addCoHostListener('your_live_id', 'onCoHostRequestReceived', (params) => {
- *   console.log('result:', params);
+ * addCoHostListener('your_live_id', 'onCoHostRequestReceived', {
+ * 	callback: (params) => {
+ * 		console.log('result:', params);
+ * 	}
  * });
  */
 function addCoHostListener(liveID: string, eventName: string, listener: ILiveListener): void {
@@ -135,9 +212,9 @@ function addCoHostListener(liveID: string, eventName: string, listener: ILiveLis
 }
 
 /**
- * 移除连麦主播事件监听
+ * 移除连线主播事件监听
  * @param {string} liveID - 直播间ID
- * @param {string} eventName - 事件名称，可选值: 'onCoHostRequestReceived'(收到连麦请求)<br>'onCoHostRequestCancelled'(连麦请求被取消)<br>'onCoHostRequestAccepted'(连麦请求被接受)<br>'onCoHostRequestRejected'(连麦请求被拒绝)<br>'onCoHostRequestTimeout'(连麦请求超时)<br>'onCoHostUserJoined'(连麦用户加入)<br>'onCoHostUserLeft'(连麦用户离开)
+ * @param {string} eventName - 事件名称，可选值: 'onCoHostRequestReceived'(收到连线请求)<br>'onCoHostRequestCancelled'(连线请求被取消)<br>'onCoHostRequestAccepted'(连线请求被接受)<br>'onCoHostRequestRejected'(连线请求被拒绝)<br>'onCoHostRequestTimeout'(连线请求超时)<br>'onCoHostUserJoined'(连线用户加入)<br>'onCoHostUserLeft'(连线用户离开)
  * @param {ILiveListener} listener - 事件回调函数
  * @returns {void}
  * @memberof module:CoHostState
@@ -180,20 +257,20 @@ export function useCoHostState(liveID: string) {
   bindEvent(liveID);
 
   return {
-    coHostStatus,           // 当前连麦状态
-    connected,              // 已连接的连麦主播列表
-    invitees,               // 被邀请连麦的主播列表
-    applicant,              // 当前申请连麦的主播信息
-    // candidates,          // 可邀请连麦的候选主播列表： TODO：待支持
+    coHostStatus,           // 当前连线状态
+    connected,              // 已连接的连线主播列表
+    invitees,               // 被邀请连线的主播列表
+    applicant,              // 当前申请连线的主播信息
+    // candidates,          // 可邀请连线的候选主播列表： TODO：待支持
 
-    requestHostConnection,  // 请求连麦
-    cancelHostConnection,   // 取消连麦请求
-    acceptHostConnection,   // 接受连麦请求
-    rejectHostConnection,   // 拒绝连麦请求
-    exitHostConnection,     // 退出连麦
+    requestHostConnection,  // 请求连线
+    cancelHostConnection,   // 取消连线请求
+    acceptHostConnection,   // 接受连线请求
+    rejectHostConnection,   // 拒绝连线请求
+    exitHostConnection,     // 退出连线
 
-    addCoHostListener,      // 添加连麦事件监听
-    removeCoHostListener,   // 移除连麦事件监听
+    addCoHostListener,      // 添加连线事件监听
+    removeCoHostListener,   // 移除连线事件监听
   };
 }
 

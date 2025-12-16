@@ -1,6 +1,11 @@
 /**
- * 直播间观众状态管理
  * @module LiveAudienceState
+ * @module_description
+ * 直播间观众状态管理模块
+ * 核心功能：管理直播间观众列表，提供观众权限控制、管理员设置等直播间秩序维护功能。
+ * 技术特点：支持实时观众列表更新、权限分级管理、批量操作等高级功能，确保直播间秩序和用户体验。
+ * 业务价值：为直播平台提供完整的观众管理解决方案，支持大规模观众场景下的秩序维护。
+ * 应用场景：观众管理、权限控制、直播间秩序维护、观众互动管理等核心业务场景。
  */
 import { ref } from "vue";
 import {
@@ -14,6 +19,23 @@ import { callUTSFunction, safeJsonParse } from "../utils/utsUtils";
  * 直播间观众列表
  * @type {Ref<LiveUserInfoParam[]>}
  * @memberof module:LiveAudienceState
+ * @example
+ * import { useLiveAudienceState } from '@/uni_modules/tuikit-atomic-x/state/LiveAudienceState';
+ * const { audienceList } = useLiveAudienceState('your_live_id');
+ * 
+ * // 监听观众列表变化
+ * watch(audienceList, (newAudienceList) => {
+ *   if (newAudienceList && newAudienceList.length > 0) {
+ *     console.log('观众列表更新:', newAudienceList);
+ *     newAudienceList.forEach(audience => {
+ *       console.log('观众ID:', audience.userID);
+ *     });
+ *   }
+ * });
+ * 
+ * // 获取当前观众列表
+ * const audiences = audienceList.value;
+ * console.log('当前观众数:', audiences.length);
  */
 const audienceList = ref<LiveUserInfoParam[]>([]);
 
@@ -21,6 +43,22 @@ const audienceList = ref<LiveUserInfoParam[]>([]);
  * 直播间观众数量
  * @type {Ref<number>}
  * @memberof module:LiveAudienceState
+ * @example
+ * import { useLiveAudienceState } from '@/uni_modules/tuikit-atomic-x/state/LiveAudienceState';
+ * const { audienceCount } = useLiveAudienceState('your_live_id');
+ * 
+ * // 监听观众数量变化
+ * watch(audienceCount, (newCount) => {
+ *   console.log('观众数量更新:', newCount);
+ *   // 当观众数量达到某个阈值时可以进行特殊处理
+ *   if (newCount >= 100) {
+ *     console.log('直播热度很高，观众数超过100');
+ *   }
+ * });
+ * 
+ * // 获取当前观众数量
+ * const count = audienceCount.value;
+ * console.log('当前观众数量:', count);
  */
 const audienceCount = ref<number>(0);
 
@@ -104,8 +142,10 @@ function disableSendMessage(params : DisableSendMessageOptions) : void {
  * @example
  * import { useLiveAudienceState } from '@/uni_modules/tuikit-atomic-x/state/LiveAudienceState';
  * const { addAudienceListener } = useLiveAudienceState("your_live_id");
- * addAudienceListener('your_live_id', 'onAudienceJoined', (params) => {
- *   console.log('result:', params);
+ * addAudienceListener('your_live_id', 'onAudienceJoined', {
+ * 	callback: (params) => {
+ * 		console.log('result:', params);
+ * 	}
  * });
  */
 function addAudienceListener(liveID : string, eventName : string, listener : ILiveListener) : void {

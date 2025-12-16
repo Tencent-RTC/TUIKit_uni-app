@@ -46,7 +46,7 @@ public class LoginStoreObserver {
             "role": userProfile.role,
             "level": userProfile.level,
             "allowType": convertAllowType(type: userProfile.allowType),
-            "customInfo": userProfile.customInfo,
+            // "customInfo": userProfile.customInfo, //TODO:暂不支持
         ]
     }
     private func convertGender(gender: Gender?) -> String {

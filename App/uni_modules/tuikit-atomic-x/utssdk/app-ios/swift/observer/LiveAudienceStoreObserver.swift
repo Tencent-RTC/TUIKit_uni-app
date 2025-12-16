@@ -50,6 +50,13 @@ public class LiveAudienceStoreObserver {
                     if let json = JsonUtil.toJson(dict) {
                         callback("onAudienceJoined", json)
                     }
+                case .onAudienceMessageDisabled(let audience, let isDisable):
+                    var dict: [String: Any] = [:]
+                    dict["isDisable"] = isDisable
+                    dict["audience"] = TypeConvert.convertLiveUserInfoToDic(liveUserInfo: audience)
+                    if let json = JsonUtil.toJson(dict) {
+                        callback("onAudienceMessageDisabled", json)
+                    }
                 case .onAudienceLeft(let audience):
                     let dict: [String: Any] = [
                         "audience" : TypeConvert.convertLiveUserInfoToDic(liveUserInfo: audience)

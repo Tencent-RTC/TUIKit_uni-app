@@ -1,179 +1,216 @@
 import {
-    UserProfileParam,
-    LiveInfoParam,
-    TakeSeatModeType,
-    LiveUserInfoParam,
-    MoveSeatPolicyType,
-    VideoQualityType,
-    BarrageParam,
-    MessageType,
-    AudioReverbTypeParam,
-    AudioChangerTypeParam,
+  UserProfileParam, LiveInfoParam, TakeSeatModeType, LiveUserInfoParam, MoveSeatPolicyType,
+  VideoQualityType, BarrageParam, MessageType, AudioReverbTypeParam, AudioChangerTypeParam,
+  LiveModifyFlag, AppendLocalTipOptions,
 } from '../../interface.uts';
 
-import {
-    UserProfile, AllowType, Gender,
-    LiveInfo, LiveUserInfo, TakeSeatMode, MoveSeatPolicy, VideoQuality,
-    Barrage, BarrageType, AudioChangerType, AudioReverbType
-} from 'io.trtc.tuikit.atomicxcore.api';
-
+import { UserProfile, AllowType, Gender, } from 'io.trtc.tuikit.atomicxcore.api.login';
+import { LiveInfo, LiveUserInfo, TakeSeatMode, MoveSeatPolicy, } from 'io.trtc.tuikit.atomicxcore.api.live';
+import { VideoQuality, AudioChangerType, AudioReverbType, } from 'io.trtc.tuikit.atomicxcore.api.device';
+import { Barrage, BarrageType, } from 'io.trtc.tuikit.atomicxcore.api.barrage';
 export class ParamsCovert {
-    public static convertUserProfile(userProfile : UserProfileParam) : UserProfile {
-        const nativeUserProfile = new UserProfile()
-        nativeUserProfile.userID = userProfile.userID ?? ""
-        nativeUserProfile.nickname = userProfile.nickname
-        nativeUserProfile.avatarURL = userProfile.avatarURL
-        nativeUserProfile.selfSignature = userProfile.selfSignature
-        nativeUserProfile.gender = Gender.parse(userProfile.gender?.toInt() ?? 0)
-        nativeUserProfile.role = userProfile.role?.toInt()
-        nativeUserProfile.level = userProfile.level?.toInt()
-        nativeUserProfile.birthday = userProfile.birthday?.toLong()
-        nativeUserProfile.allowType = AllowType.parse(userProfile.allowType?.toInt() ?? 0)
-        //nativeUserProfile.customInfo = userProfile.customInfo //TODO: ByteArray转换
-        return nativeUserProfile
+  public static convertUserProfile(userProfile : UserProfileParam) : UserProfile {
+    const nativeUserProfile = new UserProfile()
+    nativeUserProfile.userID = userProfile.userID ?? ""
+    nativeUserProfile.nickname = userProfile.nickname
+    nativeUserProfile.avatarURL = userProfile.avatarURL
+    nativeUserProfile.selfSignature = userProfile.selfSignature
+    nativeUserProfile.gender = Gender.parse(userProfile.gender?.toInt() ?? 0)
+    nativeUserProfile.role = userProfile.role?.toInt()
+    nativeUserProfile.level = userProfile.level?.toInt()
+    nativeUserProfile.birthday = userProfile.birthday?.toLong()
+    nativeUserProfile.allowType = AllowType.parse(userProfile.allowType?.toInt() ?? 0)
+    //nativeUserProfile.customInfo = userProfile.customInfo //TODO: ByteArray转换
+    return nativeUserProfile
+  }
+
+  public static convertLiveInfo(liveInfo : LiveInfoParam) : LiveInfo {
+    const nativeLiveInfo = new LiveInfo()
+    nativeLiveInfo.liveID = liveInfo.liveID
+    nativeLiveInfo.liveName = liveInfo.liveName ?? ""
+    nativeLiveInfo.notice = liveInfo.notice ?? ""
+    nativeLiveInfo.isMessageDisable = liveInfo.isMessageDisable ?? false
+    nativeLiveInfo.isPublicVisible = liveInfo.isPublicVisible ?? true
+    nativeLiveInfo.isSeatEnabled = liveInfo.isSeatEnabled ?? true
+    nativeLiveInfo.keepOwnerOnSeat = liveInfo.keepOwnerOnSeat ?? false
+    nativeLiveInfo.maxSeatCount = liveInfo.maxSeatCount?.toInt() ?? 0
+    nativeLiveInfo.seatMode = ParamsCovert.convertTakeSeatMode(liveInfo.seatMode)
+    nativeLiveInfo.seatLayoutTemplateID = liveInfo.seatLayoutTemplateID?.toInt() ?? 600
+    nativeLiveInfo.coverURL = liveInfo.coverURL ?? ""
+    nativeLiveInfo.backgroundURL = liveInfo.backgroundURL ?? ""
+    let list = mutableListOf<Int>()
+    liveInfo.categoryList?.forEach((info : number) => {
+      list.add(info.toInt())
+    })
+    nativeLiveInfo.categoryList = list;
+    nativeLiveInfo.activityStatus = liveInfo.activityStatus?.toInt() ?? 0
+    nativeLiveInfo.totalViewerCount = liveInfo.totalViewerCount?.toInt() ?? 0
+    nativeLiveInfo.isGiftEnabled = liveInfo.isGiftEnabled ?? true
+    nativeLiveInfo.metaData = liveInfo.metaData ?? Map<string, string>()
+    return nativeLiveInfo
+  }
+
+  private static convertTakeSeatMode(seatMode ?: TakeSeatModeType) : TakeSeatMode {
+    if (seatMode == 'FREE') {
+      return TakeSeatMode.FREE
+    }
+    return TakeSeatMode.APPLY
+  }
+
+  private static convertModifyFlag(flag : LiveModifyFlag) : LiveInfo.ModifyFlag {
+    switch (flag) {
+      case 'LIVE_NAME':
+        return LiveInfo.ModifyFlag.LIVE_NAME
+      case 'NOTICE':
+        return LiveInfo.ModifyFlag.NOTICE
+      case 'IS_MESSAGE_DISABLE':
+        return LiveInfo.ModifyFlag.IS_MESSAGE_DISABLE
+      case 'IS_PUBLIC_VISIBLE':
+        return LiveInfo.ModifyFlag.IS_PUBLIC_VISIBLE
+      case 'SEAT_MODE':
+        return LiveInfo.ModifyFlag.SEAT_MODE
+      case 'COVER_URL':
+        return LiveInfo.ModifyFlag.COVER_URL
+      case 'BACKGROUND_URL':
+        return LiveInfo.ModifyFlag.BACKGROUND_URL
+      case 'CATEGORY_LIST':
+        return LiveInfo.ModifyFlag.CATEGORY_LIST
+      case 'ACTIVITY_STATUS':
+        return LiveInfo.ModifyFlag.ACTIVITY_STATUS
+      case 'SEAT_LAYOUT_TEMPLATE_ID':
+        return LiveInfo.ModifyFlag.SEAT_LAYOUT_TEMPLATE_ID
+      default:
+        return LiveInfo.ModifyFlag.NONE
+    }
+  }
+
+  public static convertModifyFlagList(modifyFlagList ?: LiveModifyFlag[]) : List<LiveInfo.ModifyFlag> {
+    let arrays = Array<LiveInfo.ModifyFlag>()
+
+    if (modifyFlagList != null && modifyFlagList.length > 0) {
+      modifyFlagList.forEach((flag : LiveModifyFlag) => {
+        const result = ParamsCovert.convertModifyFlag(flag)
+        arrays.push(result)
+      })
     }
 
-    public static convertLiveInfo(liveInfo : LiveInfoParam) : LiveInfo {
-        const nativeLiveInfo = new LiveInfo()
-        nativeLiveInfo.liveID = liveInfo.liveID
-        nativeLiveInfo.liveName = liveInfo.liveName ?? ""
-        nativeLiveInfo.notice = liveInfo.notice ?? ""
-        nativeLiveInfo.isMessageDisable = liveInfo.isMessageDisable ?? false
-        nativeLiveInfo.isPublicVisible = liveInfo.isPublicVisible ?? true
-        nativeLiveInfo.isSeatEnabled = liveInfo.isSeatEnabled ?? true
-        nativeLiveInfo.keepOwnerOnSeat = liveInfo.keepOwnerOnSeat ?? false
-        nativeLiveInfo.maxSeatCount = liveInfo.maxSeatCount?.toInt() ?? 0
-        nativeLiveInfo.seatMode = ParamsCovert.convertTakeSeatMode(liveInfo.seatMode)
-        nativeLiveInfo.seatLayoutTemplateID = liveInfo.seatLayoutTemplateID?.toInt() ?? 600
-        nativeLiveInfo.coverURL = liveInfo.coverURL ?? ""
-        nativeLiveInfo.backgroundURL = liveInfo.backgroundURL ?? ""
-        let list = mutableListOf<Int>()
-        liveInfo.categoryList?.forEach((info : number) => {
-            list.add(info.toInt())
-        })
-        nativeLiveInfo.categoryList = list;
-        nativeLiveInfo.activityStatus = liveInfo.activityStatus?.toInt() ?? 0
-        nativeLiveInfo.totalViewerCount = liveInfo.totalViewerCount?.toInt() ?? 0
-        nativeLiveInfo.isGiftEnabled = liveInfo.isGiftEnabled ?? true
-        nativeLiveInfo.metaData = liveInfo.metaData ?? Map<string, string>()
-        return nativeLiveInfo
-    }
+    return arrays
+  }
 
-    private static convertTakeSeatMode(seatMode ?: TakeSeatModeType) : TakeSeatMode {
-        if (seatMode == 'FREE') {
-            return TakeSeatMode.FREE
-        }
-        return TakeSeatMode.APPLY
+  public static convertMoveSeatPolicy(policyType ?: MoveSeatPolicyType) : MoveSeatPolicy {
+    switch (policyType) {
+      case 'FORCE_REPLACE':
+        return MoveSeatPolicy.FORCE_REPLACE;
+      case 'SWAP_POSITION':
+        return MoveSeatPolicy.SWAP_POSITION;
+      default:
+        return MoveSeatPolicy.ABORT_WHEN_OCCUPIED;
     }
+  }
 
-    public static convertModifyFlagList(modifyFlagList : number[]) : List<LiveInfo.ModifyFlag> {
-        let arrays = Array<LiveInfo.ModifyFlag>()
-        modifyFlagList?.forEach((flag : number) => {
-            arrays.add(LiveInfo.ModifyFlag.values()[flag.toInt()])
-        })
-        return arrays
+  public static covertVideoQuality(quality : VideoQualityType) : VideoQuality {
+    switch (quality) {
+      case 'VIDEOQUALITY_540P':
+        return VideoQuality.QUALITY_540P;     // 标清540P
+      case 'VIDEOQUALITY_720P':
+        return VideoQuality.QUALITY_720P;     // 高清720P
+      case 'VIDEOQUALITY_1080P':
+        return VideoQuality.QUALITY_1080P;    // 超清1080P
+      default:
+        return VideoQuality.QUALITY_360P;     // value = 1 低清360P
     }
+  }
 
-    public static convertMoveSeatPolicy(policyType ?: MoveSeatPolicyType) : MoveSeatPolicy {
-        switch (policyType) {
-            case 'FORCE_REPLACE':
-                return MoveSeatPolicy.FORCE_REPLACE;
-            case 'SWAP_POSITION':
-                return MoveSeatPolicy.SWAP_POSITION;
-            default:
-                return MoveSeatPolicy.ABORT_WHEN_OCCUPIED;
-        }
-    }
+  public static convertBarrage(barrageParam : AppendLocalTipOptions) : Barrage {
+    const nativeBarrage = new Barrage()
 
-    public static covertVideoQuality(quality : VideoQualityType) : VideoQuality {
-        switch (quality) {
-            case 'VIDEOQUALITY_540P':
-                return VideoQuality.QUALITY_540P;     // 标清540P
-            case 'VIDEOQUALITY_720P':
-                return VideoQuality.QUALITY_720P;     // 高清720P
-            case 'VIDEOQUALITY_1080P':
-                return VideoQuality.QUALITY_1080P;    // 超清1080P
-            default:
-                return VideoQuality.QUALITY_360P;     // value = 1 低清360P
-        }
-    }
+    nativeBarrage.liveID = barrageParam.liveID
+    nativeBarrage.sender = ParamsCovert.convertLiveUserInfo(barrageParam.sender)
+    nativeBarrage.sequence = barrageParam.sequence?.toLong() ?? 0
+    nativeBarrage.timestampInSecond = barrageParam.timestampInSecond?.toLong() ?? 0
+    nativeBarrage.messageType = ParamsCovert.convertMessageType(barrageParam.messageType)
+    nativeBarrage.textContent = barrageParam.textContent ?? ""
+    nativeBarrage.extensionInfo = barrageParam.extensionInfo ?? Map<string, string>()
+    nativeBarrage.businessID = barrageParam.businessID ?? ""
+    nativeBarrage.data = barrageParam.data ?? ""
+    return nativeBarrage
+  }
 
-    public static convertBarrage(barrageParam : BarrageParam) : Barrage {
-        const nativeBarrage = new Barrage()
-        nativeBarrage.liveID = barrageParam.liveID
-        nativeBarrage.sender = ParamsCovert.convertLiveUserInfo(barrageParam.sender)
-        nativeBarrage.sequence = barrageParam.sequence?.toLong() ?? 0
-        nativeBarrage.timestampInSecond = barrageParam.timestampInSecond?.toLong() ?? 0
-        nativeBarrage.messageType = ParamsCovert.convertMessageType(barrageParam.messageType)
-        nativeBarrage.textContent = barrageParam.textContent ?? ""
-        nativeBarrage.extensionInfo = barrageParam.extensionInfo ?? Map<string, string>()
-        nativeBarrage.businessID = barrageParam.businessID ?? ""
-        nativeBarrage.data = barrageParam.data ?? ""
-        return nativeBarrage
-    }
+  private static convertLiveUserInfo(info : LiveUserInfoParam) : LiveUserInfo {
+    let liveUseInfo = new LiveUserInfo()
+    liveUseInfo.userID = info?.userID ?? ""
+    liveUseInfo.userName = info?.userName ?? ""
+    liveUseInfo.avatarURL = info?.avatarURL ?? ""
+    return liveUseInfo
+  }
 
-    private static convertLiveUserInfo(info ?: LiveUserInfoParam) : LiveUserInfo {
-        let liveUseInfo = new LiveUserInfo()
-        liveUseInfo.userID = info?.userID ?? ""
-        liveUseInfo.userName = info?.userName ?? ""
-        liveUseInfo.avatarURL = info?.avatarURL ?? ""
-        return liveUseInfo
+  private static convertMessageType(messageType ?: MessageType) : BarrageType {
+    if (messageType == 'CUSTOM') {
+      return BarrageType.CUSTOM
     }
+    return BarrageType.TEXT
+  }
 
-    private static convertMessageType(messageType ?: MessageType) : BarrageType {
-        if (messageType == 'CUSTOM') {
-            return BarrageType.CUSTOM
-        }
-        return BarrageType.TEXT
+  public static convertAudioChangerType(changerType : AudioChangerTypeParam) : AudioChangerType {
+    switch (changerType) {
+      case 'CHILD':
+        return AudioChangerType.CHILD;
+      case 'LITTLE_GIRL':
+        return AudioChangerType.LITTLE_GIRL;
+      case 'MAN':
+        return AudioChangerType.MAN;
+      case 'HEAVY_METAL':
+        return AudioChangerType.HEAVY_METAL;
+      case 'COLD':
+        return AudioChangerType.COLD;
+      case 'FOREIGNER':
+        return AudioChangerType.FOREIGNER;
+      case 'TRAPPED_BEAST':
+        return AudioChangerType.TRAPPED_BEAST;
+      case 'FATSO':
+        return AudioChangerType.FATSO;
+      case 'STRONG_CURRENT':
+        return AudioChangerType.STRONG_CURRENT;
+      case 'HEAVY_MACHINERY':
+        return AudioChangerType.HEAVY_MACHINERY;
+      case 'ETHEREAL':
+        return AudioChangerType.ETHEREAL;
+      default:
+        return AudioChangerType.NONE;
     }
+  }
 
-    public static convertAudioChangerType(changerType : AudioChangerTypeParam) : AudioChangerType {
-        switch (changerType) {
-            case 'CHILD':
-                return AudioChangerType.CHILD;
-            case 'LITTLE_GIRL':
-                return AudioChangerType.LITTLE_GIRL;
-            case 'MAN':
-                return AudioChangerType.MAN;
-            case 'HEAVY_METAL':
-                return AudioChangerType.HEAVY_METAL;
-            case 'COLD':
-                return AudioChangerType.COLD;
-            case 'FOREIGNER':
-                return AudioChangerType.FOREIGNER;
-            case 'TRAPPED_BEAST':
-                return AudioChangerType.TRAPPED_BEAST;
-            case 'FATSO':
-                return AudioChangerType.FATSO;
-            case 'STRONG_CURRENT':
-                return AudioChangerType.STRONG_CURRENT;
-            case 'HEAVY_MACHINERY':
-                return AudioChangerType.HEAVY_MACHINERY;
-            case 'ETHEREAL':
-                return AudioChangerType.ETHEREAL;
-            default:
-                return AudioChangerType.NONE;
-        }
+  public static convertAudioReverbType(reverbType : AudioReverbTypeParam) : AudioReverbType {
+    switch (reverbType) {
+      case 'KTV':
+        return AudioReverbType.KTV;
+      case 'SMALL_ROOM':
+        return AudioReverbType.SMALL_ROOM;
+      case 'AUDITORIUM':
+        return AudioReverbType.AUDITORIUM;
+      case 'DEEP':
+        return AudioReverbType.DEEP;
+      case 'LOUD':
+        return AudioReverbType.LOUD;
+      case 'METALLIC':
+        return AudioReverbType.METALLIC;
+      case 'MAGNETIC':
+        return AudioReverbType.MAGNETIC;
+      default:
+        return AudioReverbType.NONE;
     }
-
-    public static convertAudioReverbType(reverbType : AudioReverbTypeParam) : AudioReverbType {
-        switch (reverbType) {
-            case 'KTV':
-                return AudioReverbType.KTV;
-            case 'SMALL_ROOM':
-                return AudioReverbType.SMALL_ROOM;
-            case 'AUDITORIUM':
-                return AudioReverbType.AUDITORIUM;
-            case 'DEEP':
-                return AudioReverbType.DEEP;
-            case 'LOUD':
-                return AudioReverbType.LOUD;
-            case 'METALLIC':
-                return AudioReverbType.METALLIC;
-            case 'MAGNETIC':
-                return AudioReverbType.MAGNETIC;
-            default:
-                return AudioReverbType.NONE;
-        }
-    }
+  }
+  
+  public static convertJsonToUTSJSONObject(jsonData ?: string): UTSJSONObject {
+      let jsonObject = new UTSJSONObject();
+      if (jsonData == null) {
+          return jsonObject;
+      }
+      try {
+          jsonObject = JSON.parse(jsonData) as UTSJSONObject;
+      } catch (error) {
+          console.error('JSON parse failed:', error);
+      }
+      return jsonObject
+  }
 }

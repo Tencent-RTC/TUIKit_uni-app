@@ -1,10 +1,10 @@
 package uts.sdk.modules.atomicx.observer
 
 import com.google.gson.Gson
-import io.trtc.tuikit.atomicxcore.api.CoGuestStore
-import io.trtc.tuikit.atomicxcore.api.DeviceStatus
-import io.trtc.tuikit.atomicxcore.api.Role
-import io.trtc.tuikit.atomicxcore.api.SeatUserInfo
+import io.trtc.tuikit.atomicxcore.api.live.CoGuestStore
+import io.trtc.tuikit.atomicxcore.api.device.DeviceStatus
+import io.trtc.tuikit.atomicxcore.api.live.Role
+import io.trtc.tuikit.atomicxcore.api.live.SeatUserInfo
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job

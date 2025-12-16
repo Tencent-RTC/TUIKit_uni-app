@@ -1,7 +1,7 @@
 package uts.sdk.modules.atomicx.observer
 
 import com.google.gson.Gson
-import io.trtc.tuikit.atomicxcore.api.LikeStore
+import io.trtc.tuikit.atomicxcore.api.live.LikeStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job

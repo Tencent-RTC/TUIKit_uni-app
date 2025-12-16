@@ -1,6 +1,11 @@
 /**
- * 连麦嘉宾状态管理
  * @module CoGuestState
+ * @module_description
+ * 直播连麦管理相关接口
+ * 核心功能：处理观众与主播之间的连麦互动，管理连麦申请、邀请、接受、拒绝等完整的连麦流程。
+ * 技术特点：基于音视频技术，支持连麦状态实时同步、音视频质量自适应、网络状况监控等高级功能。
+ * 业务价值：为直播平台提供观众参与互动的核心能力，增强用户粘性和直播趣味性。
+ * 应用场景：观众连麦、互动问答、在线K歌、游戏直播等需要观众参与的互动场景。
  */
 import { ref } from "vue";
 import {
@@ -15,6 +20,24 @@ import { callUTSFunction, safeJsonParse } from "../utils/utsUtils";
  * 已连接的连麦嘉宾列表
  * @type {Ref<SeatUserInfoParam[]>}
  * @memberof module:CoGuestState
+ * @example
+ * import { useCoGuestState } from '@/uni_modules/tuikit-atomic-x/state/CoGuestState';
+ * const { connected } = useCoGuestState('your_live_id');
+ * 
+ * // 监听已连接的连麦嘉宾列表变化
+ * watch(connected, (newConnected) => {
+ *   if (newConnected && newConnected.length > 0) {
+ *     console.log('连麦嘉宾列表更新:', newConnected);
+ *     newConnected.forEach(guest => {
+ *       console.log('嘉宾用户ID:', guest.userID);
+ *       console.log('嘉宾昵称:', guest.nickname);
+ *     });
+ *   }
+ * });
+ * 
+ * // 获取当前连麦嘉宾列表
+ * const guests = connected.value;
+ * console.log('当前连麦嘉宾数量:', guests.length);
  */
 const connected = ref<SeatUserInfoParam[]>([]);
 
@@ -22,6 +45,24 @@ const connected = ref<SeatUserInfoParam[]>([]);
  * 被邀请上麦的用户列表
  * @type {Ref<LiveUserInfoParam[]>}
  * @memberof module:CoGuestState
+ * @example
+ * import { useCoGuestState } from '@/uni_modules/tuikit-atomic-x/state/CoGuestState';
+ * const { invitees } = useCoGuestState('your_live_id');
+ * 
+ * // 监听被邀请用户列表变化
+ * watch(invitees, (newInvitees) => {
+ *   if (newInvitees && newInvitees.length > 0) {
+ *     console.log('被邀请用户列表更新:', newInvitees);
+ *     newInvitees.forEach(user => {
+ *       console.log('被邀请用户ID:', user.userID);
+ *       console.log('被邀请用户昵称:', user.nickname);
+ *     });
+ *   }
+ * });
+ * 
+ * // 获取当前被邀请用户列表
+ * const invitedUsers = invitees.value;
+ * console.log('当前被邀请用户数量:', invitedUsers.length);
  */
 const invitees = ref<LiveUserInfoParam[]>([]);
 
@@ -29,6 +70,24 @@ const invitees = ref<LiveUserInfoParam[]>([]);
  * 申请上麦的用户列表
  * @type {Ref<LiveUserInfoParam[]>}
  * @memberof module:CoGuestState
+ * @example
+ * import { useCoGuestState } from '@/uni_modules/tuikit-atomic-x/state/CoGuestState';
+ * const { applicants } = useCoGuestState('your_live_id');
+ * 
+ * // 监听申请上麦用户列表变化
+ * watch(applicants, (newApplicants) => {
+ *   if (newApplicants && newApplicants.length > 0) {
+ *     console.log('申请上麦用户列表更新:', newApplicants);
+ *     newApplicants.forEach(user => {
+ *       console.log('申请用户ID:', user.userID);
+ *       console.log('申请用户昵称:', user.nickname);
+ *     });
+ *   }
+ * });
+ * 
+ * // 获取当前申请上麦用户列表
+ * const applyingUsers = applicants.value;
+ * console.log('当前申请用户数量:', applyingUsers.length);
  */
 const applicants = ref<LiveUserInfoParam[]>([]);
 
@@ -36,6 +95,24 @@ const applicants = ref<LiveUserInfoParam[]>([]);
  * 可邀请上麦的候选用户列表
  * @type {Ref<LiveUserInfoParam[]>}
  * @memberof module:CoGuestState
+ * @example
+ * import { useCoGuestState } from '@/uni_modules/tuikit-atomic-x/state/CoGuestState';
+ * const { candidates } = useCoGuestState('your_live_id');
+ * 
+ * // 监听候选用户列表变化
+ * watch(candidates, (newCandidates) => {
+ *   if (newCandidates && newCandidates.length > 0) {
+ *     console.log('候选用户列表更新:', newCandidates);
+ *     newCandidates.forEach(user => {
+ *       console.log('候选用户ID:', user.userID);
+ *       console.log('候选用户昵称:', user.nickname);
+ *     });
+ *   }
+ * });
+ * 
+ * // 获取当前候选用户列表
+ * const candidateUsers = candidates.value;
+ * console.log('当前候选用户数量:', candidateUsers.length);
  */
 const candidates = ref<LiveUserInfoParam[]>([]);
 
@@ -47,7 +124,7 @@ const candidates = ref<LiveUserInfoParam[]>([]);
  * @example
  * import { useCoGuestState } from '@/uni_modules/tuikit-atomic-x/state/CoGuestState';
  * const { applyForSeat } = useCoGuestState("your_live_id");
- * applyForSeat({ seatIndex: 2, timeout: 30 , extension: 'extra info'});
+ * applyForSeat({ seatIndex: 2, timeout: 10 , extension: 'extra info'});
  */
 function applyForSeat(params: ApplyForSeatOptions): void {
   callUTSFunction("applyForSeat", params);
@@ -103,7 +180,7 @@ function rejectApplication(params: RejectApplicationOptions): void {
  * @example
  * import { useCoGuestState } from '@/uni_modules/tuikit-atomic-x/state/CoGuestState';
  * const { inviteToSeat } = useCoGuestState("your_live_id");
- * inviteToSeat({ userID: 'user123', seatIndex: 2, timeout: 30 , extension: 'extra info'});
+ * inviteToSeat({ userID: 'user123', seatIndex: 2, timeout: 10 , extension: 'extra info'});
  */
 function inviteToSeat(params: InviteToSeatOptions): void {
   callUTSFunction("inviteToSeat", params);
@@ -175,8 +252,10 @@ function disconnect(params: DisconnectOptions): void {
  * @example
  * import { useCoGuestState } from '@/uni_modules/tuikit-atomic-x/state/CoGuestState';
  * const { addCoGuestGuestListener } = useCoGuestState("your_live_id");
- * addCoGuestGuestListener('your_live_id', 'onHostInvitationReceived', (params) => {
- *   console.log('result:', params);
+ * addCoGuestGuestListener('your_live_id', 'onHostInvitationReceived', {
+ * 	callback: (params) => {
+ * 		console.log('result:', params);
+ * 	}
  * });
  */
 function addCoGuestGuestListener(liveID: string, eventName: string, listener: ILiveListener): void {
@@ -209,8 +288,10 @@ function removeCoGuestGuestListener(liveID: string, eventName: string, listener:
  * @example
  * import { useCoGuestState } from '@/uni_modules/tuikit-atomic-x/state/CoGuestState';
  * const { addCoGuestHostListener } = useCoGuestState("your_live_id");
- * addCoGuestHostListener('your_live_id', 'onGuestApplicationReceived', (params) => {
- *   console.log('result:', params);
+ * addCoGuestHostListener('your_live_id', 'onGuestApplicationReceived', {
+ * 	callback: (params) => {
+ * 		console.log('result:', params);
+ * 	}
  * });
  */
 function addCoGuestHostListener(liveID: string, eventName: string, listener: ILiveListener): void {

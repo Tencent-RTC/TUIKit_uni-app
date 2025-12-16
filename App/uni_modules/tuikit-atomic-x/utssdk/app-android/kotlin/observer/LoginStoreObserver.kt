@@ -2,8 +2,8 @@ package uts.sdk.modules.atomicx.observer
 
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
-import io.trtc.tuikit.atomicxcore.api.LoginStatus
-import io.trtc.tuikit.atomicxcore.api.LoginStore
+import io.trtc.tuikit.atomicxcore.api.login.LoginStatus
+import io.trtc.tuikit.atomicxcore.api.login.LoginStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job

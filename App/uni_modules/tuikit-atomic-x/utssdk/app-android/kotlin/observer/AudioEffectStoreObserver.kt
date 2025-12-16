@@ -1,7 +1,7 @@
 package uts.sdk.modules.atomicx.observer
 
 import com.google.gson.Gson
-import io.trtc.tuikit.atomicxcore.api.AudioEffectStore
+import io.trtc.tuikit.atomicxcore.api.device.AudioEffectStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job

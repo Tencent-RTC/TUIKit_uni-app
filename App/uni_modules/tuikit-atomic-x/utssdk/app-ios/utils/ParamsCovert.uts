@@ -1,193 +1,237 @@
 import {
-    UserProfileParam, LiveInfoParam, AudioChangerTypeParam, AudioReverbTypeParam,
-    TakeSeatModeType, MoveSeatPolicyType, BarrageParam, VideoQualityType, LiveUserInfoParam, MessageType, ModifyFlagType, UserAllowType, GenderType,
+  UserProfileParam, LiveInfoParam, AudioChangerTypeParam, AudioReverbTypeParam,
+  TakeSeatModeType, MoveSeatPolicyType, BarrageParam, VideoQualityType, LiveUserInfoParam, MessageType,
+  UserAllowType, GenderType, LiveModifyFlag, AppendLocalTipOptions,
 } from '../../interface.uts';
 
 import {
-    UserProfile, LiveInfo, TakeSeatMode, MoveSeatPolicy, Barrage, LiveUserInfo, BarrageType,
-    AudioChangerType, AudioReverbType, VideoQuality, AllowType, Gender
+  UserProfile, LiveInfo, TakeSeatMode, MoveSeatPolicy, Barrage, LiveUserInfo, BarrageType,
+  AudioChangerType, AudioReverbType, VideoQuality, AllowType, Gender
 } from 'AtomicXCore';
 
 
 export class ParamsCovert {
-    public static convertUserProfile(userProfile : UserProfileParam) : UserProfile {
-        // TODO: iOS 底层没有对齐，创建 UserProfile 还需要传参，待底层对齐
-        let userID = userProfile.userID ?? ""
-        const nativeUserProfile = new UserProfile(userID = userID)
-        nativeUserProfile.userID = userProfile.userID ?? ""
-        nativeUserProfile.nickname = userProfile.nickname ?? ""
-        nativeUserProfile.avatarURL = userProfile.avatarURL ?? ""
-        nativeUserProfile.selfSignature = userProfile.selfSignature ?? ""
-        nativeUserProfile.gender = ParamsCovert.convertGender(userProfile.gender)
-        nativeUserProfile.role = userProfile.role?.toUInt32()
-        nativeUserProfile.level = userProfile.level?.toUInt32()
-        nativeUserProfile.birthday = userProfile.birthday?.toUInt32()
-        nativeUserProfile.allowType = ParamsCovert.convertAllowType(userProfile.allowType)
-        //nativeUserProfile.customInfo = userProfile.customInfo //TODO: ByteArray转换
-        return nativeUserProfile
+  public static convertUserProfile(userProfile : UserProfileParam) : UserProfile {
+    // TODO: iOS 底层没有对齐，创建 UserProfile 还需要传参，待底层对齐
+    let userID = userProfile.userID ?? ""
+    const nativeUserProfile = new UserProfile(userID = userID)
+    nativeUserProfile.userID = userProfile.userID ?? ""
+    nativeUserProfile.nickname = userProfile.nickname ?? ""
+    nativeUserProfile.avatarURL = userProfile.avatarURL ?? ""
+    nativeUserProfile.selfSignature = userProfile.selfSignature ?? ""
+    nativeUserProfile.gender = ParamsCovert.convertGender(userProfile.gender)
+    nativeUserProfile.role = userProfile.role?.toUInt32()
+    nativeUserProfile.level = userProfile.level?.toUInt32()
+    nativeUserProfile.birthday = userProfile.birthday?.toUInt32()
+    nativeUserProfile.allowType = ParamsCovert.convertAllowType(userProfile.allowType)
+    //nativeUserProfile.customInfo = userProfile.customInfo //TODO: ByteArray转换
+    return nativeUserProfile
+  }
+
+  public static convertAllowType(allowType ?: UserAllowType) : AllowType {
+    switch (allowType) {
+      case 'NEED_CONFIRM':
+        return AllowType.needConfirm;
+      case 'DENY_ANY':
+        return AllowType.denyAny;
+      default:
+        return AllowType.allowAny;
     }
-    
-    public static convertAllowType(allowType ?: UserAllowType) : AllowType {
-        switch (allowType) {
-            case 'NEED_CONFIRM':
-                return AllowType.needConfirm;
-            case 'DENY_ANY':
-                return AllowType.denyAny;
-            default:
-                return AllowType.allowAny;
-        }
+  }
+  public static convertGender(gender ?: GenderType) : Gender {
+    switch (gender) {
+      case 'MALE':
+        return Gender.male;
+      case 'FEMALE':
+        return Gender.female;
+      default:
+        return Gender.unknown;
     }
-    public static convertGender(gender ?: GenderType) : Gender {
-        switch (gender) {
-            case 'MALE':
-                return Gender.male;
-            case 'FEMALE':
-                return Gender.female;
-            default:
-                return Gender.unknown;
-        }
+  }
+
+  public static convertLiveInfo(liveInfo : LiveInfoParam) : LiveInfo {
+    let nativeLiveInfo = new LiveInfo();
+    nativeLiveInfo.liveID = liveInfo.liveID;
+    nativeLiveInfo.liveName = liveInfo.liveName ?? "";
+    nativeLiveInfo.notice = liveInfo.notice ?? "";
+    nativeLiveInfo.isMessageDisable = liveInfo.isMessageDisable ?? false;
+    nativeLiveInfo.isPublicVisible = liveInfo.isPublicVisible ?? true;
+    nativeLiveInfo.isSeatEnabled = liveInfo.isSeatEnabled ?? true;
+    nativeLiveInfo.keepOwnerOnSeat = liveInfo.keepOwnerOnSeat ?? false;
+    nativeLiveInfo.maxSeatCount = liveInfo.maxSeatCount?.toInt() ?? 0;
+    nativeLiveInfo.seatMode = ParamsCovert.convertTakeSeatMode(liveInfo.seatMode);
+    nativeLiveInfo.seatLayoutTemplateID = liveInfo.seatLayoutTemplateID?.toUInt() ?? 600;
+    nativeLiveInfo.coverURL = liveInfo.coverURL ?? "";
+    nativeLiveInfo.backgroundURL = liveInfo.backgroundURL ?? "";
+    nativeLiveInfo.categoryList = liveInfo.categoryList ?? [];
+    nativeLiveInfo.activityStatus = liveInfo.activityStatus?.toInt() ?? 0;
+    nativeLiveInfo.totalViewerCount = liveInfo.totalViewerCount?.toInt() ?? 0;
+    nativeLiveInfo.isGiftEnabled = liveInfo.isGiftEnabled ?? true;
+    nativeLiveInfo.metaData = liveInfo.metaData ?? Map<string, string>();
+    return nativeLiveInfo
+  }
+
+  public static convertTakeSeatMode(seatMode ?: TakeSeatModeType) : TakeSeatMode {
+    if (seatMode == 'FREE') {
+      return TakeSeatMode.free
+    }
+    return TakeSeatMode.apply
+  }
+
+  public static convertMoveSeatPolicy(policyType ?: MoveSeatPolicyType) : MoveSeatPolicy {
+    switch (policyType) {
+      case 'FORCE_REPLACE':
+        return MoveSeatPolicy.forceReplace;
+      case 'SWAP_POSITION':
+        return MoveSeatPolicy.swapPosition;
+      default:
+        return MoveSeatPolicy.abortWhenOccupied;
+    }
+  }
+
+  public static covertVideoQuality(quality : VideoQualityType) : VideoQuality {
+    switch (quality) {
+      case 'VIDEOQUALITY_540P':
+        return VideoQuality.quality540P;     // 标清540P
+      case 'VIDEOQUALITY_720P':
+        return VideoQuality.quality720P;     // 高清720P
+      case 'VIDEOQUALITY_1080P':
+        return VideoQuality.quality1080P;    // 超清1080P
+      default:
+        return VideoQuality.quality360P;     // value = 1 低清360P
+    }
+  }
+
+  public static convertBarrage(barrageParam : AppendLocalTipOptions) : Barrage {
+    const nativeBarrage = new Barrage()
+    nativeBarrage.liveID = barrageParam.liveID
+    nativeBarrage.sender = ParamsCovert.convertLiveUserInfo(barrageParam.sender)
+    nativeBarrage.sequence = barrageParam.sequence?.toInt() ?? 0
+    nativeBarrage.timestampInSecond = barrageParam.timestampInSecond?.toDouble() ?? 0
+    nativeBarrage.messageType = ParamsCovert.convertMessageType(barrageParam.messageType)
+    nativeBarrage.textContent = barrageParam.textContent ?? ""
+    nativeBarrage.extensionInfo = barrageParam.extensionInfo ?? Map<string, string>()
+    nativeBarrage.businessID = barrageParam.businessID ?? ""
+    nativeBarrage.data = barrageParam.data ?? ""
+    return nativeBarrage
+  }
+
+  private static convertMessageType(messageType ?: MessageType) : BarrageType {
+    if (messageType == 'CUSTOM') {
+      return BarrageType.custom
+    }
+    return BarrageType.text
+  }
+
+  public static convertLiveUserInfo(userInfo ?: LiveUserInfoParam) : LiveUserInfo {
+    let nativeUserInfo : LiveUserInfo = new LiveUserInfo()
+    nativeUserInfo.userID = userInfo?.userID ?? ""
+    nativeUserInfo.userName = userInfo?.userName ?? ""
+    nativeUserInfo.avatarURL = userInfo?.avatarURL ?? ""
+    return nativeUserInfo
+  }
+
+  public static convertAudioChangerType(changerType : AudioChangerTypeParam) : AudioChangerType {
+    switch (changerType) {
+      case 'CHILD':
+        return AudioChangerType.child;
+      case 'LITTLE_GIRL':
+        return AudioChangerType.littleGirl;
+      case 'MAN':
+        return AudioChangerType.man;
+      case 'HEAVY_METAL':
+        return AudioChangerType.heavyMetal;
+      case 'COLD':
+        return AudioChangerType.cold;
+      case 'FOREIGNER':
+        return AudioChangerType.foreigner;
+      case 'TRAPPED_BEAST':
+        return AudioChangerType.trappedBeast;
+      case 'FATSO':
+        return AudioChangerType.fatso;
+      case 'STRONG_CURRENT':
+        return AudioChangerType.strongCurrent;
+      case 'HEAVY_MACHINERY':
+        return AudioChangerType.heavyMachinery;
+      case 'ETHEREAL':
+        return AudioChangerType.ethereal;
+      default:
+        return AudioChangerType.none;
+    }
+  }
+
+  public static convertAudioReverbType(reverbType : AudioReverbTypeParam) : AudioReverbType {
+    switch (reverbType) {
+      case 'KTV':
+        return AudioReverbType.ktv;
+      case 'SMALL_ROOM':
+        return AudioReverbType.smallRoom;
+      case 'AUDITORIUM':
+        return AudioReverbType.auditorium;
+      case 'DEEP':
+        return AudioReverbType.deep;
+      case 'LOUD':
+        return AudioReverbType.loud;
+      case 'METALLIC':
+        return AudioReverbType.metallic;
+      case 'MAGNETIC':
+        return AudioReverbType.magnetic;
+      default:
+        return AudioReverbType.none;
+    }
+  }
+
+  private static convertModifyFlag(flag : LiveModifyFlag) : LiveInfo.ModifyFlag {
+    switch (flag) {
+      case 'NONE':
+        return LiveInfo.ModifyFlag.none
+      case 'LIVE_NAME':
+        return LiveInfo.ModifyFlag.liveName
+      case 'NOTICE':
+        return LiveInfo.ModifyFlag.notice
+      case 'IS_MESSAGE_DISABLE':
+        return LiveInfo.ModifyFlag.isMessageDisable
+      case 'IS_PUBLIC_VISIBLE':
+        return LiveInfo.ModifyFlag.isPublicVisible
+      case 'SEAT_MODE':
+        return LiveInfo.ModifyFlag.seatMode
+      case 'COVER_URL':
+        return LiveInfo.ModifyFlag.coverURL
+      case 'BACKGROUND_URL':
+        return LiveInfo.ModifyFlag.backgroundURL
+      case 'CATEGORY_LIST':
+        return LiveInfo.ModifyFlag.categoryList
+      case 'ACTIVITY_STATUS':
+        return LiveInfo.ModifyFlag.activityStatus
+      case 'SEAT_LAYOUT_TEMPLATE_ID':
+        return LiveInfo.ModifyFlag.seatLayoutTemplateID
+      default:
+        return LiveInfo.ModifyFlag.none
+    }
+  }
+
+  public static convertModifyFlagList(modifyFlagList : LiveModifyFlag[]) : LiveInfo.ModifyFlag {
+    let combinedFlag : LiveInfo.ModifyFlag = LiveInfo.ModifyFlag.none
+
+    if (modifyFlagList != null && modifyFlagList.length > 0) {
+      modifyFlagList.forEach((flag : LiveModifyFlag) => {
+        const flagValue = ParamsCovert.convertModifyFlag(flag)
+        combinedFlag.insert(flagValue)
+      })
     }
 
-    public static convertLiveInfo(liveInfo : LiveInfoParam) : LiveInfo {
-        let nativeLiveInfo = new LiveInfo();
-        nativeLiveInfo.liveID = liveInfo.liveID;
-        nativeLiveInfo.liveName = liveInfo.liveName ?? "";
-        nativeLiveInfo.notice = liveInfo.notice ?? "";
-        nativeLiveInfo.isMessageDisable = liveInfo.isMessageDisable ?? false;
-        nativeLiveInfo.isPublicVisible = liveInfo.isPublicVisible ?? true;
-        nativeLiveInfo.isSeatEnabled = liveInfo.isSeatEnabled ?? true;
-        nativeLiveInfo.keepOwnerOnSeat = liveInfo.keepOwnerOnSeat ?? false;
-        nativeLiveInfo.maxSeatCount = liveInfo.maxSeatCount?.toInt() ?? 0;
-        nativeLiveInfo.seatMode = ParamsCovert.convertTakeSeatMode(liveInfo.seatMode);
-        nativeLiveInfo.seatLayoutTemplateID = liveInfo.seatLayoutTemplateID?.toUInt() ?? 600;
-        nativeLiveInfo.coverURL = liveInfo.coverURL ?? "";
-        nativeLiveInfo.backgroundURL = liveInfo.backgroundURL ?? "";
-        nativeLiveInfo.categoryList = liveInfo.categoryList ?? [];
-        nativeLiveInfo.activityStatus = liveInfo.activityStatus?.toInt() ?? 0;
-        nativeLiveInfo.totalViewerCount = liveInfo.totalViewerCount?.toInt() ?? 0;
-        nativeLiveInfo.isGiftEnabled = liveInfo.isGiftEnabled ?? true;
-        nativeLiveInfo.metaData = liveInfo.metaData ?? Map<string, string>();
-        return nativeLiveInfo
-    }
-
-    public static convertTakeSeatMode(seatMode ?: TakeSeatModeType) : TakeSeatMode {
-        if (seatMode == 'FREE') {
-            return TakeSeatMode.free
-        }
-        return TakeSeatMode.apply
-    }
-
-    public static convertMoveSeatPolicy(policyType ?: MoveSeatPolicyType) : MoveSeatPolicy {
-        switch (policyType) {
-            case 'FORCE_REPLACE':
-                return MoveSeatPolicy.forceReplace;
-            case 'SWAP_POSITION':
-                return MoveSeatPolicy.swapPosition;
-            default:
-                return MoveSeatPolicy.abortWhenOccupied;
-        }
-    }
-
-    public static covertVideoQuality(quality : VideoQualityType) : VideoQuality {
-        switch (quality) {
-            case 'VIDEOQUALITY_540P':
-                return VideoQuality.quality540P;     // 标清540P
-            case 'VIDEOQUALITY_720P':
-                return VideoQuality.quality720P;     // 高清720P
-            case 'VIDEOQUALITY_1080P':
-                return VideoQuality.quality1080P;    // 超清1080P
-            default:
-                return VideoQuality.quality360P;     // value = 1 低清360P
-        }
-    }
-
-    public static convertBarrage(barrageParam : BarrageParam) : Barrage {
-        const nativeBarrage = new Barrage()
-        nativeBarrage.liveID = barrageParam.liveID
-        nativeBarrage.sender = ParamsCovert.convertLiveUserInfo(barrageParam.sender)
-        nativeBarrage.sequence = barrageParam.sequence?.toInt() ?? 0
-        nativeBarrage.timestampInSecond = barrageParam.timestampInSecond?.toDouble() ?? 0
-        nativeBarrage.messageType = ParamsCovert.convertMessageType(barrageParam.messageType)
-        nativeBarrage.textContent = barrageParam.textContent ?? ""
-        nativeBarrage.extensionInfo = barrageParam.extensionInfo ?? Map<string, string>()
-        nativeBarrage.businessID = barrageParam.businessID ?? ""
-        nativeBarrage.data = barrageParam.data ?? ""
-        return nativeBarrage
-    }
-
-    private static convertMessageType(messageType ?: MessageType) : BarrageType {
-        if (messageType == 'CUSTOM') {
-            return BarrageType.custom
-        }
-        return BarrageType.text
-    }
-
-    public static convertLiveUserInfo(userInfo ?: LiveUserInfoParam) : LiveUserInfo {
-        let nativeUserInfo : LiveUserInfo = new LiveUserInfo()
-        nativeUserInfo.userID = userInfo?.userID ?? ""
-        nativeUserInfo.userName = userInfo?.userName ?? ""
-        nativeUserInfo.avatarURL = userInfo?.avatarURL ?? ""
-        return nativeUserInfo
-    }
-
-    public static convertAudioChangerType(changerType : AudioChangerTypeParam) : AudioChangerType {
-        switch (changerType) {
-            case 'CHILD':
-                return AudioChangerType.child;
-            case 'LITTLE_GIRL':
-                return AudioChangerType.littleGirl;
-            case 'MAN':
-                return AudioChangerType.man;
-            case 'HEAVY_METAL':
-                return AudioChangerType.heavyMetal;
-            case 'COLD':
-                return AudioChangerType.cold;
-            case 'FOREIGNER':
-                return AudioChangerType.foreigner;
-            case 'TRAPPED_BEAST':
-                return AudioChangerType.trappedBeast;
-            case 'FATSO':
-                return AudioChangerType.fatso;
-            case 'STRONG_CURRENT':
-                return AudioChangerType.strongCurrent;
-            case 'HEAVY_MACHINERY':
-                return AudioChangerType.heavyMachinery;
-            case 'ETHEREAL':
-                return AudioChangerType.ethereal;
-            default:
-                return AudioChangerType.none;
-        }
-    }
-
-    public static convertAudioReverbType(reverbType : AudioReverbTypeParam) : AudioReverbType {
-        switch (reverbType) {
-            case 'KTV':
-                return AudioReverbType.ktv;
-            case 'SMALL_ROOM':
-                return AudioReverbType.smallRoom;
-            case 'AUDITORIUM':
-                return AudioReverbType.auditorium;
-            case 'DEEP':
-                return AudioReverbType.deep;
-            case 'LOUD':
-                return AudioReverbType.loud;
-            case 'METALLIC':
-                return AudioReverbType.metallic;
-            case 'MAGNETIC':
-                return AudioReverbType.magnetic;
-            default:
-                return AudioReverbType.none;
-        }
-    }
-
-    public static convertModifyFlagList(modifyFlagList : number[]) : LiveInfo.ModifyFlag {
-        let combinedFlag : LiveInfo.ModifyFlag = LiveInfo.ModifyFlag.none
-        //TODO: 特殊类型，待转换
-        // modifyFlagList.forEach(flagNumber => {
-        //     let singleFlag = new LiveInfo.ModifyFlag(rawValue: flagNumber.toUInt())
-        //     combinedFlag |= singleFlag
-
-        // });
-        return combinedFlag
-    }
+    return combinedFlag
+  }
+  public static convertJsonToUTSJSONObject(jsonData ?: string): UTSJSONObject {
+      let jsonObject = new UTSJSONObject();
+      if (jsonData == null) {
+          return jsonObject;
+      }
+      try {
+          jsonObject = JSON.parse(jsonData) as UTSJSONObject;
+      } catch (error) {
+          console.error('JSON parse failed:', error);
+      }
+      return jsonObject
+  }
 }

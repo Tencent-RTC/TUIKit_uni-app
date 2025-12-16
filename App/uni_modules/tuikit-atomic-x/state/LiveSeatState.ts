@@ -1,6 +1,11 @@
 /**
- * 直播间座位状态管理
  * @module LiveSeatState
+ * @module_description
+ * 直播间麦位管理模块
+ * 核心功能：实现多人连麦场景下的座位控制，支持复杂的座位状态管理和音视频设备控制。
+ * 技术特点：基于音视频技术，支持多路音视频流管理，提供座位锁定、设备控制、权限管理等高级功能。
+ * 业务价值：为多人互动直播提供核心技术支撑，支持PK、连麦、多人游戏等丰富的互动场景。
+ * 应用场景：多人连麦、主播PK、互动游戏、在线教育、会议直播等需要多人音视频互动的场景。
  */
 import { ref } from "vue";
 import {
@@ -19,7 +24,7 @@ import { callUTSFunction, safeJsonParse } from "../utils/utsUtils";
  * @property {number} w 宽度
  * @property {number} h 高度
  * @property {number} zorder 层级顺序
- * @memberof module:LiveSeatState
+ * @memberof module:LiveSeatState 
  */
 export type RegionInfoParams = {
     x : number;
@@ -63,6 +68,27 @@ export type SeatInfo = {
  * 座位列表
  * @type {Ref<SeatInfo[]>}
  * @memberof module:LiveSeatState
+ * @example
+ * import { useLiveSeatState } from '@/uni_modules/tuikit-atomic-x/state/LiveSeatState';
+ * const { seatList } = useLiveSeatState('your_live_id');
+ * 
+ * // 监听座位列表变化
+ * watch(seatList, (newSeatList) => {
+ *   if (newSeatList && newSeatList.length > 0) {
+ *     console.log('座位列表更新:', newSeatList);
+ *     newSeatList.forEach(seat => {
+ *       console.log('座位索引:', seat.index);
+ *       console.log('座位是否锁定:', seat.isLocked);
+ *       if (seat.userInfo) {
+ *         console.log('座位上用户ID:', seat.userInfo.userID);
+ *       }
+ *     });
+ *   }
+ * });
+ * 
+ * // 获取当前座位列表
+ * const seats = seatList.value;
+ * console.log('当前座位数:', seats.length);
  */
 const seatList = ref<SeatInfo[]>([]);
 
@@ -70,6 +96,22 @@ const seatList = ref<SeatInfo[]>([]);
  * 画布信息
  * @type {Ref<LiveCanvasParams | null>}
  * @memberof module:LiveSeatState
+ * @example
+ * import { useLiveSeatState } from '@/uni_modules/tuikit-atomic-x/state/LiveSeatState';
+ * const { canvas } = useLiveSeatState('your_live_id');
+ * 
+ * // 监听画布信息变化
+ * watch(canvas, (newCanvas) => {
+ *   if (newCanvas) {
+ *     console.log('画布信息更新:', newCanvas);
+ *   }
+ * });
+ * 
+ * // 获取当前画布信息
+ * const currentCanvas = canvas.value;
+ * if (currentCanvas) {
+ *   console.log('当前画布分辨率:', currentCanvas.w, 'x', currentCanvas.h);
+ * }
  */
 const canvas = ref<LiveCanvasParams | null>(null);
 
@@ -77,6 +119,26 @@ const canvas = ref<LiveCanvasParams | null>(null);
  * 正在说话的用户列表
  * @type {Ref<Map<string, number> | null>}
  * @memberof module:LiveSeatState
+ * @example
+ * import { useLiveSeatState } from '@/uni_modules/tuikit-atomic-x/state/LiveSeatState';
+ * const { speakingUsers } = useLiveSeatState('your_live_id');
+ * 
+ * // 监听正在说话的用户列表变化
+ * watch(speakingUsers, (newSpeakingUsers) => {
+ *   if (newSpeakingUsers && newSpeakingUsers.size > 0) {
+ *     console.log('正在说话的用户更新');
+ *     newSpeakingUsers.forEach((volume, userID) => {
+ *       console.log('用户ID:', userID);
+ *       console.log('音量:', volume);
+ *     });
+ *   }
+ * });
+ * 
+ * // 获取当前正在说话的用户数量
+ * const users = speakingUsers.value;
+ * if (users) {
+ *   console.log('当前说话的用户数:', users.size);
+ * }
  */
 const speakingUsers = ref<Map<string, number> | null>(null);
 
@@ -304,8 +366,10 @@ function closeRemoteMicrophone(params : CloseRemoteMicrophoneOptions) : void {
  * @example
  * import { useLiveSeatState } from '@/uni_modules/tuikit-atomic-x/state/LiveSeatState';
  * const { addLiveSeatEventListener } = useLiveSeatState('your_live_id');
- * addLiveSeatEventListener('your_live_id', 'onLocalCameraOpenedByAdmin', (params) => {
- *   console.log('result:', params);
+ * addLiveSeatEventListener('your_live_id', 'onLocalCameraOpenedByAdmin', {
+ * 	callback: (params) => {
+ * 		console.log('result:', params);
+ * 	}
  * });
  */
 function addLiveSeatEventListener(liveID : string, eventName : string, listener : ILiveListener) : void {
@@ -350,12 +414,10 @@ function bindEvent(liveID : string) : void {
 export function useLiveSeatState(liveID : string) {
     bindEvent(liveID);
     return {
-        // 状态变量
         seatList,                // 座位列表
         canvas,                  // 画布信息
         speakingUsers,           // 正在说话的用户列表
 
-        // 座位操作方法
         takeSeat,                // 用户上麦
         leaveSeat,               // 用户下麦
         muteMicrophone,          // 静音麦克风
@@ -369,7 +431,6 @@ export function useLiveSeatState(liveID : string) {
         openRemoteMicrophone,    // 开启远程麦克风
         closeRemoteMicrophone,   // 关闭远程麦克风
 
-        // 事件监听方法
         addLiveSeatEventListener,    // 添加座位事件监听
         removeLiveSeatEventListener, // 移除座位事件监听
     };

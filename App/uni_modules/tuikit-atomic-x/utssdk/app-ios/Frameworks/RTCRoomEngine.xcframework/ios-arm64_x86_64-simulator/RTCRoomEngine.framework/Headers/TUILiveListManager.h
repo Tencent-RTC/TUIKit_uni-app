@@ -50,6 +50,33 @@ typedef NS_OPTIONS(NSUInteger, TUILiveModifyFlag) {
 };
 
 /**
+ * 直播统计数据修改标记位
+ */
+typedef NS_OPTIONS(NSUInteger, TUILiveStatisticsModifyFlag) {
+
+    TUILiveStatisticsModifyFlagNone = 0,
+
+    /// TotalViewers: 累计观看次数
+    TUILiveStatisticsModifyFlagTotalViewers = 1 << 0,
+
+    /// TotalGiftsSent: 送礼总个数
+    TUILiveStatisticsModifyFlagTotalGiftsSent = 1 << 1,
+
+    /// TotalGiftCoins: 送礼总金额
+    TUILiveStatisticsModifyFlagTotalGiftCoins = 1 << 2,
+
+    /// TotalUniqueGiftSenders: 送礼人数
+    TUILiveStatisticsModifyFlagTotalUniqueGiftSenders = 1 << 3,
+
+    /// TotalLikesReceived: 点赞总数
+    TUILiveStatisticsModifyFlagTotalLikesReceived = 1 << 4,
+
+    /// TotalMessageCount: 消息总数
+    TUILiveStatisticsModifyFlagTotalMessageCount = 1 << 5,
+
+};
+
+/**
  * 直播信息
  */
 TUIENGINE_EXPORT @interface TUILiveInfo : NSObject
@@ -119,7 +146,7 @@ TUIENGINE_EXPORT @interface TUILiveInfo : NSObject
 @end
 
 /**
- * 直播统计信息
+ * 直播统计数据
  */
 TUIENGINE_EXPORT @interface TUILiveStatisticsData : NSObject
 
@@ -138,13 +165,21 @@ TUIENGINE_EXPORT @interface TUILiveStatisticsData : NSObject
 /// 点赞总数
 @property(nonatomic, assign) NSInteger totalLikesReceived;
 
+/// 消息总数
+@property(nonatomic, assign) NSInteger totalMessageCount;
+
+/// 直播时长
+@property(nonatomic, assign) NSInteger liveDuration;
+
 @end
 
 typedef void (^TUILiveInfoBlock)(TUILiveInfo* _Nonnull liveInfo);
 typedef void (^TUILiveInfoListBlock)(NSString* _Nonnull cursor, NSArray<TUILiveInfo*>* _Nonnull liveInfoList);
 typedef void (^TUIStopLiveBlock)(TUILiveStatisticsData* _Nonnull statisticData);
+typedef void (^TUILiveStatisticsBlock)(TUILiveStatisticsData* _Nonnull statisticData);
 
 @protocol TUILiveListManagerObserver <NSObject>
+@optional
 
 /**
  * 直播信息改变回调
@@ -153,6 +188,15 @@ typedef void (^TUIStopLiveBlock)(TUILiveStatisticsData* _Nonnull statisticData);
  * @param modifyFlag 改变类型
  */
 - (void)onLiveInfoChanged:(TUILiveInfo*)liveInfo modifyFlag:(TUILiveModifyFlag)modifyFlag NS_SWIFT_NAME(onLiveInfoChanged(liveInfo:modifyFlag:));
+
+/**
+ * 直播统计数据改变回调
+ *
+ * @param roomId        房间ID
+ * @param statisticData 直播统计数据
+ * @param modifyFlag    改变类型
+ */
+- (void)onLiveStatisticsChanged:(NSString*)roomId statisticData:(TUILiveStatisticsData*)statisticData modifyFlag:(TUILiveStatisticsModifyFlag)modifyFlag NS_SWIFT_NAME(onLiveStatisticsChanged(roomId:statisticData:modifyFlag:));
 
 @end
 
@@ -225,6 +269,15 @@ TUIENGINE_EXPORT @interface TUILiveListManager : NSObject
  * @param onError   失败回调
  */
 - (void)getLiveInfo:(NSString*)roomId onSuccess:(TUILiveInfoBlock)onSuccess onError:(TUIErrorBlock)onError NS_SWIFT_NAME(getLiveInfo(_:onSuccess:onError:));
+
+/**
+ * 获取直播统计数据
+ *
+ * @param roomId     房间ID
+ * @param onSuccess  成功回调
+ * @param onError    失败回调
+ */
+- (void)getLiveStatistics:(NSString*)roomId onSuccess:(TUILiveStatisticsBlock)onSuccess onError:(TUIErrorBlock)onError NS_SWIFT_NAME(getLiveStatistics(roomId:onSuccess:onError:));
 
 /**
  * 获取直播列表

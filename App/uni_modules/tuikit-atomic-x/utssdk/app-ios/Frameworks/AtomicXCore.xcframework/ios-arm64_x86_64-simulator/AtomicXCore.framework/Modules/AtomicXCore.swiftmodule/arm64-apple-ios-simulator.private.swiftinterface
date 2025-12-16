@@ -120,17 +120,6 @@ public struct BaseBeautyState {
   public func reset()
   @objc deinit
 }
-public struct BattleConfig {
-  public var duration: Foundation.TimeInterval
-  public var needResponse: Swift.Bool
-  public var extensionInfo: Swift.String
-}
-public struct BattleInfo {
-  public var battleID: Swift.String
-  public var config: AtomicXCore.BattleConfig
-  public var startTime: Swift.UInt
-  public var endTime: Swift.UInt
-}
 public enum BattleEndedReason : Swift.Int {
   case timeOver
   case allMemberExit
@@ -140,18 +129,19 @@ public enum BattleEndedReason : Swift.Int {
     get
   }
 }
-public enum BattleEvent {
-  case onBattleStarted(battleInfo: AtomicXCore.BattleInfo, inviter: AtomicXCore.SeatUserInfo, invitees: [AtomicXCore.SeatUserInfo])
-  case onBattleEnded(battleInfo: AtomicXCore.BattleInfo, reason: AtomicXCore.BattleEndedReason)
-  case onUserJoinBattle(battleID: Swift.String, battleUser: AtomicXCore.SeatUserInfo)
-  case onUserExitBattle(battleID: Swift.String, battleUser: AtomicXCore.SeatUserInfo)
-  case onBattleRequestReceived(battleID: Swift.String, inviter: AtomicXCore.SeatUserInfo, invitee: AtomicXCore.SeatUserInfo)
-  case onBattleRequestCancelled(battleID: Swift.String, inviter: AtomicXCore.SeatUserInfo, invitee: AtomicXCore.SeatUserInfo)
-  case onBattleRequestTimeout(battleID: Swift.String, inviter: AtomicXCore.SeatUserInfo, invitee: AtomicXCore.SeatUserInfo)
-  case onBattleRequestAccept(battleID: Swift.String, inviter: AtomicXCore.SeatUserInfo, invitee: AtomicXCore.SeatUserInfo)
-  case onBattleRequestReject(battleID: Swift.String, inviter: AtomicXCore.SeatUserInfo, invitee: AtomicXCore.SeatUserInfo)
+public struct BattleConfig {
+  public var duration: Swift.Double
+  public var needResponse: Swift.Bool
+  public var extensionInfo: Swift.String
+  public init(duration: Foundation.TimeInterval = 0, needResponse: Swift.Bool = false, extensionInfo: Swift.String = "")
 }
-public typealias BattleRequestClosure = (Swift.Result<(AtomicXCore.BattleInfo, [Swift.String : Swift.Int]), AtomicXCore.ErrorInfo>) -> Swift.Void
+public struct BattleInfo {
+  public var battleID: Swift.String
+  public var config: AtomicXCore.BattleConfig
+  public var startTime: Swift.UInt
+  public var endTime: Swift.UInt
+  public init(battleID: Swift.String = "", config: AtomicXCore.BattleConfig = .init(), startTime: Swift.UInt = 0, endTime: Swift.UInt = 0)
+}
 public struct BattleState : AtomicXCore.CoreViewState {
   public var currentBattleInfo: AtomicXCore.BattleInfo?
   public var battleUsers: [AtomicXCore.SeatUserInfo]
@@ -163,6 +153,18 @@ public struct BattleState : AtomicXCore.CoreViewState {
   @available(*, deprecated)
   public var battlingUserList: [RTCRoomEngine.TUIBattleUser]
   public init()
+}
+public typealias BattleRequestClosure = (Swift.Result<(AtomicXCore.BattleInfo, [Swift.String : Swift.Int]), AtomicXCore.ErrorInfo>) -> Swift.Void
+public enum BattleEvent {
+  case onBattleStarted(battleInfo: AtomicXCore.BattleInfo, inviter: AtomicXCore.SeatUserInfo, invitees: [AtomicXCore.SeatUserInfo])
+  case onBattleEnded(battleInfo: AtomicXCore.BattleInfo, reason: AtomicXCore.BattleEndedReason)
+  case onUserJoinBattle(battleID: Swift.String, battleUser: AtomicXCore.SeatUserInfo)
+  case onUserExitBattle(battleID: Swift.String, battleUser: AtomicXCore.SeatUserInfo)
+  case onBattleRequestReceived(battleID: Swift.String, inviter: AtomicXCore.SeatUserInfo, invitee: AtomicXCore.SeatUserInfo)
+  case onBattleRequestCancelled(battleID: Swift.String, inviter: AtomicXCore.SeatUserInfo, invitee: AtomicXCore.SeatUserInfo)
+  case onBattleRequestTimeout(battleID: Swift.String, inviter: AtomicXCore.SeatUserInfo, invitee: AtomicXCore.SeatUserInfo)
+  case onBattleRequestAccept(battleID: Swift.String, inviter: AtomicXCore.SeatUserInfo, invitee: AtomicXCore.SeatUserInfo)
+  case onBattleRequestReject(battleID: Swift.String, inviter: AtomicXCore.SeatUserInfo, invitee: AtomicXCore.SeatUserInfo)
 }
 @_hasMissingDesignatedInitializers public class BattleStore {
   public static func create(liveID: Swift.String) -> AtomicXCore.BattleStore
@@ -207,6 +209,101 @@ public struct C2CSettingState {
   public func deleteFriend(completion: AtomicXCore.CompletionClosure?)
   @objc deinit
 }
+public struct CallInfo {
+  public var callId: Swift.String
+  public var roomId: RTCRoomEngine.TUIRoomId
+  public var inviterId: Swift.String
+  public var inviteeIds: [Swift.String]
+  public var chatGroupId: Swift.String
+  public var mediaType: RTCRoomEngine.TUICallMediaType
+  public var result: RTCRoomEngine.TUICallResultType
+  public var startTime: Swift.Double
+  public var duration: Swift.Double
+  public init()
+}
+public struct CallListState {
+  public var activeCall: AtomicXCore.CallInfo
+  public var recentCalls: [AtomicXCore.CallInfo]
+  public var cursor: Swift.String
+  public init()
+}
+@objc @_inheritsConvenienceInitializers public class CallListStore : ObjectiveC.NSObject {
+  public static let shared: AtomicXCore.CallListStoreImpl
+  final public let state: AtomicXCore.StatePublisher<AtomicXCore.CallListState>
+  public func calls(participantIds: [Swift.String], callMediaType: RTCRoomEngine.TUICallMediaType, params: RTCRoomEngine.TUICallParams?, completion: AtomicXCore.CompletionClosure?)
+  public func accept(completion: AtomicXCore.CompletionClosure?)
+  public func reject(completion: AtomicXCore.CompletionClosure?)
+  public func hangup(completion: AtomicXCore.CompletionClosure?)
+  public func join(callId: Swift.String, completion: AtomicXCore.CompletionClosure?)
+  public func invite(participantIds: [Swift.String], params: RTCRoomEngine.TUICallParams?, completion: AtomicXCore.CompletionClosure?)
+  public func queryRecentCalls(cursor: Swift.String, count: Swift.UInt, completion: AtomicXCore.CompletionClosure?)
+  public func deleteRecentCalls(callIdList: [Swift.String], completion: AtomicXCore.CompletionClosure?)
+  @objc override dynamic public init()
+  @objc deinit
+}
+@objc @_inheritsConvenienceInitializers @_hasMissingDesignatedInitializers public class CallListStoreImpl : AtomicXCore.CallListStore {
+  override public func calls(participantIds: [Swift.String], callMediaType: RTCRoomEngine.TUICallMediaType, params: RTCRoomEngine.TUICallParams?, completion: AtomicXCore.CompletionClosure?)
+  override public func accept(completion: AtomicXCore.CompletionClosure?)
+  override public func reject(completion: AtomicXCore.CompletionClosure?)
+  override public func hangup(completion: AtomicXCore.CompletionClosure?)
+  override public func join(callId: Swift.String, completion: AtomicXCore.CompletionClosure?)
+  override public func invite(participantIds: [Swift.String], params: RTCRoomEngine.TUICallParams?, completion: AtomicXCore.CompletionClosure?)
+  override public func queryRecentCalls(cursor: Swift.String, count: Swift.UInt, completion: AtomicXCore.CompletionClosure?)
+  override public func deleteRecentCalls(callIdList: [Swift.String], completion: AtomicXCore.CompletionClosure?)
+  @objc deinit
+}
+extension AtomicXCore.CallListStoreImpl : RTCRoomEngine.TUICallObserver {
+  @objc dynamic public func onCallReceived(_ callId: Swift.String, callerId: Swift.String, calleeIdList: [Swift.String], mediaType: RTCRoomEngine.TUICallMediaType, info: RTCRoomEngine.TUICallObserverExtraInfo)
+  @objc dynamic public func onCallBegin(callId: Swift.String, mediaType: RTCRoomEngine.TUICallMediaType, info: RTCRoomEngine.TUICallObserverExtraInfo)
+  @objc dynamic public func onCallEnd(callId: Swift.String, mediaType: RTCRoomEngine.TUICallMediaType, reason: RTCRoomEngine.TUICallEndReason, userId: Swift.String, totalTime: Swift.Float, info: RTCRoomEngine.TUICallObserverExtraInfo)
+  @objc dynamic public func onCallNotConnected(callId: Swift.String, mediaType: RTCRoomEngine.TUICallMediaType, reason: RTCRoomEngine.TUICallEndReason, userId: Swift.String, info: RTCRoomEngine.TUICallObserverExtraInfo)
+  @objc dynamic public func onCallCancelled(callerId: Swift.String)
+}
+public struct CallParticipantInfo {
+  public var id: Swift.String
+  public var name: Swift.String
+  public var avatarUrl: Swift.String
+  public var remark: Swift.String
+  public var role: RTCRoomEngine.TUICallRole
+  public var status: RTCRoomEngine.TUICallStatus
+  public var isMicrophoneOpened: Swift.Bool
+  public var isCameraOpened: Swift.Bool
+  public init()
+}
+public struct CallParticipantState {
+  public var selfInfo: AtomicXCore.CallParticipantInfo
+  public var allParticipants: [AtomicXCore.CallParticipantInfo]
+  public var speakerVolumes: [Swift.String : Swift.Int]
+  public var networkQualities: [Swift.String : RTCRoomEngine.TUINetworkQuality]
+  public init()
+}
+@objc @_inheritsConvenienceInitializers public class CallParticipantStore : ObjectiveC.NSObject {
+  public static let shared: AtomicXCore.CallParticipantStoreImpl
+  final public let state: AtomicXCore.StatePublisher<AtomicXCore.CallParticipantState>
+  @objc override dynamic public init()
+  @objc deinit
+}
+@objc @_inheritsConvenienceInitializers @_hasMissingDesignatedInitializers public class CallParticipantStoreImpl : AtomicXCore.CallParticipantStore {
+  @objc deinit
+}
+extension AtomicXCore.CallParticipantStoreImpl : RTCRoomEngine.TUICallObserver {
+  @objc dynamic public func onCallReceived(_ callId: Swift.String, callerId: Swift.String, calleeIdList: [Swift.String], mediaType: RTCRoomEngine.TUICallMediaType, info: RTCRoomEngine.TUICallObserverExtraInfo)
+  @objc dynamic public func onCallBegin(callId: Swift.String, mediaType: RTCRoomEngine.TUICallMediaType, info: RTCRoomEngine.TUICallObserverExtraInfo)
+  @objc dynamic public func onCallEnd(callId: Swift.String, mediaType: RTCRoomEngine.TUICallMediaType, reason: RTCRoomEngine.TUICallEndReason, userId: Swift.String, totalTime: Swift.Float, info: RTCRoomEngine.TUICallObserverExtraInfo)
+  @objc dynamic public func onCallNotConnected(callId: Swift.String, mediaType: RTCRoomEngine.TUICallMediaType, reason: RTCRoomEngine.TUICallEndReason, userId: Swift.String, info: RTCRoomEngine.TUICallObserverExtraInfo)
+  @objc dynamic public func onCallCancelled(callerId: Swift.String)
+  @objc dynamic public func onUserJoin(userId: Swift.String)
+  @objc dynamic public func onUserLeave(userId: Swift.String)
+  @objc dynamic public func onUserReject(userId: Swift.String)
+  @objc dynamic public func onUserInviting(userId: Swift.String)
+  @objc dynamic public func onUserLineBusy(userId: Swift.String)
+  @objc dynamic public func onUserNoResponse(userId: Swift.String)
+  @objc dynamic public func onUserVoiceVolumeChanged(volumeMap: [Swift.String : Foundation.NSNumber])
+  @objc dynamic public func onUserNetworkQualityChanged(networkQualityList: [RTCRoomEngine.TUINetworkQualityInfo])
+  @objc dynamic public func onUserAudioAvailable(userId: Swift.String, isAudioAvailable: Swift.Bool)
+  @objc dynamic public func onUserVideoAvailable(userId: Swift.String, isVideoAvailable: Swift.Bool)
+  @objc dynamic public func onKickedOffline()
+}
 @_hasMissingDesignatedInitializers public class ChatUtil {
   public static func dictionary2JsonData(_ dictionary: [Swift.String : Any]) -> Foundation.Data?
   public static func jsonData2Dictionary(jsonData: Foundation.Data?) -> [Swift.String : Any]?
@@ -228,6 +325,15 @@ public struct C2CSettingState {
   public static func convertToSystemInfoFromGroupInfoChangedList(opUser: Swift.String, userList: [Swift.String], tipsElem: ImSDK_Plus.V2TIMGroupTipsElem) -> [AtomicXCore.SystemMessageInfo]
   @objc deinit
 }
+public enum NoResponseReason : Swift.Int {
+  case timeout
+  case alreadySeated
+  public init?(rawValue: Swift.Int)
+  public typealias RawValue = Swift.Int
+  public var rawValue: Swift.Int {
+    get
+  }
+}
 public struct CoGuestState : AtomicXCore.CoreViewState {
   public var connected: [AtomicXCore.SeatUserInfo]
   public var invitees: [AtomicXCore.LiveUserInfo]
@@ -242,15 +348,6 @@ public struct CoGuestState : AtomicXCore.CoreViewState {
   @available(*, deprecated)
   public var inviteeList: Swift.Set<RTCRoomEngine.TUIUserInfo>
   public init()
-}
-public enum NoResponseReason : Swift.Int {
-  case timeout
-  case alreadySeated
-  public init?(rawValue: Swift.Int)
-  public typealias RawValue = Swift.Int
-  public var rawValue: Swift.Int {
-    get
-  }
 }
 public enum HostEvent {
   case onGuestApplicationReceived(guestUser: AtomicXCore.LiveUserInfo)
@@ -292,6 +389,7 @@ public enum CoHostStatus : Swift.Int {
   }
 }
 public enum CoHostLayoutTemplate : Swift.Int {
+  case hostStaticVoice6v6
   case hostDynamicGrid
   case hostDynamic1v6
   public init?(rawValue: Swift.Int)
@@ -637,6 +735,7 @@ public struct NetworkInfo {
   public var upLoss: Swift.UInt32
   public var downLoss: Swift.UInt32
   public var delay: Swift.UInt32
+  public init(userID: Swift.String = "", quality: AtomicXCore.NetworkQuality = .excellent, upLoss: Swift.UInt32 = 0, downLoss: Swift.UInt32 = 0, delay: Swift.UInt32 = 0)
 }
 public enum MirrorType : Swift.UInt {
   case auto
@@ -671,6 +770,7 @@ public struct DeviceState {
   }
   public func openLocalMicrophone(completion: AtomicXCore.CompletionClosure?)
   public func closeLocalMicrophone()
+  public func setCaptureVolume(volume: Swift.Int)
   public func setOutputVolume(_ volume: Swift.Int)
   public func setAudioRoute(_ route: AtomicXCore.AudioRoute)
   public func openLocalCamera(isFront: Swift.Bool, completion: AtomicXCore.CompletionClosure?)
@@ -680,7 +780,6 @@ public struct DeviceState {
   public func updateVideoQuality(_ quality: AtomicXCore.VideoQuality)
   public func startScreenShare(appGroup: Swift.String)
   public func stopScreenShare()
-  public func setCaptureVolume(volume: Swift.Int)
   public func reset()
   @objc deinit
 }
@@ -693,6 +792,7 @@ public struct Gift {
   public let level: Swift.UInt
   public let coins: Swift.UInt
   public let extensionInfo: [Swift.String : Swift.String]
+  public init(giftID: Swift.String, name: Swift.String, desc: Swift.String, iconURL: Swift.String, resourceURL: Swift.String, level: Swift.UInt, coins: Swift.UInt, extensionInfo: [Swift.String : Swift.String])
 }
 public struct GiftCategory {
   public let categoryID: Swift.String
@@ -700,6 +800,7 @@ public struct GiftCategory {
   public let desc: Swift.String
   public let extensionInfo: [Swift.String : Swift.String]
   public let giftList: [AtomicXCore.Gift]
+  public init(categoryID: Swift.String, name: Swift.String, desc: Swift.String, extensionInfo: [Swift.String : Swift.String], giftList: [AtomicXCore.Gift])
 }
 public struct GiftState {
   public var usableGifts: [AtomicXCore.GiftCategory]
@@ -853,6 +954,7 @@ public struct LiveAudienceState {
 public enum LiveAudienceEvent {
   case onAudienceJoined(audience: AtomicXCore.LiveUserInfo)
   case onAudienceLeft(audience: AtomicXCore.LiveUserInfo)
+  case onAudienceMessageDisabled(audience: AtomicXCore.LiveUserInfo, isDisable: Swift.Bool)
 }
 @_hasMissingDesignatedInitializers public class LiveAudienceStore {
   public static func create(liveID: Swift.String) -> AtomicXCore.LiveAudienceStore
@@ -873,8 +975,8 @@ extension AtomicXCore.LiveUserInfo : Swift.Equatable {
   public static func == (lhs: AtomicXCore.LiveUserInfo, rhs: AtomicXCore.LiveUserInfo) -> Swift.Bool
 }
 public enum CoreViewType {
-  case pushView
   case playView
+  case pushView
   public static func == (a: AtomicXCore.CoreViewType, b: AtomicXCore.CoreViewType) -> Swift.Bool
   public func hash(into hasher: inout Swift.Hasher)
   public var hashValue: Swift.Int {
@@ -900,8 +1002,6 @@ public enum CoreViewType {
   @_Concurrency.MainActor @preconcurrency required public init(viewType: AtomicXCore.CoreViewType, frame: CoreFoundation.CGRect = .zero)
   @objc deinit
   @_Concurrency.MainActor @preconcurrency weak public var videoViewDelegate: (any AtomicXCore.VideoViewDelegate)?
-}
-extension AtomicXCore.LiveCoreView {
   @_Concurrency.MainActor public func setLiveID(_ liveID: Swift.String)
   @_Concurrency.MainActor @preconcurrency public func startPreviewLiveStream(roomId: Swift.String, isMuteAudio: Swift.Bool, onPlaying: RTCRoomEngine.TUIPlayOnPlayingBlock? = nil, onLoading: RTCRoomEngine.TUIPlayOnLoadingBlock? = nil, onError: RTCRoomEngine.TUIPlayOnErrorBlock? = nil)
   @_Concurrency.MainActor @preconcurrency public func stopPreviewLiveStream(roomId: Swift.String)
@@ -1092,6 +1192,28 @@ public enum TakeSeatMode {
     get
   }
 }
+public enum LiveEndedReason : Swift.Int {
+  case endedByHost
+  case endedByServer
+  public init?(rawValue: Swift.Int)
+  public typealias RawValue = Swift.Int
+  public var rawValue: Swift.Int {
+    get
+  }
+}
+public enum LiveKickedOutReason : Swift.Int {
+  case byAdmin
+  case byLoggedOnOtherDevice
+  case byServer
+  case forNetworkDisconnected
+  case forJoinRoomStatusInvalidDuringOffline
+  case forCountOfJoinedRoomsExceedLimit
+  public init?(rawValue: Swift.Int)
+  public typealias RawValue = Swift.Int
+  public var rawValue: Swift.Int {
+    get
+  }
+}
 public struct LiveInfo {
   public var liveID: Swift.String
   public var liveName: Swift.String
@@ -1117,6 +1239,7 @@ public struct LiveInfo {
   public var isGiftEnabled: Swift.Bool
   public var metaData: [Swift.String : Swift.String]
   public init()
+  public init(liveOwner: AtomicXCore.LiveUserInfo)
   public var isEmpty: Swift.Bool {
     get
   }
@@ -1143,28 +1266,7 @@ public struct LiveListState {
   public var liveList: [AtomicXCore.LiveInfo]
   public var liveListCursor: Swift.String
   public var currentLive: AtomicXCore.LiveInfo
-}
-public enum LiveEndedReason : Swift.Int {
-  case endedByHost
-  case endedByServer
-  public init?(rawValue: Swift.Int)
-  public typealias RawValue = Swift.Int
-  public var rawValue: Swift.Int {
-    get
-  }
-}
-public enum LiveKickedOutReason : Swift.Int {
-  case byAdmin
-  case byLoggedOnOtherDevice
-  case byServer
-  case forNetworkDisconnected
-  case forJoinRoomStatusInvalidDuringOffline
-  case forCountOfJoinedRoomsExceedLimit
-  public init?(rawValue: Swift.Int)
-  public typealias RawValue = Swift.Int
-  public var rawValue: Swift.Int {
-    get
-  }
+  public init()
 }
 public enum LiveListEvent {
   case onLiveEnded(liveID: Swift.String, reason: AtomicXCore.LiveEndedReason, message: Swift.String)
@@ -1191,40 +1293,6 @@ public typealias MetaDataCompletionClosure = (Swift.Result<[Swift.String : Swift
 extension AtomicXCore.LiveInfo : Swift.Equatable {
   public static func == (lhs: AtomicXCore.LiveInfo, rhs: AtomicXCore.LiveInfo) -> Swift.Bool
 }
-public struct SeatUserInfo {
-  public var userID: Swift.String
-  public var userName: Swift.String
-  public var avatarURL: Swift.String
-  public var role: AtomicXCore.Role
-  public var liveID: Swift.String
-  public var microphoneStatus: AtomicXCore.DeviceStatus
-  public var allowOpenMicrophone: Swift.Bool
-  public var cameraStatus: AtomicXCore.DeviceStatus
-  public var allowOpenCamera: Swift.Bool
-}
-public struct RegionInfo {
-  public var x: CoreFoundation.CGFloat
-  public var y: CoreFoundation.CGFloat
-  public var w: CoreFoundation.CGFloat
-  public var h: CoreFoundation.CGFloat
-  public var zorder: Swift.Int
-}
-public struct SeatInfo {
-  public var index: Swift.Int
-  public var isLocked: Swift.Bool
-  public var userInfo: AtomicXCore.SeatUserInfo
-  public var region: AtomicXCore.RegionInfo
-}
-public struct LiveCanvas {
-  public var templateID: Swift.UInt
-  public var w: CoreFoundation.CGFloat
-  public var h: CoreFoundation.CGFloat
-}
-public struct LiveSeatState {
-  public var seatList: [AtomicXCore.SeatInfo]
-  public var canvas: AtomicXCore.LiveCanvas
-  public var speakingUsers: [Swift.String : Swift.Int]
-}
 public enum MoveSeatPolicy : Swift.Int {
   case abortWhenOccupied
   case forceReplace
@@ -1242,6 +1310,45 @@ public enum DeviceControlPolicy : Swift.Int {
   public var rawValue: Swift.Int {
     get
   }
+}
+public struct SeatUserInfo {
+  public var userID: Swift.String
+  public var userName: Swift.String
+  public var avatarURL: Swift.String
+  public var role: AtomicXCore.Role
+  public var liveID: Swift.String
+  public var microphoneStatus: AtomicXCore.DeviceStatus
+  public var allowOpenMicrophone: Swift.Bool
+  public var cameraStatus: AtomicXCore.DeviceStatus
+  public var allowOpenCamera: Swift.Bool
+  public init(userID: Swift.String = "", userName: Swift.String = "", avatarURL: Swift.String = "", role: AtomicXCore.Role = .generalUser, liveID: Swift.String = "", microphoneStatus: AtomicXCore.DeviceStatus = .off, allowOpenMicrophone: Swift.Bool = true, cameraStatus: AtomicXCore.DeviceStatus = .off, allowOpenCamera: Swift.Bool = true)
+}
+public struct RegionInfo {
+  public var x: CoreFoundation.CGFloat
+  public var y: CoreFoundation.CGFloat
+  public var w: CoreFoundation.CGFloat
+  public var h: CoreFoundation.CGFloat
+  public var zorder: Swift.Int
+  public init(x: CoreFoundation.CGFloat = 0, y: CoreFoundation.CGFloat = 0, w: CoreFoundation.CGFloat = 0, h: CoreFoundation.CGFloat = 0, zorder: Swift.Int = 0)
+}
+public struct SeatInfo {
+  public var index: Swift.Int
+  public var isLocked: Swift.Bool
+  public var userInfo: AtomicXCore.SeatUserInfo
+  public var region: AtomicXCore.RegionInfo
+  public init(index: Swift.Int = 0, isLocked: Swift.Bool = false, userInfo: AtomicXCore.SeatUserInfo = .init(), region: AtomicXCore.RegionInfo = .init())
+}
+public struct LiveCanvas {
+  public var w: CoreFoundation.CGFloat
+  public var h: CoreFoundation.CGFloat
+  public var templateID: Swift.UInt
+  public init(templateID: Swift.UInt = 600, w: CoreFoundation.CGFloat = 0, h: CoreFoundation.CGFloat = 0)
+}
+public struct LiveSeatState {
+  public var seatList: [AtomicXCore.SeatInfo]
+  public var canvas: AtomicXCore.LiveCanvas
+  public var speakingUsers: [Swift.String : Swift.Int]
+  public init()
 }
 public enum LiveSeatEvent {
   case onLocalCameraOpenedByAdmin(policy: AtomicXCore.DeviceControlPolicy)
@@ -1265,10 +1372,10 @@ public enum LiveSeatEvent {
   public func moveUserToSeat(userID: Swift.String, targetIndex: Swift.Int, policy: AtomicXCore.MoveSeatPolicy?, completion: AtomicXCore.CompletionClosure?)
   public func lockSeat(seatIndex: Swift.Int, completion: AtomicXCore.CompletionClosure?)
   public func unlockSeat(seatIndex: Swift.Int, completion: AtomicXCore.CompletionClosure?)
-  public func closeRemoteCamera(userID: Swift.String, completion: AtomicXCore.CompletionClosure?)
-  public func closeRemoteMicrophone(userID: Swift.String, completion: AtomicXCore.CompletionClosure?)
   public func openRemoteCamera(userID: Swift.String, policy: AtomicXCore.DeviceControlPolicy, completion: AtomicXCore.CompletionClosure?)
+  public func closeRemoteCamera(userID: Swift.String, completion: AtomicXCore.CompletionClosure?)
   public func openRemoteMicrophone(userID: Swift.String, policy: AtomicXCore.DeviceControlPolicy, completion: AtomicXCore.CompletionClosure?)
+  public func closeRemoteMicrophone(userID: Swift.String, completion: AtomicXCore.CompletionClosure?)
   @objc deinit
 }
 extension AtomicXCore.SeatUserInfo : Swift.Equatable {
@@ -1282,6 +1389,27 @@ extension AtomicXCore.RegionInfo : Swift.Equatable {
 }
 extension AtomicXCore.LiveCanvas : Swift.Equatable {
   public static func == (lhs: AtomicXCore.LiveCanvas, rhs: AtomicXCore.LiveCanvas) -> Swift.Bool
+}
+public struct LiveSummaryData {
+  public var totalDuration: Swift.UInt
+  public var totalViewers: Swift.UInt
+  public var totalGiftsSent: Swift.UInt
+  public var totalGiftUniqueSenders: Swift.UInt
+  public var totalGiftCoins: Swift.UInt
+  public var totalLikesReceived: Swift.UInt
+  public var totalMessageSent: Swift.UInt
+  public init()
+}
+public struct LiveSummaryState {
+  public var summaryData: AtomicXCore.LiveSummaryData
+  public init()
+}
+@_hasMissingDesignatedInitializers public class LiveSummaryStore {
+  public static func create(liveID: Swift.String) -> AtomicXCore.LiveSummaryStore
+  public var state: AtomicXCore.StatePublisher<AtomicXCore.LiveSummaryState> {
+    get
+  }
+  @objc deinit
 }
 public enum LoginStatus : Swift.Int {
   case unlogin
@@ -1341,9 +1469,9 @@ public struct LoginState {
   public var loginUserInfo: AtomicXCore.UserProfile?
 }
 @objc @_inheritsConvenienceInitializers @_hasMissingDesignatedInitializers public class LoginStore : ObjectiveC.NSObject {
+  public static let shared: AtomicXCore.LoginStore
   public var sdkAppID: Swift.Int32
   public var state: AtomicXCore.StatePublisher<AtomicXCore.LoginState>
-  public static let shared: AtomicXCore.LoginStore
   public func login(sdkAppID: Swift.Int32, userID: Swift.String, userSig: Swift.String, completion: AtomicXCore.CompletionClosure?)
   public func logout(completion: AtomicXCore.CompletionClosure?)
   public func setSelfInfo(userProfile: AtomicXCore.UserProfile, completion: AtomicXCore.CompletionClosure?)
@@ -1584,6 +1712,14 @@ public struct MessageListState {
   public func fetchMoreMessageList(direction: AtomicXCore.MessageFetchDirection, completion: AtomicXCore.CompletionClosure?)
   public func downloadMessageResource(_ message: AtomicXCore.MessageInfo, resourceType: AtomicXCore.MessageMediaFileType, completion: AtomicXCore.CompletionClosure?)
   @objc deinit
+}
+@objc @_hasMissingDesignatedInitializers @_Concurrency.MainActor @preconcurrency public class ParticipantView : UIKit.UIView {
+  @_Concurrency.MainActor @preconcurrency public init(participantId: Swift.String, streamType: RTCRoomEngine.TUIVideoStreamType)
+  @_Concurrency.MainActor @preconcurrency public func setRenderParams(params: RTCRoomEngine.TUIVideoRenderParams)
+  @objc deinit
+}
+extension AtomicXCore.ParticipantView {
+  @_Concurrency.MainActor @preconcurrency @objc override dynamic public func didMoveToWindow()
 }
 @_hasMissingDesignatedInitializers @objc @_Concurrency.MainActor @preconcurrency public class SignalVideoView : UIKit.UIView {
   @_Concurrency.MainActor @preconcurrency @objc override dynamic public func didMoveToWindow()
