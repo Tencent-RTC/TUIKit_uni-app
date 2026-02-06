@@ -1,0 +1,143 @@
+<template>
+  <view class="user-advanced">
+    <!-- 单行样式 -->
+    <view class="options-row" @click="handleClick">
+      <text class="label">性别:</text>
+      <text class="value active">{{ currentGenderLabel }}</text>
+      <text class="arrow">▼</text>
+      <text class="label" style="margin-left: 32rpx;">年龄:</text>
+      <text class="value">{{ ageRangeText }}</text>
+    </view>
+  </view>
+</template>
+
+<script setup lang="ts">
+import { ref, watch, computed } from 'vue'
+import { Gender } from '../../../types/userProfile'
+import { UserAdvancedProps, UserAdvancedEmits } from '../../../types/search'
+
+const props = withDefaults(defineProps<UserAdvancedProps>(), {
+  minBirthday: undefined,
+  maxBirthday: undefined,
+  gender: Gender.UNKNOWN
+})
+
+const emit = defineEmits<UserAdvancedEmits>()
+
+// 将生日格式 YYYYMMDD 转换为年龄
+const birthdayToAge = (birthday: number | undefined): number | undefined => {
+  if (birthday === undefined) return undefined
+  const birthStr = String(birthday)
+  const birthYear = parseInt(birthStr.substring(0, 4))
+  const birthMonth = parseInt(birthStr.substring(4, 6))
+  const birthDay = parseInt(birthStr.substring(6, 8))
+  
+  const today = new Date()
+  let age = today.getFullYear() - birthYear
+  const monthDiff = today.getMonth() + 1 - birthMonth
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDay)) {
+    age--
+  }
+  return age
+}
+
+// 将年龄转换为生日格式 YYYYMMDD
+const ageToBirthday = (age: number): number => {
+  const today = new Date()
+  const birthYear = today.getFullYear() - age
+  const month = String(today.getMonth() + 1).padStart(2, '0')
+  const day = String(today.getDate()).padStart(2, '0')
+  return parseInt(`${birthYear}${month}${day}`)
+}
+
+// 内部使用年龄进行展示
+const selectedMinAge = ref(birthdayToAge(props.maxBirthday) ?? 0)  // maxBirthday -> minAge
+const selectedMaxAge = ref(birthdayToAge(props.minBirthday) ?? 99) // minBirthday -> maxAge
+const selectedGender = ref<Gender>(props.gender)
+
+const genderOptions = [
+  { label: '不限', value: Gender.UNKNOWN },
+  { label: '男', value: Gender.MALE },
+  { label: '女', value: Gender.FEMALE }
+]
+
+const currentGenderLabel = computed(() => {
+  const option = genderOptions.find(o => o.value === selectedGender.value)
+  return option?.label || '不限'
+})
+
+const ageRangeText = computed(() => {
+  return `${selectedMinAge.value}-${selectedMaxAge.value}`
+})
+
+watch(() => props.minBirthday, (val) => {
+  selectedMaxAge.value = birthdayToAge(val) ?? 99
+})
+
+watch(() => props.maxBirthday, (val) => {
+  selectedMinAge.value = birthdayToAge(val) ?? 0
+})
+
+watch(() => props.gender, (val) => {
+  selectedGender.value = val
+})
+
+const handleClick = () => {
+  emit('click')
+}
+
+const updateFilter = (minAge: number, maxAge: number, gender: Gender) => {
+  selectedMinAge.value = minAge
+  selectedMaxAge.value = maxAge
+  selectedGender.value = gender
+  
+  // 转换为生日格式输出
+  const minBirthday = maxAge !== 99 ? ageToBirthday(maxAge) : undefined
+  const maxBirthday = minAge !== 0 ? ageToBirthday(minAge) : undefined
+  
+  emit('update:minBirthday', minBirthday)
+  emit('update:maxBirthday', maxBirthday)
+  emit('update:gender', gender)
+  emit('change', minBirthday, maxBirthday, gender)
+}
+
+defineExpose({
+  selectedMinAge,
+  selectedMaxAge,
+  selectedGender,
+  updateFilter
+})
+</script>
+
+<style>
+.user-advanced {
+  background-color: #ffffff;
+}
+
+.options-row {
+  flex-direction: row;
+  align-items: center;
+  padding: 20rpx 40rpx;
+}
+
+.label {
+  font-size: 28rpx;
+  color: rgba(0, 0, 0, 0.55);
+  margin-right: 8rpx;
+}
+
+.value {
+  font-size: 28rpx;
+  color: rgba(0, 0, 0, 0.55);
+  padding: 12rpx;
+}
+
+.value.active {
+  color: #1C66E5;
+}
+
+.arrow {
+  font-size: 20rpx;
+  color: rgba(0, 0, 0, 0.4);
+}
+</style>

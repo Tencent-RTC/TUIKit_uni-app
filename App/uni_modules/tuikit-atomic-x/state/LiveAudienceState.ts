@@ -70,7 +70,9 @@ const audienceCount = ref<number>(0);
  * @example
  * import { useLiveAudienceState } from '@/uni_modules/tuikit-atomic-x/state/LiveAudienceState';
  * const { fetchAudienceList } = useLiveAudienceState("your_live_id");
- * fetchAudienceList();
+ * fetchAudienceList({
+ *   liveID: 'your_live_id',
+ * });
  */
 function fetchAudienceList(params ?: FetchAudienceListOptions) : void {
     callUTSFunction("fetchAudienceList", params || {});
@@ -84,7 +86,7 @@ function fetchAudienceList(params ?: FetchAudienceListOptions) : void {
  * @example
  * import { useLiveAudienceState } from '@/uni_modules/tuikit-atomic-x/state/LiveAudienceState';
  * const { setAdministrator } = useLiveAudienceState("your_live_id");
- * setAdministrator({ userID: 'user123' });
+ * setAdministrator({ liveID: 'your_live_id', userID: 'user123' });
  */
 function setAdministrator(params : SetAdministratorOptions) : void {
     callUTSFunction("setAdministrator", params);
@@ -98,7 +100,7 @@ function setAdministrator(params : SetAdministratorOptions) : void {
  * @example
  * import { useLiveAudienceState } from '@/uni_modules/tuikit-atomic-x/state/LiveAudienceState';
  * const { revokeAdministrator } = useLiveAudienceState("your_live_id");
- * revokeAdministrator({ userID: 'user123' });
+ * revokeAdministrator({ liveID: 'your_live_id', userID: 'user123' });
  */
 function revokeAdministrator(params : RevokeAdministratorOptions) : void {
     callUTSFunction("revokeAdministrator", params);
@@ -112,7 +114,7 @@ function revokeAdministrator(params : RevokeAdministratorOptions) : void {
  * @example
  * import { useLiveAudienceState } from '@/uni_modules/tuikit-atomic-x/state/LiveAudienceState';
  * const { kickUserOutOfRoom } = useLiveAudienceState("your_live_id");
- * kickUserOutOfRoom({ userID: 'user123' });
+ * kickUserOutOfRoom({ liveID: 'your_live_id', userID: 'user123' });
  */
 function kickUserOutOfRoom(params : KickUserOutOfRoomOptions) : void {
     callUTSFunction("kickUserOutOfRoom", params);
@@ -126,7 +128,7 @@ function kickUserOutOfRoom(params : KickUserOutOfRoomOptions) : void {
  * @example
  * import { useLiveAudienceState } from '@/uni_modules/tuikit-atomic-x/state/LiveAudienceState';
  * const { disableSendMessage } = useLiveAudienceState("your_live_id");
- * disableSendMessage({ userID: 'user123', disable: true });
+ * disableSendMessage({ liveID: 'your_live_id', userID: 'user123', isDisable: true });
  */
 function disableSendMessage(params : DisableSendMessageOptions) : void {
     callUTSFunction("disableSendMessage", params);

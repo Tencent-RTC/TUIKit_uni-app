@@ -16,7 +16,9 @@ import {
   SendLikeOptions, CallExperimentalAPIOptions, VolumeOptions, RequestHostConnectionOptions, AcceptHostConnectionOptions,
   CancelHostConnectionOptions, RejectHostConnectionOptions, ExitHostConnectionOptions, AppendLocalTipOptions,
   RefreshUsableGiftsOptions, SetAudioReverbTypeOptions, SetAudioChangerTypeOptions, ILiveListener,
-  RequestBattleOptions, CancelBattleRequestOptions, AcceptBattleOptions, RejectBattleOptions, ExitBattleOptions, SetLanguageOptions
+  RequestBattleOptions, CancelBattleRequestOptions, AcceptBattleOptions, RejectBattleOptions, ExitBattleOptions, SetLanguageOptions,
+  HybridListenerOptions,
+  HybridCallOptions,
 } from "../../../tuikit-atomic-x/utssdk/interface";
 import { ParamsCovert } from "./utils/ParamsCovert";
 
@@ -55,6 +57,12 @@ import {
 import { GiftStore } from 'io.trtc.tuikit.atomicxcore.api.gift';
 import { BaseBeautyStore, AudioEffectStore, DeviceStore, AudioRoute, MirrorType, } from 'io.trtc.tuikit.atomicxcore.api.device';
 import { BarrageStore, Barrage } from 'io.trtc.tuikit.atomicxcore.api.barrage';
+
+// HybridBridge
+import { HybridBridge } from 'io.trtc.tuikit.atomicxcore.hybridapi.bridge';
+import { DataReport } from 'io.trtc.tuikit.atomicxcore.impl.common';
+DataReport.reportUIPlatform(52);
+
 const RTC_TAG = "UTS-Login: "
 const LIVE_TAG = "UTS-Live: "
 const SEAT_TAG = "UTS-LiveSeat: "
@@ -1589,4 +1597,81 @@ function startForegroundService() {
 function stopForegroundService() {
   console.log("UTS-Live: stopForegroundService")
   VideoForegroundService.stop(context)
+}
+
+type ListenerCallback = (eventData:string) => void;
+type ListenerMap = Map<string, ListenerCallback>;
+
+const HybridListenerMap = new Map<string, ListenerMap>();
+
+function genListenerKey(store:string, name:string, id?:string):string {
+  return `${store}_${name}_${id}`;
+}
+
+const hybridBridge = new HybridBridge(context, (eventName:string, eventData:string) => {
+  try {
+    const data = JSON.parse<UTSJSONObject>(eventName);
+    console.warn(`addListener, data:`, data);
+
+    if (data != null) {
+      const storeName = data.getString("store") ?? "";
+      const dataName = data.getString("name") ?? "";
+      const paramsData = data.getJSON("params");
+      let instanceId = "";
+      if (paramsData != null) {
+        instanceId = paramsData.getString("createStoreParams") ?? "";
+      }
+
+      const listenerKey = genListenerKey(storeName, dataName, instanceId);
+      const listeners = HybridListenerMap.get(listenerKey);
+      if(listeners != null){
+        listeners.forEach((listener: ListenerCallback, listenerID: string) => {
+          try {
+            listener(eventData);
+          } catch(e) {
+            console.error(`Error executing listener ${listenerID}:`, e);
+          }
+        });
+      }
+    }
+  } catch(e) {
+    console.error("parse eventData error", eventName, eventData, e);
+  }
+})
+
+@UTSJS.keepAlive
+export function addListener(options:HybridListenerOptions, listener:(eventData:string) => void){
+  const paramsStr = (options.params != null ? JSON.stringify(options.params) : "{}") as string;
+  const params = JSON.parse<UTSJSONObject>(paramsStr);
+  const listenerKey = genListenerKey(options.store, options.name, params?.getString("createStoreParams") ?? "");
+  const listenerID = options.listenerID ?? "default";
+  let listeners = HybridListenerMap.get(listenerKey);
+  const isNewListener = listeners == null;
+  if(listeners == null){
+    listeners = new Map<string, ListenerCallback>();
+  }
+  listeners.set(listenerID, listener);
+  HybridListenerMap.set(listenerKey, listeners);
+  if(isNewListener){
+    hybridBridge.addListener(JSON.stringify(options));
+  }
+}
+
+export function removeListener(options:HybridListenerOptions){
+  const paramsStr = (options.params != null ? JSON.stringify(options.params) : "{}") as string;
+  const params = JSON.parse<UTSJSONObject>(paramsStr);
+  const listenerKey = genListenerKey(options.store, options.name, params?.getString("createStoreParams") ?? "");
+  const listenerID = options.listenerID ?? "default";
+  const listeners = HybridListenerMap.get(listenerKey);
+  if(listeners != null){
+    listeners.delete(listenerID);
+    if(listeners.size === 0){
+      hybridBridge.removeListener(JSON.stringify(options));
+      HybridListenerMap.delete(listenerKey);
+    }
+  }
+}
+
+export function callAPI(options:HybridCallOptions, callback:(result:string) => void){
+  hybridBridge.callAPI(JSON.stringify(options), callback);
 }

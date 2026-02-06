@@ -1,0 +1,96 @@
+<template>
+  <view class="face-message">
+    <view class="face-highlight">
+      <image
+        class="face-image"
+        :src="faceImageUrl"
+        :style="faceImageStyle"
+        mode="aspectFit"
+      />
+    </view>
+  </view>
+</template>
+
+<script setup lang="ts">
+import { computed } from 'vue'
+import type { MessageInfo } from '../../../../types/message'
+
+interface Props {
+  message: MessageInfo
+}
+
+const props = defineProps<Props>()
+
+const DEFAULT_FACE_SIZE = 120
+
+const faceIndex = computed(() => {
+  return props.message.messageBody?.faceIndex || 0
+})
+
+const faceName = computed(() => {
+  return props.message.messageBody?.faceName || ''
+})
+
+const faceImageUrl = computed(() => {
+  return getFaceUrlByIndex(faceIndex.value, faceName.value)
+})
+
+const faceImageStyle = computed(() => {
+  return {
+    width: `${DEFAULT_FACE_SIZE}rpx`,
+    height: `${DEFAULT_FACE_SIZE}rpx`
+  }
+})
+
+const getFaceUrlByIndex = (index: number, name: string) => {
+  const faceMap: Record<number, string> = {
+    0: '/static/emoji/smile.png',
+    1: '/static/emoji/laugh.png',
+    2: '/static/emoji/cry.png',
+    3: '/static/emoji/angry.png',
+    4: '/static/emoji/surprise.png',
+    5: '/static/emoji/love.png',
+    6: '/static/emoji/sad.png',
+    7: '/static/emoji/cool.png',
+    8: '/static/emoji/wink.png',
+    9: '/static/emoji/kiss.png'
+  }
+  
+  if (name) {
+    const nameMap: Record<string, string> = {
+      'smile': '/static/emoji/smile.png',
+      'laugh': '/static/emoji/laugh.png',
+      'cry': '/static/emoji/cry.png',
+      'angry': '/static/emoji/angry.png',
+      'surprise': '/static/emoji/surprise.png',
+      'love': '/static/emoji/love.png',
+      'sad': '/static/emoji/sad.png',
+      'cool': '/static/emoji/cool.png',
+      'wink': '/static/emoji/wink.png',
+      'kiss': '/static/emoji/kiss.png'
+    }
+    
+    if (nameMap[name]) {
+      return nameMap[name]
+    }
+  }
+  
+  return faceMap[index] || faceMap[0]
+}
+</script>
+
+<style>
+.face-message {
+  align-items: center;
+  justify-content: center;
+}
+
+.face-highlight {
+  align-items: center;
+  justify-content: center;
+}
+
+.face-image {
+  border-radius: 8rpx;
+}
+</style>

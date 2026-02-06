@@ -9,7 +9,6 @@ const LanguageMap = {
 
 const { callExperimentalAPI } = useLiveListState();
 export function setSdkLanguageFromSystem() {
-  uni.$liveID = '';
   uni.getSystemInfo()
     .then((systemInfo) => {
       console.log(`systemInfo.language: ${systemInfo.language}`);

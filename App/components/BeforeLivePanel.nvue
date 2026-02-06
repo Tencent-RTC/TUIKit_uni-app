@@ -3,7 +3,7 @@
     <!-- 直播设置卡片 -->
     <view class="live-info-card">
       <view class="cover-section" @tap="onEditCover">
-        <image class="cover-image" style="position: relative;" :src="localCoverURL" mode="aspectFill" />
+        <image class="cover-image" style="position: relative;" :src="localCoverURL" mode="aspectFill" @error="handleCoverError" />
         <view
           style="display: flex; flex-direction: column; justify-content: center; align-items: center; width: 140rpx; position: absolute; bottom: 0; padding: 5rpx 0;border-bottom-left-radius: 24rpx; border-bottom-right-radius: 24rpx; background-color: rgba(0, 0, 0, 0.5); ">
           <text class="live-detail" style="margin-left: 0;">
@@ -36,7 +36,8 @@
         <list class="audience-content" :show-scrollbar="false">
           <cell class="tab-item">
             <view v-for="(url, idx) in avatarList" :key="url" class="cover-dialog-item" @tap="selectAvatar(idx)">
-              <image :src="url" :class="{selected: idx === selectedAvatarIndex}" class="cover-dialog-img" />
+              <image :src="url" :class="{selected: idx === selectedAvatarIndex}" class="cover-dialog-img"
+                @error="handleErrorEvent(idx)" />
             </view>
           </cell>
         </list>
@@ -134,8 +135,11 @@
   const hasUserInteracted = ref(false);
   const lastValidTitle = ref('');
 
-  // 封面列表
-  const avatarList = [
+  // 默认封面图片
+  const DEFAULT_COVER_URL = 'https://web.sdk.qcloud.com/trtc/live/web/assets/defaultCoverLive.png';
+
+  // 封面列表（使用 ref 实现响应式）
+  const avatarList = ref([
     "https://liteav-test-1252463788.cos.ap-guangzhou.myqcloud.com/voice_room/voice_room_cover1.png",
     "https://liteav-test-1252463788.cos.ap-guangzhou.myqcloud.com/voice_room/voice_room_cover2.png",
     "https://liteav-test-1252463788.cos.ap-guangzhou.myqcloud.com/voice_room/voice_room_cover3.png",
@@ -148,7 +152,7 @@
     "https://liteav-test-1252463788.cos.ap-guangzhou.myqcloud.com/voice_room/voice_room_cover10.png",
     "https://liteav-test-1252463788.cos.ap-guangzhou.myqcloud.com/voice_room/voice_room_cover11.png",
     "https://liteav-test-1252463788.cos.ap-guangzhou.myqcloud.com/voice_room/voice_room_cover12.png",
-  ];
+  ]);
 
   // 计算默认标题
   const defaultLiveTitle = computed(() => {
@@ -257,6 +261,16 @@
     isInputFocused.value = false;
   };
 
+  const handleErrorEvent = (idx : number) => {
+    // 图片加载失败时替换为默认图片
+    avatarList.value[idx] = DEFAULT_COVER_URL;
+  }
+
+  const handleCoverError = () => {
+    // 顶部封面图片加载失败时替换为默认图片
+    localCoverURL.value = DEFAULT_COVER_URL;
+  }
+
   const onEditCover = () => {
     isShowOverDialog.value = true;
     emit('editCover', localCoverURL.value);
@@ -283,7 +297,7 @@
   };
 
   const setCover = () => {
-    localCoverURL.value = avatarList[selectedAvatarIndex.value];
+    localCoverURL.value = avatarList.value[selectedAvatarIndex.value];
     emit('editCover', localCoverURL.value);
     isShowOverDialog.value = false;
   };

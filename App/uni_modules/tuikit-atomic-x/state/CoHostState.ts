@@ -129,7 +129,12 @@ const coHostStatus = ref<string>('')
  * @example
  * import { useCoHostState } from '@/uni_modules/tuikit-atomic-x/state/CoHostState';
  * const { requestHostConnection } = useCoHostState("your_live_id");
- * requestHostConnection({});
+ * requestHostConnection({
+ *  liveID: 'your_live_id',
+ *  targetHostLiveID: 'target_live_id',
+ *  layoutTemplate: 600,
+ *  timeout: 30,
+ * });
  */
 function requestHostConnection(params: RequestHostConnectionOptions): void {
   callUTSFunction("requestHostConnection", params);
@@ -143,7 +148,7 @@ function requestHostConnection(params: RequestHostConnectionOptions): void {
  * @example
  * import { useCoHostState } from '@/uni_modules/tuikit-atomic-x/state/CoHostState';
  * const { cancelHostConnection } = useCoHostState(“your_live_id”);
- * cancelHostConnection({ toHostLiveID : "target_live_id" });
+ * cancelHostConnection({ liveID: 'your_live_id', toHostLiveID : "target_live_id" });
  */
 function cancelHostConnection(params: CancelHostConnectionOptions): void {
   callUTSFunction("cancelHostConnection", params);
@@ -157,7 +162,7 @@ function cancelHostConnection(params: CancelHostConnectionOptions): void {
  * @example
  * import { useCoHostState } from '@/uni_modules/tuikit-atomic-x/state/CoHostState';
  * const { acceptHostConnection } = useCoHostState(“your_live_id”);
- * acceptHostConnection({ fromHostLiveID: "from_live_id" });
+ * acceptHostConnection({ liveID: 'your_live_id', fromHostLiveID: "from_live_id" });
  */
 function acceptHostConnection(params: AcceptHostConnectionOptions): void {
   callUTSFunction("acceptHostConnection", params);
@@ -171,7 +176,7 @@ function acceptHostConnection(params: AcceptHostConnectionOptions): void {
  * @example
  * import { useCoHostState } from '@/uni_modules/tuikit-atomic-x/state/CoHostState';
  * const { rejectHostConnection } = useCoHostState(“your_live_id”);
- * rejectHostConnection({ fromHostLiveID: "from_live_id" });
+ * rejectHostConnection({ liveID: 'your_live_id', fromHostLiveID: "from_live_id" });
  */
 function rejectHostConnection(params: RejectHostConnectionOptions): void {
   callUTSFunction("rejectHostConnection", params);
@@ -185,7 +190,7 @@ function rejectHostConnection(params: RejectHostConnectionOptions): void {
  * @example
  * import { useCoHostState } from '@/uni_modules/tuikit-atomic-x/state/CoHostState';
  * const { exitHostConnection } = useCoHostState(“your_live_id”);
- * exitHostConnection({});
+ * exitHostConnection({ liveID: 'your_live_id' });
  */
 function exitHostConnection(params: ExitHostConnectionOptions): void {
   callUTSFunction("exitHostConnection", params);

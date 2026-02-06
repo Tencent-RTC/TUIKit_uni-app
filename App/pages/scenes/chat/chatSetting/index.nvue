@@ -1,0 +1,34 @@
+<template>
+  <C2CChatSetting v-if="isC2C" :conversationID="conversationID" :showType="showType" />
+  <GroupChatSetting v-else-if="isGroup" :conversationID="conversationID" />
+</template>
+
+<script setup lang="ts">
+import { ref, computed } from 'vue';
+import { onLoad } from '@dcloudio/uni-app';
+import C2CChatSetting from '@/uni_modules/tuikit-atomic-x/components/ChatSetting/C2CChatSetting.nvue';
+import GroupChatSetting from '@/uni_modules/tuikit-atomic-x/components/ChatSetting/GroupChatSetting.nvue';
+
+const conversationID = ref('');
+const showType = ref(0);
+
+const isC2C = computed(() => conversationID.value?.startsWith('c2c_'));
+
+const isGroup = computed(() => conversationID.value?.startsWith('group_'));
+
+onLoad((options) => {
+  if (options.conversationID) {
+    conversationID.value = options.conversationID;
+  } else {
+    console.error('未接收到 conversationID 参数')
+  }
+  if (options.showType) {
+    showType.value = parseInt(options.showType);
+  } else {
+    console.error('未接收到 showType 参数');
+  }
+});
+</script>
+
+<style scoped>
+</style>

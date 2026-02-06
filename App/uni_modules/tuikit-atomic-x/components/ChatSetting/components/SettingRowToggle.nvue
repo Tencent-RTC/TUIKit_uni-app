@@ -1,0 +1,109 @@
+<template>
+  <view class="setting-row-toggle">
+    <text class="setting-row-toggle__label">{{ label }}</text>
+    <!-- 自定义纯受控 Switch 组件 -->
+    <view 
+      class="custom-switch" 
+      :class="{ 'custom-switch--animated': hasInteracted }"
+      :style="{ backgroundColor: modelValue ? switchColor : '#E5E5E5' }"
+      @tap.stop="handleSwitchTap"
+    >
+      <view 
+        class="custom-switch__thumb"
+        :class="{ 'custom-switch__thumb--animated': hasInteracted }"
+        :style="{ transform: modelValue ? 'translateX(19rpx)' : 'translateX(0)' }"
+      />
+    </view>
+  </view>
+</template>
+
+<script setup lang="ts">
+import { ref } from 'vue';
+import { throttle } from '../../../utils/lodash';
+
+interface SettingRowToggleProps {
+  label: string;
+  modelValue: boolean;
+  switchColor?: string;
+  disabled?: boolean;
+}
+
+const props = withDefaults(defineProps<SettingRowToggleProps>(), {
+  label: '',
+  modelValue: false,
+  switchColor: '#0066FF',
+  disabled: false
+});
+
+const emit = defineEmits<{
+  (e: 'change', value: boolean): void;
+}>();
+
+// 标记是否已经交互过，用于控制动画
+const hasInteracted = ref(false);
+
+const handleSwitchTap = throttle(() => {
+  if (props.disabled) {
+    uni.showToast({
+      title: '当前状态不可修改',
+      icon: 'none'
+    });
+    return;
+  }
+  hasInteracted.value = true;
+  emit('change', !props.modelValue);
+}, 700, { leading: true, trailing: false });
+</script>
+
+<style scoped>
+.setting-row-toggle {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24rpx 32rpx;
+  background-color: #FFFFFF;
+  border-bottom-width: 1rpx;
+  border-bottom-style: solid;
+  border-bottom-color: #E5E5E5;
+}
+
+.setting-row-toggle__label {
+  font-size: 32rpx;
+  color: rgba(0, 0, 0, 0.55);
+}
+
+/* 自定义 Switch 样式 */
+/* 轨道宽100rpx，左右各4rpx padding，圆球52rpx */
+/* 移动距离 = 100 - 4*2 - 52 = 40rpx */
+.custom-switch {
+  min-width: 100rpx;
+  height: 60rpx;
+  border-radius: 30rpx;
+  background-color: #E5E5E5;
+  padding-top: 4rpx;
+  padding-bottom: 4rpx;
+  padding-left: 4rpx;
+  padding-right: 4rpx;
+}
+
+/* 交互后才启用动画 */
+.custom-switch--animated {
+  transition-property: background-color;
+  transition-duration: 200ms;
+  transition-timing-function: ease-out;
+}
+
+.custom-switch__thumb {
+  width: 52rpx;
+  height: 52rpx;
+  border-radius: 26rpx;
+  background-color: #FFFFFF;
+}
+
+/* 交互后才启用动画 */
+.custom-switch__thumb--animated {
+  transition-property: transform;
+  transition-duration: 200ms;
+  transition-timing-function: ease-out;
+}
+</style>

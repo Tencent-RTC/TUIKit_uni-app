@@ -1,0 +1,295 @@
+<template>
+  <view class="msg-actions" @tap="handleMaskTap">
+    <view 
+      class="msg-actions__panel"
+      :style="containerStyle"
+      @tap.stop
+    >
+      <view 
+        v-if="canCopy"
+        class="msg-actions__item"
+        @tap="handleCopy"
+      >
+        <image class="msg-actions__icon" :src="copyIcon" mode="aspectFit"></image>
+        <text class="msg-actions__text">复制</text>
+      </view>
+      
+      <!-- 删除 -->
+      <view 
+        class="msg-actions__item"
+        @tap="handleDelete"
+      >
+        <image class="msg-actions__icon" :src="deleteIcon" mode="aspectFit"></image>
+        <text class="msg-actions__text">删除</text>
+      </view>
+      
+      <!-- 撤回 -->
+      <view 
+        v-if="canRecall"
+        class="msg-actions__item"
+        @tap="handleRecall"
+      >
+        <image class="msg-actions__icon" :src="recallIcon" mode="aspectFit"></image>
+        <text class="msg-actions__text">撤回</text>
+      </view>
+    </view>
+    
+    <view class="msg-actions__arrow-wrapper" :style="arrowWrapperStyle">
+      <image class="msg-actions__arrow" :src="arrowIcon" mode="aspectFit"></image>
+    </view>
+  </view>
+</template>
+
+<script setup>
+import { computed, ref, onMounted, onUnmounted } from 'vue'
+import { MessageStatus, MessageType } from '../../../types/message'
+import { useMessageActionState } from '../../../state/MessageActionState'
+
+import copyIcon from '../assets/msg_copy.png'
+import deleteIcon from '../assets/msg_delete.png'
+import recallIcon from '../assets/msg_recall.png'
+import arrowIcon from '../assets/msg_arrow.png'
+
+let deleteMessage;
+let recallMessage;
+let destroyStore;
+
+const props = defineProps({
+  message: {
+    type: Object,
+    required: true
+  },
+  actions: {
+    type: Array,
+    default: () => []
+  }
+})
+
+const emit = defineEmits(['close', 'action'])
+
+const triggerPosition = ref({ x: 0, y: 0, })
+const arrowWrapperStyle = ref({ x: 0, y: 0 })
+const isPositioned = ref(false)
+
+onMounted(() => {
+  const obj = useMessageActionState({ message: props.message })
+  deleteMessage = obj.deleteMessage
+  recallMessage = obj.recallMessage
+  destroyStore = obj.destroyStore
+})
+
+onUnmounted(() => {
+  destroyStore()
+})
+
+// 通用的关闭处理函数，针对 iOS 14 进行特殊处理
+const safeClose = () => {
+  // #ifdef APP-IOS
+  // iOS 14 上延迟关闭，确保异步操作完全完成
+  setTimeout(() => {
+    emit('close')
+  }, 300)
+  // #endif
+  
+  // #ifndef APP-IOS
+  emit('close')
+  // #endif
+}
+
+const canCopy = computed(() => {
+  return props.message.messageType === MessageType.TEXT && 
+         props.message.messageBody?.text
+})
+
+const canRecall = computed(() => {
+  if (!props.message.isSelf) {
+    return false
+  }
+  
+  if (props.message.status === MessageStatus.RECALLED || 
+      props.message.status === MessageStatus.DELETED) {
+    return false
+  }
+  
+  if (props.message.timestamp) {
+    const now = Math.floor(Date.now() / 1000)
+    const messageTime = props.message.timestamp
+    const timeDiff = now - messageTime
+    return timeDiff <= 120
+  }
+  
+  return false
+})
+
+const containerStyle = computed(() => {
+  if (!triggerPosition.value.x || !triggerPosition.value.y) {
+    return { visibility: 'hidden' } // 初始隐藏 
+  }
+  
+  const systemInfo = uni.getSystemInfoSync()
+  const screenWidthRpx = 750
+  const avatarTotalWidth = 104 * 2 // 头像宽度
+  const menuWidth = screenWidthRpx - avatarTotalWidth - 64 // 消息编辑弹窗的宽度
+  const messageActionsHeiht = 64 // 消息操作弹窗高度
+  const messageActionsHeihtRpx = messageActionsHeiht / systemInfo.windowWidth * 750
+  const marginValue = 20
+  // 不同平台的导航栏计算
+  let navigationBarHeight = 44 // 默认
+  if (systemInfo.platform === 'android') {
+    navigationBarHeight = 48
+  }
+  const totalNavHeight = (systemInfo?.safeArea?.top + navigationBarHeight) / systemInfo.windowWidth * 750
+  
+  const position = {
+    left: `${triggerPosition.value.x}rpx`,
+    top: `${triggerPosition.value.y - messageActionsHeihtRpx - marginValue}rpx`,
+    width: `${menuWidth}rpx`,
+    visibility: isPositioned.value ? 'visible' : 'hidden',  // 根据状态控制可见性
+  }
+  // 根据 message 的宽度，设置箭头的位置, 箭头指向消息的中间位置
+  arrowWrapperStyle.value = {
+    left: `${(triggerPosition.value.messageX + triggerPosition.value.messageWidth / 2) * 750 / systemInfo.windowWidth}rpx`,
+    top: `${triggerPosition.value.y - marginValue - 16}rpx`,
+  }
+  // 顶部空间不够, "消息操作" 弹窗在消息下面展示
+  if ((triggerPosition.value.y - totalNavHeight) < messageActionsHeihtRpx) {
+    position.top = `${triggerPosition.value.y + triggerPosition.value.messageHeight + marginValue}rpx`
+    
+    arrowWrapperStyle.value = {
+      left: arrowWrapperStyle.value.left,
+      top: `${triggerPosition.value.y + triggerPosition.value.messageHeight + 12}rpx`,
+    }
+  }
+  
+  return position
+})
+
+const handleMaskTap = () => {
+  safeClose()
+}
+
+const handleCopy = () => {
+  if (props.message.messageBody?.text) {
+    uni.setClipboardData({
+      data: props.message.messageBody.text,
+      success: () => {
+        uni.showToast({
+          title: '已复制',
+          icon: 'none'
+        })
+      }
+    })
+  }
+  emit('action', { key: 'copy', text: '复制' })
+  safeClose()
+}
+
+const handleDelete = async() => {
+  try {
+    await deleteMessage()
+    safeClose()
+  } catch(error ) {
+    uni.showToast({
+      title: '删除失败',
+      icon: 'none',
+      duration: 2000
+    })
+    safeClose()
+  }
+}
+
+const handleRecall = async() => {
+  try {
+    await recallMessage()
+    safeClose()
+  } catch(error ) {
+    console.warn('recallMessage failed: ', error)
+    uni.showToast({
+      title: '撤回失败',
+      icon: 'none',
+      duration: 2000
+    })
+    safeClose()
+  }
+}
+
+const setTriggerPosition = (position) => {
+  triggerPosition.value = {
+    x: position.x,
+    y: position.y,
+    messageX: position.messageX,
+    messageWidth: position.messageWidth,
+    messageHeight: position.messageHeight,
+  }
+  // 位置设置完成后，延迟一帧显示，确保样式已计算完成
+  setTimeout(() => {
+    isPositioned.value = true
+  }, 50)  // 50ms 延迟，确保位置计算完成
+}
+
+defineExpose({
+  setTriggerPosition
+})
+</script>
+
+<style>
+.msg-actions {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(255, 255, 255, 0.01);
+  z-index: 999;
+}
+
+.msg-actions__panel {
+  position: absolute;
+  flex-direction: row;
+  background-color: #FFFFFF;
+  border-radius: 12rpx;
+  box-shadow: 0 8rpx 24rpx rgba(0, 0, 0, 0.25);
+  padding: 33rpx 0 22rpx;
+  z-index: 1000;
+  justify-content: space-around;
+  align-items: center;
+}
+
+.msg-actions__item {
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  /* padding: 8rpx 24rpx; */
+  min-width: 114rpx;
+  flex: 1;
+}
+
+.msg-actions__item:active {
+  opacity: 0.6;
+}
+
+/* Element: icon */
+.msg-actions__icon {
+  width: 36rpx;
+  height: 36rpx;
+  margin-bottom: 10rpx;
+}
+
+.msg-actions__text {
+  font-size: 20rpx;
+  color: rgba(0, 0, 0, 0.55);
+  text-align: center;
+}
+
+.msg-actions__arrow-wrapper {
+  position: absolute;
+  width: 60rpx;
+  height: 60rpx;
+  left: 0rpx;
+}
+.msg-actions__arrow {
+  width: 24rpx;
+  height: 24rpx;
+  transform: rotate(45deg);
+}
+</style>

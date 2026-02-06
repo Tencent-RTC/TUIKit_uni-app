@@ -15,7 +15,8 @@ import {
   OpenRemoteCameraOptions, CloseRemoteCameraOptions, OpenRemoteMicrophoneOptions, CloseRemoteMicrophoneOptions, LeaveSeatOptions, MuteMicrophoneOptions, UnmuteMicrophoneOptions,
   KickUserOutOfSeatOptions, MoveUserToSeatOptions, InviteToSeatOptions, CancelInvitationOptions, AcceptInvitationOptions, RejectInvitationOptions, DisconnectOptions, ILiveListener,
   RequestBattleOptions, CancelBattleRequestOptions, AcceptBattleOptions, RejectBattleOptions, ExitBattleOptions,
-  BattleConfigParam, BattleInfoParam
+  BattleConfigParam, BattleInfoParam,
+  HybridListenerOptions, HybridCallOptions,
 } from '../interface.uts';
 import { ParamsCovert } from './utils/ParamsCovert.uts';
 import {
@@ -33,6 +34,9 @@ import {
   DeviceControlPolicy, AudioRoute, CoHostLayoutTemplate, MirrorType, BattleConfig
 } from "AtomicXCore";
 import { UTSiOS } from "DCloudUTSFoundation"
+
+// HybridBridge
+import { HybridBridge, DataReport } from 'AtomicXCore';
 
 const RTC_TAG = "UTS-Login: "
 const LIVE_TAG = "UTS-Live: "
@@ -1617,4 +1621,110 @@ export class RTCRoomEngineManager {
       }
     });
   }
+}
+
+type ListenerCallback = (eventData: string) => void;
+type ListenerMap = Map<string, ListenerCallback>;
+
+const HybridListenerMap = new Map<string, ListenerMap>();
+
+function genListenerKey(storeName:string, dataName:string, id?:string):string {
+  return `${storeName}_${dataName}_${id}`;
+}
+
+const hybridBridge = new HybridBridge(eventEmitter = (eventName:string, eventData:string) => {
+  try {
+    const data = JSON.parse<UTSJSONObject>(eventName);
+    console.warn(`addListener, data:`, data);
+
+    if (data != null) {
+      const storeName = data.getString("store") ?? "";
+      const dataName = data.getString("name") ?? "";
+
+      let instanceId = "";
+      const paramsData = data.getJSON("params");
+      if (paramsData != null) {
+        instanceId = paramsData.getString("createStoreParams") ?? "";
+      }
+
+      const listenerKey = genListenerKey(storeName, dataName, instanceId);
+      const listeners = HybridListenerMap.get(listenerKey);
+      if(listeners != null){
+        listeners.forEach((listener: ListenerCallback, listenerID: string) => {
+          try {
+            listener(eventData);
+          } catch(e) {
+            console.error(`Error executing listener ${listenerID}:`, e);
+          }
+        });
+      }
+    }
+  } catch(e) {
+    console.error("parse eventData error", eventName, eventData, e);
+  }
+})
+
+let hasReportedUIPlatform = false
+
+@UTSJS.keepAlive
+export function addListener(options:HybridListenerOptions, listener:(eventData:string) => void){
+  if (!hasReportedUIPlatform) {
+    hasReportedUIPlatform = true
+    DataReport.reportUIPlatform(platform = 52)
+  }
+  const paramsStr = (options.params != null ? JSON.stringify(options.params) : "{}") as string;
+  const params = JSON.parse<UTSJSONObject>(paramsStr ?? "");
+  const listenerKey = genListenerKey(options.store, options.name, params?.getString("createStoreParams") ?? "");
+  
+  const listenerID = options.listenerID ?? "default";
+  let existingListeners = HybridListenerMap.get(listenerKey);
+  let listeners: Map<string, ListenerCallback> = existingListeners ?? new Map<string, ListenerCallback>();
+  const isNew = (existingListeners == null);
+  listeners.set(listenerID, listener);
+  HybridListenerMap.set(listenerKey, listeners);
+  if(isNew){
+    hybridBridge.addListener(JSON.stringify(options) ?? "");
+  }
+}
+
+export function removeListener(options:HybridListenerOptions){
+  // 1. 生成 Key
+  const paramsStr = (options.params != null ? JSON.stringify(options.params) : "{}") as string;
+  const params = JSON.parse<UTSJSONObject>(paramsStr ?? "");
+  const listenerKey = genListenerKey(options.store, options.name, params?.getString("createStoreParams") ?? "");
+  
+  const listenerID = options.listenerID ?? "default";
+  
+  // 2. 获取旧的 Map (只读)
+  let existingListeners = HybridListenerMap.get(listenerKey);
+  
+  if(existingListeners != null){
+    // 【关键修改】不使用 new Map(oldMap) 构造，避免 UTS 编译为 Swift let 常量
+    // 而是创建一个全新的空 Map，UTS 会将其编译为可变的 var Dictionary
+    let newListeners = new Map<string, ListenerCallback>();
+    
+    // 3. 手动把不需要删除的数据复制到新 Map 中
+    // 这种写法最稳妥，彻底切断了与旧内存的联系 (Deep Copy 效果)
+    existingListeners.forEach((val, key) => {
+        // 如果不是我们要删除的那个 ID，就复制过去
+        if (key != listenerID) {
+            newListeners.set(key, val);
+        }
+    });
+
+    // 4. 判断新 Map 的状态
+    if(newListeners.size === 0){
+      // 如果空了，清理 Native 监听和全局引用
+      hybridBridge.removeListener(JSON.stringify(options) ?? "");
+      HybridListenerMap.delete(listenerKey);
+    } else {
+      // 5. 【原子替换】将全新的 Map 放回去
+      // 这一步是瞬间完成的，不会影响正在遍历旧 Map 的 onEvent 线程
+      HybridListenerMap.set(listenerKey, newListeners);
+    }
+  }
+}
+
+export function callAPI(options:HybridCallOptions, callback:(result:string) => void){
+  hybridBridge.callAPI(json = JSON.stringify(options) ?? "", callback = callback);
 }

@@ -1,0 +1,285 @@
+<template>
+  <view 
+    class="conv-preview" 
+    :class="{ 'conv-preview--pinned': conversation.isPinned }"
+  >
+    <component
+      :is="Avatar"
+      :src="conversation.avatarURL"
+      :name="displayName"
+      :badgeCount="unreadCount"
+      :showBadgeDot="isMuted"
+      :defaultAvatarType="defaultAvatarType"
+    />
+    <view class="conv-preview__info">
+      <view class="conv-preview__header">
+        <text class="conv-preview__name" :numberOfLines="1">{{ conversation.title }}</text>
+        <text class="conv-preview__time">{{ formatTime(conversation.timestamp) }}</text>
+      </view>
+
+      <view class="conv-preview__footer">
+        <view class="conv-preview__message">
+          <text v-if="conversation.draft" class="conv-preview__label conv-preview__label--draft">[草稿]</text>
+          <text v-else-if="isMuted && unreadCount > 0" class="conv-preview__label conv-preview__label--count">[{{unreadCount}}条]</text>
+          
+          <view class="conv-preview__last-msg-container">
+            <template v-for="(segment, index) in messageSegments" :key="index">
+              <text 
+                v-if="segment.type === 'text'" 
+                class="conv-preview__last-msg-text"
+              >{{ segment.content }}</text>
+              <image 
+                v-else-if="segment.type === 'emoji'" 
+                class="conv-preview__emoji"
+                :src="segment.src"
+              />
+            </template>
+          </view>
+        </view>
+        
+        <view class="conv-preview__status">
+          <view v-if="isMuted" class="conv-preview__icon">
+            <image
+              src="../../static/icon/mute.png"
+              class="conv-preview__icon-img"
+              mode="aspectFill"
+            />
+          </view>
+        </view>
+      </view>
+    </view>
+
+  </view>
+</template>
+
+<script setup lang="ts">
+import { computed } from 'vue'
+import AvatarComponent from '../Avatar'
+import { ConversationType, ConversationReceiveOption, type ConversationInfo } from '../../types/conversation'
+import { MessageType, MessageStatus, type MessageInfo } from '../../types/message'
+import type { ConversationPreviewProps } from '../../types/conversationList'
+import { 
+  getMessageAbstract, 
+  parseTextToSegments, 
+  truncateSegments, 
+  getSenderName,
+  type MessageSegment 
+} from './utils'
+
+const props = withDefaults(defineProps<ConversationPreviewProps>(), {
+  Avatar: () => AvatarComponent
+})
+
+const displayName = computed(() => {
+  return props.conversation.title || '未知会话'
+})
+
+const defaultAvatarType = computed(() => {
+  if (props.conversation.type === ConversationType.GROUP) {
+    return props.conversation.groupType
+  }
+  return 'user'
+})
+
+const isMuted = computed(() => {
+  return props.conversation.receiveOption === ConversationReceiveOption.NOT_RECEIVE ||
+         props.conversation.receiveOption === ConversationReceiveOption.NOT_NOTIFY
+})
+
+const messageSegments = computed<MessageSegment[]>(() => {
+  if (props.conversation.draft) {
+    return truncateSegments(parseTextToSegments(props.conversation.draft))
+  }
+  
+  const lastMessage = props.conversation.lastMessage
+  
+  if (!lastMessage) {
+    return [{ type: 'text', content: '暂无消息' }]
+  }
+  
+  if (lastMessage.messageType === MessageType.TEXT && lastMessage.messageBody?.text) {
+    // 将换行符替换为空格，保证一行显示
+    let text = lastMessage.messageBody.text.replace(/[\r\n]+/g, ' ')
+    
+    const senderName = getSenderName(lastMessage)
+    if (senderName) {
+      text = `${senderName}: ${text}`
+    }
+    
+    return truncateSegments(parseTextToSegments(text))
+  }
+  
+  const abstract = getMessageAbstract(lastMessage)
+  return [{ type: 'text', content: abstract }]
+})
+
+const unreadCount = computed(() => {
+  return props.conversation.unreadCount
+})
+
+const formatTime = (timestamp: number): string => {
+  if (!timestamp) return ''
+  
+  const messageTime = new Date(timestamp * 1000)
+  const now = new Date()
+  
+  const messageYear = messageTime.getFullYear()
+  const messageMonth = messageTime.getMonth() + 1
+  const messageDay = messageTime.getDate()
+  const messageHours = messageTime.getHours().toString().padStart(2, '0')
+  const messageMinutes = messageTime.getMinutes().toString().padStart(2, '0')
+  const messageDayOfWeek = messageTime.getDay()
+  
+  const formattedMonth = messageMonth.toString().padStart(2, '0')
+  const formattedDay = messageDay.toString().padStart(2, '0')
+  
+  const currentYear = now.getFullYear()
+  
+  const timeDiff = now.getTime() - messageTime.getTime()
+  const dayDiff = Math.floor(timeDiff / (1000 * 60 * 60 * 24))
+  
+  if (dayDiff === 0) {
+    return `${messageHours}:${messageMinutes}`
+  }
+  
+  if (dayDiff === 1) {
+    return `昨天 ${messageHours}:${messageMinutes}`
+  }
+  
+  if (dayDiff > 1 && dayDiff < 7) {
+    const weekDays = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
+    const weekDay = weekDays[messageDayOfWeek]
+    return `${weekDay} ${messageHours}:${messageMinutes}`
+  }
+  
+  if (messageYear === currentYear) {
+    return `${formattedMonth}/${formattedDay}`
+  }
+  
+  return `${messageYear}/${formattedMonth}/${formattedDay}`
+}
+</script>
+
+<style>
+/* Block: conv-preview */
+.conv-preview {
+  flex-direction: row;
+  align-items: center;
+  padding-left: 22rpx;
+  background-color: #ffffff;
+  position: relative;
+}
+
+/* Modifier: pinned state */
+.conv-preview--pinned {
+  background-color: #F0F2F7;
+}
+
+/* Element: info container */
+.conv-preview__info {
+  padding: 24rpx 32rpx 24rpx 14rpx;
+  flex: 1;
+  justify-content: space-between;
+  border-bottom: 1rpx solid #E6E9F0;
+}
+
+/* Element: header */
+.conv-preview__header {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4rpx;
+}
+
+/* Element: name */
+.conv-preview__name {
+  flex: 1;
+  font-size: 36rpx;
+  line-height: 48rpx;
+  font-weight: 400;
+  color: #333333;
+  lines: 1;
+  text-overflow: ellipsis;
+}
+
+/* Element: time */
+.conv-preview__time {
+  font-weight: 400;
+  font-size: 24rpx;
+  line-height: 34rpx;
+  color: #999999;
+}
+
+/* Element: footer */
+.conv-preview__footer {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* Element: message container */
+.conv-preview__message {
+  flex: 1;
+  flex-direction: row;
+  align-items: center;
+  margin-right: 16rpx;
+}
+
+/* Element: label */
+.conv-preview__label {
+  font-weight: 400;
+  font-size: 28rpx;
+  line-height: 40rpx;
+  margin-right: 8rpx;
+}
+
+/* Modifier: draft label */
+.conv-preview__label--draft {
+  font-size: 24rpx;
+  color: #ff4444;
+}
+
+/* Modifier: count label */
+.conv-preview__label--count {
+  color: #999999;
+}
+
+/* Element: last message container - 混合布局容器 */
+.conv-preview__last-msg-container {
+  flex: 1;
+  flex-direction: row;
+  align-items: center;
+  overflow: hidden;
+}
+
+/* Element: text for last message */
+.conv-preview__last-msg-text {
+  font-size: 28rpx;
+  line-height: 40rpx;
+  color: #999999;
+}
+
+/* Element: emoji in last message */
+.conv-preview__emoji {
+  width: 32rpx;
+  height: 32rpx;
+  margin: 0 4rpx;
+}
+
+/* Element: status container */
+.conv-preview__status {
+  flex-direction: row;
+  align-items: center;
+}
+
+/* Element: icon container */
+.conv-preview__icon {
+  margin-right: 8rpx;
+}
+
+/* Element: icon image */
+.conv-preview__icon-img {
+  width: 26rpx;
+  height: 26rpx;
+}
+</style>

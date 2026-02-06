@@ -1,0 +1,233 @@
+<template>
+  <view
+    class="file-message"
+    :class="['content-'+ (message.isSelf ? 'out' : 'in')]"
+    @tap="handleFileTap"
+  >
+    <view class="file-highlight">
+      <view class="file-icon">
+        <text class="icon-text">{{ fileIconText }}</text>
+      </view>
+      <view class="file-info">
+        <view  class="file-name">
+          <text class="file-name-text" :lines="2">{{ fileName }}</text>
+        </view>
+        <view  class="file-footer">
+          <text class="file-size-text">{{ formatFileSize(fileSize) }}</text>
+          <view class="file-download" v-if="!isDownloaded">
+            <image
+              src="../../../../static/icon/download.png"
+              class="icon-image"
+              mode="aspectFill"
+            />
+          </view>
+        </view>
+      </view>
+    </view>
+    <view
+      v-if="isDownloading"
+      class="downloading"
+      :class="['content-'+ (message.isSelf ? 'out' : 'in')]"
+      :style="{ width: downloadWidth + 'rpx' }"
+    >
+    </view>
+  </view>
+</template>
+
+<script setup lang="ts">
+import { ref, computed } from 'vue'
+import type { MessageInfo } from '../../../../types/message'
+
+interface Props {
+  message: MessageInfo
+}
+
+const props = defineProps<Props>()
+
+const isDownloading = ref(false)
+const downloadProgress = ref(0)
+const isDownloaded = ref(false)
+
+const fileName = computed(() => {
+  return props.message.messageBody?.fileName || '未知文件'
+})
+
+const fileSize = computed(() => {
+  return props.message.messageBody?.fileSize || 0
+})
+
+const filePath = computed(() => {
+  return props.message.messageBody?.filePath || ''
+})
+
+const downloadWidth = computed(() => {
+  const maxWidth = 500
+  return (downloadProgress.value / 100) * maxWidth
+})
+
+const fileType = computed(() => {
+  const name = fileName.value
+  const extension = name.split('.').pop()?.toLowerCase()
+  return extension || 'unknown'
+})
+
+const fileIconText = computed(() => {
+  const ext = fileType.value
+  if (ext === 'unknown') return 'F'
+  return ext.charAt(0).toUpperCase()
+})
+
+const formatFileSize = (size: number) => {
+  if (!size) return '0 B'
+  
+  const units = ['B', 'KB', 'MB', 'GB', 'TB']
+  let fileSize = size
+  let unitIndex = 0
+  
+  while (fileSize >= 1024 && unitIndex < units.length - 1) {
+    fileSize /= 1024
+    unitIndex++
+  }
+  
+  return `${fileSize.toFixed(unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`
+}
+
+const simulateDownload = () => {
+  isDownloading.value = true
+  downloadProgress.value = 0
+  
+  const interval = setInterval(() => {
+    downloadProgress.value += Math.random() * 15
+    
+    if (downloadProgress.value >= 100) {
+      downloadProgress.value = 100
+      isDownloading.value = false
+      isDownloaded.value = true
+      clearInterval(interval)
+      
+      uni.$emit('fileDownloadComplete', {
+        messageId: props.message.msgID,
+        url: filePath.value
+      })
+    }
+  }, 300)
+}
+
+const handleFileTap = () => {
+  if (isDownloading.value) return
+  
+  if (!isDownloaded.value) {
+    simulateDownload()
+  } else {
+    uni.$emit('openFile', {
+      url: filePath.value,
+      name: fileName.value,
+      type: fileType.value
+    })
+  }
+}
+</script>
+
+<style>
+.file-message {
+  position: relative;
+  background-color: #FFFFFF;
+  border: 2rpx solid #E6E9F0;
+  min-width: 300rpx;
+  max-width: 500rpx;
+}
+
+.content-in {
+  border-radius: 4rpx 20rpx 20rpx 20rpx;
+}
+
+.content-out {
+  border-radius: 20rpx 4rpx 20rpx 20rpx;
+}
+
+/* 闪烁层 */
+.file-highlight {
+  flex: 1;
+  flex-direction: row;
+  align-items: center;
+  padding: 24rpx;
+  background-color: transparent;
+}
+
+.file-icon {
+  margin-right: 20rpx;
+  width: 64rpx;
+  height: 64rpx;
+  justify-content: center;
+  align-items: center;
+  background-color: #E54545;
+  border-radius: 10rpx;
+}
+
+.icon-text {
+  font-size: 32rpx;
+  color: #FFFFFF;
+}
+
+.file-info, .file-name, .file-footer {
+  flex: 1;
+}
+
+.file-name-text {
+  flex: 1;
+  font-weight: 400;
+  font-size: 32rpx;
+  line-height: 42rpx;
+  color: rgba(0, 0, 0, 0.9);
+  margin-bottom: 4rpx;
+  lines: 2;
+  text-overflow: ellipsis;
+}
+
+.file-size-text {
+  font-weight: 400;
+  font-size: 28rpx;
+  line-height: 39rpx;
+  color: rgba(0, 0, 0, 0.4);
+}
+
+.file-footer {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.file-download {
+  justify-content: flex-end;
+}
+
+.icon-image {
+  width: 28rpx;
+  height: 28rpx;
+}
+
+.file-status {
+  margin-left: 16rpx;
+  align-items: center;
+  justify-content: center;
+}
+
+.downloading {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  z-index: 0;
+  background-color: rgba(204, 226, 255, 0.5);
+  border-radius: 20rpx;
+  transition-property: width;
+  transition-duration: 0.3s;
+  transition-timing-function: ease-out;
+}
+
+.download-progress {
+  font-size: 20rpx;
+  color: #1890ff;
+  margin-top: 8rpx;
+}
+</style>

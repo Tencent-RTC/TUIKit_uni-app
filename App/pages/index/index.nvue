@@ -1,0 +1,364 @@
+<template>
+  <view class="page">
+    <view class="navbar" :style="{ paddingTop: statusBarHeight + 'px' }">
+      <view class="navbar-content">
+        <view class="navbar-left">
+			<image class="logo-image" src="/static/images/logo.png" mode="aspectFit"></image>
+        </view>
+        <image
+          class="avatar"
+          :src="userInfo?.avatar || 'https://web.sdk.qcloud.com/component/TUIKit/assets/avatar_21.png'"
+          mode="aspectFill"
+          @tap="navigateToProfile"></image>
+      </view>
+    </view>
+
+    <view class="notice-banner">
+      <text class="notice-text">{{ noticeText }}</text>
+    </view>
+
+    <list class="main-content" :show-scrollbar="false">
+      <cell v-for="(row, rowIndex) in moduleRows" :key="rowIndex">
+        <view class="module-row">
+          <view 
+            v-for="(module, index) in row" 
+            :key="module.id"
+            :class="['module-card', index === row.length - 1 ? 'module-card-last' : '']"
+            @tap="navigateToModule(module)"
+          >
+            <view class="card-header">
+              <view class="card-header-left">
+                <image class="card-icon" :src="module.icon" mode="aspectFit"></image>
+                <text class="card-title">{{ module.title }}</text>
+                <view class="ui-badge">
+                    <text class="badge-text">UI组件</text>
+                </view>
+              </view>
+              <view class="card-arrow">
+                  <text class="arrow-icon">›</text>
+              </view>
+            </view>
+			<view class="card-info">
+				<text class="card-description">{{ module.description }}</text>
+			</view>
+          </view>
+        </view>
+      </cell>
+      <footer class="list-footer">
+        <view class="footer-placeholder"></view>
+      </footer>
+    </list>
+
+    <Dialog
+      :visible="showSecurityDialog"
+      :title="securityConfig.title"
+    >
+      <text class="dialog-intro">{{ securityConfig.intro }}</text>
+      <view class="dialog-tips">
+        <text 
+          v-for="(tip, index) in securityConfig.tips" 
+          :key="index"
+          class="tip-item"
+        >{{ tip }}</text>
+      </view>
+      <text class="dialog-text-footer">{{ securityConfig.footer }}</text>
+      
+      <template v-slot:footer>
+        <view 
+          :class="['dialog-button', canCloseDialog ? 'dialog-button-active' : 'dialog-button-disabled']"
+          @tap="handleDialogConfirm"
+        >
+          <text class="dialog-button-text">{{ buttonText }}</text>
+        </view>
+      </template>
+    </Dialog>
+  </view>
+</template>
+
+<script setup>
+import { ref, computed, onBeforeUnmount } from "vue";
+import { onLoad } from "@dcloudio/uni-app";
+import { loginUserInfo } from "@/server/loginService";
+import Dialog from "@/components/Dialog/Dialog.nvue";
+import homeConfig from "./home-config";
+
+const statusBarHeight = ref(0);
+const showSecurityDialog = ref(false);
+const canCloseDialog = ref(false);
+const countdown = ref(homeConfig.securityDialog.countdownSeconds);
+let timer = null;
+
+const noticeText = homeConfig.noticeText;
+const securityConfig = homeConfig.securityDialog;
+const modules = homeConfig.modules;
+
+const userInfo = computed(() => loginUserInfo.value);
+
+const moduleRows = computed(() => {
+  const rows = [];
+  for (let i = 0; i < modules.length; i += 2) {
+    rows.push(modules.slice(i, i + 2));
+  }
+  return rows;
+});
+
+const buttonText = computed(() => {
+  return canCloseDialog.value 
+    ? securityConfig.buttonText 
+    : `${securityConfig.buttonText}(${countdown.value}s)`;
+});
+
+function startCountdown() {
+  timer = setInterval(() => {
+    if (countdown.value > 0) {
+      countdown.value--;
+    }
+    if (countdown.value === 0) {
+      canCloseDialog.value = true;
+      clearInterval(timer);
+    }
+  }, 1000);
+}
+
+function handleDialogConfirm() {
+  if (canCloseDialog.value) {
+    showSecurityDialog.value = false;
+    uni.setStorage({
+      key: 'showSecurity',
+      data: userInfo.value?.userId,
+    });
+  }
+}
+
+function navigateToModule(module) {
+  if(!module.route) {
+    return uni.showToast({
+      title: '功能开发中',
+      icon: 'none'
+    })
+  }
+  uni.navigateTo({
+    url: module.route,
+  });
+}
+
+function navigateToProfile() {
+  uni.navigateTo({
+    url: '/pages/mine/mine',
+  });
+}
+
+onLoad(() => {
+  const systemInfo = uni.getSystemInfoSync();
+  statusBarHeight.value = systemInfo.statusBarHeight || 0;
+  
+  uni?.getStorage({
+    key: 'showSecurity',
+    success: (res) => {
+      console.warn('showSecurity', res, userInfo.value?.userId);
+      if (!res.data || res.data !== userInfo.value?.userId) {
+        showSecurityDialog.value = true;
+        startCountdown();
+      }
+    },
+    fail: () => {
+      showSecurityDialog.value = true;
+      startCountdown();
+    }
+  });
+});
+
+onBeforeUnmount(() => {
+  if (timer) {
+    clearInterval(timer);
+  }
+});
+</script>
+
+<style>
+.page {
+  flex: 1;
+  background-color: #f5f5f5;
+}
+
+.navbar {
+  background-color: #ffffff;
+  border-bottom-width: 1rpx;
+  border-bottom-color: #e5e5e5;
+  border-bottom-style: solid;
+}
+
+.navbar-content {
+  height: 129rpx;
+  padding: 20rpx 36rpx;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.navbar-left {
+  flex-direction: row;
+  align-items: center;
+}
+
+.logo-image {
+  width: 260rpx;
+  height: 60rpx;
+}
+
+.avatar {
+  width: 60rpx;
+  height: 60rpx;
+  border-radius: 30rpx;
+}
+
+.notice-banner {
+  background-color: #FFEEEC;
+  padding: 16rpx 36rpx;
+}
+
+.notice-text {
+  font-size: 24rpx;
+  color: #C85F51;
+  line-height: 36rpx;
+}
+
+.main-content {
+  flex: 1;
+  padding: 24rpx 0;
+}
+
+.list-footer {
+  height: 46rpx;
+}
+
+.footer-placeholder {
+  height: 46rpx;
+}
+
+.module-row {
+  flex-direction: row;
+  padding: 0 36rpx;
+  margin-bottom: 28rpx;
+}
+
+.module-card {
+  flex: 1;
+  background-color: #ffffff;
+  border-radius: 18rpx;
+  position: relative;
+  margin-right: 28rpx;
+  display: flex;
+  flex-direction: column;
+}
+
+.module-card-last {
+  margin-right: 0;
+}
+
+.card-header {
+  padding: 28rpx 24rpx 0;
+  border-radius: 18rpx;
+  background: linear-gradient(to bottom, #CCDFFF, #ffffff);
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+}
+.card-header-left {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+}
+
+.card-icon {
+  width: 48rpx;
+  height: 48rpx;
+}
+
+.card-title {
+  font-size: 32rpx;
+  line-height: 36rpx;
+  font-weight: 600;
+  color: #000000;
+  margin: 0 12rpx;
+}
+
+.ui-badge {
+	background: #73A1F0;
+	border-radius: 4rpx;
+	padding: 0 8rpx;
+}
+
+.badge-text {
+  font-size: 24rpx;
+  line-height: 36rpx;
+  color: #ffffff;
+  font-weight: 500;
+}
+
+.card-info {
+  padding: 24rpx 24rpx;
+  height: 120rpx;
+}
+
+.card-description {
+  font-size: 24rpx;
+  font-weight: 400;
+  color: #6C7077;
+  line-height: 36rpx;
+}
+
+.arrow-icon {
+  font-size: 46rpx;
+  color: #d8d8d8;
+  font-weight: 300;
+}
+
+/* 安全提示弹窗内容样式 */
+.dialog-intro {
+  font-size: 28rpx;
+  color: #333333;
+  line-height: 42rpx;
+  margin-bottom: 24rpx;
+}
+
+.dialog-tips {
+  margin-bottom: 24rpx;
+}
+
+.tip-item {
+  font-size: 28rpx;
+  color: #666666;
+  line-height: 42rpx;
+  margin-bottom: 16rpx;
+}
+
+.dialog-text-footer {
+  font-size: 28rpx;
+  color: #333333;
+  line-height: 42rpx;
+}
+
+/* 安全提示弹窗按钮样式 */
+.dialog-button {
+  height: 88rpx;
+  border-radius: 44rpx;
+  align-items: center;
+  justify-content: center;
+}
+
+.dialog-button-active {
+  background-color: #0066FF;
+}
+
+.dialog-button-disabled {
+  background-color: #CCCCCC;
+}
+
+.dialog-button-text {
+  font-size: 32rpx;
+  font-weight: 500;
+  color: #ffffff;
+}
+</style>

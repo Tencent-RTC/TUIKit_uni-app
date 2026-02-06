@@ -1,0 +1,45 @@
+<template>
+  <view class="msg-time-divider">
+    <view class="msg-time-divider__content">
+      <text class="msg-time-divider__text">{{ formattedTime }}</text>
+    </view>
+  </view>
+</template>
+
+<script setup>
+import { computed } from 'vue'
+import { formatTime } from '../../../utils/timeUtils'
+
+const props = defineProps({
+  timestamp: {
+    type: Number,
+    required: true
+  }
+})
+
+const formattedTime = computed(() => {
+  return formatTime(props.timestamp, true)
+})
+</script>
+
+<style>
+.msg-time-divider {
+  flex-direction: row;
+  justify-content: center;
+  align-items: center;
+  padding: 10rpx 0;
+  margin: 20rpx 0;
+}
+
+.msg-time-divider__content {
+  margin: 0 20rpx;
+}
+
+.msg-time-divider__text {
+  font-size: 24rpx;
+  color: #999;
+  line-height: 1.2;
+  padding: 8rpx 16rpx;
+  border-radius: 16rpx;
+}
+</style>

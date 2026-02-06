@@ -5,10 +5,10 @@
       <view class="drawer-header">
         <view class="user-info-section">
           <view class="avatar-container">
-            <image class="user-avatar" :src="userInfo?.avatar || defaultAvatarURL" mode="aspectFill"></image>
+            <image class="user-avatar" :src="userInfo?.avatarURL || defaultAvatarURL" mode="aspectFill"></image>
           </view>
           <view class="user-details">
-            <text class="username">{{ userInfo?.userName || '' }}</text>
+            <text class="username">{{ userInfo?.userName || userInfo?.userID || '' }}</text>
             <text class="user-id">ID: {{ userInfo?.userID || '' }}</text>
           </view>
         </view>

@@ -1,0 +1,152 @@
+<template>
+  <view v-if="isShow" ref="maskRef" class="popup-mask" @tap="handleMaskTap">
+    <view ref="containerRef" class="popup-container" @tap.stop>
+      <slot></slot>
+    </view>
+  </view>
+</template>
+
+<script setup lang="ts">
+import { ref, watch, nextTick } from 'vue';
+
+const animation = uni.requireNativePlugin('animation');
+
+interface PopupProps {
+  visible: boolean;
+  closeOnMaskTap?: boolean;
+}
+
+const props = withDefaults(defineProps<PopupProps>(), {
+  visible: false,
+  closeOnMaskTap: true
+});
+
+const emit = defineEmits<{
+  (e: 'update:visible', value: boolean): void;
+  (e: 'close'): void;
+}>();
+
+const isShow = ref(false);
+const maskRef = ref<any>(null);
+const containerRef = ref<any>(null);
+const isAnimating = ref(false);
+
+watch(() => props.visible, (newVal) => {
+  if (newVal) {
+    showPopup();
+  } else {
+    hidePopup();
+  }
+});
+
+const showPopup = async () => {
+  if (isAnimating.value) return;
+  isAnimating.value = true;
+  isShow.value = true;
+  
+  await nextTick();
+  
+  setTimeout(() => {
+    const maskEl = maskRef.value;
+    const containerEl = containerRef.value;
+    
+    if (maskEl && containerEl) {
+      // 遮罩快速淡入
+      animation.transition(maskEl, {
+        styles: { opacity: 1 },
+        duration: 180,
+        timingFunction: 'ease-out'
+      });
+      
+      // 弹窗弹性弹出
+      animation.transition(containerEl, {
+        styles: {
+          transform: 'translateY(0) scale(1)',
+          opacity: 1
+        },
+        duration: 240,
+        timingFunction: 'cubic-bezier(0.175, 0.885, 0.32, 1.275)'
+      }, () => {
+        isAnimating.value = false;
+      });
+    } else {
+      isAnimating.value = false;
+    }
+  }, 10);
+};
+
+const hidePopup = (callback?: () => void) => {
+  if (isAnimating.value) return;
+  isAnimating.value = true;
+  
+  const maskEl = maskRef.value;
+  const containerEl = containerRef.value;
+  
+  if (maskEl && containerEl) {
+    // 遮罩快速淡出
+    animation.transition(maskEl, {
+      styles: { opacity: 0 },
+      duration: 150,
+      timingFunction: 'ease-out'
+    });
+    
+    // 弹窗快速收缩消失
+    animation.transition(containerEl, {
+      styles: {
+        transform: 'translateY(20px) scale(0.9)',
+        opacity: 0
+      },
+      duration: 150,
+      timingFunction: 'cubic-bezier(0.4, 0, 1, 1)'
+    }, () => {
+      isShow.value = false;
+      isAnimating.value = false;
+      callback?.();
+    });
+  } else {
+    isShow.value = false;
+    isAnimating.value = false;
+    callback?.();
+  }
+};
+
+// 暴露 close 方法给父组件
+const close = (callback?: () => void) => {
+  hidePopup(() => {
+    emit('update:visible', false);
+    emit('close');
+    callback?.();
+  });
+};
+
+const handleMaskTap = () => {
+  if (props.closeOnMaskTap) {
+    close();
+  }
+};
+
+defineExpose({ close });
+</script>
+
+<style scoped>
+.popup-mask {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.8);
+  justify-content: center;
+  align-items: center;
+  opacity: 0;
+}
+
+.popup-container {
+  width: 654rpx;
+  background-color: #FFFFFF;
+  border-radius: 24rpx;
+  overflow: hidden;
+  opacity: 0;
+  transform: translateY(20px) scale(0.9);
+}
+</style>

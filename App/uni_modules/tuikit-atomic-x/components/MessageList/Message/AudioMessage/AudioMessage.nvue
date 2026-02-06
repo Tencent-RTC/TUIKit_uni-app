@@ -1,0 +1,209 @@
+<template>
+  <view 
+    class="audio-message" 
+    :class="'content-'+ (message.isSelf ? 'out' : 'in')" 
+    :style="{ width: audioWidth + 'rpx' }"
+    @tap="handlePlayTap"
+  >
+    <view class="audio-highlight">
+      <image
+        src="../../../../static/icon/audio.png"
+        class="icon-image"
+        :class="['icon-'+ (message.isSelf ? 'out' : 'in'), { 'icon-playing': isPlaying }]"
+        mode="aspectFill"
+      />
+      <view class="audio-duration">
+        <text class="duration-text">{{ formatDuration(soundDuration) }}</text>
+      </view>
+    </view>
+  </view>
+</template>
+
+<script setup lang="ts">
+import { ref, computed, onMounted, onUnmounted } from 'vue'
+import type { MessageInfo } from '../../../../types/message'
+
+interface Props {
+  message: MessageInfo
+}
+
+const props = defineProps<Props>()
+
+const isPlaying = ref(false)
+const currentPlayTime = ref(0)
+
+const soundUrl = computed(() => {
+  return props.message.messageBody?.soundPath || ''
+})
+
+const soundDuration = computed(() => {
+  return props.message.messageBody?.soundDuration || 0
+})
+
+const audioWidth = computed(() => {
+  const duration = soundDuration.value
+  const minWidth = 220 // 最小宽度
+  const maxWidth = 474 // 最大宽度
+  const minDuration = 20 // 20秒以内保持最小宽度
+  const maxDuration = 60 // 60秒对应最大宽度
+  
+  if (duration <= minDuration) return minWidth
+  if (duration >= maxDuration) return maxWidth
+  
+  // 线性插值计算宽度（20秒到60秒之间）
+  return minWidth + (maxWidth - minWidth) * ((duration - minDuration) / (maxDuration - minDuration))
+})
+
+const formatDuration = (duration: number) => {
+  if (!duration) return `0''`
+  
+  const seconds = Math.floor(duration)
+  
+  return `${seconds}''`
+}
+
+const handlePlayTap = () => {
+  isPlaying.value = !isPlaying.value
+  
+  if (isPlaying.value) {
+    // 触发音频播放事件
+    uni.$emit('playAudio', {
+      url: soundUrl.value,
+      messageId: props.message.msgID,
+      duration: soundDuration.value
+    })
+    
+    // 开始计时
+    startTimer()
+  } else {
+    // 触发音频暂停事件
+    uni.$emit('pauseAudio', {
+      messageId: props.message.msgID
+    })
+    
+    // 停止计时
+    stopTimer()
+  }
+}
+
+let timer: ReturnType<typeof setInterval> | null = null
+
+const startTimer = () => {
+  stopTimer()
+  currentPlayTime.value = 0
+  
+  timer = setInterval(() => {
+    currentPlayTime.value += 0.1
+    
+    // 播放完成
+    if (currentPlayTime.value >= soundDuration.value) {
+      handlePlayComplete()
+    }
+  }, 100)
+}
+
+const stopTimer = () => {
+  if (timer) {
+    clearInterval(timer)
+    timer = null
+  }
+}
+
+const handlePlayComplete = () => {
+  isPlaying.value = false
+  currentPlayTime.value = 0
+  stopTimer()
+  
+  // 触发播放完成事件
+  uni.$emit('audioPlayComplete', {
+    messageId: props.message.msgID
+  })
+}
+
+const handleGlobalAudioControl = (data: any) => {
+  // 如果是其他消息开始播放，停止当前播放
+  if (data.messageId !== props.message.msgID && isPlaying.value) {
+    isPlaying.value = false
+    stopTimer()
+  }
+}
+
+onMounted(() => {
+  uni.$on('globalAudioControl', handleGlobalAudioControl)
+})
+
+onUnmounted(() => {
+  stopTimer()
+  
+  uni.$off('globalAudioControl', handleGlobalAudioControl)
+})
+</script>
+
+<style>
+.audio-message {
+  min-width: 200rpx;
+}
+
+.content-in {
+  background-color: #F0F2F7;
+  border-radius: 4rpx 20rpx 20rpx 20rpx;
+}
+
+.content-out {
+  background-color: #CCE2FF;
+  border-radius: 20rpx 4rpx 20rpx 20rpx;
+}
+
+.audio-highlight {
+  flex: 1;
+  flex-direction: row;
+  align-items: center;
+  padding: 20rpx;
+  background-color: transparent;
+}
+
+.content-out .audio-highlight {
+  flex-direction: row-reverse;
+}
+
+.icon-in {
+  transform: rotate(180deg);
+}
+
+.icon-image {
+  width: 40rpx;
+  height: 40rpx;
+  transition-property: transform, opacity;
+  transition-duration: 0.3s;
+}
+
+.icon-playing {
+  animation-name: pulse;
+  animation-duration: 1s;
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+}
+
+@keyframes pulse {
+  0% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.6;
+    transform: scale(0.9);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.duration-text {
+  padding: 0 4rpx;
+  font-size: 20rpx;
+  line-height: 17rpx;
+  font-weight: 500;
+  color: rgba(0, 0, 0, 0.9);
+}
+</style>

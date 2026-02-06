@@ -1,0 +1,158 @@
+<template>
+  <view
+    class="text-msg text-msg--no-select" 
+    :class="['text-msg__content', 'text-msg__content--'+ (message.isSelf ? 'out' : 'in')]"
+  >
+    <view class="text-msg__highlight">
+      <view 
+        v-if="quoteMessage" 
+        class="text-msg__quote text-msg__quote--no-select"
+        @tap="handleReferenceTap"
+      >
+        <view class="text-msg__quote-header">
+          <text class="text-msg__quote-sender text-msg__text--no-select">{{ quoteMessage.msgSender || '' }}</text>
+        </view>
+        <view class="text-msg__quote-body">
+          <text class="text-msg__quote-text text-msg__text--no-select">{{ quoteMessage.msgAbstract || '' }}</text>
+        </view>
+      </view>
+      
+      <view class="text-msg__body text-msg__body--no-select">
+        <rich-text
+          class="text-msg__rich-text--no-select"
+          style="background-color: transparent"
+          :nodes="richTextNodes"
+          :selectable="false"
+        />
+      </view>
+    </view>
+  </view>
+</template>
+
+<script setup lang="ts">
+import { computed } from 'vue'
+import type { MessageInfo } from '../../../../types/message'
+import { parseEmojiToNodes } from '../../../../utils/emojiUtils'
+
+interface Props {
+  message: MessageInfo
+}
+
+const props = defineProps<Props>()
+
+const messageText = computed(() => {
+  return props.message.messageBody?.text || ''
+})
+
+const richTextNodes = computed(() => {
+  return parseEmojiToNodes(messageText.value, '40rpx')
+})
+
+const quoteMessage = computed(() => {
+  return props.message.quoteMessageInfo
+})
+
+const handleReferenceTap = () => {
+  if (quoteMessage.value?.msgID) {
+    uni.$emit('scrollToMessage', quoteMessage.value.msgID)
+  }
+}
+</script>
+
+<style>
+.text-msg {
+  flex-direction: column;
+  max-width: 500rpx;
+}
+
+/* 禁用整个文本消息的选择 */
+.text-msg--no-select {
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.text-msg__content {
+  flex: 1;
+}
+
+.text-msg__content--in {
+  background-color: #F0F2F7;
+  border-radius: 4rpx 20rpx 20rpx 20rpx;
+}
+
+.text-msg__content--out {
+  background-color: #CCE2FF;
+  border-radius: 20rpx 4rpx 20rpx 20rpx;
+}
+
+.text-msg__highlight {
+  flex: 1;
+  padding: 20rpx 24rpx;
+  background-color: transparent;
+}
+
+.text-msg__quote {
+  background-color: rgba(0, 0, 0, 0.05);
+  border-left-width: 4rpx;
+  border-left-color: #999;
+  border-radius: 8rpx;
+  padding: 16rpx;
+  margin-bottom: 12rpx;
+}
+
+/* 禁用引用消息的选择 */
+.text-msg__quote--no-select {
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.text-msg__quote-header {
+  margin-bottom: 8rpx;
+}
+
+.text-msg__quote-sender {
+  font-size: 24rpx;
+  color: #333;
+  font-weight: 500;
+}
+
+.text-msg__quote-body {
+  max-width: 100%;
+}
+
+.text-msg__quote-text {
+  font-size: 26rpx;
+  color: #666;
+}
+
+/* 禁用所有文本元素的选择 */
+.text-msg__text--no-select {
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.text-msg__body {
+  flex-direction: column;
+}
+
+/* 禁用消息体的选择 */
+.text-msg__body--no-select {
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+/* 禁用 rich-text 的选择 */
+.text-msg__rich-text--no-select {
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.text-msg__rich-text-wrapper {
+  background-color: transparent;
+}
+</style>

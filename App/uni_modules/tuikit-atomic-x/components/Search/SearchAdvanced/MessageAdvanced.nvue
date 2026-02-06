@@ -1,0 +1,211 @@
+<template>
+  <view class="message-advanced">
+    <view class="options-row">
+      <text class="label">选择时间:</text>
+      <view 
+        v-for="item in rangeOptions" 
+        :key="item.value"
+        class="option-cell"
+        @click="handleOptionClick(item)"
+      >
+        <text 
+          class="option" 
+          :class="{ active: selectedRange === item.value }"
+        >{{ item.value === 'all' ? displayDateRange : item.label }}</text>
+        <text v-if="item.value === 'all'" class="arrow">▼</text>
+      </view>
+    </view>
+    
+    <DateRangePicker
+      v-model:visible="showDatePicker"
+      v-model:startDate="localStartDate"
+      v-model:endDate="localEndDate"
+      @change="handleDateChange"
+    />
+  </view>
+</template>
+
+<script setup lang="ts">
+import { ref, watch, computed } from 'vue'
+import DateRangePicker from '../../DateRangePicker/DateRangePicker.nvue'
+import { MessageAdvancedProps, MessageAdvancedEmits } from '../../../types/search'
+
+type DateRangeType = 'all' | 'today' | 'three_days' | 'seven_days'
+
+const props = withDefaults(defineProps<MessageAdvancedProps>(), {
+  startDate: '',
+  endDate: ''
+})
+
+const emit = defineEmits<MessageAdvancedEmits>()
+
+const selectedRange = ref<DateRangeType>('all')
+const showDatePicker = ref(false)
+const localStartDate = ref(props.startDate)
+const localEndDate = ref(props.endDate)
+
+const rangeOptions = [
+  { value: 'all' as DateRangeType, label: '全部' },
+  { value: 'today' as DateRangeType, label: '今天' },
+  { value: 'three_days' as DateRangeType, label: '近三天' },
+  { value: 'seven_days' as DateRangeType, label: '近7天' }
+]
+
+const displayDateRange = computed(() => {
+  if (localStartDate.value && localEndDate.value) {
+    const formatShort = (dateStr: string) => {
+      const parts = dateStr.split('-')
+      return `${parts[1]}/${parts[2]}`
+    }
+    return `${formatShort(localStartDate.value)}-${formatShort(localEndDate.value)}`
+  }
+  return '全部'
+})
+
+watch(() => props.startDate, (val) => {
+  localStartDate.value = val
+})
+
+watch(() => props.endDate, (val) => {
+  localEndDate.value = val
+})
+
+const formatDate = (date: Date): string => {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+const handleOptionClick = (item: { value: DateRangeType, label: string }) => {
+  if (item.value === 'all') {
+    handleSelectAll()
+  } else {
+    handleSelect(item.value)
+  }
+}
+
+const handleSelectAll = () => {
+  selectedRange.value = 'all'
+  showDatePicker.value = true
+}
+
+const handleSelect = (range: DateRangeType) => {
+  showDatePicker.value = false
+  
+  if (selectedRange.value === range) {
+    selectedRange.value = 'all'
+    localStartDate.value = ''
+    localEndDate.value = ''
+    emit('update:startDate', '')
+    emit('update:endDate', '')
+    emit('change', '', '')
+    return
+  }
+  
+  selectedRange.value = range
+  
+  const today = new Date()
+  let startDate = ''
+  let endDate = formatDate(today)
+  
+  switch (range) {
+    case 'today':
+      startDate = formatDate(today)
+      break
+    case 'three_days':
+      const threeDaysAgo = new Date(today)
+      threeDaysAgo.setDate(today.getDate() - 2)
+      startDate = formatDate(threeDaysAgo)
+      break
+    case 'seven_days':
+      const sevenDaysAgo = new Date(today)
+      sevenDaysAgo.setDate(today.getDate() - 6)
+      startDate = formatDate(sevenDaysAgo)
+      break
+  }
+  
+  localStartDate.value = startDate
+  localEndDate.value = endDate
+  emit('update:startDate', startDate)
+  emit('update:endDate', endDate)
+  emit('change', startDate, endDate)
+}
+
+const matchPresetRange = (start: string, end: string): DateRangeType => {
+  const today = new Date()
+  const todayStr = formatDate(today)
+  
+  if (end !== todayStr) {
+    return 'all'
+  }
+  
+  if (start === todayStr) {
+    return 'today'
+  }
+  
+  const threeDaysAgo = new Date(today)
+  threeDaysAgo.setDate(today.getDate() - 2)
+  if (start === formatDate(threeDaysAgo)) {
+    return 'three_days'
+  }
+  
+  const sevenDaysAgo = new Date(today)
+  sevenDaysAgo.setDate(today.getDate() - 6)
+  if (start === formatDate(sevenDaysAgo)) {
+    return 'seven_days'
+  }
+  
+  return 'all'
+}
+
+const handleDateChange = (startDate: string, endDate: string) => {
+  selectedRange.value = matchPresetRange(localStartDate.value, localEndDate.value)
+  
+  emit('update:startDate', localStartDate.value)
+  emit('update:endDate', localEndDate.value)
+  emit('change', localStartDate.value, localEndDate.value)
+}
+</script>
+
+<style>
+.message-advanced {
+  background-color: #ffffff;
+}
+
+.options-row {
+  flex-direction: row;
+  align-items: center;
+  padding: 20rpx 40rpx 0;
+}
+
+.label {
+  font-size: 28rpx;
+  color: rgba(0, 0, 0, 0.55);
+  margin-right: 16rpx;
+}
+
+.option-cell {
+  flex-direction: row;
+  align-items: center;
+  margin-right: 20rpx;
+}
+.option-cell:last-child {
+  margin-right: 0;
+}
+
+.option {
+  font-size: 28rpx;
+  color: rgba(0, 0, 0, 0.55);
+  padding: 12rpx;
+}
+
+.option.active {
+  color: #1C66E5;
+}
+
+.arrow {
+  font-size: 20rpx;
+  color: rgba(0, 0, 0, 0.4);
+}
+</style>

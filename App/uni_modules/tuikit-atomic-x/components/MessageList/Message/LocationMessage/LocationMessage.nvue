@@ -1,0 +1,121 @@
+<template>
+  <view
+    class="location-message" 
+    :class="['message-content', 'content-'+ message.flow]"
+    @tap="handleLocationTap">
+    <view class="location-info">
+      <text class="location-title">{{ locationTitle }}</text>
+      <text class="location-description">{{ locationDescription }}</text>
+    </view>
+    
+    <image
+      class="location-map"
+      :src="mapImageUrl"
+      :style="mapStyle"
+      mode="aspectFill"
+    />
+  </view>
+</template>
+
+<script setup>
+import { computed } from 'vue'
+
+const props = defineProps({
+  message: {
+    type: Object,
+    required: true
+  }
+})
+
+const messageContent = computed(() => {
+  return props.message.payload || {}
+})
+
+const locationTitle = computed(() => {
+  return messageContent.value.title || messageContent.value.name || '位置信息'
+})
+
+const locationDescription = computed(() => {
+  return messageContent.value.description || messageContent.value.address || ''
+})
+
+const mapImageUrl = computed(() => {
+  const lat = messageContent.value.latitude
+  const lng = messageContent.value.longitude
+  
+  if (!lat || !lng) {
+    return 'https://picsum.photos/seed/location/400/240'
+  }
+  
+  return `https://restapi.amap.com/v3/staticmap?location=${lng},${lat}&zoom=15&size=400*240&markers=mid,,A:${lng},${lat}&key=YOUR_KEY`
+})
+
+const mapStyle = computed(() => {
+  const defaultWidth = 400
+  const defaultHeight = 240
+  
+  return {
+    width: `${defaultWidth}rpx`,
+    height: `${defaultHeight}rpx`
+  }
+})
+
+const handleLocationTap = () => {
+  uni.$emit('viewLocation', {
+    latitude: messageContent.value.latitude,
+    longitude: messageContent.value.longitude,
+    title: locationTitle.value,
+    description: locationDescription.value
+  })
+}
+</script>
+
+<style>
+.location-message {
+  overflow: hidden;
+  border: 2rpx solid #E6E9F0;
+  background-color: #FFFFFF;
+}
+
+.content-in {
+  border-radius: 4rpx 20rpx 20rpx 20rpx;
+}
+
+.content-out {
+  border-radius: 20rpx 4rpx 20rpx 20rpx;
+}
+
+.location-info {
+  flex-direction: column;
+  padding: 20rpx 24rpx;
+  border-bottom: 2rpx solid #E6E9F0;
+}
+
+.location-title {
+  font-size: 32rpx;
+  line-height: 42rpx;
+  color: rgba(0, 0, 0, 0.9);
+  font-weight: 400;
+  margin-bottom: 4rpx;
+  width: 352rpx;
+  lines: 1;
+  text-overflow: ellipsis;
+  overflow: hidden;
+}
+
+.location-description {
+  font-size: 24rpx;
+  line-height: 34rpx;
+  color: rgba(0, 0, 0, 0.4);
+  font-weight: 400;
+  width: 352rpx;
+  lines: 1;
+  text-overflow: ellipsis;
+  overflow: hidden;
+}
+
+.location-map {
+  width: 400rpx;
+  height: 240rpx;
+}
+</style>

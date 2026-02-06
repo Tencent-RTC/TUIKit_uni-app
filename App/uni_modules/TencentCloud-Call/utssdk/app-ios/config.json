@@ -1,0 +1,13 @@
+{
+  "frameworks": [
+	"CoreTelephony.framework"
+  ],
+  "deploymentTarget": "13", 
+  "dependencies-pods": [
+	{
+	    "name": "TUICallKit_Swift",
+	    "version": "3.6.3",
+		"source": "https://cdn.cocoapods.org/"
+	}
+  ]
+}

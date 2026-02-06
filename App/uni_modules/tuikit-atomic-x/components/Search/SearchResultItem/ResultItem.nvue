@@ -1,0 +1,501 @@
+<template>
+  <view class="result-item">
+    <component
+      :is="Avatar"
+      :src="avatarURL"
+      :name="title"
+      :size="72"
+      :defaultAvatarType="defaultAvatarType"
+    />
+    <view class="result-item__info">
+      <view class="result-item__title-row">
+        <text
+          v-for="(segment, index) in titleSegments"
+          :key="index"
+          :class="segment.highlight ? 'result-item__title--highlight' : 'result-item__title'"
+        >{{ segment.text }}</text>
+        <text
+          v-for="(segment, index) in titleSuffixSegments"
+          :key="'suffix-' + index"
+          :class="[
+            segment.highlight ? 'result-item__title-suffix--highlight' : 'result-item__title-suffix',
+            index === 0 ? 'result-item__title-suffix--first' : ''
+          ]"
+        >{{ segment.text }}</text>
+      </view>
+      <view v-if="subtitle || mediaType" class="result-item__subtitle-row">
+        <image
+          v-if="mediaType === 'image' && mediaSrc"
+          :src="mediaSrc"
+          class="result-item__image-thumb"
+          mode="aspectFill"
+        />
+        <view v-else-if="mediaType === 'video' && mediaSrc" class="result-item__video-thumb">
+          <image
+            :src="mediaSrc"
+            class="result-item__video-cover"
+            mode="aspectFill"
+          />
+          <view class="result-item__video-play">
+            <image
+              src="../../../static/icon/play.png"
+              class="result-item__video-play-icon"
+              mode="aspectFill"
+            />
+          </view>
+        </view>
+        <view v-else-if="mediaType === 'sound'" class="result-item__audio">
+          <image
+            src="../../../static/icon/audio.png"
+            class="result-item__audio-icon"
+            mode="aspectFill"
+          />
+          <text class="result-item__audio-duration">{{ formatSoundDuration(mediaInfo?.duration) }}</text>
+        </view>
+        <view v-else-if="mediaType === 'file'" class="result-item__file">
+          <view class="result-item__file-icon">
+            <text class="result-item__file-icon-text">{{ fileIconText }}</text>
+          </view>
+          <view class="result-item__file-info">
+            <text class="result-item__file-name" :lines="1">{{ mediaInfo?.fileName || '未知文件' }}</text>
+            <text class="result-item__file-size">{{ formatFileSize(mediaInfo?.fileSize) }}</text>
+          </view>
+        </view>
+        <image
+          v-else-if="mediaType === 'face'"
+          :src="faceImageUrl"
+          class="result-item__face"
+          mode="aspectFit"
+        />
+        <template v-for="(segment, index) in subtitleSegments" :key="index">
+          <text
+            v-if="segment.type === 'text'"
+            :class="segment.highlight ? 'result-item__subtitle--highlight' : 'result-item__subtitle'"
+          >{{ segment.text }}</text>
+          <image
+            v-else-if="segment.type === 'emoji'"
+            :src="segment.src"
+            class="result-item__emoji"
+          />
+        </template>
+      </view>
+    </view>
+    <view v-if="RightContent" class="result-item__right">
+      <component :is="RightContent" />
+    </view>
+  </view>
+</template>
+
+<script setup lang="ts">
+import { computed } from 'vue'
+import type { Component } from 'vue'
+import AvatarComponent from '../../Avatar'
+import { emojiUrlMap, emojiBaseUrl } from '../../../constants/emoji'
+
+interface MediaInfo {
+  duration?: number
+  fileName?: string
+  fileSize?: number
+  faceIndex?: number
+  faceName?: string
+}
+
+interface ResultItemProps {
+  avatarURL?: string
+  title?: string
+  titleSuffix?: string
+  RightContent?: Component
+  subtitle?: string
+  keyword?: string
+  Avatar?: Component
+  mediaType?: 'image' | 'video' | 'file' | 'sound' | 'face' | ''
+  mediaSrc?: string
+  mediaInfo?: MediaInfo
+  /** 默认头像类型：none | user | work | public | meeting | avchatroom */
+  defaultAvatarType?: string
+}
+
+const props = withDefaults(defineProps<ResultItemProps>(), {
+  avatarURL: '',
+  title: '',
+  titleSuffix: '',
+  subtitle: '',
+  keyword: '',
+  Avatar: () => AvatarComponent,
+  mediaType: '',
+  mediaSrc: '',
+  mediaInfo: () => ({}),
+  defaultAvatarType: 'none'
+})
+
+const formatSoundDuration = (duration?: number) => {
+  if (!duration) return `0''`
+  const seconds = Math.floor(duration)
+  return `${seconds}''`
+}
+
+const formatFileSize = (size?: number) => {
+  if (!size) return '0 B'
+  
+  const units = ['B', 'KB', 'MB', 'GB', 'TB']
+  let fileSize = size
+  let unitIndex = 0
+  
+  while (fileSize >= 1024 && unitIndex < units.length - 1) {
+    fileSize /= 1024
+    unitIndex++
+  }
+  
+  return `${fileSize.toFixed(unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`
+}
+
+const fileIconText = computed(() => {
+  const fileName = props.mediaInfo?.fileName || ''
+  const ext = fileName.split('.').pop()?.toLowerCase()
+  if (!ext || ext === 'unknown') return 'F'
+  return ext.charAt(0).toUpperCase()
+})
+
+const faceImageUrl = computed(() => {
+  const index = props.mediaInfo?.faceIndex || 0
+  const name = props.mediaInfo?.faceName || ''
+  
+  const faceMap: Record<number, string> = {
+    0: '/static/emoji/smile.png',
+    1: '/static/emoji/laugh.png',
+    2: '/static/emoji/cry.png',
+    3: '/static/emoji/angry.png',
+    4: '/static/emoji/surprise.png',
+    5: '/static/emoji/love.png',
+    6: '/static/emoji/sad.png',
+    7: '/static/emoji/cool.png',
+    8: '/static/emoji/wink.png',
+    9: '/static/emoji/kiss.png'
+  }
+  
+  if (name) {
+    const nameMap: Record<string, string> = {
+      'smile': '/static/emoji/smile.png',
+      'laugh': '/static/emoji/laugh.png',
+      'cry': '/static/emoji/cry.png',
+      'angry': '/static/emoji/angry.png',
+      'surprise': '/static/emoji/surprise.png',
+      'love': '/static/emoji/love.png',
+      'sad': '/static/emoji/sad.png',
+      'cool': '/static/emoji/cool.png',
+      'wink': '/static/emoji/wink.png',
+      'kiss': '/static/emoji/kiss.png'
+    }
+    if (nameMap[name]) {
+      return nameMap[name]
+    }
+  }
+  
+  return faceMap[index] || faceMap[0]
+})
+
+interface TextSegment {
+  type: 'text'
+  text: string
+  highlight?: boolean
+}
+
+interface EmojiSegment {
+  type: 'emoji'
+  src: string
+}
+
+type Segment = TextSegment | EmojiSegment
+
+function splitByKeyword(text: string, keyword: string): TextSegment[] {
+  if (!text) return []
+  if (!keyword) return [{ type: 'text', text, highlight: false }]
+
+  const segments: TextSegment[] = []
+  const lowerText = text.toLowerCase()
+  const lowerKeyword = keyword.toLowerCase()
+  let lastIndex = 0
+  let index = lowerText.indexOf(lowerKeyword)
+
+  while (index !== -1) {
+    if (index > lastIndex) {
+      segments.push({ type: 'text', text: text.slice(lastIndex, index), highlight: false })
+    }
+    segments.push({ type: 'text', text: text.slice(index, index + keyword.length), highlight: true })
+    lastIndex = index + keyword.length
+    index = lowerText.indexOf(lowerKeyword, lastIndex)
+  }
+
+  if (lastIndex < text.length) {
+    segments.push({ type: 'text', text: text.slice(lastIndex), highlight: false })
+  }
+
+  return segments.length > 0 ? segments : [{ type: 'text', text, highlight: false }]
+}
+
+function parseTextWithEmoji(text: string, highlight: boolean): Segment[] {
+  const segments: Segment[] = []
+  const emojiRegex = /\[TUIEmoji_[^\]]+\]/g
+  let lastIndex = 0
+  let match: RegExpExecArray | null
+
+  while ((match = emojiRegex.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      segments.push({ type: 'text', text: text.substring(lastIndex, match.index), highlight })
+    }
+
+    const emojiKey = match[0]
+    const emojiFileName = emojiUrlMap[emojiKey]
+    if (emojiFileName) {
+      segments.push({ type: 'emoji', src: emojiBaseUrl + emojiFileName })
+    } else {
+      segments.push({ type: 'text', text: emojiKey, highlight })
+    }
+
+    lastIndex = emojiRegex.lastIndex
+  }
+
+  if (lastIndex < text.length) {
+    segments.push({ type: 'text', text: text.substring(lastIndex), highlight })
+  }
+
+  return segments
+}
+
+const MAX_SUBTITLE_LENGTH = 30
+
+function truncateText(text: string, maxLength: number): string {
+  if (!text || text.length <= maxLength) return text
+  return text.slice(0, maxLength) + '...'
+}
+
+function buildSubtitleSegments(text: string, keyword: string): Segment[] {
+  if (!text) return []
+  
+  const truncatedText = truncateText(text, MAX_SUBTITLE_LENGTH)
+
+  if (!keyword) {
+    return parseTextWithEmoji(truncatedText, false)
+  }
+
+  const segments: Segment[] = []
+  const lowerText = truncatedText.toLowerCase()
+  const lowerKeyword = keyword.toLowerCase()
+  let lastIndex = 0
+  let index = lowerText.indexOf(lowerKeyword)
+
+  while (index !== -1) {
+    if (index > lastIndex) {
+      segments.push(...parseTextWithEmoji(truncatedText.slice(lastIndex, index), false))
+    }
+    segments.push({ type: 'text', text: truncatedText.slice(index, index + keyword.length), highlight: true })
+    lastIndex = index + keyword.length
+    index = lowerText.indexOf(lowerKeyword, lastIndex)
+  }
+
+  if (lastIndex < truncatedText.length) {
+    segments.push(...parseTextWithEmoji(truncatedText.slice(lastIndex), false))
+  }
+
+  return segments.length > 0 ? segments : parseTextWithEmoji(truncatedText, false)
+}
+
+const titleSegments = computed(() => splitByKeyword(props.title, props.keyword))
+const titleSuffixSegments = computed(() => splitByKeyword(props.titleSuffix, props.keyword))
+const subtitleSegments = computed(() => buildSubtitleSegments(props.subtitle, props.keyword))
+</script>
+
+<style>
+.result-item {
+  flex-direction: row;
+  align-items: center;
+}
+
+.result-item__info {
+  flex: 1;
+  margin-left: 16rpx;
+}
+
+.result-item__title-row {
+  flex-direction: row;
+  align-items: center;
+}
+
+.result-item__title {
+  font-size: 32rpx;
+  line-height: 45rpx;
+  font-weight: 400;
+  color: rgba(0, 0, 0, 0.9);
+  lines: 1;
+  text-overflow: ellipsis;
+}
+
+.result-item__title--highlight {
+  font-size: 32rpx;
+  line-height: 45rpx;
+  font-weight: 400;
+  color: #007AFF;
+}
+
+.result-item__title-suffix {
+  font-size: 32rpx;
+  line-height: 44rpx;
+  font-weight: 400;
+  color: rgba(0, 0, 0, 0.9);
+}
+
+.result-item__title-suffix--highlight {
+  font-size: 32rpx;
+  line-height: 44rpx;
+  font-weight: 400;
+  color: #007AFF;
+}
+
+.result-item__title-suffix--first {
+  margin-left: 8rpx;
+}
+
+.result-item__right {
+  margin-left: 16rpx;
+}
+
+.result-item__subtitle-row {
+  flex-direction: row;
+  align-items: center;
+  margin-top: 8rpx;
+  overflow: hidden;
+}
+
+.result-item__subtitle {
+  font-size: 28rpx;
+  line-height: 40rpx;
+  font-weight: 400;
+  color: rgba(0, 0, 0, 0.4);
+  lines: 1;
+  text-overflow: ellipsis;
+}
+
+.result-item__subtitle--highlight {
+  font-size: 28rpx;
+  line-height: 40rpx;
+  font-weight: 400;
+  color: #007AFF;
+  lines: 1;
+  text-overflow: ellipsis;
+}
+
+.result-item__emoji {
+  width: 28rpx;
+  height: 28rpx;
+  margin: 0 4rpx;
+}
+
+.result-item__image-thumb {
+  width: 80rpx;
+  height: 80rpx;
+  border-radius: 8rpx;
+}
+
+.result-item__video-thumb {
+  position: relative;
+  width: 80rpx;
+  height: 80rpx;
+}
+
+.result-item__video-cover {
+  width: 80rpx;
+  height: 80rpx;
+  border-radius: 8rpx;
+}
+
+.result-item__video-play {
+  position: absolute;
+  left: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  align-items: center;
+  justify-content: center;
+  background-color: rgba(0, 0, 0, 0.3);
+  border-radius: 8rpx;
+}
+
+.result-item__video-play-icon {
+  width: 32rpx;
+  height: 32rpx;
+}
+
+.result-item__audio {
+  flex-direction: row;
+  align-items: center;
+  padding: 12rpx 20rpx;
+  background-color: #F0F2F7;
+  border-radius: 12rpx;
+}
+
+.result-item__audio-icon {
+  width: 32rpx;
+  height: 32rpx;
+  transform: rotate(180deg);
+}
+
+.result-item__audio-duration {
+  margin-left: 8rpx;
+  font-size: 24rpx;
+  line-height: 34rpx;
+  font-weight: 500;
+  color: rgba(0, 0, 0, 0.9);
+}
+
+.result-item__file {
+  flex-direction: row;
+  align-items: center;
+  padding: 12rpx 16rpx;
+  background-color: #FFFFFF;
+  border-radius: 12rpx;
+  border-width: 1rpx;
+  border-color: #E6E9F0;
+  max-width: 400rpx;
+}
+
+.result-item__file-icon {
+  width: 48rpx;
+  height: 48rpx;
+  justify-content: center;
+  align-items: center;
+  background-color: #E54545;
+  border-radius: 8rpx;
+  margin-right: 12rpx;
+}
+
+.result-item__file-icon-text {
+  font-size: 24rpx;
+  color: #FFFFFF;
+}
+
+.result-item__file-info {
+  flex: 1;
+}
+
+.result-item__file-name {
+  font-size: 26rpx;
+  line-height: 36rpx;
+  font-weight: 400;
+  color: rgba(0, 0, 0, 0.9);
+  lines: 1;
+  text-overflow: ellipsis;
+}
+
+.result-item__file-size {
+  font-size: 22rpx;
+  line-height: 30rpx;
+  font-weight: 400;
+  color: rgba(0, 0, 0, 0.4);
+}
+
+.result-item__face {
+  width: 64rpx;
+  height: 64rpx;
+  border-radius: 8rpx;
+}
+</style>

@@ -1,0 +1,49 @@
+<template>
+  <view class="user-picker-page">
+    <UserPicker :businessType="businessType" :routeParams="routeParams" @confirm="handleConfirm" />
+  </view>
+</template>
+
+<script setup lang="ts">
+import { ref } from 'vue'
+import { onLoad } from '@dcloudio/uni-app'
+import UserPicker from '@/uni_modules/tuikit-atomic-x/components/UserPicker/UserPicker.nvue'
+import { UserPickerType } from '@/uni_modules/tuikit-atomic-x/types/userpicker'
+import type { User } from '@/uni_modules/tuikit-atomic-x/components/UserPicker/service/types'
+
+declare const uni: any
+
+const businessType = ref<number>(-1)
+const routeParams = ref<Record<string, string>>({})
+let eventChannel: any = null
+
+onLoad((options) => {
+  console.log('>>> options', options);
+  businessType.value = parseInt(options.businessType || '-1')
+  routeParams.value = options;
+  
+  // 获取 eventChannel
+  const pages = getCurrentPages()
+  const currentPage = pages[pages.length - 1]
+  eventChannel = currentPage.getOpenerEventChannel?.()
+})
+
+const handleConfirm = (selectedUsers: User[]) => {
+  console.log('>>> selectedUsers', selectedUsers);
+  
+  // 如果是选择群成员类型，通过 eventChannel 返回数据并返回上一层
+  if (businessType.value === UserPickerType.SELECT_GROUP_MEMBER) {
+    if (eventChannel) {
+      eventChannel.emit('onSelectGroupMember', { selectedUsers })
+    }
+    uni.navigateBack()
+  }
+}
+</script>
+
+<style>
+.user-picker-page {
+  flex: 1;
+  background-color: #f5f5f5;
+}
+</style>

@@ -1,0 +1,86 @@
+<template>
+  <view class="search-tab">
+    <view 
+      v-for="tab in tabs" 
+      :key="tab.value"
+      class="search-tab__item"
+      :class="{ 'search-tab__item--active': modelValue === tab.value }"
+      @click="handleTabClick(tab.value)"
+    >
+      <text 
+        class="search-tab__text"
+        :class="{ 'search-tab__text--active': modelValue === tab.value }"
+      >{{ tab.label }}</text>
+    </view>
+  </view>
+</template>
+
+<script setup lang="ts">
+import { SearchTabValue } from '../../types/search'
+
+interface TabItem {
+  label: string
+  value: SearchTabValue
+}
+
+interface SearchTabProps {
+  modelValue?: SearchTabValue
+  tabs?: TabItem[]
+}
+
+interface SearchTabEmits {
+  (e: 'update:modelValue', value: SearchTabValue): void
+  (e: 'change', value: SearchTabValue): void
+}
+
+const props = withDefaults(defineProps<SearchTabProps>(), {
+  modelValue: SearchTabValue.All,
+  tabs: () => [
+    { label: '全部', value: SearchTabValue.All },
+    { label: '用户', value: SearchTabValue.Friend },
+    { label: '群聊', value: SearchTabValue.Group },
+    { label: '消息', value: SearchTabValue.Message },
+  ]
+})
+
+const emit = defineEmits<SearchTabEmits>()
+
+const handleTabClick = (value: SearchTabValue) => {
+  if (value !== props.modelValue) {
+    emit('update:modelValue', value)
+    emit('change', value)
+  }
+}
+</script>
+
+<style>
+.search-tab {
+  flex-direction: row;
+  background-color: #ffffff;
+  border-top: 1rpx solid #E6E9F0;
+  padding-top: 20rpx;
+}
+
+.search-tab__item {
+  justify-content: center;
+  align-items: center;
+  padding: 20rpx 0;
+  margin-left: 40rpx;
+  border-bottom: 4rpx solid transparent;
+}
+
+.search-tab__text {
+  font-size: 28rpx;
+  font-weight: 400;
+  line-height: 40rpx;
+  color: #666666;
+}
+
+.search-tab__text--active {
+  color: #1C66E5;
+}
+
+.search-tab__item--active {
+  border-bottom: 4rpx solid #1C66E5;
+}
+</style>

@@ -1,0 +1,41 @@
+<template>
+  <ResultItem
+    :avatarURL="group.groupAvatarURL"
+    :title="displayName"
+    :titleSuffix="'(' + group.groupID + ')'"
+    :subtitle="group.memberCount + '人'"
+    :keyword="keyword"
+    :Avatar="Avatar"
+    :defaultAvatarType="defaultAvatarType"
+  />
+</template>
+
+<script setup lang="ts">
+import { computed } from 'vue'
+import AvatarComponent from '../../Avatar'
+import ResultItem from './ResultItem.nvue'
+import type { SearchResultItemGroupProps } from '../../../types/search'
+import { GroupType } from '../../../types/group'
+
+const props = withDefaults(defineProps<SearchResultItemGroupProps>(), {
+  keyword: '',
+  Avatar: () => AvatarComponent
+})
+
+const displayName = computed(() => {
+  return props.group.groupName || props.group.groupID || '未知群组'
+})
+
+const GROUP_TYPE_TO_AVATAR: Record<string, string> = {
+  [GroupType.Work]: 'work',
+  [GroupType.Public]: 'public',
+  [GroupType.Meeting]: 'meeting',
+  [GroupType.AVChatRoom]: 'avchatroom',
+  [GroupType.Community]: 'public'
+}
+
+const defaultAvatarType = computed(() => {
+  const groupType = props.group.groupType
+  return groupType ? (GROUP_TYPE_TO_AVATAR[groupType] || 'public') : 'public'
+})
+</script>

@@ -1,0 +1,198 @@
+<template>
+  <view class="member-avatar-list">
+    <scroll-view class="member-avatar-list__scroll" scroll-x="true" :show-scrollbar="false">
+      <view class="member-avatar-list__content">
+        <!-- 成员头像 -->
+        <view 
+          v-for="(member, index) in displayMembers" 
+          :key="member.userID"
+          class="member-avatar-list__item"
+          :class="{
+            'member-avatar-list__item--no-margin-right': isLastInRow(index)
+          }"
+          @tap="handleMemberClick(member)"
+        >
+          <Avatar
+            :src="member.avatarURL"
+            :name="getMemberName(member)"
+            :size="80"
+            :shape="'square'"
+            :defaultAvatarType="'user'"
+            pureMode
+          />
+          <text v-if="showName" class="member-avatar-list__name">{{ getMemberName(member) }}</text>
+        </view>
+
+        <!-- 添加按钮 -->
+        <view 
+          v-if="showAddButton"
+          class="member-avatar-list__item"
+          :class="{
+            'member-avatar-list__item--no-margin-right': isAddButtonLastInRow
+          }"
+          @tap="handleAdd"
+        >
+          <view class="member-avatar-list__btn">
+            <text class="member-avatar-list__btn-icon">+</text>
+          </view>
+          <text v-if="showName" class="member-avatar-list__name">{{ ' ' }}</text>
+        </view>
+
+        <!-- 删除按钮 -->
+        <view 
+          v-if="showRemoveButton"
+          class="member-avatar-list__item"
+          :class="{
+            'member-avatar-list__item--no-margin-right': isRemoveButtonLastInRow
+          }"
+          @tap="handleRemove"
+        >
+          <view class="member-avatar-list__btn">
+            <text class="member-avatar-list__btn-icon">−</text>
+          </view>
+          <text v-if="showName" class="member-avatar-list__name">{{ ' ' }}</text>
+        </view>
+      </view>
+    </scroll-view>
+  </view>
+</template>
+
+<script setup lang="ts">
+import { computed } from 'vue';
+import { Avatar } from '../../Avatar';
+import type { GroupMember } from '../../../types/group';
+
+interface Props {
+  members: GroupMember[];
+  maxDisplay?: number;
+  showAddButton?: boolean;
+  showRemoveButton?: boolean;
+  showName?: boolean;
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  members: () => [],
+  maxDisplay: 5,
+  showAddButton: false,
+  showRemoveButton: false,
+  showName: false,
+});
+
+const emit = defineEmits<{
+  (e: 'add'): void;
+  (e: 'remove'): void;
+  (e: 'member-click', member: GroupMember): void;
+}>();
+
+// 每行显示的数量
+const ITEMS_PER_ROW = 6;
+
+// 显示的成员列表（限制数量）
+const displayMembers = computed(() => {
+  return props.members.slice(0, props.maxDisplay);
+});
+
+// 判断是否是每行的最后一个元素（一行6个）
+const isLastInRow = (index: number): boolean => {
+  return (index + 1) % ITEMS_PER_ROW === 0;
+};
+
+// 添加按钮在列表中的位置索引
+const addButtonIndex = computed(() => {
+  return displayMembers.value.length;
+});
+
+// 判断添加按钮是否是每行的最后一个
+const isAddButtonLastInRow = computed(() => {
+  return (addButtonIndex.value + 1) % ITEMS_PER_ROW === 0;
+});
+
+// 删除按钮在列表中的位置索引
+const removeButtonIndex = computed(() => {
+  return displayMembers.value.length + (props.showAddButton ? 1 : 0);
+});
+
+// 判断删除按钮是否是每行的最后一个
+const isRemoveButtonLastInRow = computed(() => {
+  return (removeButtonIndex.value + 1) % ITEMS_PER_ROW === 0;
+});
+
+// 获取头像文字
+const getAvatarText = (member: GroupMember): string => {
+  const name = member.nameCard || member.nickname || member.userID || '';
+  return name.substring(0, 1);
+};
+
+// 获取成员显示名称
+const getMemberName = (member: GroupMember): string => {
+  return member.nameCard || member.nickname || member.userID || '';
+};
+
+// 点击成员
+const handleMemberClick = (member: GroupMember) => {
+  emit('member-click', member);
+};
+
+// 点击添加
+const handleAdd = () => {
+  emit('add');
+};
+
+// 点击删除
+const handleRemove = () => {
+  emit('remove');
+};
+</script>
+
+<style scoped>
+.member-avatar-list {
+  background-color: #FFFFFF;
+}
+
+.member-avatar-list__scroll {
+  flex: 1;
+}
+
+.member-avatar-list__content {
+  flex-direction: row;
+  padding: 32rpx 32rpx 0;
+  flex-wrap: wrap;
+}
+
+.member-avatar-list__item {
+  align-items: center;
+  margin-right: 40rpx;
+  margin-bottom: 24rpx;
+}
+
+.member-avatar-list__item--no-margin-right {
+  margin-right: 0;
+}
+
+.member-avatar-list__item:last-child {
+  margin-right: 0;
+}
+
+.member-avatar-list__name {
+  font-size: 24rpx;
+  color: rgba(0, 0, 0, 0.9);
+  margin-top: 6rpx;
+  max-width: 80rpx;
+  text-align: center;
+  lines: 1;
+}
+
+.member-avatar-list__btn {
+  width: 80rpx;
+  height: 80rpx;
+  border-radius: 10rpx;
+  justify-content: center;
+  align-items: center;
+  background-color: #F0F2F7;
+}
+
+.member-avatar-list__btn-icon {
+  font-size: 48rpx;
+  color: #999999;
+}
+</style>

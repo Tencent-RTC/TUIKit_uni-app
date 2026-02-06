@@ -1,0 +1,49 @@
+<template>
+  <ResultItem
+    :avatarURL="messageResult.conversationAvatarURL"
+    :title="messageResult.conversationShowName"
+    :subtitle="subtitleText"
+    :keyword="keyword"
+    :Avatar="Avatar"
+    :defaultAvatarType="defaultAvatarType"
+  />
+</template>
+
+<script setup lang="ts">
+import { computed } from 'vue'
+import AvatarComponent from '../../Avatar'
+import ResultItem from './ResultItem.nvue'
+import { getMessageAbstract } from '../../ConversationList/utils'
+import type { SearchResultItemMessageProps } from '../../../types/search'
+
+const props = withDefaults(defineProps<SearchResultItemMessageProps>(), {
+  keyword: '',
+  Avatar: () => AvatarComponent
+})
+
+const previewText = computed(() => {
+  const messages = props.messageResult.messageList
+  if (!messages || messages.length === 0) return ''
+  
+  const firstMessage = messages[0]
+  if (firstMessage.messageBody?.text) {
+    return firstMessage.messageBody.text
+  }
+  return getMessageAbstract(firstMessage);
+})
+
+const subtitleText = computed(() => {
+  const count = props.messageResult.messageCount
+  if (count === 1) {
+    return previewText.value
+  }
+  return `${count}条相关聊天记录`
+})
+
+const defaultAvatarType = computed(() => {
+  if (props.messageResult.conversationID.startsWith('group_')) {
+    return 'public'
+  }
+  return 'user'
+})
+</script>

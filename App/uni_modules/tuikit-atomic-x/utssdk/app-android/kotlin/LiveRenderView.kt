@@ -75,7 +75,7 @@ class LiveRenderView(context: Context, attrs: AttributeSet? = null) : Constraint
         }
         removeAllViews()
         val renderView = LiveCoreView(context, null, 0, nativeViewType)
-        renderView.setLiveId(liveID)
+        renderView.setLiveID(liveID)
         val lp = LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT)
         addView(renderView, lp)
     }

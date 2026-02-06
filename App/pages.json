@@ -1,18 +1,61 @@
 {
   "pages": [{
-      "path": "pages/login/index",
-      "style": {
-        "navigationBarTitleText": "登录"
-      }
-    },
-    {
-      "path": "pages/livelist/index",
+      "path": "pages/login/login",
       "style": {
         "navigationStyle": "custom"
       }
     },
     {
-      "path": "pages/audience/index",
+      "path": "pages/index/index",
+      "style": {
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/mine/mine",
+      "style": {
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "uni_modules/TencentCloud-Call/callkit/callPage",
+      "style": {
+        "navigationBarTitleText": "",
+        "navigationStyle": "custom",
+        "app-plus": {
+          "titleNView": false
+        }
+      }
+    },
+    {
+      "path": "pages/scenes/call/index",
+      "style": {
+        "navigationBarTitleText": "腾讯云 CallKit",
+        "navigationBarBackgroundColor": "#EBF0F6"
+      }
+    },
+    {
+      "path": "pages/scenes/call/call",
+      "style": {
+        "navigationBarTitleText": "腾讯云 CallKit",
+        "navigationBarBackgroundColor": "#EBF0F6"
+      }
+    },
+    {
+      "path": "pages/scenes/call/groupCall",
+      "style": {
+        "navigationBarTitleText": "腾讯云 CallKit",
+        "navigationBarBackgroundColor": "#EBF0F6"
+      }
+    },
+    {
+      "path": "pages/scenes/live/livelist/index",
+      "style": {
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/scenes/live/audience/index",
       "style": {
         "navigationBarTextStyle": "white",
         "app-plus": {
@@ -21,7 +64,7 @@
       }
     },
     {
-      "path": "pages/anchor/index",
+      "path": "pages/scenes/live/anchor/index",
       "disableSwipeBack": true,
       "style": {
         "backgroundColor": "#000000",
@@ -32,7 +75,7 @@
       }
     },
     {
-      "path": "pages/liveend/index",
+      "path": "pages/scenes/live/liveend/index",
       "disableSwipeBack": true,
       "style": {
         "navigationBarTextStyle": "white",
@@ -42,41 +85,105 @@
       }
     },
     {
-      "path": "pages/mine/mine",
+      "path": "pages/scenes/chat/conversationList/conversationList",
       "style": {
-        "navigationBarTitleText": "个人中心"
+        "navigationStyle": "custom",
+        "backgroundColor": "#f5f5f5"
       }
     },
     {
-      "path": "pages/live/live",
+      "path": "pages/scenes/chat/chat/index",
       "style": {
-        "navigationBarTitleText": "直播"
+        "navigationStyle": "custom",
+        "backgroundColor": "#f5f5f5",
+        "app-plus": {
+          "titleNView": false
+        }
+      }
+    },
+    {
+      "path": "pages/scenes/chat/chatSetting/index",
+      "style": {
+        "navigationStyle": "custom",
+        "backgroundColor": "#f5f5f5"
+      }
+    },
+    {
+      "path": "pages/scenes/chat/groupManagement/index",
+      "style": {
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/scenes/chat/groupMemberList/index",
+      "style": {
+        "navigationStyle": "custom",
+        "backgroundColor": "#f5f5f5"
+      }
+    },
+    {
+      "path": "pages/scenes/chat/search/search",
+      "style": {
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/scenes/chat/search/searchInConversation",
+      "style": {
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/scenes/chat/search/userFilter",
+      "style": {
+        "navigationBarTitleText": "按条件查找用户",
+        "navigationBarBackgroundColor": "#ffffff",
+        "navigationBarTextStyle": "black",
+        "backgroundColor": "#f5f5f5"
+      }
+    },
+    {
+      "path": "pages/scenes/chat/userPicker/userPicker",
+      "style": {
+        "navigationBarTitleText": "选人列表",
+        "navigationBarBackgroundColor": "#ffffff",
+        "navigationBarTextStyle": "black",
+        "backgroundColor": "#f5f5f5"
+      }
+    },
+    {
+      "path": "pages/scenes/chat/createGroup/createGroup",
+      "style": {
+        "navigationBarTitleText": "创建群聊",
+        "navigationBarBackgroundColor": "#ffffff",
+        "navigationBarTextStyle": "black",
+        "backgroundColor": "#f5f5f5"
+      }
+    },
+    {
+      "path": "pages/scenes/chat/groupTypeInfo/groupTypeInfo",
+      "style": {
+        "navigationBarTitleText": "选择群类型",
+        "navigationBarBackgroundColor": "#ffffff",
+        "navigationBarTextStyle": "black",
+        "backgroundColor": "#f5f5f5"
+      }
+    },
+    {
+      "path": "pages/scenes/chat/videoPlayer/videoPlayer",
+      "style": {
+        "app-plus": {
+          "titleNView": false,
+          "screenOrientation": ["portrait-primary", "landscape-primary", "landscape-secondary"]
+        }
       }
     }
   ],
-  "tabBar": {
-    "color": "#999",
-    "selectedColor": "#007AFF",
-    "backgroundColor": "#FFFFFF",
-    "fontSize": "14px",
-    "list": [{
-      "pagePath": "pages/live/live",
-      "text": "直播",
-      "iconPath": "/static/images/mode.png",
-      "selectedIconPath": "/static/images/mode.png"
-    }, {
-      "pagePath": "pages/mine/mine",
-      "text": "我的",
-      "iconPath": "/static/images/mine-normal.png",
-      "selectedIconPath": "/static/images/mine-hover.png"
-    }]
-  },
   "globalStyle": {
     "navigationBarTextStyle": "black",
-    "navigationBarTitleText": "uni-app",
-    "navigationBarBackgroundColor": "#FFFFFF",
-    "backgroundColor": "#FFFFFF",
-    "app-plus": {}
+    "navigationBarTitleText": "腾讯云 IM",
+    "navigationBarBackgroundColor": "#EBF0F6",
+    "backgroundColor": "#F8F8F8"
   },
   "uniIdRouter": {}
 }

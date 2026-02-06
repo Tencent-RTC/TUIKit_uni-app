@@ -1,0 +1,136 @@
+<template>
+  <view class="search-advanced">
+    <MessageAdvanced
+      v-if="currentTab === SearchTabValue.Message"
+      v-model:startDate="messageStartDate"
+      v-model:endDate="messageEndDate"
+      @change="handleMessageAdvancedChange"
+    />
+    <UserAdvanced
+      v-if="currentTab === SearchTabValue.Friend && isCloudSearch"
+      ref="userAdvancedRef"
+      v-model:minBirthday="userMinBirthday"
+      v-model:maxBirthday="userMaxBirthday"
+      v-model:gender="userGender"
+      @change="handleUserAdvancedChange"
+      @click="handleUserAdvancedClick"
+    />
+  </view>
+</template>
+
+<script setup lang="ts">
+import { ref, watch, computed } from 'vue'
+import MessageAdvanced from '@/uni_modules/tuikit-atomic-x/components/Search/SearchAdvanced/MessageAdvanced.nvue'
+import UserAdvanced from '@/uni_modules/tuikit-atomic-x/components/Search/SearchAdvanced/UserAdvanced.nvue'
+import { Gender } from '@/uni_modules/tuikit-atomic-x/types/userProfile'
+import { SearchTabValue, SearchAdvancedProps, SearchAdvancedEmits, UserSearchFilter, MessageSearchFilter } from '@/uni_modules/tuikit-atomic-x/types/search'
+
+const props = withDefaults(defineProps<SearchAdvancedProps>(), {
+  currentTab: SearchTabValue.All,
+  isCloudSearch: false,
+})
+
+const emit = defineEmits<SearchAdvancedEmits>()
+
+const messageStartDate = ref('')
+const messageEndDate = ref('')
+
+const userMinBirthday = ref<number | undefined>(undefined)
+const userMaxBirthday = ref<number | undefined>(undefined)
+const userGender = ref<Gender>(Gender.UNKNOWN)
+const userAdvancedRef = ref<InstanceType<typeof UserAdvanced> | null>(null)
+
+const showAdvanced = computed(() => {
+  return props.currentTab === SearchTabValue.Message || props.currentTab === SearchTabValue.Friend
+})
+
+const handleMessageAdvancedChange = (startDate: string, endDate: string) => {
+  const filter: MessageSearchFilter = {
+    // searchTimePosition 以 endDate 为基准，加上一天使其包含当天
+    searchTimePosition: endDate ? new Date(endDate).getTime() / 1000 + 86400 : undefined,
+    // searchTimePeriod 是从 endDate 往前到 startDate 的时间段，加上一天使结束日期包含当天
+    searchTimePeriod: startDate && endDate ? Math.floor((new Date(endDate).getTime() - new Date(startDate).getTime()) / 1000) + 86400 : undefined
+  }
+  emit('messageFilterChange', filter)
+}
+
+const handleUserAdvancedChange = (minBirthday: number | undefined, maxBirthday: number | undefined, gender: Gender) => {
+  const filter: UserSearchFilter = {
+    minBirthday,
+    maxBirthday,
+    gender
+  }
+  emit('userFilterChange', filter)
+}
+
+// 将生日格式 YYYYMMDD 转换为年龄
+const birthdayToAge = (birthday: number | undefined): number | undefined => {
+  if (birthday === undefined) return undefined
+  const birthStr = String(birthday)
+  const birthYear = parseInt(birthStr.substring(0, 4))
+  const birthMonth = parseInt(birthStr.substring(4, 6))
+  const birthDay = parseInt(birthStr.substring(6, 8))
+  
+  const today = new Date()
+  let age = today.getFullYear() - birthYear
+  const monthDiff = today.getMonth() + 1 - birthMonth
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDay)) {
+    age--
+  }
+  return age
+}
+
+const handleUserAdvancedClick = () => {
+  // 将生日转换为年龄传递给筛选页面
+  const minAge = birthdayToAge(userMaxBirthday.value) ?? 0
+  const maxAge = birthdayToAge(userMinBirthday.value) ?? 99
+  const url = `/pages/scenes/chat/search/userFilter?minAge=${minAge}&maxAge=${maxAge}&gender=${userGender.value}`
+  uni.navigateTo({
+    url,
+    events: {
+      userFilterResult: (data: UserSearchFilter) => {
+        console.log('[SearchAdvanced] User filter result:', data)
+        userMinBirthday.value = data.minBirthday
+        userMaxBirthday.value = data.maxBirthday
+        userGender.value = data.gender ?? Gender.UNKNOWN
+        emit('userFilterChange', data)
+      }
+    }
+  })
+}
+
+const reset = () => {
+  messageStartDate.value = ''
+  messageEndDate.value = ''
+  userMinBirthday.value = undefined
+  userMaxBirthday.value = undefined
+  userGender.value = Gender.UNKNOWN
+}
+
+const getFilters = () => {
+  return {
+    message: {
+      startDate: messageStartDate.value,
+      endDate: messageEndDate.value
+    },
+    user: {
+      minBirthday: userMinBirthday.value,
+      maxBirthday: userMaxBirthday.value,
+      gender: userGender.value
+    }
+  }
+}
+
+defineExpose({
+  reset,
+  getFilters,
+  showAdvanced,
+  userAdvancedRef
+})
+</script>
+
+<style>
+.search-advanced {
+  background-color: #ffffff;
+}
+</style>

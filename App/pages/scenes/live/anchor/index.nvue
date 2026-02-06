@@ -1,0 +1,1106 @@
+<template>
+  <view class="live-container" @click="handleHideInput" :style="{
+                                          height: systemInfo?.windowHeight + 'px',
+                                          width: systemInfo?.safeArea?.width + 'px',
+                                       }">
+    <LiveStreamView v-if="liveID.length > 0" :liveID="liveID || ''" :isAnchor="true" :templateLayout="templateLayout"
+      :isLiving="isStartLive" :enableClickPanel="true" :onStreamViewClick="ShowAnchorViewClickPanel"></LiveStreamView>
+
+    <view class="navigate-back-arrow" @tap="goBackToTabBar" v-if="!isStartLive">
+      <image class="navigate-back-arrow-image" src="/static/images/left-arrow.png"></image>
+    </view>
+
+    <!-- 顶部信息栏 -->
+    <view class="header" v-if="isStartLive">
+      <view class="header-left">
+        <view class="stream-info" @tap="showAnchorInfoDrawer">
+          <image class="avatar" :src="loginUserInfo?.avatarURL || defaultAvatarURL" mode="aspectFill" />
+          <view class="stream-details">
+            <text class="stream-title"
+              :numberOfLines="1">{{ loginUserInfo?.nickname || loginUserInfo?.userID || '' }}</text>
+          </view>
+        </view>
+      </view>
+      <view class="header-right">
+        <view class="participants" @tap="showAudienceList">
+          <view v-for="(user, index) in audienceList.slice(0, 2)">
+            <image class="participant-avatar" :src="user?.avatarURL || defaultAvatarURL" mode="aspectFill" />
+          </view>
+          <view class="participant-count">
+            <text class="count-text">{{ currentAudienceCount }}</text>
+          </view>
+        </view>
+        <view class="control-icons">
+          <!-- <image class="control-icon" src="/static/images/live-share.png" /> -->
+          <image class="control-icon" @tap="navigateBack()" src="/static/images/live-end.png" />
+        </view>
+      </view>
+    </view>
+
+    <!-- 主播开播前画面区域 -->
+    <BeforeLivePanel v-if="!isStartLive" :coverURL="coverURL" :liveCategory="liveCategory" :liveMode="liveMode"
+      :templateLayout="templateLayout" :liveTitle="liveTitle" @editCover="editCover" @editTitle="editTitle"
+      @chooseCategory="chooseCategory" @chooseMode="chooseMode" @chooseTemplate="chooseTemplate" @startLive="startLive"
+      @camera="handleCamera" @settings="handleSettings" ref="beforeLivePanelRef" />
+
+    <!-- 主播直播画面区域 -->
+    <view class="live-content" v-if="isStartLive">
+      <view class="live-network-container" @tap="isShowLiveStatusInfoCard = true">
+        <image class="live-network" src="/static/images/network-good.png" alt="" />
+        <text class="live-timer">{{ liveDurationText }}</text>
+      </view>
+
+      <view class="go-guest-request-container" v-if="(applicants || []).length > 0 && isShowCoGuestPanelAvatar"
+        @tap="showCoGuestPanel('requests')">
+        <view class="avatar-overlay-container" :style="getAvatarContainerStyle()">
+          <!-- 显示前两张申请者的头像 -->
+          <image v-for="(applicant, index) in applicants.slice(0, 2)" :key="index" class="go-guest-request-img"
+            :style="getAvatarStyle(index, Math.min(applicants.length, 3))"
+            :src="applicant?.avatarURL || defaultAvatarURL" />
+          <!-- 第三张图片始终显示默认头像 -->
+          <image v-if="applicants.length >= 3" class="go-guest-request-img" :style="getAvatarStyle(2, 3)"
+            src="/static/images/live-more.png" />
+        </view>
+        <text class="go-guest-request-text">申请连麦({{ (applicants || []).length }})</text>
+      </view>
+      <BarrageList mode="anchor" :bottomPx="safeArea.height * 1/8" @itemTap="audienceOperator" ref="barrageListRef" />
+      <view class="live-bottom-Panel" :style="{ width: safeArea.width + 'px' }">
+        <BarrageInput></BarrageInput>
+        <view class="action-buttons">
+          <view class="action-button-item" :class="{ 'disabled': shouldDisableCoHostButton }" @tap="showCoHostPanel">
+            <image class="action-button-icon" src="/static/images/link-host.png" mode="aspectFit" />
+            <text class="action-button-text">连主播</text>
+          </view>
+          <!-- <view class="action-button-item">
+						<image class="action-button-icon" src="/static/images/host-pk.png" mode="aspectFit" />
+            <text class="action-button-text">主播pk</text>
+          </view> -->
+          <view class="action-button-item" @tap="showCoGuestPanel('requests')">
+            <image class="action-button-icon" src="/static/images/link-guest.png" mode="aspectFit" />
+            <text class="action-button-text">连观众</text>
+          </view>
+          <view class="action-button-item" @tap="handleSettings">
+            <image class="action-button-icon" src="/static/images/live-more.png" mode="aspectFit" />
+            <text class="action-button-text">更多</text>
+          </view>
+          <Like role="anchor" />
+        </view>
+      </view>
+
+      <LiveAudienceList v-model="isShowAudienceList"></LiveAudienceList>
+      <AudienceActionPanel v-if="liveID" v-model="isShowAudienceActionPanel" :userInfo="selectedAudience"
+        :liveID="liveID"></AudienceActionPanel>
+
+      <CoGuestPanel v-if="liveID" v-model="isShowCoGuestPanel" :activeTab="activeTab"></CoGuestPanel>
+      <CoHostPanel v-if="liveID" v-model="isShowCoHostPanel"></CoHostPanel>
+      <LiveMoreActionsPanel v-if="liveID" v-model="isShowLiveMoreActionsPanel"></LiveMoreActionsPanel>
+      <UserInfoPanel v-if="liveID" v-model="isShowUserInfoPanel" :userInfo="clickUserInfo"
+        :isShowAnchor="isShowAnchorInfo"></UserInfoPanel>
+    </view>
+
+    <GiftPlayer ref="giftPlayerRef" v-model="isLargeSizeGiftPlayer" :url="giftInfo?.resourceURL" :safeArea="safeArea"
+      @finished="svgaPlayerFinished" />
+
+    <LiveStatusInfoCard v-model="isShowLiveStatusInfoCard" />
+    <ActionSheet v-model="isShowEndSheet" :title="endSheetTitle" :itemList="endSheetItems" @select="onEndSheetSelect" />
+    <!-- 自定义Modal组件 -->
+    <view class="custom-modal-overlay" v-if="showCustomModal">
+      <view class="custom-modal" @click.stop>
+        <view class="modal-content">
+          <text class="modal-text"> {{ modalContent }}</text>
+        </view>
+        <view class="modal-actions">
+          <view class="modal-btn modal-btn-cancel" @tap="handleModalCancel">
+            <text class="modal-btn-reject">拒绝</text>
+          </view>
+          <view class="modal-btn modal-btn-confirm" @tap="handleModalConfirm">
+            <text class="modal-btn-accept">接受</text>
+          </view>
+        </view>
+      </view>
+    </view>
+  </view>
+</template>
+
+<script setup lang="ts">
+  import { onLoad } from '@dcloudio/uni-app';
+  import { ref, onMounted, onUnmounted, computed, watch } from 'vue';
+
+  import BeforeLivePanel from '@/components/BeforeLivePanel.nvue';
+  import LiveStatusInfoCard from '@/uni_modules/tuikit-atomic-x/components/LiveStatusInfoCard.nvue';
+  import UserInfoPanel from '@/uni_modules/tuikit-atomic-x/components/LiveStreamView/UserInfoPanel.nvue';
+  import LiveAudienceList from '@/uni_modules/tuikit-atomic-x/components/LiveAudienceList/LiveAudienceList.nvue';
+  import CoGuestPanel from '@/uni_modules/tuikit-atomic-x/components/CoGuestPanel/CoGuestPanel.nvue';
+  import CoHostPanel from '@/uni_modules/tuikit-atomic-x/components/CoHostPanel.nvue';
+  import AudienceActionPanel from '@/uni_modules/tuikit-atomic-x/components/LiveAudienceList/AudienceActionPanel.nvue';
+  import LiveMoreActionsPanel from '@/components/LiveMoreActionsPanel.nvue';
+  import LiveStreamView from '@/uni_modules/tuikit-atomic-x/components/LiveStreamView/LiveStreamView.nvue';
+  import GiftPlayer from '@/uni_modules/tuikit-atomic-x/components/GiftPlayer/GiftPlayer.nvue';
+  import { giftService } from '@/uni_modules/tuikit-atomic-x/components/GiftPlayer/giftService'
+  import Like from '@/uni_modules/tuikit-atomic-x/components/Like.nvue';
+  import BarrageInput from '@/uni_modules/tuikit-atomic-x/components/BarrageInput.vue';
+  import BarrageList from '@/uni_modules/tuikit-atomic-x/components/BarrageList.nvue';
+  import { useLiveListState } from "@/uni_modules/tuikit-atomic-x/state/LiveListState";
+  import { useCoGuestState } from "@/uni_modules/tuikit-atomic-x/state/CoGuestState";
+  import { useDeviceState } from "@/uni_modules/tuikit-atomic-x/state/DeviceState";
+  import { useBarrageState } from "@/uni_modules/tuikit-atomic-x/state/BarrageState";
+  import { useLiveAudienceState } from "@/uni_modules/tuikit-atomic-x/state/LiveAudienceState";
+  import { useCoHostState } from "@/uni_modules/tuikit-atomic-x/state/CoHostState";
+  import { useLiveSeatState } from "@/uni_modules/tuikit-atomic-x/state/LiveSeatState";
+  import { useLoginState } from "@/uni_modules/tuikit-atomic-x/state/LoginState";
+  import { useAudioEffectState } from '@/uni_modules/tuikit-atomic-x/state/AudioEffectState'
+  import { useBaseBeautyState } from '@/uni_modules/tuikit-atomic-x/state/BaseBeautyState'
+  import { useGiftState } from "@/uni_modules/tuikit-atomic-x/state/GiftState";
+  import ActionSheet from '@/components/ActionSheet.nvue';
+  import { setSdkLanguageFromSystem } from '@/uni_modules/tuikit-atomic-x/utils/setSdkLanguageFromSystem'
+  const dom = uni.requireNativePlugin('dom')
+  const { loginUserInfo } = useLoginState();
+  uni.$liveID = `live_${uni.$userID}`
+  uni.$localGuestStatus = 'IDLE'
+  const { setVoiceEarMonitorEnable,
+    setVoiceEarMonitorVolume,
+    setAudioChangerType,
+    setAudioReverbType,
+    isEarMonitorOpened,
+    earMonitorVolume,
+    changerType,
+    reverbType } = useAudioEffectState(uni.$liveID)
+  const { setSmoothLevel, setWhitenessLevel, setRuddyLevel, whitenessLevel, ruddyLevel, smoothLevel } = useBaseBeautyState(uni.$liveID)
+  const { addCoHostListener, removeCoHostListener, acceptHostConnection, rejectHostConnection, exitHostConnection, coHostStatus, invitees } = useCoHostState(uni?.$liveID)
+  const { joinLive, createLive, fetchLiveList, liveList, endLive, currentLive, liveListCursor, callExperimentalAPI } = useLiveListState();
+  const { applicants, rejectApplication, connected } = useCoGuestState(uni?.$liveID);
+  const { messageList, sendTextMessage, sendCustomMessage } = useBarrageState(uni?.$liveID);
+  const { openLocalCamera, openLocalMicrophone, isFrontCamera, switchCamera, closeLocalMicrophone, closeLocalCamera } = useDeviceState(uni?.$liveID);
+  const { audienceList, audienceCount } = useLiveAudienceState(uni?.$liveID);
+  const { seatList, canvas, lockSeat, } = useLiveSeatState(uni?.$liveID);
+  const { addGiftListener, removeGiftListener } = useGiftState(uni?.$liveID);
+
+  const defaultCoverURL = 'https://liteav-test-1252463788.cos.ap-guangzhou.myqcloud.com/voice_room/voice_room_cover1.png';
+  const defaultAvatarURL = 'https://web.sdk.qcloud.com/component/TUIKit/assets/avatar_01.png';
+  const currentAudienceCount = computed(() => audienceList.value.length > 100 ? audienceCount : audienceList.value.length);
+  const isShowEndSheet = ref(false)
+  const endSheetTitle = ref('')
+  const endSheetItems = ref(['关闭直播间'])
+  const systemInfo = ref({});
+  const safeArea = ref({
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    width: 375,
+    height: 750,
+  });
+  const beforeLivePanelRef = ref();
+
+  const isShowUserInfoPanel = ref(false);
+  const isShowAudienceList = ref(false);
+  const isShowCoHostPanel = ref(false);
+  const isShowCoGuestPanel = ref(false);
+  const isShowAudienceActionPanel = ref(false);
+  const isShowLiveMoreActionsPanel = ref(false);
+  const isShowLiveStatusInfoCard = ref(false);
+  // 主播直播状态
+  const isStartLive = ref(false);
+  // 通过点击 message 信息选中的观众
+  const selectedAudience = ref({});
+  const liveID = ref(uni?.$liveID);
+  const isLargeSizeGiftPlayer = ref(false);
+  const giftInfo = ref({});
+
+  const activeTab = ref('requests');
+
+  // 自定义Modal相关状态
+  const showCustomModal = ref(false);
+  const modalContent = ref('');
+  const currentModalUserInfo = ref(null);
+
+  const coverURL = ref(defaultCoverURL);
+  const liveCategory = ref('日常聊天');
+  const liveMode = ref('公开');
+  const templateLayout = ref(600);
+  const liveTitle = ref(loginUserInfo.value?.nickname);
+  const currentUserID = ref(loginUserInfo.value?.userID);
+  const clickUserInfo = ref({});
+  const isShowCoGuestPanelAvatar = ref(true);
+  const barrageListRef = ref();
+  const giftPlayerRef = ref();
+  const { showGift, onGiftFinished } = giftService({
+    roomId: uni?.$liveID,
+    giftPlayerRef,
+  })
+  const isShowAnchorInfo = ref(true)
+
+  // 监听用户名变化，更新 liveTitle
+  watch(() => loginUserInfo.value?.nickname, (newUserName, oldUserName) => {
+    if (newUserName) {
+      // 如果当前标题是默认值或者为空，则更新为新的用户名
+      if (!liveTitle.value || liveTitle.value === oldUserName) {
+        liveTitle.value = newUserName;
+      }
+    }
+  }, { immediate: true, deep: true });
+
+  watch(() => loginUserInfo.value?.userID, (newUserId, oldUserId) => {
+    if (newUserId) {
+      // 如果当前标题是默认值或者为空，则更新为新的用户名
+      currentUserID.value = newUserId;
+      uni.$liveID = `live_${currentUserID.value}`;
+      liveID.value = uni.$liveID;
+    }
+  }, { immediate: true, deep: true });
+
+  const editCover = (data : string) => {
+    coverURL.value = data
+  };
+  const editTitle = (data : string) => {
+    liveTitle.value = data
+  };
+  const chooseCategory = (data : string) => {
+    liveCategory.value = data
+  };
+  const chooseMode = (data : string) => {
+    liveMode.value = data
+  };
+
+  const chooseTemplate = (data : number) => {
+    templateLayout.value = data;
+  }
+
+  // 自定义Modal相关方法
+  const showCustomModalDialog = (userInfo) => {
+    currentModalUserInfo.value = userInfo;
+    modalContent.value = `${userInfo.userName || userInfo.userID}向你发来连线邀请`;
+    showCustomModal.value = true;
+  };
+
+  // 关闭Modal
+  const closeCustomModal = () => {
+    showCustomModal.value = false;
+    currentModalUserInfo.value = null;
+  };
+
+  // 处理确认操作
+  const handleModalConfirm = () => {
+    if (currentModalUserInfo.value) {
+      acceptHostConnection({
+        liveID: uni?.$liveID,
+        fromHostLiveID: currentModalUserInfo.value.liveID
+      });
+    }
+    closeCustomModal();
+  };
+
+  // 处理取消操作
+  const handleModalCancel = () => {
+    if (currentModalUserInfo.value) {
+      rejectHostConnection({
+        liveID: uni?.$liveID,
+        fromHostLiveID: currentModalUserInfo.value.liveID
+      });
+    }
+    isShowCoGuestPanelAvatar.value = true
+    closeCustomModal();
+  };
+
+  const shouldDisableCoHostButton = computed(() => {
+    return connected.value.length > 1
+  });
+
+  watch(applicants, (newVal, oldVal) => {
+    if (!isShowCoGuestPanelAvatar.value) {
+      applicants.value.forEach(applicant => {
+        rejectApplication({
+          liveID: uni?.$liveID,
+          userID: applicant.userID,
+        });
+      });
+    }
+  }, {
+    deep: true,
+    immediate: true,
+  })
+
+  watch(coHostStatus, (newVal) => {
+    if (newVal === 'DISCONNECTED') {
+      isShowCoGuestPanelAvatar.value = true
+    }
+  }, {
+    deep: true,
+    immediate: true,
+  })
+
+  watch(invitees, (newVal) => {
+    if (!newVal && !isShowCoGuestPanelAvatar.value) {
+      isShowCoGuestPanelAvatar.value = true
+    } else {
+      applicants.value.forEach(applicant => {
+        rejectApplication({
+          liveID: uni?.$liveID,
+          userID: applicant.userID,
+        });
+      });
+    }
+  })
+
+  // 聊天渲染与自动滚动由 ChatList 组件处理
+
+  const handleReceiveGift = {
+    callback: (event) => {
+      const res = JSON.parse(event)
+      showGiftToast(res);
+    }
+  }
+
+  // 显示礼物提示
+  const showGiftToast = async (giftData ?: any) => {
+    if (!giftData) return;
+    giftInfo.value = giftData;
+    showGift(giftData, { onlyDisplay: true });
+
+    // 使用 BarrageList 的 showToast 方法显示礼物提示
+    if (barrageListRef.value) {
+      barrageListRef.value.showToast({
+        name: giftData?.sender?.userName || giftData?.sender?.userID || '',
+        avatarURL: giftData?.sender?.avatarURL || '',
+        desc: giftData?.gift.name || '',
+        iconURL: giftData?.gift.iconURL || '',
+        duration: 3000
+      });
+    }
+  };
+
+  // 页面加载
+  onLoad((options) => {
+    if (options && options.isLiving === 'true') {
+      isStartLive.value = true;
+    }
+    // 禁用右滑返回（仅 iOS 有效）
+    if (uni.getSystemInfoSync().platform === 'ios') {
+      const pages = getCurrentPages();
+      if (pages.length > 0) {
+        const currentPage = pages[pages.length - 1];
+        currentPage.$page.style.disableSwipeBack = true;
+      }
+    }
+  });
+
+  onMounted(() => {
+    setSdkLanguageFromSystem()
+    uni.setKeepScreenOn({
+      keepScreenOn: true,
+    });
+    openLocalCamera({
+      isFront: true,
+    });
+    openLocalMicrophone();
+    uni.getSystemInfo({
+      success: (res) => {
+        systemInfo.value = res;
+        safeArea.value = res.safeArea;
+
+        console.warn(`systemInfo: ${systemInfo.value.windowHeight}`)
+      }
+    });
+    addCoHostListener(uni.$liveID,
+      'onCoHostRequestAccepted',
+      handleCoHostRequestAccepted
+    )
+    addCoHostListener(uni.$liveID,
+      'onCoHostRequestRejected',
+      handleCoHostRequestRejected
+    )
+    addCoHostListener(uni.$liveID,
+      'onCoHostRequestTimeout',
+      handleCoHostRequestTimeout
+    )
+    addCoHostListener(uni.$liveID,
+      'onCoHostRequestReceived',
+      handleCoHostRequestReceived
+    )
+    addGiftListener(uni.$liveID, 'onReceiveGift', handleReceiveGift)
+
+  });
+  onUnmounted(() => {
+    removeCoHostListener(uni.$liveID,
+      'onCoHostRequestAccepted',
+      handleCoHostRequestAccepted
+    )
+    removeCoHostListener(uni.$liveID,
+      'onCoHostRequestRejected',
+      handleCoHostRequestRejected
+    )
+    removeCoHostListener(uni.$liveID,
+      'onCoHostRequestTimeout',
+      handleCoHostRequestTimeout
+    )
+    removeCoHostListener(uni.$liveID,
+      'onCoHostRequestReceived',
+      handleCoHostRequestReceived
+    )
+    removeGiftListener(uni.$liveID, 'onReceiveGift', handleReceiveGift)
+  })
+
+  const handleCoHostRequestAccepted = {
+    callback: (event) => {
+      uni.showToast({
+        icon: 'none',
+        title: '连线被同意'
+      })
+    }
+  }
+
+  const handleCoHostRequestRejected = {
+    callback: (event) => {
+      uni.showToast({
+        icon: 'none',
+        title: '连线被拒绝'
+      })
+    }
+  }
+
+  const handleCoHostRequestTimeout = {
+
+    callback: (event) => {
+      uni.showToast({
+        icon: 'none',
+        title: '连线请求超时'
+      })
+      isShowCoGuestPanelAvatar.value = true
+      closeCustomModal();
+    },
+
+  }
+
+  const handleCoHostRequestReceived = {
+    callback: (event) => {
+      if (isShowCoGuestPanelAvatar.value && applicants.value.length === 0) {
+        isShowCoGuestPanelAvatar.value = false
+      }
+      const res = JSON.parse(event)
+      if (connected.value.length > 1 || applicants.value.length > 0) {
+        rejectHostConnection({
+          liveID: uni?.$liveID,
+          fromHostLiveID: res.inviter.liveID
+        })
+        return
+      }
+      // 使用自定义Modal替代uni.showModal
+      showCustomModalDialog(res.inviter);
+    }
+  }
+
+  const clearAudioEffectSet = () => {
+    setVoiceEarMonitorEnable({
+      enable: false
+    })
+    setVoiceEarMonitorVolume({
+      volume: 100
+    })
+    setAudioChangerType({
+      changerType: 'NONE'
+    })
+    setAudioReverbType({
+      reverbType: 'NONE'
+    })
+  }
+
+  const handleHideInput = () => {
+    uni.hideKeyboard()
+  }
+
+  const clearBeautyPanelSet = () => {
+    setSmoothLevel({ smoothLevel: 0 })
+    setWhitenessLevel({ whitenessLevel: 0 })
+    setRuddyLevel({ ruddyLevel: 0 })
+  }
+
+  // 未开直播：退出
+  const goBackToTabBar = () => {
+    clearAudioEffectSet();
+    clearBeautyPanelSet();
+    closeLocalMicrophone();
+    closeLocalCamera();
+
+    console.warn(` 后退 `);
+    uni.redirectTo({
+      url: '/pages/scenes/live/livelist/index',
+      success: () => {
+        console.log(`redirect success`);
+      },
+      fail: (error) => {
+        console.error(`redirect, error: ${JSON.stringify(error)}`);
+      },
+    });
+  };
+  const navigateBack = () => {
+    if (coHostStatus.value === 'CONNECTED') {
+      endSheetItems.value = ['断开连线', '关闭直播间']
+      endSheetTitle.value = '当前处于连线状态，是否需要「断开连线」或「关闭直播间」'
+    }
+    isShowEndSheet.value = true
+  };
+
+  const onEndSheetSelect = (res : { tapIndex : number }) => {
+    const index = res.tapIndex
+    if (coHostStatus.value === 'CONNECTED' && index === 0) {
+      exitHostConnection({
+        liveID: uni?.$liveID,
+      })
+      endSheetItems.value = ['关闭直播间']
+      endSheetTitle.value = ''
+      return
+    }
+    if (coHostStatus.value === 'CONNECTED' && index === 1 || coHostStatus.value !== 'CONNECTED' && index === 0) {
+      clearAudioEffectSet()
+      clearBeautyPanelSet()
+      endLive({
+        success: () => {
+          uni.redirectTo({ url: '/pages/scenes/live/liveend/index' });
+        },
+      });
+    }
+  }
+
+  const handleCamera = () => {
+    switchCamera({ isFront: !isFrontCamera.value })
+  };
+
+  const handleSettings = () => {
+    isShowLiveMoreActionsPanel.value = true;
+  };
+
+  const startLive = () => {
+
+    createLive({
+      liveInfo: {
+        liveID: uni?.$liveID,
+        liveName: liveTitle.value,
+        totalViewerCount: 4,
+        coverURL: coverURL.value,
+        isSeatEnabled: true,
+        seatMode: 'APPLY',
+        maxSeatCount: 0,
+        isPublicVisible: liveMode.value === '公开',
+        keepOwnerOnSeat: true,
+        seatLayoutTemplateID: templateLayout.value,
+      },
+      success: () => {
+        const params = {
+          cursor: "", // 首次拉起传空（不能是null),然后根据回调数据的cursor确认是否拉完
+          count: 20,   // 分页拉取的个数
+        };
+        fetchLiveList(params);
+
+        openLocalCamera({ isFront: isFrontCamera.value });
+        openLocalMicrophone();
+        setLocalVideoMuteImage();
+      },
+      fail: (errCode, errMsg) => {
+        uni.showToast({
+          title: '创建直播间失败',
+        });
+      },
+    });
+    isStartLive.value = true;
+  };
+
+  const ShowAnchorViewClickPanel = (userInfo) => {
+    clickUserInfo.value = userInfo,
+      showUserInfoPanel()
+    isShowAnchorInfo.value = false
+  }
+
+  const showUserInfoPanel = () => {
+    isShowUserInfoPanel.value = true;
+  };
+
+  const setLocalVideoMuteImage = () => {
+    const tempFilePath = '/static/images/live-mute-local-video.png'; // 本地存放的图片文件
+    let imageFilePath = '';
+    uni.saveFile({
+      tempFilePath: tempFilePath,
+      success: (res) => {
+        console.warn('保存文件成功 = ', JSON.stringify(res)); // 获取的是相对路径
+        imageFilePath = res.savedFilePath;
+        imageFilePath = plus.io.convertLocalFileSystemURL(imageFilePath); // 转绝对路径
+        const data = { "api": "setLocalVideoMuteImage", "params": { "image": imageFilePath } }
+        callExperimentalAPI(
+          {
+            jsonData: JSON.stringify(data)
+          })
+      },
+      fail: (err) => {
+        console.error('保存文件失败');
+      },
+    });
+  }
+
+  const showAudienceList = () => {
+    isShowAudienceList.value = true;
+  };
+
+
+  const showAnchorInfoDrawer = () => {
+    isShowAnchorInfo.value = true
+    clickUserInfo.value = { ...(currentLive?.value.liveOwner || {}), liveID: currentLive?.value.liveID || '' }
+    showUserInfoPanel()
+  }
+
+  const audienceOperator = (message : any) => {
+    console.warn(`click message: ${JSON.stringify(message)}`);
+    if (message?.sender?.userID === currentLive?.value.liveOwner.userID) return;
+
+    if (message?.sender?.userID === currentUserID.value) {
+      return;
+    }
+    const targetAudience = audienceList.value.find(audience =>
+      audience.userID === message?.sender?.userID
+    );
+    if (!targetAudience) {
+      isShowAnchorInfo.value = false;
+      clickUserInfo.value = message?.sender;
+      showUserInfoPanel()
+    } else {
+      selectedAudience.value = targetAudience;
+      console.warn(`click message selectedAudience: ${JSON.stringify(selectedAudience.value)}`);
+      isShowAudienceActionPanel.value = true;
+    }
+  };
+
+  // 直播中控制面板操作
+  const showCoHostPanel = () => {
+    if (connected.value.length > 1) {
+      return
+    }
+    const params = {
+      cursor: '', // 首次拉起传空（不能是null),然后根据回调数据的cursor确认是否拉完
+      count: 20,   // 分页拉取的个数
+    };
+    fetchLiveList(params);
+    isShowCoHostPanel.value = true;
+  };
+  const showCoGuestPanel = (activeTabValue : string = 'requests') => {
+    console.warn(`go guest Panel activeTab = ${activeTabValue}`);
+    activeTab.value = activeTabValue;
+    isShowCoGuestPanel.value = true;
+  };
+
+
+
+  // 计时器相关
+  import { ref as vueRef, onMounted as vueOnMounted, onUnmounted as vueOnUnmounted } from 'vue';
+  const liveDuration = vueRef(0); // 秒
+  const liveDurationText = vueRef('00:00:00');
+  let timer : any = null;
+
+  watch(isStartLive, (val) => {
+    if (val) {
+      liveDuration.value = 0;
+      updateLiveDurationText();
+      timer = setInterval(() => {
+        liveDuration.value++;
+        updateLiveDurationText();
+      }, 1000);
+    } else {
+      clearInterval(timer);
+      timer = null;
+      liveDuration.value = 0;
+      updateLiveDurationText();
+    }
+  });
+
+  function updateLiveDurationText() {
+    const h = String(Math.floor(liveDuration.value / 3600)).padStart(2, '0');
+    const m = String(Math.floor((liveDuration.value % 3600) / 60)).padStart(2, '0');
+    const s = String(liveDuration.value % 60).padStart(2, '0');
+    liveDurationText.value = `${h}:${m}:${s}`;
+  }
+
+  vueOnUnmounted(() => {
+    if (timer) clearInterval(timer);
+  });
+
+
+
+  const svgaPlayerFinished = () => {
+    isLargeSizeGiftPlayer.value = false;
+    onGiftFinished();
+  }
+
+  // 头像叠加配置
+  const avatarOverlayConfig = {
+    size: 80, // 头像大小 (rpx)
+    overlapRatio: 0.6, // 覆盖比例 (0.5 = 50%覆盖, 0.6 = 60%覆盖)
+    enableScale: false, // 是否启用缩放效果
+    enableOpacity: false, // 是否启用透明度效果
+
+  };
+
+  // 计算头像容器样式，确保水平垂直居中
+  const getAvatarContainerStyle = () => {
+    const count = applicants.value?.length || 0;
+    if (count === 0) return {};
+
+    // 使用配置计算叠加偏移量
+    const overlapOffset = avatarOverlayConfig.size * (1 - avatarOverlayConfig.overlapRatio);
+    // 容器总宽度 = 头像大小 + (头像数量 - 1) * 偏移量
+    const containerWidth = avatarOverlayConfig.size + (count - 1) * overlapOffset;
+
+    return {
+      position: 'relative',
+      width: `${containerWidth}rpx`,
+      height: `${avatarOverlayConfig.size}rpx`,
+      margin: '0 auto' // 水平居中
+    };
+  };
+
+  // 计算每个头像的样式，实现真正的叠加效果
+  const getAvatarStyle = (index : number, totalCount : number) => {
+    // 使用配置计算叠加偏移量
+    const overlapOffset = avatarOverlayConfig.size * (1 - avatarOverlayConfig.overlapRatio);
+
+    // 计算每个头像的left位置，后面的头像向左偏移，覆盖前面的头像
+    const left = index * overlapOffset;
+
+    // 基础样式
+    const baseStyle = {
+      position: 'absolute',
+      left: `${left}rpx`,
+      top: '0',
+      width: `${avatarOverlayConfig.size}rpx`,
+      height: `${avatarOverlayConfig.size}rpx`,
+      borderRadius: `${avatarOverlayConfig.size / 2}rpx`,
+    };
+
+    // 添加视觉效果
+    if (avatarOverlayConfig.enableScale) {
+      baseStyle.transform = `scale(${1 - index * 0.05})`; // 后面的头像稍微小一点
+    }
+
+    if (avatarOverlayConfig.enableOpacity) {
+      baseStyle.opacity = 1 - index * 0.1; // 后面的头像稍微透明一点
+    }
+
+    return baseStyle;
+  };
+</script>
+
+<style>
+  .live-container {
+    flex: 1;
+    position: relative;
+    background: rgba(15, 16, 20, 0.5);
+    overflow: hidden;
+  }
+
+  .navigate-back-arrow {
+    position: absolute;
+    top: 130rpx;
+    left: 60rpx;
+    z-index: 1000;
+    width: 60rpx;
+    height: 60rpx;
+  }
+
+  .navigate-back-arrow-image {
+    width: 20rpx;
+    height: 35rpx;
+  }
+
+  .header {
+    display: flex;
+    position: absolute;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20rpx 32rpx;
+    margin-top: 80rpx;
+    width: 750rpx;
+    top: 40rpx;
+  }
+
+  .header-left {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    flex: 1;
+  }
+
+  .stream-info {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    background-color: rgba(0, 0, 0, 0.3);
+    padding: 6rpx 10rpx;
+    border-radius: 40rpx;
+  }
+
+  .avatar {
+    width: 56rpx;
+    height: 56rpx;
+    border-radius: 30rpx;
+    border-width: 2rpx;
+    border-color: #ffffff;
+    margin-right: 16rpx;
+  }
+
+  .stream-details {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .stream-title {
+    color: #ffffff;
+    font-size: 28rpx;
+    font-weight: 500;
+    margin-bottom: 4rpx;
+    width: 120rpx;
+    height: 40rpx;
+    lines: 1;
+  }
+
+  .header-right {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-end;
+    width: 300rpx;
+  }
+
+  .participants {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .participant-avatar {
+    width: 36rpx;
+    height: 36rpx;
+    border-radius: 24rpx;
+    border-width: 2rpx;
+    border-color: #ffffff;
+    margin-right: 8rpx;
+  }
+
+  .participant-count {
+    width: 48rpx;
+    height: 48rpx;
+    border-radius: 24rpx;
+    background-color: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .count-text {
+    color: #ffffff;
+    font-size: 24rpx;
+    font-weight: 500;
+  }
+
+  .control-icons {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .control-icon {
+    width: 36rpx;
+    height: 36rpx;
+    margin-left: 16rpx;
+  }
+
+
+  .live-content {
+    flex: 1;
+    position: absolute;
+
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .go-guest-request-container {
+    position: fixed;
+    top: 280rpx;
+    right: 30rpx;
+    width: 200rpx;
+    height: 200rpx;
+    border-radius: 40rpx;
+    background: #4F586B;
+
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+  }
+
+  /* 头像叠加容器样式 */
+  .avatar-overlay-container {
+    position: relative;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .go-guest-request-img {
+    width: 60rpx;
+    height: 60rpx;
+    border-radius: 30rpx;
+    transition: all 0.3s ease;
+    /* 确保图片内容正确显示 */
+    object-fit: cover;
+  }
+
+  .go-guest-request-text {
+    margin-top: 30rpx;
+    font-size: 24rpx;
+    color: #fff;
+  }
+
+  .live-bottom-Panel {
+    flex: 1;
+    position: fixed;
+    bottom: 40rpx;
+    left: 20rpx;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+
+
+
+  .action-buttons {
+    flex-direction: row;
+    align-items: center;
+    padding-right: 70rpx;
+  }
+
+  .action-button-item {
+    width: 64rpx;
+    height: 92rpx;
+    margin-left: 24rpx;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .action-button-item.disabled {
+    opacity: 0.5;
+    filter: grayscale(100%);
+    pointer-events: none;
+  }
+
+  .action-button-icon {
+    width: 56rpx;
+    height: 56rpx;
+    margin-bottom: 4rpx;
+  }
+
+  .action-button-text {
+    color: #fff;
+    font-size: 20rpx;
+  }
+
+  .live-network {
+    width: 36rpx;
+    height: 36rpx;
+  }
+
+  .live-network-container {
+    position: fixed;
+    top: 220rpx;
+    right: 10rpx;
+    width: 180rpx;
+    height: 40rpx;
+    background-color: rgba(0, 0, 0, 0.3);
+    border-radius: 45rpx;
+    flex-direction: row;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .live-timer {
+    color: #fff;
+    font-size: 24rpx;
+    margin-left: 12rpx;
+  }
+
+  /* 自定义Modal样式 */
+  .custom-modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.4);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+  }
+
+  .custom-modal {
+    width: 500rpx;
+    background-color: #FFFFFF;
+    border-radius: 20rpx;
+    box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.3);
+    flex-direction: column;
+    align-items: center;
+  }
+
+
+
+  .modal-content {
+    flex: 1;
+    flex-direction: column;
+    align-items: center;
+    margin-top: 40rpx;
+  }
+
+  .modal-text {
+    color: #000000;
+    font-size: 32rpx;
+    font-weight: 600;
+    text-align: center;
+    line-height: 40rpx;
+    margin-bottom: 30rpx;
+    max-width: 400rpx;
+    word-wrap: break-word;
+    word-break: break-all;
+    white-space: normal;
+  }
+
+  .modal-actions {
+    flex-direction: row;
+    justify-content: space-around;
+    align-items: center;
+    border-top: 2rpx solid rgba(213, 224, 242, 1);
+    width: 500rpx;
+  }
+
+  .modal-btn {
+    width: 250rpx;
+    padding: 28rpx;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .modal-btn-confirm {
+    border-left: 2rpx solid rgba(213, 224, 242, 1);
+  }
+
+  .modal-btn-reject {
+    font-size: 32rpx;
+    font-weight: bold;
+    color: rgba(79, 88, 107, 1);
+  }
+
+  .modal-btn-accept {
+    font-size: 32rpx;
+    font-weight: bold;
+    color: rgba(28, 102, 229, 1);
+  }
+</style>

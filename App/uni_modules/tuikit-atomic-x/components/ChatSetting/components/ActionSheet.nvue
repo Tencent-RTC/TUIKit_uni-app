@@ -1,0 +1,202 @@
+<template>
+  <view v-if="isShow" ref="maskRef" class="action-sheet-mask" @tap="handleMaskTap">
+    <view ref="sheetRef" class="action-sheet" @tap.stop>
+      <view
+        v-for="(item, index) in options"
+        :key="index"
+        class="action-sheet__item"
+        @tap="handleSelect(item, index)"
+      >
+        <text 
+          class="action-sheet__text"
+          :style="{ color: item.color || 'rgba(0, 0, 0, 0.9)' }"
+        >{{ item.label }}</text>
+      </view>
+      <view class="action-sheet__gap"></view>
+      <view class="action-sheet__item action-sheet__item--cancel" @tap="handleCancel">
+        <text class="action-sheet__text">取消</text>
+      </view>
+    </view>
+  </view>
+</template>
+
+<script setup lang="ts">
+import { ref, watch, nextTick } from 'vue';
+
+const animation = uni.requireNativePlugin('animation');
+
+export interface ActionSheetOption {
+  label: string;
+  value: any;
+  color?: string;
+}
+
+interface ActionSheetProps {
+  visible: boolean;
+  options: ActionSheetOption[];
+}
+
+const props = withDefaults(defineProps<ActionSheetProps>(), {
+  visible: false,
+  options: () => []
+});
+
+const emit = defineEmits<{
+  (e: 'update:visible', value: boolean): void;
+  (e: 'select', option: ActionSheetOption, index: number): void;
+  (e: 'cancel'): void;
+}>();
+
+const isShow = ref(false);
+const maskRef = ref<any>(null);
+const sheetRef = ref<any>(null);
+const isAnimating = ref(false);
+
+watch(() => props.visible, (newVal) => {
+  if (newVal) {
+    showSheet();
+  } else {
+    hideSheet();
+  }
+});
+
+const showSheet = async () => {
+  if (isAnimating.value) return;
+  isAnimating.value = true;
+  isShow.value = true;
+  
+  await nextTick();
+  
+  setTimeout(() => {
+    const maskEl = maskRef.value;
+    const sheetEl = sheetRef.value;
+    
+    if (maskEl && sheetEl) {
+      // 遮罩快速淡入
+      animation.transition(maskEl, {
+        styles: { opacity: 1 },
+        duration: 180,
+        timingFunction: 'ease-out'
+      });
+      
+      // 底部弹出 - 弹性滑入
+      animation.transition(sheetEl, {
+        styles: {
+          transform: 'translateY(0)',
+          opacity: 1
+        },
+        duration: 280,
+        timingFunction: 'cubic-bezier(0.23, 1, 0.32, 1)'
+      }, () => {
+        isAnimating.value = false;
+      });
+    } else {
+      isAnimating.value = false;
+    }
+  }, 10);
+};
+
+const hideSheet = (callback?: () => void) => {
+  if (isAnimating.value) return;
+  isAnimating.value = true;
+  
+  const maskEl = maskRef.value;
+  const sheetEl = sheetRef.value;
+  
+  if (maskEl && sheetEl) {
+    // 遮罩快速淡出
+    animation.transition(maskEl, {
+      styles: { opacity: 0 },
+      duration: 150,
+      timingFunction: 'ease-out'
+    });
+    
+    // 快速滑出
+    animation.transition(sheetEl, {
+      styles: {
+        transform: 'translateY(100%)',
+        opacity: 1
+      },
+      duration: 180,
+      timingFunction: 'cubic-bezier(0.4, 0, 1, 1)'
+    }, () => {
+      isShow.value = false;
+      isAnimating.value = false;
+      callback?.();
+    });
+  } else {
+    isShow.value = false;
+    isAnimating.value = false;
+    callback?.();
+  }
+};
+
+const handleSelect = (option: ActionSheetOption, index: number) => {
+  hideSheet(() => {
+    emit('select', option, index);
+    emit('update:visible', false);
+  });
+};
+
+const handleCancel = () => {
+  hideSheet(() => {
+    emit('cancel');
+    emit('update:visible', false);
+  });
+};
+
+const handleMaskTap = () => {
+  handleCancel();
+};
+</script>
+
+<style scoped>
+.action-sheet-mask {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.8);
+  justify-content: flex-end;
+  opacity: 0;
+}
+
+.action-sheet {
+  background-color: #F5F5F5;
+  border-top-left-radius: 24rpx;
+  border-top-right-radius: 24rpx;
+  padding-bottom: 68rpx;
+  transform: translateY(100%);
+}
+
+.action-sheet__item {
+  padding: 32rpx 0;
+  background-color: #FFFFFF;
+  justify-content: center;
+  align-items: center;
+  border-bottom-width: 1rpx;
+  border-bottom-style: solid;
+  border-bottom-color: #E5E5E5;
+}
+
+.action-sheet__item:active {
+  background-color: #F5F5F5;
+}
+
+.action-sheet__item--cancel {
+  margin-top: 0;
+  border-bottom-width: 0;
+}
+
+.action-sheet__text {
+  font-size: 32rpx;
+  font-weight: 500;
+  color: rgba(0, 0, 0, 0.9);
+}
+
+.action-sheet__gap {
+  height: 16rpx;
+  background-color: #F5F5F5;
+}
+</style>

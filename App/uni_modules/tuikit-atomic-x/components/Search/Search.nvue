@@ -1,0 +1,475 @@
+<template>
+  <view class="search" @click="handleContainerClick">
+    <component
+      ref="searchBarRef"
+      :is="SearchBarComponent"
+      v-model="keyword"
+      :placeholder="placeholder"
+      :showCancel="showCancel"
+      :debounceTime="debounceTime"
+      :autoFocus="autoFocus"
+      @search="handleSearch"
+      @cancel="handleCancel"
+      @focus="handleFocus"
+      @clear="handleClear"
+    />
+    <component
+      v-if="showTab"
+      :is="SearchTabComponent"
+      v-model="currentTab"
+      :tabs="tabList"
+      @change="handleTabChange"
+    />
+    <component
+      v-if="SearchAdvancedComponent"
+      :is="SearchAdvancedComponent"
+      :currentTab="currentTab"
+      :isCloudSearch="isCloudSearch"
+      :conversationID="conversationID"
+      @messageFilterChange="handleMessageFilterChange"
+      @userFilterChange="handleUserFilterChange"
+    />
+    <component
+      :is="SearchResultsComponent"
+      :keyword="keyword"
+      :conversationID="conversationID"
+      :currentTab="currentTab"
+      :isLoading="isLoading"
+      :showPresearch="showPresearch"
+      :userList="filteredUserList"
+      :friendList="filteredFriendList"
+      :groupList="filteredGroupList"
+      :groupMemberList="groupMemberList"
+      :messageResults="filteredMessageResults"
+      :hasMoreUser="hasMoreUserList"
+      :hasMoreFriend="hasMoreFriendList"
+      :hasMoreGroup="hasMoreGroupList"
+      :hasMoreGroupMember="hasMoreGroupMemberList"
+      :hasMoreMessage="hasMoreMessageResults"
+      :searchHistory="searchHistory"
+      :SearchResultItem="SearchResultItem"
+      :PlaceholderEmpty="PlaceholderEmpty"
+      :PlaceholderLoading="PlaceholderLoading"
+      :PlaceholderPresearch="PlaceholderPresearch"
+      :Avatar="Avatar"
+      @resultItemClick="handleResultItemClick"
+      @viewMore="handleViewMore"
+      @historyClick="handleHistoryClick"
+      @clearHistory="handleClearHistory"
+      @cloudSearchClick="handleCloudSearchClick"
+    />
+  </view>
+</template>
+
+<script setup lang="ts">
+import { ref, computed, watch, onBeforeUnmount, onMounted } from 'vue'
+import { useSearchState } from '../../state/SearchState'
+import { 
+  SearchType, 
+  KeywordListMatchType,
+  SearchTabValue
+} from '../../types/search'
+import AvatarComponent from '../Avatar'
+import DefaultSearchBar from './SearchBar.nvue'
+import DefaultSearchResults from './SearchResults.nvue'
+import DefaultSearchTab from './SearchTab.nvue'
+import DefaultPresearch from './placeholders/SearchResultsPresearch.nvue'
+import DefaultLoading from './placeholders/SearchResultsLoading.nvue'
+import DefaultEmpty from './placeholders/SearchResultsEmpty.nvue'
+import type { 
+  SearchProps, 
+  SearchEmits,
+  SearchResultType,
+  SearchTabItem,
+  SearchOption,
+  FriendSearchInfo,
+  MessageSearchResultItem,
+  UserSearchFilter,
+  MessageSearchFilter
+} from '../../types/search'
+import { SearchResultTypeMap } from '../../types/search'
+import type { UserProfile } from '../../types/userProfile'
+import type { GroupSearchInfo, GroupMember } from '../../types/group'
+
+const props = withDefaults(defineProps<SearchProps>(), {
+  conversationID: '',
+  initialKeyword: '',
+  initialOption: () => ({}),
+  placeholder: '搜索',
+  isCloud: false,
+  autoFocus: true,
+  showAdvanced: false,
+  showCancel: true,
+  debounceTime: 300,
+  SearchBar: () => DefaultSearchBar,
+  SearchResults: () => DefaultSearchResults,
+  SearchAdvanced: () => null,
+  SearchTab: () => DefaultSearchTab,
+  PlaceholderPresearch: () => DefaultPresearch,
+  PlaceholderLoading: () => DefaultLoading,
+  PlaceholderEmpty: () => DefaultEmpty,
+  SearchResultItem: () => null,
+  Avatar: () => AvatarComponent
+})
+
+const emit = defineEmits<SearchEmits>()
+
+// 如果有 conversationID，使用它作为 storeID，否则使用默认值
+const searchStoreID = props.conversationID || 'default_search_store'
+
+const {
+  userList,
+  friendList,
+  groupList,
+  groupMemberList,
+  messageResults,
+  hasMoreUserList,
+  hasMoreFriendList,
+  hasMoreGroupList,
+  hasMoreGroupMemberList,
+  hasMoreMessageResults,
+  search,
+  searchMore,
+  clearSearchResults,
+  destroyStore
+} = useSearchState(searchStoreID)
+
+const keyword = ref('')
+const isLoading = ref(false)
+const showPresearch = ref(true)
+const currentTab = ref<SearchTabValue>(SearchTabValue.All)
+const searchBarRef = ref<any>(null)
+const isCloudSearch = ref(props.isCloud)
+
+const userFilter = ref<UserSearchFilter>({})
+const messageFilter = ref<MessageSearchFilter>({})
+
+// 搜索历史记录
+const SEARCH_HISTORY_KEY = 'tuikit_search_history'
+const MAX_HISTORY_COUNT = 20
+const searchHistory = ref<string[]>([])
+
+// 加载搜索历史
+const loadSearchHistory = () => {
+  try {
+    const history = uni.getStorageSync(SEARCH_HISTORY_KEY)
+    if (history) {
+      searchHistory.value = JSON.parse(history)
+    }
+  } catch (e) {
+    console.error('[Search] Load search history failed:', e)
+  }
+}
+
+// 保存搜索历史
+const saveSearchHistory = (kw: string) => {
+  if (!kw.trim()) return
+  
+  // 移除重复项
+  const index = searchHistory.value.indexOf(kw)
+  if (index > -1) {
+    searchHistory.value.splice(index, 1)
+  }
+  
+  // 添加到开头
+  searchHistory.value.unshift(kw)
+  
+  // 限制数量
+  if (searchHistory.value.length > MAX_HISTORY_COUNT) {
+    searchHistory.value = searchHistory.value.slice(0, MAX_HISTORY_COUNT)
+  }
+  
+  // 持久化
+  try {
+    uni.setStorageSync(SEARCH_HISTORY_KEY, JSON.stringify(searchHistory.value))
+  } catch (e) {
+    console.error('[Search] Save search history failed:', e)
+  }
+}
+
+// 清除搜索历史
+const clearSearchHistory = () => {
+  searchHistory.value = []
+  try {
+    uni.removeStorageSync(SEARCH_HISTORY_KEY)
+  } catch (e) {
+    console.error('[Search] Clear search history failed:', e)
+  }
+}
+
+// 是否显示进入全局搜索入口（非云端搜索时显示）
+const showCloudSearchEntry = computed(() => {
+  return !isCloudSearch.value && showPresearch.value
+})
+
+const tabList: SearchTabItem[] = [
+  { label: '全部', value: SearchTabValue.All },
+  { label: '用户', value: SearchTabValue.Friend },
+  { label: '群聊', value: SearchTabValue.Group },
+  { label: '消息', value: SearchTabValue.Message },
+]
+
+const currentSearchOption = computed<SearchOption>(() => {
+  const searchType = isCloudSearch.value
+    ? SearchType.User.or(SearchType.Group).or(SearchType.Message)
+    : SearchType.Friend.or(SearchType.Group).or(SearchType.Message)
+  
+  return {
+    keywordListMatchType: KeywordListMatchType.OR,
+    isCloudSearch: isCloudSearch.value,
+    searchType,
+    searchCount: 20,
+  }
+})
+
+const SearchBarComponent = computed(() => props.SearchBar)
+const SearchResultsComponent = computed(() => props.SearchResults)
+const SearchAdvancedComponent = computed(() => props.SearchAdvanced)
+const SearchTabComponent = computed(() => (props as any).SearchTab || DefaultSearchTab)
+
+const isConversationSearch = computed(() => !!props.conversationID)
+
+const showTab = computed(() => {
+  if (isConversationSearch.value) {
+    return false
+  }
+  return keyword.value.trim() && !showPresearch.value
+})
+
+const filteredUserList = computed(() => {
+  if (isConversationSearch.value) {
+    return []
+  }
+  if (currentTab.value === SearchTabValue.All || currentTab.value === SearchTabValue.Friend) {
+    return userList.value
+  }
+  return []
+})
+
+const filteredFriendList = computed(() => {
+  if (isConversationSearch.value) {
+    return []
+  }
+  if (currentTab.value === SearchTabValue.All || currentTab.value === SearchTabValue.Friend) {
+    return friendList.value
+  }
+  return []
+})
+
+const filteredGroupList = computed(() => {
+  if (isConversationSearch.value) {
+    return []
+  }
+  if (currentTab.value === SearchTabValue.All || currentTab.value === SearchTabValue.Group) {
+    return groupList.value
+  }
+  return []
+})
+
+const filteredMessageResults = computed(() => {
+  if (currentTab.value === SearchTabValue.All || currentTab.value === SearchTabValue.Message) {
+    return messageResults.value
+  }
+  return []
+})
+
+const doSearch = async (searchKeyword: string) => {
+  if (!searchKeyword.trim()) {
+    showPresearch.value = true
+    clearSearchResults()
+    return
+  }
+  showPresearch.value = false
+  isLoading.value = true
+  
+  let searchType = currentSearchOption.value.searchType
+  
+  if (isConversationSearch.value) {
+    searchType = SearchType.Message
+  } else if (currentTab.value === SearchTabValue.Message) {
+    searchType = SearchType.Message
+  } else if (currentTab.value === SearchTabValue.Friend) {
+    searchType = isCloudSearch.value
+    ? SearchType.User
+    : SearchType.Friend
+  } else if (currentTab.value === SearchTabValue.Group) {
+    searchType = SearchType.Group
+  }
+  
+  const option: SearchOption = {
+    ...currentSearchOption.value,
+    searchType,
+    userFilter: userFilter.value,
+    messageFilter: messageFilter.value
+  }
+  
+  if (isConversationSearch.value) {
+    option.messageFilter = {
+      ...option.messageFilter,
+      conversationID: props.conversationID
+    }
+  }
+
+  emit('search', searchKeyword, option)
+  
+  
+  try {
+    await search([searchKeyword], option)
+    // 保存搜索历史
+    saveSearchHistory(searchKeyword)
+  } catch (error) {
+    console.error('[Search] Search failed:', error)
+    uni.showToast({
+      title: error.message,
+      icon: 'none',
+      duration: 2000
+    })
+  } finally {
+    isLoading.value = false
+  }
+}
+
+const handleSearch = (searchKeyword: string) => {
+  doSearch(searchKeyword)
+}
+
+const handleCancel = () => {
+  keyword.value = ''
+  showPresearch.value = true
+  currentTab.value = SearchTabValue.All
+  clearSearchResults()
+  emit('cancel')
+}
+
+const handleFocus = () => {
+  if (!keyword.value) {
+    showPresearch.value = true
+  }
+}
+
+const handleClear = () => {
+  showPresearch.value = true
+  currentTab.value = SearchTabValue.All
+  clearSearchResults()
+}
+
+const handleContainerClick = () => {
+  searchBarRef.value?.blur?.()
+}
+
+const handleTabChange = (tab: SearchTabValue) => {
+  currentTab.value = tab
+  
+  if (tab === SearchTabValue.All && !props.conversationID) {
+    const hasFilter = Object.keys(messageFilter.value).length > 0 || Object.keys(userFilter.value).length > 0
+    if (hasFilter) {
+      messageFilter.value = {}
+      userFilter.value = {}
+      if (keyword.value.trim()) {
+        doSearch(keyword.value)
+      }
+    }
+  }
+}
+
+const handleMessageFilterChange = (filter: MessageSearchFilter) => {
+  messageFilter.value = filter
+  if (keyword.value.trim()) {
+    doSearch(keyword.value)
+  }
+}
+
+const handleUserFilterChange = (filter: UserSearchFilter) => {
+  userFilter.value = filter
+  if (keyword.value.trim()) {
+    doSearch(keyword.value)
+  }
+}
+
+const handleResultItemClick = (type: SearchResultType | 'conversation', data: FriendSearchInfo | UserProfile | GroupSearchInfo | GroupMember | MessageSearchResultItem) => {
+  emit('resultItemClick', type, data)
+}
+
+const handleViewMore = async (type: SearchResultType) => {
+  if (currentTab.value === SearchTabValue.All) {
+    if (type) {
+      currentTab.value = type as unknown as SearchTabValue
+    }
+  } else {
+    const searchTypeValue = SearchResultTypeMap[type]
+    if (searchTypeValue) {
+      try {
+        await searchMore(searchTypeValue)
+      } catch (error) {
+        console.error('[Search] View more failed:', error)
+        uni.showToast({
+          title: error.message,
+          icon: 'none',
+          duration: 2000
+        })
+      }
+    }
+  }
+}
+
+// 点击历史记录
+const handleHistoryClick = (historyKeyword: string) => {
+  keyword.value = historyKeyword
+  doSearch(historyKeyword)
+}
+
+// 清除历史记录
+const handleClearHistory = () => {
+  clearSearchHistory()
+}
+
+// 点击进入全局搜索
+const handleCloudSearchClick = () => {
+  isCloudSearch.value = true
+  // 如果有关键词，重新搜索
+  if (keyword.value.trim()) {
+    doSearch(keyword.value)
+  }
+}
+
+onBeforeUnmount(() => {
+  destroyStore()
+})
+
+// onLoad 和 onMounted 执行顺序不一致导致的初始值传递问题
+watch(
+  () => props.initialKeyword,
+  (newKeyword) => {
+    if (newKeyword && !keyword.value) {
+      keyword.value = newKeyword
+      doSearch(newKeyword)
+    }
+  },
+  { immediate: true }
+)
+
+onMounted(() => {
+  // 加载搜索历史
+  loadSearchHistory()
+  
+  if (props.initialOption) {
+    if (props.initialOption.userFilter) {
+      userFilter.value = props.initialOption.userFilter
+    }
+    if (props.initialOption.messageFilter) {
+      messageFilter.value = props.initialOption.messageFilter
+    }
+  }
+  if (props.initialKeyword && !keyword.value) {
+    keyword.value = props.initialKeyword
+    doSearch(props.initialKeyword)
+  }
+})
+</script>
+
+<style>
+.search {
+  flex: 1;
+  background-color: #ffffff;
+}
+</style>

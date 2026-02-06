@@ -1,0 +1,150 @@
+<template>
+  <Popup
+    ref="popupRef"
+    :visible="visible"
+    :closeOnMaskTap="closeOnMaskTap"
+    @update:visible="handleVisibleChange"
+    @close="handleClose"
+  >
+    <view class="dialog-container">
+      <view class="dialog-content">
+        <text class="dialog-title">{{ title }}</text>
+        <text v-if="description" class="dialog-desc">{{ description }}</text>
+      </view>
+      <view class="dialog-buttons">
+        <view class="dialog-btn dialog-btn--cancel" @tap="handleCancel">
+          <text class="dialog-btn__text dialog-btn__text--cancel">{{ cancelText }}</text>
+        </view>
+        <view class="dialog-btn dialog-btn--confirm" @tap="handleConfirm">
+          <text 
+            class="dialog-btn__text dialog-btn__text--confirm"
+            :style="{ color: confirmColor }"
+          >{{ confirmText }}</text>
+        </view>
+      </view>
+    </view>
+  </Popup>
+</template>
+
+<script setup lang="ts">
+import { ref } from 'vue';
+import Popup from './Popup.nvue';
+
+interface ConfirmDialogProps {
+  visible: boolean;
+  title: string;
+  description?: string;
+  cancelText?: string;
+  confirmText?: string;
+  confirmColor?: string;
+  closeOnMaskTap?: boolean;
+}
+
+const props = withDefaults(defineProps<ConfirmDialogProps>(), {
+  visible: false,
+  title: '',
+  description: '',
+  cancelText: '取消',
+  confirmText: '确定',
+  confirmColor: '#E54545',
+  closeOnMaskTap: true
+});
+
+const emit = defineEmits<{
+  (e: 'update:visible', value: boolean): void;
+  (e: 'confirm'): void;
+  (e: 'cancel'): void;
+}>();
+
+const popupRef = ref<InstanceType<typeof Popup> | null>(null);
+
+const handleConfirm = () => {
+  popupRef.value?.close(() => {
+    emit('confirm');
+  });
+};
+
+const handleCancel = () => {
+  popupRef.value?.close(() => {
+    emit('cancel');
+  });
+};
+
+const handleVisibleChange = (val: boolean) => {
+  emit('update:visible', val);
+};
+
+const handleClose = () => {
+  emit('cancel');
+};
+</script>
+
+<style scoped>
+.dialog-container {
+  /* background-color: #FFFFFF; */
+  border-radius: 24rpx;
+  overflow: hidden;
+  width: 654rpx;
+}
+
+.dialog-content {
+  padding: 64rpx 48rpx 40rpx;
+}
+
+.dialog-title {
+  font-size: 36rpx;
+  color: rgba(0, 0, 0, 0.9);
+  font-weight: 500;
+  text-align: center;
+}
+
+.dialog-desc {
+  font-size: 32rpx;
+  color: rgba(0, 0, 0, 0.9);
+  margin-top: 12rpx;
+  text-align: center;
+}
+
+.dialog-buttons {
+  flex-direction: row;
+  border-top-width: 1rpx;
+  border-top-style: solid;
+  border-top-color: #E5E5E5;
+}
+
+.dialog-btn {
+  flex: 1;
+  padding: 32rpx 0;
+  justify-content: center;
+  align-items: center;
+  background-color: #FFFFFF;
+}
+
+.dialog-btn:active {
+  background-color: #F5F5F5;
+}
+
+.dialog-btn--cancel {
+  border-right-width: 1rpx;
+  border-right-style: solid;
+  border-right-color: #E5E5E5;
+  border-bottom-left-radius: 24rpx;
+}
+
+.dialog-btn--confirm {
+  border-bottom-right-radius: 24rpx;
+}
+
+.dialog-btn__text {
+  font-size: 32rpx;
+  font-weight: 500;
+}
+
+.dialog-btn__text--cancel {
+  color: rgba(0, 0, 0, 0.9);
+}
+
+.dialog-btn__text--confirm {
+  color: #E54545;
+}
+</style>

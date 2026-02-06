@@ -1,0 +1,215 @@
+<template>
+  <view class="tools-panel">
+    <scroll-view class="tools-scroll" scroll-y="true">
+      <view class="tools-grid">
+        <view 
+          v-for="(tool, index) in displayToolList" 
+          :key="tool.id"
+          class="tool-item"
+          :class="{ 'last-in-row': (index + 1) % 4 === 0 }"
+        >
+          <view class="tool-icon-wrapper" @tap="handleToolClick(tool)">
+            <image
+              class="tool-icon"
+              :src="tool.icon"
+              mode="aspectFit"
+            ></image>
+          </view>
+          <text class="tool-name">{{ tool.name }}</text>
+        </view>
+      </view>
+    </scroll-view>
+  </view>
+</template>
+
+<script setup lang="ts">
+import { computed } from 'vue';
+import { useMessageInputState } from '../../state/MessageInputState';
+import type { ToolItem } from './types';
+import { DEFAULT_TOOLS } from './types';
+
+interface ChooseImageSuccessResult {
+  tempFiles: Array<{
+    path: string;
+    size: number;
+  }>;
+}
+
+interface ChooseVideoSuccessResult {
+  tempFilePath: string;
+  duration: number;
+  size: number;
+  height: number;
+  width: number;
+}
+
+interface ChooseMediaSuccessResult {
+  type: 'image' | 'video' | 'mix';
+  tempFiles: Array<{
+    height: number;
+    width: number;
+    fileType: 'video' | 'image';
+    tempFilePath: string;
+    thumbTempFilePath: string;
+    // seconds
+    duration: number;
+    type: 'video' | 'image';
+    byteSize: number;
+  }>;
+}
+
+interface ToolsPanelProps {
+  conversationID: string;
+  toolList?: ToolItem[];
+}
+
+const props = withDefaults(defineProps<ToolsPanelProps>(), {
+  conversationID: '',
+});
+
+const messageInputState = useMessageInputState({
+  conversationID: props.conversationID,
+});
+
+const displayToolList = computed(() => {
+  if (props.toolList && props.toolList.length > 0) {
+    return props.toolList;
+  }
+  return DEFAULT_TOOLS;
+});
+
+// 移除无用的资源路径前缀
+const removeUnusedResourcePrefix = (path: string) => {
+  return path.startsWith('file:///') ? path.substring(7) : path;
+};
+
+const handleToolClick = (tool: ToolItem) => {
+  // 如果有自定义 callback，优先执行 callback
+  if (tool.callback) {
+    tool.callback();
+    return;
+  }
+  
+  // 内置工具处理
+  switch (tool.id) {
+    case 'image':
+      uni.chooseImage({
+        count: 9,
+        sourceType: ['camera', 'album'],
+        success: (chooseImageResult: ChooseImageSuccessResult) => {
+          chooseImageResult.tempFiles.forEach(file => {
+            uni.getImageInfo({
+              src: file.path,
+              success: (getImageInfoResult: any) => {
+                messageInputState?.sendImageMessage({
+                  imagePath: removeUnusedResourcePrefix(getImageInfoResult.path),
+                  imageWidth: getImageInfoResult.width,
+                  imageHeight: getImageInfoResult.height,
+                });
+              },
+              fail: (err: any) => {
+                uni.showToast({
+                  title: '获取图片信息失败',
+                  icon: 'none',
+                });
+              },
+            });
+          });
+        },
+        fail: (err: any) => {
+          if (err.errMsg.includes('mission')) {
+            uni.showToast({
+              title: '请检查相关访问权限',
+              icon: 'none',
+            });
+          }
+        },
+      });
+      break;
+    case 'video':
+      uni.chooseMedia({
+        count: 1,
+        mediaType: ['video'],
+        success: (chooseMediaResult: ChooseMediaSuccessResult) => {
+          chooseMediaResult.tempFiles.forEach(file => {
+            messageInputState?.sendVideoMessage({
+              videoPath: removeUnusedResourcePrefix(file.tempFilePath),
+              videoSnapshotPath: removeUnusedResourcePrefix(file.thumbTempFilePath),
+              videoSnapshotWidth: file.width,
+              videoSnapshotHeight: file.height,
+              videoDuration: Math.round(file.duration),
+              videoType: file.type,
+            })
+          });
+        },
+        fail: (err: any) => {
+          if (err.errMsg.includes('mission')) {
+            uni.showToast({
+              title: '请检查相关访问权限',
+              icon: 'none',
+            });
+          }
+        },
+      });
+      break;
+    default:
+      console.log('Tool clicked:', tool);
+  }
+};
+</script>
+
+<style scoped>
+.tools-panel {
+  flex: 1;
+  background-color: #FFF;
+  border-top-width: 1rpx;
+  border-top-style: solid;
+  border-top-color: #F0F2F7;
+}
+
+.tools-scroll {
+  flex: 1;
+  padding: 20rpx 48rpx;
+}
+
+.tools-grid {
+  flex-direction: row;
+  flex-wrap: wrap;
+}
+
+.tool-item {
+  align-items: center;
+  margin-bottom: 8rpx;
+  margin-right: 45rpx;
+  margin-bottom: 38rpx;
+}
+
+.tool-item.last-in-row {
+  margin-right: 0;
+}
+
+.tool-icon-wrapper {
+  width: 128rpx;
+  height: 128rpx;
+  background-color: #F9FAFC;
+  border-radius: 28rpx;
+  justify-content: center;
+  align-items: center;
+  margin-bottom: 8rpx;
+}
+
+.tool-icon-wrapper:active {
+  background-color: #F0F2F7;
+}
+
+.tool-icon {
+  width: 52rpx;
+  height: 42rpx;
+}
+
+.tool-name {
+  font-size: 24rpx;
+  color: rgba(0, 0, 0, 0.40);
+  text-align: center;
+}
+</style>

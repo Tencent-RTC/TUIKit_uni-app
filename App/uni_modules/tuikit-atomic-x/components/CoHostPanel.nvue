@@ -13,11 +13,14 @@
           </view>
         </view>
       </view>
-
-      <view v-if="filteredConnected?.length > 0"
-        style="display: flex; width: 800rpx; padding-left: 80rpx; margin-bottom: 40rpx;">
+      <view
+        style="display: flex; width: 800rpx; flex-direction: row; padding-left: 80rpx; padding-right: 80rpx;margin-bottom: 40rpx; justify-content:space-between; "
+        @click.stop v-if="filteredConnected?.length > 0">
         <text class="title-text">连线中</text>
-        <view v-for="connect in filteredConnected" :key="connect.userID" class="audience-item">
+      </view>
+      <list v-if="filteredConnected?.length > 0"
+        style="display: flex; width: 800rpx; padding-left: 80rpx; margin-bottom: 40rpx;">
+        <cell v-for="connect in filteredConnected" :key="connect.userID" class="audience-item">
           <view class="audience-info">
             <view class="audience-avatar-container">
               <image class="audience-avatar" mode="aspectFill" :src="connect.avatarURL || defaultAvatarURL" />
@@ -28,8 +31,8 @@
               </view>
             </view>
           </view>
-        </view>
-      </view>
+        </cell>
+      </list>
       <view v-if="liveList?.length > 0" class="audience-grid">
 
       </view>
@@ -42,7 +45,7 @@
 
       <list class="audience-content" @loadmore="loadMore" :show-scrollbar="false">
 
-        <cell v-for="host in currentInviteHosts" :key="host?.liveOwner?.userID">
+        <cell v-for="host in currentInviteHosts" :key="host?.liveOwner?.userID" class="audience-item">
           <view class="audience-info">
             <view class="audience-avatar-container">
               <image class="audience-avatar" mode="aspectFill" :src="host?.liveOwner?.avatarURL || defaultAvatarURL" />
@@ -200,31 +203,15 @@
       cursor: '', // 首次拉起传空（不能是null),然后根据回调数据的cursor确认是否拉完
       count: 20,   // 分页拉取的个数
       success: () => {
-        fetchLiveListRecursively(liveListCursor.value); // 最多尝试3次
+        uni.showToast({
+          title: '刷新完成'
+        });
       }
     };
     fetchLiveList(params);
   }
 
-  const fetchLiveListRecursively = (cursor) => {
-    const params = {
-      cursor: cursor,
-      count: 20,
-      success: () => {
-        if (liveListCursor.value) {
-          fetchLiveListRecursively(liveListCursor.value);
-        } else {
-          uni.showToast({
-            title: '刷新完成'
-          });
-        }
-      },
-      fail: (err) => {
-        console.error(`fetchLiveListRecursively failed, err: ${JSON.stringify(err)}`);
-      }
-    };
-    fetchLiveList(params);
-  }
+
 
   const loadMore = () => {
     if (!liveListCursor.value) {
@@ -282,10 +269,15 @@
       },
       fail: (errorCode) => {
         console.log(errorCode)
-        if (errorCode === 5) {
+        if (errorCode === 3) {
           uni.showToast({
             icon: 'none',
             title: '主播连线中，无法发起连线'
+          })
+        } else if (errorCode === 100404) {
+          uni.showToast({
+            icon: 'none',
+            title: '超过连线和 battle 房间数量上限'
           })
         } else {
           uni.showToast({
@@ -484,7 +476,7 @@
 
   .audience-item {
     border-radius: 16rpx;
-    height: 100rpx;
+    height: 120rpx;
     color: #ffffff;
     position: relative;
     margin-bottom: 32rpx;

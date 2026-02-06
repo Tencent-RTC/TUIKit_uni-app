@@ -1,0 +1,453 @@
+<template>
+  <view class="create-group">
+    <!-- 创建群聊表单 -->
+    <view class="form-container">
+      <!-- 表单内容 -->
+      <scroll-view class="form-content" scroll-y="true">
+        <!-- 群名称 -->
+        <view class="form-item form-item--first">
+          <text class="form-label">群名称</text>
+          <input 
+            ref="groupNameInput"
+            class="form-input" 
+            v-model="groupName" 
+            placeholder="输入群名称" 
+            maxlength="20" 
+          />
+        </view>
+
+        <!-- 群ID -->
+        <view class="form-item form-item--connected">
+          <text class="form-label">群ID（选填）</text>
+          <input 
+            ref="groupIdInput"
+            class="form-input" 
+            v-model="groupID" 
+            placeholder="输入群 ID" 
+          />
+        </view>
+
+        <!-- 群类型 -->
+        <view class="form-item form-item--clickable" @tap="handleGroupTypeSelect">
+          <text class="form-label">群类型</text>
+          <view class="form-value">
+            <text class="form-text">{{ selectedGroupType.name }}</text>
+            <image class="arrow-icon" src="/static/icon/arrow.png" />
+          </view>
+        </view>
+
+        <!-- 群类型说明 -->
+        <view class="group-type-desc">
+          <text class="desc-text">{{ selectedGroupType.description }}
+          </text>
+        </view>
+
+        <!-- 群头像 -->
+        <view class="avatar-section">
+          <text class="section-title">群头像</text>
+          <view class="avatar-grid">
+            <view v-for="(avatar, index) in DEFAULT_GROUP_AVATARS" :key="index" class="avatar-wrapper"
+              :class="{ 'avatar-wrapper--selected': selectedAvatarIndex === index }" @tap="handleAvatarSelect(index)">
+              <view class="avatar-item">
+                <image 
+                  class="avatar-image" 
+                  :src="avatar" 
+                  mode="aspectFill"
+                  @load="onAvatarLoad(index)"
+                  @error="onAvatarError(index)"
+                />
+                <view v-if="!avatarLoadedMap[index]" class="avatar-loading">
+                  <view class="loading-placeholder"></view>
+                </view>
+              </view>
+            </view>
+          </view>
+        </view>
+      </scroll-view>
+
+      <!-- 底部创建按钮 -->
+      <view class="footer">
+        <view class="create-button" :class="{ 'create-button--disabled': !canCreate }" @tap="handleCreate">
+          <text class="create-button__text">创建</text>
+        </view>
+      </view>
+    </view>
+  </view>
+</template>
+
+<script setup lang="ts">
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { useLoginState } from '../../state/LoginState';
+import { useGroupState } from '../../state/GroupState'
+import { useMessageInputState } from '../../state/MessageInputState';
+import { GROUP_TYPES, DEFAULT_GROUP_AVATARS, getGroupTypeById, type GroupType } from '../../constants/groupTypes';
+
+const { loginUserInfo } = useLoginState();
+const { createGroup } = useGroupState()
+
+// 声明 uni 全局对象
+declare const uni: any
+
+// Props
+interface Props {
+  /** 选中的用户列表 */
+  selectedUsers?: Array<{ userID: string; nickname: string }>
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  selectedUsers: () => []
+})
+
+// Emits
+const emit = defineEmits<{
+  back: []
+  create: [groupInfo: {
+    groupName: string
+    groupID: string
+    groupType: string
+    avatarURL: string
+    memberList: string[]
+  }]
+}>()
+
+// 响应式数据
+const groupName = ref('')
+const groupID = ref('')
+const selectedAvatarIndex = ref(0)
+const avatarLoadedMap = ref<Record<number, boolean>>({})
+
+// input 引用
+const groupNameInput = ref()
+const groupIdInput = ref()
+
+// 使用常量中的群类型列表
+const groupTypes = GROUP_TYPES
+const selectedGroupType = ref<GroupType>(groupTypes[0])
+
+// 计算属性
+const canCreate = computed(() => {
+  return groupName.value.trim().length > 0
+})
+
+// 页面生命周期 - 监听页面显示
+onMounted(() => {
+  // 监听群类型选择结果
+  uni.$on('groupTypeSelected', (groupType: GroupType) => {
+    selectedGroupType.value = groupType
+  })
+})
+
+// 组件卸载时移除监听
+onUnmounted(() => {
+  uni.$off('groupTypeSelected')
+})
+
+/**
+ * 头像加载完成
+ */
+const onAvatarLoad = (index: number) => {
+  avatarLoadedMap.value[index] = true
+}
+
+/**
+ * 头像加载失败
+ */
+const onAvatarError = (index: number) => {
+  avatarLoadedMap.value[index] = true // 即使失败也隐藏加载状态
+  console.warn(`群头像 ${index} 加载失败`)
+}
+
+/**
+ * 让所有 input 失焦
+ */
+const blurAllInputs = () => {
+  // 让群名称输入框失焦
+  if (groupNameInput.value) {
+    groupNameInput.value.blur()
+  }
+  // 让群ID输入框失焦
+  if (groupIdInput.value) {
+    groupIdInput.value.blur()
+  }
+}
+
+/**
+ * 选择群类型 - 跳转到群类型选择页面
+ */
+const handleGroupTypeSelect = () => {
+  // 先让所有输入框失焦
+  blurAllInputs()
+  
+  // 直接跳转
+  uni.navigateTo({
+    url: '/pages/scenes/chat/groupTypeInfo/groupTypeInfo'
+  })
+}
+
+/**
+ * 选择头像
+ */
+const handleAvatarSelect = (index: number) => {
+  selectedAvatarIndex.value = index
+}
+
+/**
+ * 处理群组创建成功后的逻辑
+ * @param groupID 创建成功的群组ID
+ */
+const handleGroupCreatedSuccess = (groupID: string) => {
+  const conversationID = `group_${groupID}`
+
+  const messageInputState = useMessageInputState({
+    conversationID: conversationID
+  });
+
+  messageInputState?.sendCustomMessage({
+    version: 1,
+    businessID: 'group_create',
+    opUser: loginUserInfo.value?.userID || '',
+    content: '创建群聊',
+    cmd: 0
+  })
+    .finally(() => {
+      uni.navigateBack({
+        delta: 2,
+        success: () => {
+          uni.navigateTo({
+            url: `/pages/scenes/chat/chat/index?conversationID=${conversationID}`
+          })
+        }
+      })
+    });
+}
+
+/**
+ * 创建群聊
+ */
+const handleCreate = async () => {
+  if (!canCreate.value) {
+    return
+  }
+
+  try {
+    const createdGroupID = await createGroup({
+      groupType: selectedGroupType.value?.id,
+      groupName: groupName.value,
+      groupID: groupID.value,
+      avatarURL: DEFAULT_GROUP_AVATARS[selectedAvatarIndex.value],
+      memberList: uni.$selectedUserData
+    })
+    
+    // 检查群组ID是否有效
+    if (!createdGroupID) {
+      uni.showToast({
+        title: '创建群组失败，请重试',
+        icon: 'none'
+      })
+      return
+    }
+    
+    // 创建成功后处理跳转逻辑
+    handleGroupCreatedSuccess(createdGroupID)
+    
+  } catch (error) {
+    console.error('[CreateGroup] 创建群组失败:', error)
+    
+    uni.showToast({
+      title: error?.message,
+      icon: 'none'
+    })
+  }
+}
+</script>
+
+<style>
+.create-group {
+  flex: 1;
+  background-color: #f5f5f5;
+}
+
+/* 表单容器 */
+.form-container {
+  flex: 1;
+  flex-direction: column;
+}
+
+/* 表单内容 */
+.form-content {
+  flex: 1;
+  padding-bottom: 180rpx;
+}
+
+.form-item {
+  height: 120rpx;
+  background-color: #ffffff;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24rpx 32rpx;
+  margin-top: 20rpx;
+}
+
+.form-item--first {
+  
+}
+
+.form-item--connected {
+  margin-top: 2rpx;
+}
+
+.form-item--clickable {
+}
+
+.form-label {
+  font-family: PingFang SC;
+  font-size: 32rpx;
+  color: black;
+  font-weight: 400;
+  opacity: 0.55;
+}
+
+.form-input {
+  flex: 1;
+  font-size: 32rpx;
+  color: #333333;
+  text-align: right;
+}
+
+.form-value {
+  flex: 1;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.form-text {
+  font-size: 32rpx;
+  color: #333333;
+  margin-right: 16rpx;
+}
+
+.arrow-icon {
+  width: 14rpx;
+  height: 24rpx;
+}
+
+/* 群类型说明 */
+.group-type-desc {
+  padding: 10rpx 32rpx;
+  border-radius: 16rpx;
+}
+
+.desc-text {
+  font-size: 28rpx;
+  color: #666666;
+  line-height: 40rpx;
+}
+
+.desc-link {
+  font-size: 28rpx;
+  color: #1C66E5;
+}
+
+/* 头像选择 */
+.avatar-section {
+  margin-top: 20rpx;
+  background-color: #ffffff;
+  border-radius: 16rpx;
+  padding: 32rpx;
+}
+
+.section-title {
+  font-family: PingFang SC;
+  font-size: 32rpx;
+  color: black;
+  font-weight: 400;
+  opacity: 0.55;
+  margin-bottom: 20rpx;
+}
+
+.avatar-grid {
+  flex-direction: row;
+  flex-wrap: wrap;
+  justify-content: space-between;
+}
+
+.avatar-wrapper {
+  width: 128rpx;
+  height: 128rpx;
+  margin-bottom: 24rpx;
+  border-radius: 20rpx;
+  align-items: center;
+  justify-content: center;
+  background-color: transparent;
+}
+
+.avatar-wrapper--selected {
+  background-color: #1C66E5;
+}
+
+.avatar-item {
+  width: 120rpx;
+  height: 120rpx;
+  border-radius: 16rpx;
+  overflow: hidden;
+  position: relative;
+}
+
+.avatar-image {
+  width: 120rpx;
+  height: 120rpx;
+}
+
+.avatar-loading {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  align-items: center;
+  justify-content: center;
+  background-color: #f8f9fa;
+}
+
+.loading-placeholder {
+  width: 60rpx;
+  height: 60rpx;
+  border-radius: 30rpx;
+  background-color: #e9ecef;
+}
+
+/* 底部按钮 */
+.footer {
+  height: 180rpx;
+  background-color: #ffffff;
+  align-items: center;
+  justify-content: center;
+  padding: 0 32rpx;
+  border-top-width: 1rpx;
+  border-top-color: #e5e5e5;
+}
+
+.create-button {
+  position: absolute;
+  top: 32rpx;
+  right: 32rpx;
+  width: 153rpx;
+  height: 60rpx;
+  border-radius: 4rpx;
+  background-color: #1C66E5;
+  align-items: center;
+  justify-content: center;
+}
+
+.create-button--disabled {
+  background-color: #CCE2FF;
+}
+
+.create-button__text {
+  font-size: 32rpx;
+  color: #ffffff;
+  font-weight: 500;
+}
+</style>

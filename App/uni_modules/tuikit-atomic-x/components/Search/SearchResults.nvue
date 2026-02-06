@@ -1,0 +1,340 @@
+<template>
+  <view class="search-results">
+    <!-- 预搜索状态 -->
+    <view v-if="showPresearch && !isConversationSearch" class="search-results__content">
+      <component 
+        :is="PresearchComponent"
+        :searchHistory="searchHistory"
+        :keyword="keyword"
+        :showCloudSearch="showCloudSearch"
+        @historyClick="handleHistoryClick"
+        @clearHistory="handleClearHistory"
+        @cloudSearchClick="handleCloudSearchClick"
+      />
+    </view>
+    <!-- 加载状态 -->
+    <view v-else-if="isLoading" class="search-results__content">
+      <component 
+        :is="LoadingComponent"
+      />
+    </view>
+    <!-- 空状态 -->
+    <view v-else-if="isEmpty" class="search-results__content">
+      <component 
+        :is="EmptyComponent"
+        :keyword="keyword"
+      />
+    </view>
+    <!-- 结果列表 -->
+    <list v-else class="search-results__list">
+      <template v-if="!isConversationSearch">
+        <cell v-if="friendList && friendList.length > 0" class="search-results__section-header-cell">
+          <view class="search-results__section-header">
+            <text class="search-results__section-title">用户</text>
+          </view>
+        </cell>
+        <cell
+          class="search-results__section-item-cell"
+          v-for="friend in displayFriendList" 
+          :key="'friend-' + friend.userID"
+        >
+          <view class="search-results__item-wrapper">
+            <component
+              :is="SearchResultItemComponent"
+              type="friend"
+              :data="friend"
+              :keyword="keyword"
+              :Avatar="AvatarComp"
+              @click="handleItemClick"
+            />
+          </view>
+        </cell>
+        <cell v-if="showMoreFriend" class="search-results__section-more-cell">
+          <view class="search-results__section-more" @click="handleViewMore('friend')">
+            <text class="search-results__section-more-text">查看更多用户</text>
+          </view>
+        </cell>
+        <cell v-if="friendList && friendList.length > 0" class="search-results__section-gap"></cell>
+        <cell v-if="groupList && groupList.length > 0" class="search-results__section-header-cell">
+          <view class="search-results__section-header">
+            <text class="search-results__section-title">群聊</text>
+          </view>
+        </cell>
+        <cell
+          class="search-results__section-item-cell"
+          v-for="group in displayGroupList" 
+          :key="'group-' + group.groupID"
+        >
+          <view class="search-results__item-wrapper">
+            <component
+              :is="SearchResultItemComponent"
+              type="group"
+              :data="group"
+              :keyword="keyword"
+              :Avatar="AvatarComp"
+              @click="handleItemClick"
+            />
+          </view>
+        </cell>
+        <cell v-if="showMoreGroup" class="search-results__section-more-cell">
+          <view class="search-results__section-more" @click="handleViewMore('group')">
+            <text class="search-results__section-more-text">查看更多群聊</text>
+          </view>
+        </cell>
+        <cell v-if="groupList && groupList.length > 0" class="search-results__section-gap"></cell>
+      </template>
+      <cell v-if="messageResults && messageResults.length > 0" class="search-results__section-header-cell">
+        <view class="search-results__section-header">
+          <text class="search-results__section-title">聊天记录</text>
+        </view>
+      </cell>
+      <template v-if="isConversationSearch">
+        <template v-for="messageResult in displayMessageResults" :key="'conv-' + messageResult.conversationID">
+          <cell
+            class="search-results__section-item-cell"
+            v-for="message in messageResult.messageList"
+            :key="'message-' + message.messageID"
+          >
+            <view class="search-results__item-wrapper">
+              <component
+                :is="SearchResultItemComponent"
+                type="message"
+                :data="message"
+                :keyword="keyword"
+                :Avatar="AvatarComp"
+                @click="handleItemClick"
+              />
+            </view>
+          </cell>
+        </template>
+      </template>
+      <template v-else>
+        <cell
+          class="search-results__section-item-cell"
+          v-for="messageResult in displayMessageResults" 
+          :key="'message-' + messageResult.conversationID"
+        >
+          <view class="search-results__item-wrapper">
+            <component
+              :is="SearchResultItemComponent"
+              type="conversation"
+              :data="messageResult"
+              :keyword="keyword"
+              :Avatar="AvatarComp"
+              @click="handleItemClick"
+            />
+          </view>
+        </cell>
+      </template>
+      <cell v-if="showMoreMessage" class="search-results__section-more-cell">
+        <view class="search-results__section-more" @click="handleViewMore('message')">
+          <text class="search-results__section-more-text">查看更多消息</text>
+        </view>
+      </cell>
+    </list>
+  </view>
+</template>
+
+<script setup lang="ts">
+import { computed, ref } from 'vue'
+import AvatarComponent from '../Avatar'
+import DefaultSearchResultItem from './SearchResultItem/index.nvue'
+import DefaultPresearch from './placeholders/SearchResultsPresearch.nvue'
+import DefaultLoading from './placeholders/SearchResultsLoading.nvue'
+import DefaultEmpty from './placeholders/SearchResultsEmpty.nvue'
+import { SearchTabValue } from '../../types/search'
+import type { 
+  SearchResultsProps, 
+  SearchResultsEmits,
+  SearchResultType,
+  FriendSearchInfo,
+  MessageSearchResultItem
+} from '../../types/search'
+import type { GroupSearchInfo } from '../../types/group'
+import type { UserProfile } from '../../types/userProfile'
+
+const props = withDefaults(defineProps<SearchResultsProps>(), {
+  keyword: '',
+  conversationID: '',
+  currentTab: SearchTabValue.All,
+  isLoading: false,
+  showPresearch: true,
+  friendList: () => [],
+  groupList: () => [],
+  groupMemberList: () => ({}),
+  messageResults: () => [],
+  conversationList: () => [],
+  hasMoreFriend: false,
+  hasMoreGroup: false,
+  hasMoreGroupMember: false,
+  hasMoreMessage: false,
+  searchHistory: () => [],
+  showCloudSearch: false,
+  SearchResultItem: undefined,
+  PlaceholderEmpty: undefined,
+  PlaceholderLoading: undefined,
+  PlaceholderPresearch: undefined,
+  Avatar: undefined
+})
+
+const emit = defineEmits<SearchResultsEmits>()
+
+const defaultDisplayCount = 3
+
+const isAllTab = computed(() => props.currentTab === SearchTabValue.All)
+
+const isConversationSearch = computed(() => !!props.conversationID)
+
+const SearchResultItemComponent = computed(() => props.SearchResultItem || DefaultSearchResultItem)
+const PresearchComponent = computed(() => props.PlaceholderPresearch || DefaultPresearch)
+const LoadingComponent = computed(() => props.PlaceholderLoading || DefaultLoading)
+const EmptyComponent = computed(() => props.PlaceholderEmpty || DefaultEmpty)
+const AvatarComp = computed(() => props.Avatar || AvatarComponent)
+
+const isEmpty = computed(() => {
+  if (isConversationSearch.value) {
+    // 会话内搜索：只需要 messageResults 为空即展示
+    return !props.messageResults || props.messageResults.length === 0
+  }
+  // 全局搜索：三个列表都为空时展示
+  return (!props.friendList || props.friendList.length === 0) &&
+    (!props.groupList || props.groupList.length === 0) &&
+    (!props.messageResults || props.messageResults.length === 0)
+})
+
+const displayFriendList = computed(() => {
+  if (isAllTab.value) {
+    return props.friendList?.slice(0, defaultDisplayCount) || []
+  }
+  return props.friendList || []
+})
+
+const displayGroupList = computed(() => {
+  if (isAllTab.value) {
+    return props.groupList?.slice(0, defaultDisplayCount) || []
+  }
+  return props.groupList || []
+})
+
+const displayMessageResults = computed(() => {
+  if (isAllTab.value) {
+    return props.messageResults?.slice(0, defaultDisplayCount) || []
+  }
+  return props.messageResults || []
+})
+
+const showMoreFriend = computed(() => {
+  if (isConversationSearch.value) {
+    return false
+  }
+  if (isAllTab.value) {
+    return props.hasMoreFriend || (props.friendList && props.friendList.length > defaultDisplayCount)
+  }
+  return props.hasMoreFriend
+})
+
+const showMoreGroup = computed(() => {
+  if (isConversationSearch.value) {
+    return false
+  }
+  if (isAllTab.value) {
+    return props.hasMoreGroup || (props.groupList && props.groupList.length > defaultDisplayCount)
+  }
+  return props.hasMoreGroup
+})
+
+const showMoreMessage = computed(() => {
+  if (isAllTab.value && !isConversationSearch.value) {
+    return props.hasMoreMessage || (props.messageResults && props.messageResults.length > defaultDisplayCount)
+  }
+  return props.hasMoreMessage
+})
+
+const handleItemClick = (type: SearchResultType | 'conversation', data: any) => {
+  emit('resultItemClick', type, data)
+}
+
+const handleViewMore = (type: SearchResultType) => {
+  emit('viewMore', type)
+}
+
+const handleHistoryClick = (keyword: string) => {
+  emit('historyClick', keyword)
+}
+
+const handleClearHistory = () => {
+  emit('clearHistory')
+}
+
+const handleCloudSearchClick = () => {
+  emit('cloudSearchClick')
+}
+</script>
+
+<style>
+.search-results {
+  flex: 1;
+  border-top: 3rpx solid #E6E9F0;
+  background-color: #ffffff;
+}
+
+.search-results__content {
+  flex: 1;
+}
+
+.search-results__list {
+  flex: 1;
+}
+
+.search-results__section-header-cell {
+  background-color: #ffffff;
+}
+
+.search-results__section-header {
+  flex-direction: row;
+  align-items: center;
+  padding: 20rpx 40rpx 3rpx;
+}
+
+.search-results__section-title {
+  font-size: 28rpx;
+  line-height: 48rpx;
+  font-weight: 500;
+  color: #333333;
+}
+
+.search-results__section-more-cell {
+  background-color: #ffffff;
+}
+
+.search-results__section-more {
+  justify-content: center;
+  padding: 26rpx 40rpx 11rpx;
+  background-color: #ffffff;
+}
+
+.search-results__section-more-text {
+  font-size: 28rpx;
+  font-weight: 400;
+  line-height: 40rpx;
+  color: #1C66E5;
+}
+
+.search-results__section-gap {
+  height: 2rpx;
+  background-color: #F5F6F7;
+}
+
+.search-results__section-item-cell{
+  padding: 0 30rpx;
+}
+
+.search-results__item-wrapper {
+  flex: 1;
+  padding: 12rpx 0;
+  border-bottom: 1rpx solid #E6E9F0;
+}
+.search-results__item-wrapper:last-child {
+  border-bottom: none;
+}
+</style>

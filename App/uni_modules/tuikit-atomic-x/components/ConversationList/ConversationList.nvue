@@ -1,0 +1,285 @@
+<template>
+  <view class="conversation-list">
+    <view v-if="isLoading && PlaceholderLoading" class="conversation-list__placeholder">
+      <component :is="PlaceholderLoading" />
+    </view>
+
+    <view v-else-if="loadError && PlaceholderLoadError" class="conversation-list__placeholder">
+      <component :is="PlaceholderLoadError" :error="loadError" />
+    </view>
+
+    <view v-else-if="filteredAndSortedList.length === 0 && PlaceholderEmptyList" class="conversation-list__placeholder">
+      <component :is="PlaceholderEmptyList" />
+    </view>
+
+    <list v-else class="conversation-list__scroll" :show-scrollbar="false">
+      <cell 
+        v-for="(conversation, index) in filteredAndSortedList" 
+        :key="conversation.conversationID"
+      >
+        <SwipeActions
+          :ref="(el) => setSwipeActionRef(el, conversation.conversationID)"
+          :actionsWidth="computedActionsWidth"
+          :disabled="!hasVisibleActions"
+          @contentTap="handleConversationTap(conversation)"
+          @open="handleSwipeOpen(conversation.conversationID)"
+        >
+          <component 
+            :is="Preview"
+            :conversation="conversation"
+            :Avatar="Avatar"
+          />
+          
+          <template #actions v-if="hasVisibleActions">
+            <component
+              :is="ConversationActions"
+              :conversation="conversation"
+              :actions="actionsConfig.actions"
+              :isSupportPin="actionsConfig.isSupportPin"
+              :isSupportMute="actionsConfig.isSupportMute"
+              :isSupportDelete="actionsConfig.isSupportDelete"
+              @conversationPin="handlePin"
+              @conversationMute="handleMute"
+              @conversationDelete="handleDelete"
+            />
+          </template>
+        </SwipeActions>
+      </cell>
+    </list>
+  </view>
+</template>
+
+<script setup lang="ts">
+import { ref, computed, onBeforeUnmount } from 'vue'
+import { useConversationListState } from '../../state/ConversationListState'
+import SwipeActions from '../SwipeActions/SwipeActions.nvue'
+import DefaultPreview from './ConversationPreview.nvue'
+import ConversationActionsComponent from './ConversationActions.nvue'
+import AvatarComponent from '../Avatar'
+import DefaultEmptyList from './placeholders/EmptyList.nvue'
+import DefaultLoading from './placeholders/Loading.nvue'
+import DefaultLoadError from './placeholders/LoadError.nvue'
+import type { 
+  ConversationListProps, 
+  ConversationListEmits
+} from '../../types/conversationList'
+import type { ConversationInfo } from '../../types/conversation'
+
+const props = withDefaults(defineProps<ConversationListProps>(), {
+  actionsConfig: () => ({
+    isSupportPin: true,
+    isSupportMute: true,
+    isSupportDelete: true
+  }),
+  Preview: () => DefaultPreview,
+  ConversationActions: () => ConversationActionsComponent,
+  Avatar: () => AvatarComponent,
+  PlaceholderEmptyList: () => DefaultEmptyList,
+  PlaceholderLoading: () => DefaultLoading,
+  PlaceholderLoadError: () => DefaultLoadError
+})
+
+const emit = defineEmits<ConversationListEmits>()
+
+const {
+  conversationList,
+  pinConversation,
+  muteConversation,
+  deleteConversation,
+  clearConversationUnreadCount,
+  destroyStore
+} = useConversationListState()
+
+const isLoading = ref(false)
+const loadError = ref<Error | null>(null)
+interface SwipeActionInstance {
+  close: () => void
+}
+
+const swipeActionsRefs = ref<Map<string, SwipeActionInstance>>(new Map())
+const openedSwipeActionId = ref<string | null>(null)
+const filteredAndSortedList = computed(() => {
+  let list = [...conversationList.value]
+  
+  if (props.filter) {
+    list = list.filter(props.filter)
+  }
+  
+  if (props.sort) {
+    list.sort(props.sort)
+  }
+  
+  return list
+})
+
+const computedActionsWidth = computed(() => {
+  const config = props.actionsConfig || {}
+  
+  if (config.actions && config.actions.length > 0) {
+    return config.actions.length * 160
+  }
+  
+  let count = 0
+  if (config.isSupportPin) count++
+  if (config.isSupportMute) count++
+  if (config.isSupportDelete) count++
+  
+  return count * 160 || 480
+})
+
+const hasVisibleActions = computed(() => {
+  const config = props.actionsConfig || {}
+  
+  if (config.actions && config.actions.length > 0) {
+    return true
+  }
+  
+  return config.isSupportPin || config.isSupportMute || config.isSupportDelete
+})
+
+const setSwipeActionRef = (el: SwipeActionInstance | null, conversationID: string) => {
+  if (el) {
+    swipeActionsRefs.value.set(conversationID, el)
+  } else {
+    swipeActionsRefs.value.delete(conversationID)
+  }
+}
+
+const handleSwipeOpen = (conversationID: string) => {
+  if (openedSwipeActionId.value && openedSwipeActionId.value !== conversationID) {
+    const prevSwipeAction = swipeActionsRefs.value.get(openedSwipeActionId.value)
+    if (prevSwipeAction) {
+      try {
+        prevSwipeAction.close()
+      } catch (error) {
+        // 忽略关闭失败的错误
+      }
+    }
+  }
+  openedSwipeActionId.value = conversationID
+}
+
+const handleConversationTap = (conversation: ConversationInfo) => {
+  // 交互对齐企微
+  if (openedSwipeActionId.value) {
+    closeSwipeAction()
+    openedSwipeActionId.value = null
+  } else {
+    // 如果有未读数，清空未读数
+    if (conversation.unreadCount > 0) {
+      clearConversationUnreadCount(conversation.conversationID)
+    }
+    emit('conversationSelect', conversation)
+  }
+}
+
+const handlePin = async (conversationID: string, isPinned: boolean) => {
+  try {
+    emit('conversationPin', conversationID, isPinned)
+    await pinConversation(conversationID, isPinned)
+  } catch (error) {
+    uni.showToast({
+      title: isPinned ? '置顶失败' : '取消置顶失败',
+      icon: 'none',
+      duration: 2000
+    })
+  } finally {
+    closeSwipeAction()
+  }
+}
+
+const handleMute = async (conversationID: string, isMuted: boolean) => {
+  try {
+    emit('conversationMute', conversationID, isMuted)
+    await muteConversation(conversationID, isMuted)
+  } catch (error) {
+    uni.showToast({
+      title: isMuted ? '设置免打扰失败' : '取消免打扰失败',
+      icon: 'none',
+      duration: 2000
+    })
+  } finally {
+    closeSwipeAction()
+  }
+}
+
+const handleDelete = async (conversationID: string) => {
+  try {
+    emit('conversationDelete', conversationID)
+    await deleteConversation(conversationID)
+
+    // TODO: android 弹出的 ”删除弹窗“ 是系统弹窗，样式很丑而且样式无法设置, 等后续开发弹窗后再添加
+    // uni.showModal({
+    //   title: '删除会话',
+    //   content: '确定要删除这个会话吗?删除后将无法恢复',
+    //   confirmText: '删除',
+    //   cancelText: '取消',
+    //   confirmColor: '#E54545',
+    //   success: async (res) => {
+    //     if (res.confirm) {
+    //       try {
+    //         emit('conversationDelete', conversationID)
+    //         await deleteConversation(conversationID)
+    //       } catch (error) {
+    //         uni.showToast({
+    //           title: '删除失败',
+    //           icon: 'none',
+    //           duration: 2000
+    //         })
+    //       }
+    //     }
+    //   },
+    //   complete: () => {
+    //     // 无论确认还是取消,都关闭滑动操作
+    //     closeSwipeAction()
+    //   }
+    // })
+  } catch(error) {
+
+  }
+}
+
+const closeSwipeAction = () => {
+  if (openedSwipeActionId.value) {
+    const swipeAction = swipeActionsRefs.value.get(openedSwipeActionId.value)
+    if (swipeAction) {
+      swipeAction.close()
+    }
+    openedSwipeActionId.value = null
+  }
+}
+
+onBeforeUnmount(() => {
+  // 关闭所有打开的滑动操作
+  if (openedSwipeActionId.value) {
+    const swipeAction = swipeActionsRefs.value.get(openedSwipeActionId.value)
+    if (swipeAction) {
+      swipeAction.close()
+    }
+  }
+  
+  // 清理引用
+  swipeActionsRefs.value.clear()
+  openedSwipeActionId.value = null
+  
+  // 销毁 Store
+  destroyStore()
+})
+</script>
+
+<style>
+.conversation-list {
+  flex: 1;
+  background-color: #ffffff;
+}
+
+.conversation-list__placeholder {
+  flex: 1;
+  justify-content: center;
+  align-items: center;
+}
+
+.conversation-list__scroll {
+  flex: 1;
+}
+</style>

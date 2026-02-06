@@ -1,0 +1,490 @@
+<template>
+  <view class="user-picker">
+    <!-- 搜索框 -->
+    <view class="user-picker__search">
+      <view class="search__container">
+        <image class="search__icon" :src="searchIconSrc" mode="aspectFit" />
+        <input class="search__input" placeholder="搜索" v-model="searchKeyword" @input="handleSearch" />
+      </view>
+    </view>
+
+    <!-- 用户列表容器 -->
+    <view class="user-picker__content">
+      <!-- 用户列表 -->
+      <scroll-view class="user-list" scroll-y="true" :scroll-into-view="scrollIntoView" @scroll="handleScroll">
+        <view v-for="group in filteredGroups" :key="group.letter" class="user-group" :id="`group-${group.letter}`">
+          <!-- 分组标题 -->
+          <view class="group__header">
+            <text class="group__letter">{{ group.letter }}</text>
+          </view>
+
+          <!-- 用户列表 -->
+          <view v-for="user in group.users" :key="user.userID" class="user-item" @tap="handleUserSelect(user)">
+            <!-- 选择框 -->
+            <view class="user-item__checkbox">
+              <view class="checkbox" :class="{
+                'checkbox--checked': isUserSelected(user.userID),
+                'checkbox--disabled': isUserDisabled(user.userID)
+              }">
+                <image v-if="isUserSelected(user.userID)" class="checkbox__icon" :src="checkedIconSrc"
+                  mode="aspectFit" />
+              </view>
+            </view>
+
+            <!-- 用户头像 -->
+            <view class="user-item__avatar">
+              <image class="avatar__image" :src="user.avatarURL || defaultAvatar" mode="aspectFill" />
+            </view>
+
+            <!-- 用户信息 -->
+            <view class="user-item__info">
+              <text class="user__name">{{ user.nickname || user.userID }}</text>
+            </view>
+          </view>
+        </view>
+      </scroll-view>
+
+      <!-- 右侧字母索引 -->
+      <view class="alphabet-index">
+        <view v-for="letter in alphabetList" :key="letter" class="alphabet-item"
+          :class="{ 'alphabet-item--active': currentLetter === letter }" @tap="handleAlphabetTap(letter)">
+          <text class="alphabet__text">{{ letter }}</text>
+        </view>
+      </view>
+    </view>
+
+    <!-- 底部确定按钮 -->
+    <view class="user-picker__footer">
+      <!-- 已选用户头像预览 -->
+      <view class="selected-users">
+        <view v-for="user in selectedUsers.slice(0, 3)" :key="user.userID" class="selected-user">
+          <image class="selected-user__avatar" :src="user.avatarURL || defaultAvatar" mode="aspectFill" />
+        </view>
+        <view v-if="selectedUsers.length > 3" class="selected-user selected-user--more">
+          <text class="more-text">+{{ selectedUsers.length - 3 }}</text>
+        </view>
+      </view>
+
+      <!-- 确定按钮 -->
+      <view class="confirm-button" :class="{ 'confirm-button--disabled': selectedUsers.length === 0 }"
+        @tap="handleConfirm">
+        <text class="confirm-button__text">
+          确定({{ selectedUsers.length }})
+        </text>
+      </view>
+    </view>
+  </view>
+</template>
+
+<script setup lang="ts">
+import { ref, computed, onMounted } from 'vue'
+import { sortByFirstChar } from '../utils/sortByFirstChar'
+import searchIcon from '../../../static/icon/search.png'
+import checkedIcon from '../../../static/icon/checked.png'
+
+interface User {
+  userID: string;
+  nickname?: string;
+  avatarURL?: string;
+}
+
+interface Props {
+  /** 最大可选人数 */
+  maxCount?: number
+  /** 要渲染的成员列表 */
+  dataSource?: User[]
+  /** 锁定的用户ID，无法被选取 */
+  lockedItems?: string[]
+  /** 页面标题 */
+  title?: string
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  maxCount: 500,
+  dataSource: () => [],
+  lockedItems: () => [],
+  title: '选择用户'
+})
+
+const emit = defineEmits<{
+  back: []
+  confirm: [users: User[]]
+}>()
+// 搜索关键词
+const searchKeyword = ref('')
+// 已选用户ID列表
+const selectedUserIDs = ref<string[]>([])
+// 当前显示的字母
+const currentLetter = ref('A')
+// 滚动到指定位置
+const scrollIntoView = ref('')
+// 默认头像
+const defaultAvatar = ref('https://web.sdk.qcloud.com/im/assets/all-in-one/user.png')
+// 搜索图标
+const searchIconSrc = ref(searchIcon)
+// 选中图标
+const checkedIconSrc = ref(checkedIcon)
+
+/**
+ * 按首字母分组的用户列表
+ */
+const groupedUsers = computed(() => {
+  const { groupedList } = sortByFirstChar(
+    props.dataSource,
+    (user: User) => user.nickname || user.userID,
+    true
+  )
+
+  // 转换为组件需要的格式，确保 # 组在最后
+  const groups: { letter: string; users: User[] }[] = []
+  const letters = Object.keys(groupedList).sort((a, b) => {
+    // # 组始终排在最后
+    if (a === '#' && b !== '#') return 1
+    if (b === '#' && a !== '#') return -1
+    // 其他按字母顺序排序
+    return a.localeCompare(b)
+  })
+
+  letters.forEach(letter => {
+    groups.push({
+      letter,
+      users: groupedList[letter]
+    })
+  })
+
+  return groups
+})
+
+/**
+ * 字母表列表
+ */
+const alphabetList = computed(() => {
+  const letters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', '#']
+  return letters.filter(letter => {
+    return groupedUsers.value.some(group => group.letter === letter)
+  })
+})
+
+/**
+ * 过滤后的分组列表（支持搜索）
+ */
+const filteredGroups = computed(() => {
+  if (!searchKeyword.value.trim()) {
+    return groupedUsers.value
+  }
+
+  const keyword = searchKeyword.value.toLowerCase()
+  return groupedUsers.value.map(group => ({
+    ...group,
+    users: group.users.filter(user => {
+      const name = (user.nickname || user.userID).toLowerCase()
+      return name.includes(keyword)
+    })
+  })).filter(group => group.users.length > 0)
+})
+
+/**
+ * 已选用户列表（按选择顺序排列）
+ */
+const selectedUsers = computed(() => {
+  // 按照 selectedUserIDs 的顺序来构建用户列表，保持选择顺序
+  return selectedUserIDs.value.map(userID => {
+    return props.dataSource.find(user => user.userID === userID)
+  }).filter(Boolean) as User[]
+})
+
+/**
+ * 判断用户是否已选中
+ */
+const isUserSelected = (userID: string) => {
+  return selectedUserIDs.value.includes(userID)
+}
+
+/**
+ * 判断用户是否被禁用
+ */
+const isUserDisabled = (userID: string) => {
+  return props.lockedItems.includes(userID)
+}
+
+/**
+ * 处理用户选择
+ */
+const handleUserSelect = (user: User) => {
+  // 如果用户被禁用，不允许选择
+  if (isUserDisabled(user.userID)) {
+    return
+  }
+
+  const index = selectedUserIDs.value.indexOf(user.userID)
+
+  if (index > -1) {
+    // 取消选择
+    selectedUserIDs.value.splice(index, 1)
+  } else {
+    // 检查是否超过最大选择数量
+    if (selectedUserIDs.value.length >= props.maxCount) {
+      uni.showToast({
+        title: `最多只能选择${props.maxCount}人`,
+        icon: 'none'
+      })
+      return
+    }
+
+    // 添加选择
+    selectedUserIDs.value.push(user.userID)
+  }
+}
+
+/**
+ * 处理搜索
+ */
+const handleSearch = () => {
+  // 搜索逻辑已在 computed 中处理
+}
+
+/**
+ * 处理字母索引点击
+ */
+const handleAlphabetTap = (letter: string) => {
+  currentLetter.value = letter
+  scrollIntoView.value = `group-${letter}`
+}
+
+/**
+ * 处理滚动
+ */
+const handleScroll = (e: any) => {
+  // 可以根据滚动位置更新当前字母
+}
+
+/**
+ * 处理确定
+ */
+const handleConfirm = () => {
+  if (selectedUsers.value.length === 0) {
+    return
+  }
+
+  emit('confirm', selectedUsers.value)
+}
+</script>
+
+<style>
+.user-picker {
+  flex: 1;
+  background-color: #F0F2F7;
+}
+
+/* 搜索框 */
+.user-picker__search {
+  background-color: #ffffff;
+  padding: 24rpx 32rpx;
+}
+
+.search__container {
+  height: 80rpx;
+  background-color: #F0F2F7;
+  flex-direction: row;
+  align-items: center;
+  padding: 0 24rpx;
+}
+
+.search__icon {
+  width: 28rpx;
+  height: 28rpx;
+  margin-right: 16rpx;
+}
+
+.search__input {
+  flex: 1;
+  font-size: 28rpx;
+  color: #333333;
+  height: 72rpx;
+  line-height: 72rpx;
+}
+
+/* 内容区域 */
+.user-picker__content {
+  flex: 1;
+  flex-direction: row;
+  position: relative;
+}
+
+.user-list {
+  flex: 1;
+  background-color: #ffffff;
+}
+
+/* 用户分组 */
+.user-group {
+  margin-bottom: 24rpx;
+}
+
+.group__header {
+  height: 60rpx;
+  background-color: #f5f5f5;
+  justify-content: flex-start;
+  padding-left: 32rpx;
+}
+
+.group__letter {
+  font-family: PingFang SC;
+  line-height: 60rpx;
+  font-size: 28rpx;
+  color: #888888;
+  font-weight: 500;
+}
+
+/* 用户项 */
+.user-item {
+  height: 120rpx;
+  flex-direction: row;
+  align-items: center;
+  padding: 0 32rpx;
+  background-color: #ffffff;
+  border-bottom-width: 1rpx;
+  border-bottom-color: #f0f0f0;
+}
+
+.user-item__checkbox {
+  width: 48rpx;
+  height: 48rpx;
+  margin-right: 24rpx;
+  align-items: center;
+  justify-content: center;
+}
+
+.checkbox {
+  width: 48rpx;
+  height: 48rpx;
+  border-radius: 24rpx;
+  border-width: 4rpx;
+  border-color: #d9d9d9;
+  align-items: center;
+  justify-content: center;
+  background-color: #ffffff;
+}
+
+.checkbox--checked {
+  background-color: #1C66E5;
+  border-color: #1C66E5;
+}
+
+.checkbox--disabled {
+  background-color: #f5f5f5;
+  border-color: #d9d9d9;
+}
+
+.checkbox__icon {
+  width: 24rpx;
+  height: 24rpx;
+}
+
+.user-item__avatar {
+  width: 80rpx;
+  height: 80rpx;
+  margin-right: 24rpx;
+}
+
+.avatar__image {
+  width: 80rpx;
+  height: 80rpx;
+  background-color: #f5f5f5;
+  border-radius: 10rpx;
+}
+
+.user-item__info {
+  flex: 1;
+}
+
+.user__name {
+  font-size: 32rpx;
+  color: #333333;
+}
+
+/* 字母索引 */
+.alphabet-index {
+  width: 50rpx;
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  align-items: center;
+  justify-content: center;
+}
+
+.alphabet-item {
+  width: 50rpx;
+  height: 48rpx;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 4rpx;
+}
+
+.alphabet__text {
+  font-size: 20rpx;
+  color: #666666;
+  font-weight: 500;
+}
+
+/* 底部确定按钮 */
+.user-picker__footer {
+  height: 120rpx;
+  background-color: #ffffff;
+  flex-direction: row;
+  align-items: center;
+  padding: 0 32rpx;
+  border-top-width: 1rpx;
+  border-top-color: #e5e5e5;
+}
+
+.selected-users {
+  flex: 1;
+  flex-direction: row;
+  align-items: center;
+}
+
+.selected-user {
+  width: 80rpx;
+  height: 80rpx;
+  margin-right: 24rpx;
+}
+
+.selected-user__avatar {
+  width: 80rpx;
+  height: 80rpx;
+  background-color: #f5f5f5;
+  border-radius: 10rpx;
+}
+
+.selected-user--more {
+  background-color: #f0f0f0;
+  align-items: center;
+  justify-content: center;
+}
+
+.more-text {
+  font-size: 28rpx;
+  color: #666666;
+}
+
+.confirm-button {
+  width: 160rpx;
+  height: 72rpx;
+  background-color: #1C66E5;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4rpx;
+}
+
+.confirm-button--disabled {
+  background-color: #CCE2FF;
+}
+
+.confirm-button__text {
+  font-size: 28rpx;
+  color: #ffffff;
+  font-weight: 500;
+}
+</style>

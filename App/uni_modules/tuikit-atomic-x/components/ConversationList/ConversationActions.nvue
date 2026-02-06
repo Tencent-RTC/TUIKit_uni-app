@@ -1,0 +1,156 @@
+<template>
+  <view class="conversation-actions">
+    <view 
+      v-for="action in actionList"
+      :key="action.key"
+      class="conversation-actions__action"
+      :style="getActionStyle(action)"
+      @tap.stop="handleActionTap(action)"
+    >
+      <text 
+        class="conversation-actions__action-text"
+        :style="getTextStyle(action)"
+      >
+        {{ action.text }}
+      </text>
+    </view>
+  </view>
+</template>
+
+<script setup lang="ts">
+import { computed } from 'vue'
+import { ConversationReceiveOption } from '../../types/conversation'
+import { ConversationActionType } from '../../types/conversationList'
+import type { 
+  ActionItem, 
+  ConversationActionsProps, 
+  ConversationActionsEmits
+} from '../../types/conversationList'
+
+const props = withDefaults(defineProps<ConversationActionsProps>(), {
+  isSupportPin: true,
+  isSupportMute: true,
+  isSupportDelete: true
+})
+
+const emit = defineEmits<ConversationActionsEmits>()
+
+const isMuted = computed(() => {
+  return props.conversation.receiveOption === ConversationReceiveOption.NOT_RECEIVE ||
+         props.conversation.receiveOption === ConversationReceiveOption.NOT_NOTIFY
+})
+
+const getDefaultText = (key: string): string => {
+  switch (key) {
+    case ConversationActionType.PIN:
+      return props.conversation.isPinned ? '取消置顶' : '置顶'
+    case ConversationActionType.MUTE:
+      return isMuted.value ? '取消免打扰' : '免打扰'
+    case ConversationActionType.DELETE:
+      return '删除'
+    default:
+      return key
+  }
+}
+
+const actionList = computed<ActionItem[]>(() => {
+  if (props.actions && props.actions.length > 0) {
+    return props.actions.map(action => ({
+      ...action,
+      text: action.text || getDefaultText(action.key)
+    }))
+  }
+  
+  const actions: ActionItem[] = []
+  
+  if (props.isSupportMute) {
+    actions.push({
+      key: ConversationActionType.MUTE,
+      text: isMuted.value ? '取消免打扰' : '免打扰'
+    })
+  }
+  
+  if (props.isSupportPin) {
+    actions.push({
+      key: ConversationActionType.PIN,
+      text: props.conversation.isPinned ? '取消置顶' : '置顶'
+    })
+  }
+  
+  if (props.isSupportDelete) {
+    actions.push({
+      key: ConversationActionType.DELETE,
+      text: '删除'
+    })
+  }
+  
+  return actions
+})
+
+const getDefaultBackgroundColor = (key: string): string => {
+  switch (key) {
+    case ConversationActionType.PIN:
+      return '#FF7200'
+    case ConversationActionType.MUTE:
+      return '#1C66E5'
+    case ConversationActionType.DELETE:
+      return '#E54545'
+    default:
+      return '#999999'
+  }
+}
+
+const getActionStyle = (action: ActionItem) => {
+  return {
+    backgroundColor: action.backgroundColor || getDefaultBackgroundColor(action.key)
+  }
+}
+
+const getTextStyle = (action: ActionItem) => {
+  return {
+    color: action.color || '#ffffff'
+  }
+}
+
+const handleActionTap = (action: ActionItem) => {
+  const conversationID = props.conversation.conversationID
+  
+  // 如果是自定义 action 且有 onClick 回调，则调用回调
+  if (action.onClick && typeof action.onClick === 'function') {
+    action.onClick(conversationID)
+    return
+  }
+  
+  // 处理内置 action
+  switch (action.key) {
+    case ConversationActionType.PIN:
+      emit('conversationPin', conversationID, !props.conversation.isPinned)
+      break
+    case ConversationActionType.MUTE:
+      emit('conversationMute', conversationID, !isMuted.value)
+      break
+    case ConversationActionType.DELETE:
+      emit('conversationDelete', conversationID)
+      break
+  }
+}
+</script>
+
+<style>
+.conversation-actions {
+  flex-direction: row;
+  flex: 1;
+}
+
+.conversation-actions__action {
+  width: 160rpx;
+  justify-content: center;
+  align-items: center;
+}
+
+.conversation-actions__action-text {
+  font-size: 28rpx;
+  line-height: 39rpx;
+  font-weight: 400;
+}
+</style>

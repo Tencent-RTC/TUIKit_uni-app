@@ -1,0 +1,332 @@
+<template>
+  <view class="group-member-list">
+    <CustomNavbar
+      title="群成员列表"
+      :showBack="true"
+      @back="handleBack"
+    />
+
+    <!-- 成员列表 -->
+    <list class="content" @loadmore="handleLoadMore" :loadmoreoffset="100">
+      <!-- 群主 header -->
+      <cell v-if="owner" key="owner-header">
+        <view class="section">
+          <text class="section__title">群主</text>
+        </view>
+      </cell>
+
+      <!-- 群主 -->
+      <cell v-if="owner" :key="`owner-${owner.userID}`">
+        <view class="member-item" @tap="handleMemberClick(owner)">
+          <Avatar
+            :src="owner.avatarURL"
+            :name="getMemberName(owner)"
+            :size="80"
+            :shape="'square'"
+            :defaultAvatarType="'user'"
+            pureMode
+          />
+          <view class="member-item__info">
+            <text class="member-item__name">{{ getMemberName(owner) }}</text>
+            <!-- <text v-if="owner.userID" class="member-item__id">ID: {{ owner.userID }}</text> -->
+          </view>
+        </view>
+      </cell>
+
+      <!-- 管理员 header -->
+      <cell v-if="admins.length > 0" key="admins-header">
+        <view class="section">
+          <text class="section__title">管理员({{ admins.length }})</text>
+        </view>
+      </cell>
+
+      <!-- 管理员列表 -->
+      <cell 
+        v-for="member in admins" 
+        :key="`admin-${member.userID}`"
+      >
+        <view class="member-item" @tap="handleMemberClick(member)">
+          <Avatar
+            :src="member.avatarURL"
+            :name="getMemberName(member)"
+            :size="80"
+            :shape="member.avatarURL ? 'square' : 'circle'"
+            :defaultAvatarType="'none'"
+            pureMode
+          />
+          <view class="member-item__info">
+            <text class="member-item__name">{{ getMemberName(member) }}</text>
+            <!-- <text v-if="member.userID" class="member-item__id">ID: {{ member.userID }}</text> -->
+          </view>
+        </view>
+      </cell>
+
+      <!-- 普通成员 header -->
+      <cell v-if="!hideMember && members.length > 0" key="members-header">
+        <view class="section">
+          <text class="section__title">群成员({{ members.length }})</text>
+        </view>
+      </cell>
+
+      <!-- 普通成员列表 -->
+      <cell
+        v-if="!hideMember && members.length > 0"
+        v-for="member in members" 
+        :key="`member-${member.userID}`"
+      >
+        <view class="member-item" @tap="handleMemberClick(member)">
+          <Avatar
+            :src="member.avatarURL"
+            :name="getMemberName(member)"
+            :size="80"
+            :shape="'square'"
+            :defaultAvatarType="'user'"
+            pureMode
+          />
+          <view class="member-item__info">
+            <text class="member-item__name">{{ getMemberName(member) }}</text>
+            <!-- <text v-if="member.userID" class="member-item__id">ID: {{ member.userID }}</text> -->
+          </view>
+        </view>
+      </cell>
+
+      <!-- 加载更多 -->
+      <cell v-if="hasMore && !hideMember" key="load-more">
+        <view class="load-more">
+          <text class="load-more__text">{{ isLoading ? '加载中...' : '上拉加载更多' }}</text>
+        </view>
+      </cell>
+
+      <!-- 底部安全区 -->
+      <cell key="safe-area">
+        <view class="safe-area-bottom"></view>
+      </cell>
+    </list>
+  </view>
+</template>
+
+<script setup lang="ts">
+import { ref, computed, onBeforeMount, onUnmounted } from 'vue';
+import CustomNavbar from '../CustomNavbar/CustomNavbar.nvue';
+import { Avatar } from '../Avatar';
+import { useGroupMemberState } from '../../state/GroupMemberState';
+import { GroupMemberRole, type GroupMember } from '../../types/group'; 
+
+interface Props {
+  conversationID: string;
+  hideMember?: boolean;
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  hideMember: false,
+});
+
+const emit = defineEmits<{
+  (e: 'member-click', member: GroupMember): void;
+}>();
+
+// 获取 groupID
+const groupID = props.conversationID.startsWith('group_') ? props.conversationID.replace('group_', '') : '';
+
+// 获取状态
+const {
+  groupMemberList: allMembers,
+  hasMoreGroupMembers,
+  fetchMoreGroupMemberList,
+} = useGroupMemberState({
+  groupID,
+});
+
+const isLoading = ref(false);
+
+// 群主
+const owner = computed(() => {
+  return allMembers.value.find((member: GroupMember) => member.role === GroupMemberRole.Owner) || null;
+});
+
+// 管理员
+const admins = computed(() => {
+  return allMembers.value.filter(m => m.role === GroupMemberRole.Admin);
+});
+
+// 普通成员
+const members = computed(() => {
+  return allMembers.value.filter(m => m.role === GroupMemberRole.Member);
+});
+
+// 是否有更多
+const hasMore = computed(() => hasMoreGroupMembers.value);
+
+// 获取头像文字
+const getAvatarText = (member: GroupMember): string => {
+  const name = member.nameCard || member.nickname || member.userID || '';
+  return name.substring(0, 1);
+};
+
+// 获取成员显示名称
+const getMemberName = (member: GroupMember): string => {
+  return member.nameCard || member.nickname || member.userID || '';
+};
+
+// 返回
+const handleBack = () => {
+  uni.navigateBack();
+};
+
+// 点击成员
+const handleMemberClick = (member: GroupMember) => {
+  emit('member-click', member);
+};
+
+// 加载更多
+const handleLoadMore = async () => {
+  if (isLoading.value || !hasMore.value) return;
+  
+  isLoading.value = true;
+  try {
+    await fetchMoreGroupMemberList();
+  } finally {
+    isLoading.value = false;
+  }
+};
+</script>
+
+<style scoped>
+.group-member-list {
+  flex: 1;
+  background-color: #F5F5F5;
+}
+
+/* 导航栏 */
+.navbar {
+  background-color: #FFFFFF;
+  border-bottom-width: 1rpx;
+  border-bottom-style: solid;
+  border-bottom-color: #E5E5E5;
+}
+
+.navbar__content {
+  height: 88rpx;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 32rpx;
+}
+
+.navbar__back {
+  width: 60rpx;
+  height: 60rpx;
+  justify-content: center;
+  align-items: center;
+}
+
+.navbar__back-icon {
+  font-size: 48rpx;
+  color: #333333;
+}
+
+.navbar__title {
+  font-size: 36rpx;
+  font-weight: 500;
+  color: #333333;
+}
+
+.navbar__placeholder {
+  width: 60rpx;
+}
+
+/* 内容区域 */
+.content {
+  flex: 1;
+}
+
+/* 分组 */
+.section {
+  margin-top: 20rpx;
+  background-color: #FFFFFF;
+  padding-top: 24rpx;
+  padding-bottom: 12rpx;
+  padding-left: 32rpx;
+  padding-right: 32rpx;
+}
+
+.section__title {
+  font-size: 24rpx;
+  color: #999999;
+}
+
+/* 成员项 */
+.member-item {
+  flex-direction: row;
+  align-items: center;
+  padding-top: 24rpx;
+  padding-bottom: 24rpx;
+  padding-left: 32rpx;
+  padding-right: 32rpx;
+  background-color: #FFFFFF;
+  border-bottom-width: 1rpx;
+  border-bottom-style: solid;
+  border-bottom-color: #F0F0F0;
+}
+
+.member-item__avatar {
+  width: 80rpx;
+  height: 80rpx;
+  border-radius: 8rpx;
+}
+
+.member-item__avatar--default {
+  justify-content: center;
+  align-items: center;
+  background-color: #CCCCCC;
+}
+
+.member-item__avatar-text {
+  font-size: 32rpx;
+  color: #FFFFFF;
+  font-weight: 500;
+}
+
+.member-item__info {
+  flex: 1;
+  margin-left: 24rpx;
+}
+
+.member-item__name {
+  font-size: 30rpx;
+  color: #333333;
+  font-weight: 500;
+}
+
+.member-item__id {
+  font-size: 24rpx;
+  color: #999999;
+  margin-top: 8rpx;
+}
+
+.member-item__arrow {
+  font-size: 32rpx;
+  color: #CCCCCC;
+}
+
+/* 加载更多 */
+.load-more {
+  padding-top: 32rpx;
+  padding-bottom: 32rpx;
+  padding-left: 32rpx;
+  padding-right: 32rpx;
+  align-items: center;
+  background-color: #F5F5F5;
+}
+
+.load-more__text {
+  font-size: 26rpx;
+  color: #999999;
+}
+
+/* 底部安全区 */
+.safe-area-bottom {
+  height: 68rpx;
+  background-color: #F5F5F5;
+}
+</style>

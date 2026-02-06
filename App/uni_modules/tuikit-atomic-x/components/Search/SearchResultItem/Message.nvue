@@ -1,0 +1,197 @@
+<template>
+  <ResultItem
+    :avatarURL="avatarURL"
+    :title="title"
+    :subtitle="subtitleText"
+    :keyword="keyword"
+    :Avatar="Avatar"
+    :mediaType="mediaType"
+    :mediaSrc="mediaSrc"
+    :mediaInfo="mediaInfo"
+    defaultAvatarType="user"
+  />
+</template>
+
+<script setup lang="ts">
+import { computed } from 'vue'
+import AvatarComponent from '../../Avatar'
+import ResultItem from './ResultItem.nvue'
+import type { MessageSearchResultItem } from '../../../types/search'
+import type { MessageInfo, MessageType } from '../../../types/message'
+import type { Component } from 'vue'
+
+interface Props {
+  /** 消息搜索结果（会话聚合模式） */
+  messageResult?: MessageSearchResultItem
+  /** 单条消息（会话内搜索模式） */
+  message?: MessageInfo
+  /** 搜索关键词（用于高亮） */
+  keyword?: string
+  /** 自定义头像组件 */
+  Avatar?: Component
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  keyword: '',
+  Avatar: () => AvatarComponent
+})
+
+const isMessageMode = computed(() => !!props.message)
+
+const currentMessage = computed(() => {
+  if (isMessageMode.value) {
+    return props.message
+  }
+  const messages = props.messageResult?.messageList
+  if (messages && messages.length > 0) {
+    return messages[0]
+  }
+  return undefined
+})
+
+const avatarURL = computed(() => {
+  if (isMessageMode.value) {
+    return props.message?.sender?.avatarURL || ''
+  }
+  return props.messageResult?.conversationAvatarURL || ''
+})
+
+const title = computed(() => {
+  if (isMessageMode.value) {
+    return props.message?.sender?.friendRemark
+     || props.message?.sender?.nameCard
+     || props.message?.sender?.nickname
+     || props.message?.sender?.userID
+     || ''
+  }
+  return props.messageResult?.conversationShowName || ''
+})
+
+/**
+ * 获取媒体类型
+ */
+const mediaType = computed((): 'image' | 'video' | 'file' | 'sound' | 'face' | '' => {
+  const message = currentMessage.value
+  if (!message) return ''
+  
+  // 会话聚合模式下，多条消息不显示媒体预览
+  if (!isMessageMode.value && (props.messageResult?.messageCount || 0) > 1) {
+    return ''
+  }
+  
+  const messageType = message.messageType as MessageType
+  switch (messageType) {
+    case 2: // IMAGE
+      return 'image'
+    case 3: // VIDEO
+      return 'video'
+    case 4: // SOUND
+      return 'sound'
+    case 5: // FILE
+      return 'file'
+    case 6: // FACE
+      return 'face'
+    default:
+      return ''
+  }
+})
+
+/**
+ * 获取媒体资源URL
+ */
+const mediaSrc = computed(() => {
+  const message = currentMessage.value
+  if (!message) return ''
+  
+  const body = message.messageBody
+  const messageType = message.messageType as MessageType
+  
+  switch (messageType) {
+    case 2: // IMAGE
+      return body?.thumbImagePath || body?.originalImagePath || ''
+    case 3: // VIDEO
+      return body?.videoSnapshotPath || ''
+    default:
+      return ''
+  }
+})
+
+/**
+ * 获取媒体附加信息（与MessageList保持一致）
+ */
+const mediaInfo = computed(() => {
+  const message = currentMessage.value
+  if (!message) return {}
+  
+  const body = message.messageBody
+  const messageType = message.messageType as MessageType
+  
+  switch (messageType) {
+    case 3: // VIDEO
+      return {
+        duration: body?.videoDuration || 0
+      }
+    case 4: // SOUND
+      return {
+        duration: body?.soundDuration || 0
+      }
+    case 5: // FILE
+      return {
+        fileName: body?.fileName || '',
+        fileSize: body?.fileSize || 0
+      }
+    case 6: // FACE
+      return {
+        faceIndex: body?.faceIndex || 0,
+        faceName: body?.faceName || ''
+      }
+    default:
+      return {}
+  }
+})
+
+/**
+ * 根据消息类型获取展示文本
+ */
+const getMessageDisplayText = (message: MessageInfo | undefined): string => {
+  if (!message) return ''
+  
+  const messageType = message.messageType as MessageType
+  const body = message.messageBody
+  
+  switch (messageType) {
+    case 1: // TEXT
+      return body?.text || ''
+    case 2: // IMAGE
+    case 3: // VIDEO
+    case 4: // SOUND
+    case 5: // FILE
+    case 6: // FACE
+      // 媒体消息不显示文本，由 mediaType 渲染
+      return ''
+    case 7: // SYSTEM
+      return '[系统消息]'
+    case 8: // CUSTOM
+      return '[自定义消息]'
+    case 9: // MERGED
+      return '[聊天记录]'
+    default:
+      return '[未知消息]'
+  }
+}
+
+const subtitleText = computed(() => {
+  if (isMessageMode.value) {
+    return getMessageDisplayText(props.message)
+  }
+  
+  const count = props.messageResult?.messageCount || 0
+  if (count === 1) {
+    const messages = props.messageResult?.messageList
+    if (messages && messages.length > 0) {
+      return getMessageDisplayText(messages[0])
+    }
+  }
+  return `${count}条相关聊天记录`
+})
+</script>

@@ -1,0 +1,456 @@
+<template>
+  <view class="c2c-chat-setting">
+    <!-- 导航栏 -->
+    <CustomNavbar
+      :title="navTitle"
+      :showBack="true"
+      @back="handleNavBack"
+    />
+
+    <!-- 内容区域 -->
+    <scroll-view class="content" scroll-y="true">
+      <!-- 用户信息区 -->
+      <view class="user-info">
+        <view class="user-info__avatar-wrapper">
+          <Avatar
+            :src="avatarURL"
+            :name="remark || nickname || userID || ''"
+            :size="96"
+            :shape="'square'"
+            :defaultAvatarType="'user'"
+            pureMode
+          />
+        </view>
+        <view class="user-info__detail">
+          <text class="user-info__nickname">{{ nickname || userID }}</text>
+          <text class="user-info__id">ID：{{ userID || '-' }}</text>
+          <view>
+            <text class="user-info__signature" >用户签名：{{ signature || '暂无签名' }}</text>
+          </view>
+          </view>
+      </view>
+
+      <!-- 分隔区 -->
+      <view class="section-gap"></view>
+
+      <!-- 备注名行 -->
+      <SettingRowNavigate
+        v-if="isFriend"
+        label="备注名"
+        :value="remark || ''"
+        @click="handleRemarkClick"
+      />
+
+      <!-- 分隔区 -->
+      <view class="section-gap"></view>
+
+      <!-- 开关设置区 -->
+      <SettingRowToggle
+        label="消息免打扰"
+        :modelValue="isNotDisturb || false"
+        @change="handleNotDisturbChange"
+      />
+      <SettingRowToggle
+        label="置顶聊天"
+        :modelValue="isPinned || false"
+        @change="handlePinnedChange"
+      />
+
+      <!-- 分隔区 -->
+      <view class="section-gap"></view>
+
+      <SettingRowToggle
+        label="加入黑名单"
+        :modelValue="isInBlacklist || false"
+        @change="handleBlacklistChange"
+      />
+
+      <!-- 分隔区 -->
+      <view class="section-gap"></view>
+
+      <!-- 操作按钮区 -->
+      <SettingRowButton
+        label="发送消息"
+        color="#0066FF"
+        @click="handleSendMessage"
+      />
+      <SettingRowButton
+        v-if="isFriend"
+        label="删除好友"
+        color="#FF3B30"
+        @click="handleDeleteFriendClick"
+      />
+    </scroll-view>
+
+    <!-- 备注编辑弹窗 -->
+    <TextInputPopup
+      v-model:visible="showRemarkPopup"
+      title="修改备注"
+      :value="remark || ''"
+      placeholder="请输入备注名"
+      :maxLength="15"
+      :maxByteLength="50"
+      @confirm="handleRemarkConfirm"
+    />
+
+    <!-- 删除好友确认弹窗 -->
+    <ConfirmDialog
+      v-model:visible="showDeleteConfirm"
+      title="确定删除该好友？"
+      confirmText="删除"
+      @confirm="handleDeleteConfirm"
+      @cancel="handleDeleteCancel"
+    />
+  </view>
+</template>
+
+<script setup lang="ts">
+import { ref, computed, onBeforeMount } from 'vue';
+import SettingRowToggle from './components/SettingRowToggle.nvue';
+import SettingRowNavigate from './components/SettingRowNavigate.nvue';
+import SettingRowButton from './components/SettingRowButton.nvue';
+import TextInputPopup from './components/TextInputPopup.nvue';
+import ConfirmDialog from './components/ConfirmDialog.nvue';
+import CustomNavbar from '../CustomNavbar/CustomNavbar.nvue';
+import { Avatar } from '../Avatar';
+import { useContactState } from '../../state/ContactState';
+import { useConversationListState } from '../../state/ConversationListState';
+import { ReceiveMessageOpt } from '../../types/group';
+import { throttle } from '../../utils/lodash';
+import type { ContactInfo } from '../../types/contact';
+
+interface Props {
+  conversationID: string;
+  showType: number;
+}
+
+const props = defineProps<Props>();
+
+// 从 conversationID 提取 userID
+const userID = computed(() => 
+  props.conversationID.startsWith('c2c_') ? props.conversationID.replace('c2c_', '') : ''
+);
+
+// 使用 ContactState
+const {
+  setUserRemark,
+  setReceiveMessageOpt,
+  addToBlacklist,
+  removeFromBlacklist,
+  deleteFriend,
+  fetchUserInfo,
+} = useContactState();
+
+// 使用 ConversationListState 获取置顶状态
+const {
+  conversationList,
+  pinConversation,
+  fetchConversationInfo,
+} = useConversationListState('c2cSetting');
+
+// 用户信息
+const userInfo = ref<ContactInfo | null>(null);
+
+// 计算属性 - 用户信息
+const nickname = computed(() => userInfo.value?.nickname || '');
+const avatarURL = computed(() => userInfo.value?.avatarURL || '');
+const signature = computed(() => userInfo.value?.signature || '');
+const remark = computed(() => userInfo.value?.remark || '');
+const isFriend = computed(() => userInfo.value?.isFriend ?? false);
+const isInBlacklist = computed(() => userInfo.value?.isInBlacklist ?? false);
+const isNotDisturb = computed(() => 
+  userInfo.value?.receiveMessageOpt !== undefined && 
+  userInfo.value.receiveMessageOpt !== ReceiveMessageOpt.Receive
+);
+
+// 计算属性 - 置顶状态（从 ConversationListState 获取）
+const isPinned = computed(() => {
+  const currentConversation = conversationList.value.find(conv => conv.conversationID === props.conversationID);
+  return currentConversation?.isPinned ?? false;
+});
+
+// 状态栏高度
+const statusBarHeight = ref(44);
+
+// 弹窗状态
+const showRemarkPopup = ref(false);
+const showDeleteConfirm = ref(false);
+
+// 导航栏标题
+const navTitle = computed(() => {
+  if (props.showType === 0) {
+    return '个人设置';
+  }
+  return '设置';
+});
+
+// 头像文字
+const avatarText = computed(() => {
+  return (remark.value || nickname.value || userID.value || '').substring(0, 1);
+});
+
+// 获取用户信息
+const fetchPeerUserInfo = async () => {
+  if (!userID.value) return;
+  try {
+    const list = await fetchUserInfo([userID.value]);
+    if (list && list.length > 0) {
+      userInfo.value = list[0];
+    }
+  } catch (error) {
+    console.error('[C2CChatSetting] fetchPeerUserInfo failed:', error);
+  }
+};
+
+// 初始化
+onBeforeMount(async () => {
+  // 获取系统信息
+  const systemInfo = uni.getSystemInfoSync();
+  statusBarHeight.value = systemInfo.statusBarHeight || 44;
+  
+  // 获取用户信息和会话信息
+  await Promise.all([
+    fetchPeerUserInfo(),
+    fetchConversationInfo(props.conversationID),
+  ]);
+});
+
+// 返回上一页
+const handleBack = () => {
+  uni.navigateBack();
+};
+
+// 点击备注名
+const handleRemarkClick = () => {
+  showRemarkPopup.value = true;
+};
+
+// 确认修改备注
+const handleRemarkConfirm = async (newRemark: string) => {
+  if (!userID.value) return;
+  try {
+    await setUserRemark(userID.value, newRemark);
+    // 更新本地状态
+    if (userInfo.value) {
+      userInfo.value.remark = newRemark;
+    }
+  } catch (error) {
+    console.error('[C2CChatSetting] setUserRemark failed:', error);
+  }
+};
+
+// 切换免打扰 (使用 throttle 防止限频，trailing: true 确保最后一次操作生效)
+const handleNotDisturbChange = throttle(async (value: boolean) => {
+  if (!userID.value) return;
+  try {
+    const opt = value ? ReceiveMessageOpt.NotNotify : ReceiveMessageOpt.Receive;
+    await setReceiveMessageOpt(userID.value, opt);
+    // 更新本地状态
+    if (userInfo.value) {
+      userInfo.value.receiveMessageOpt = value ? ReceiveMessageOpt.NotNotify : ReceiveMessageOpt.Receive;
+    }
+  } catch (error) {
+    console.error('[C2CChatSetting] setReceiveMessageOpt failed:', error);
+  }
+}, 1000, { leading: true, trailing: true });
+
+// 切换置顶
+const handlePinnedChange = (value: boolean) => {
+  pinConversation(props.conversationID, value);
+};
+
+// 切换黑名单
+const handleBlacklistChange = async (value: boolean) => {
+  if (!userID.value) return;
+  try {
+    if (value) {
+      await addToBlacklist(userID.value);
+    } else {
+      await removeFromBlacklist(userID.value);
+    }
+    // 拉黑/取消拉黑后可能会影响好友关系，需要重新获取用户信息
+    await fetchPeerUserInfo();
+  } catch (error) {
+    console.error('[C2CChatSetting] blacklist operation failed:', error);
+  }
+};
+
+// 发送消息
+const handleSendMessage = () => {
+  switch (props.showType) {
+    case 0:
+      uni.navigateBack();
+      break;
+    case 1:
+      break;
+    case 2:
+      break;
+  }
+};
+
+// 点击删除好友
+const handleDeleteFriendClick = () => {
+  showDeleteConfirm.value = true;
+};
+
+// 取消删除
+const handleDeleteCancel = () => {
+  showDeleteConfirm.value = false;
+};
+
+// 确认删除
+const handleDeleteConfirm = async () => {
+  showDeleteConfirm.value = false;
+  if (!userID.value) return;
+  try {
+    await deleteFriend(userID.value);
+    // 删除成功后返回
+    uni.navigateBack();
+  } catch (error) {
+    console.error('[C2CChatSetting] deleteFriend failed:', error);
+  }
+};
+
+const handleNavBack = () => {
+  uni.navigateBack();
+};
+</script>
+
+<style scoped>
+.c2c-chat-setting {
+  flex: 1;
+  background-color: #F5F5F5;
+}
+
+/* 内容区域 */
+.content {
+  flex: 1;
+}
+
+/* 用户信息区 */
+.user-info {
+  flex-direction: row;
+  /* nvue 不支持 padding 简写，必须分开写 */
+  padding-top: 24rpx;
+  padding-bottom: 24rpx;
+  padding-left: 32rpx;
+  padding-right: 32rpx;
+  background-color: #FFFFFF;
+}
+
+.user-info__avatar-wrapper {
+  margin-right: 30rpx;
+}
+
+.user-info__avatar {
+  width: 96rpx;
+  height: 96rpx;
+  background-color: #F5F5F5;
+}
+
+.user-info__avatar--default {
+  justify-content: center;
+  align-items: center;
+  background-color: #CCCCCC;
+}
+
+.user-info__avatar-text {
+  font-size: 48rpx;
+  color: #FFFFFF;
+  font-weight: 500;
+}
+
+.user-info__detail {
+  flex: 1;
+  justify-content: center;
+}
+
+.user-info__nickname {
+  font-size: 36rpx;
+  font-weight: 500;
+  color: rgba(0, 0, 0, 0.9);
+  margin-bottom: 8rpx;
+  line-height: 48rpx;
+}
+
+.user-info__id {
+  font-size: 26rpx;
+  color: rgba(0, 0, 0, 0.5);
+  margin-bottom: 4rpx;
+  line-height: 40rpx;
+}
+
+.user-info__signature {
+  font-size: 26rpx;
+  color: rgba(0, 0, 0, 0.5);
+  max-width: 550rpx;
+}
+
+/* 分隔区 */
+.section-gap {
+  height: 20rpx;
+  background-color: #F0F2F7;
+}
+
+/* 确认弹窗 */
+.confirm-mask {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  justify-content: center;
+  align-items: center;
+}
+
+.confirm-dialog {
+  width: 560rpx;
+  background-color: #FFFFFF;
+  border-radius: 24rpx;
+  padding: 48rpx 32rpx 32rpx;
+  align-items: center;
+}
+
+.confirm-dialog__title {
+  font-size: 32rpx;
+  color: #333333;
+  margin-bottom: 40rpx;
+  text-align: center;
+}
+
+.confirm-dialog__buttons {
+  flex-direction: row;
+  width: 100%;
+}
+
+.confirm-dialog__btn {
+  flex: 1;
+  height: 80rpx;
+  border-radius: 8rpx;
+  justify-content: center;
+  align-items: center;
+}
+
+.confirm-dialog__btn--cancel {
+  background-color: #F5F5F5;
+  margin-right: 16rpx;
+}
+
+.confirm-dialog__btn--confirm {
+  background-color: #FF3B30;
+  margin-left: 16rpx;
+}
+
+.confirm-dialog__btn-text {
+  font-size: 28rpx;
+}
+
+.confirm-dialog__btn-text--cancel {
+  color: #666666;
+}
+
+.confirm-dialog__btn-text--confirm {
+  color: #FFFFFF;
+}
+</style>

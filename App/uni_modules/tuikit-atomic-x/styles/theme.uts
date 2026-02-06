@@ -1,0 +1,302 @@
+/**
+ * 简化的主题系统
+ * 专为 NVue 在 App 上使用
+ */
+
+/**
+ * 主题配置
+ */
+type Theme = {
+  name: string;
+  colors: {
+    primary: string;
+    secondary: string;
+    background: string;
+    card: string;
+    text: string;
+    textSecondary: string;
+    border: string;
+    success: string;
+    warning: string;
+    error: string;
+  };
+};
+
+/**
+ * 预设主题
+ */
+const themes: Record<string, Theme> = {
+  default: {
+    name: '深色主题',
+    colors: {
+      primary: '#2B6AD6',
+      secondary: '#586B8A',
+      background: '#000000',
+      card: '#2B2B2D',
+      text: '#FFFFFF',
+      textSecondary: 'rgba(255, 255, 255, 0.8)',
+      border: 'rgba(255, 255, 255, 0.1)',
+      success: '#4CAF50',
+      warning: '#FF9800',
+      error: '#E6594C',
+    },
+  },
+  light: {
+    name: '浅色主题',
+    colors: {
+      primary: '#2B6AD6',
+      secondary: '#586B8A',
+      background: '#FFFFFF',
+      card: '#F5F5F5',
+      text: '#000000',
+      textSecondary: 'rgba(0, 0, 0, 0.7)',
+      border: 'rgba(0, 0, 0, 0.1)',
+      success: '#4CAF50',
+      warning: '#FF9800',
+      error: '#E6594C',
+    },
+  },
+  blue: {
+    name: '蓝色主题',
+    colors: {
+      primary: '#007AFF',
+      secondary: '#5AC8FA',
+      background: '#000D1A',
+      card: '#002244',
+      text: '#FFFFFF',
+      textSecondary: 'rgba(255, 255, 255, 0.8)',
+      border: 'rgba(255, 255, 255, 0.1)',
+      success: '#4CAF50',
+      warning: '#FF9800',
+      error: '#E6594C',
+    },
+  },
+  pink: {
+    name: '粉色主题',
+    colors: {
+      primary: '#FF6B9D',
+      secondary: '#FF8FAB',
+      background: '#1A0D0D',
+      card: '#4A1F1F',
+      text: '#FFFFFF',
+      textSecondary: 'rgba(255, 255, 255, 0.8)',
+      border: 'rgba(255, 255, 255, 0.1)',
+      success: '#4CAF50',
+      warning: '#FF9800',
+      error: '#E6594C',
+    },
+  },
+  green: {
+    name: '绿色主题',
+    colors: {
+      primary: '#00C853',
+      secondary: '#5EE650',
+      background: '#0D1A0D',
+      card: '#1F4A1F',
+      text: '#FFFFFF',
+      textSecondary: 'rgba(255, 255, 255, 0.8)',
+      border: 'rgba(255, 255, 255, 0.1)',
+      success: '#00E676',
+      warning: '#FF9800',
+      error: '#E6594C',
+    },
+  },
+};
+
+/**
+ * 当前主题
+ */
+let currentTheme: Theme = themes.default;
+let currentThemeKey: string = 'default';
+
+/**
+ * 获取当前主题
+ */
+export function getCurrentTheme(): Theme {
+  return currentTheme;
+}
+
+/**
+ * 获取当前主题键名
+ */
+export function getCurrentThemeKey(): string {
+  return currentThemeKey;
+}
+
+/**
+ * 获取所有主题
+ */
+export function getThemes(): Record<string, Theme> {
+  return themes;
+}
+
+/**
+ * 切换主题
+ * @param themeKey 主题键名
+ */
+export function switchTheme(themeKey: string): void {
+  if (themes[themeKey]) {
+    currentTheme = themes[themeKey];
+    currentThemeKey = themeKey;
+    
+    // 保存到本地存储
+    try {
+      uni.setStorageSync('atomicx-theme', themeKey);
+    } catch (e) {
+      console.error('保存主题失败:', e);
+    }
+    
+    // 发送主题变更事件
+    uni.$emit('theme-changed', themeKey);
+  }
+}
+
+/**
+ * 初始化主题系统
+ */
+export function initTheme(): void {
+  // 从本地存储加载主题
+  try {
+    const savedTheme = uni.getStorageSync('atomicx-theme');
+    if (savedTheme && themes[savedTheme]) {
+      currentTheme = themes[savedTheme];
+      currentThemeKey = savedTheme;
+    }
+  } catch (e) {
+    console.error('加载主题失败:', e);
+  }
+}
+
+/**
+ * 获取颜色
+ * @param colorKey 颜色键名
+ */
+export function getColor(colorKey: string): string {
+  return currentTheme.colors[colorKey] || '#000000';
+}
+
+/**
+ * 获取背景色
+ */
+export function getBackgroundColor(): UTSJSONObject {
+  return {
+    backgroundColor: currentTheme.colors.background,
+  };
+}
+
+/**
+ * 获取卡片背景色
+ */
+export function getCardColor(): UTSJSONObject {
+  return {
+    backgroundColor: currentTheme.colors.card,
+  };
+}
+
+/**
+ * 获取主文本色
+ */
+export function getTextColor(): UTSJSONObject {
+  return {
+    color: currentTheme.colors.text,
+  };
+}
+
+/**
+ * 获取次要文本色
+ */
+export function getTextSecondaryColor(): UTSJSONObject {
+  return {
+    color: currentTheme.colors.textSecondary,
+  };
+}
+
+/**
+ * 获取主色调
+ */
+export function getPrimaryColor(): UTSJSONObject {
+  return {
+    backgroundColor: currentTheme.colors.primary,
+  };
+}
+
+/**
+ * 获取主色调文本
+ */
+export function getPrimaryTextColor(): UTSJSONObject {
+  return {
+    color: currentTheme.colors.primary,
+  };
+}
+
+/**
+ * 获取边框色
+ */
+export function getBorderColor(): UTSJSONObject {
+  return {
+    borderColor: currentTheme.colors.border,
+    borderWidth: '1px',
+    borderStyle: 'solid',
+  };
+}
+
+/**
+ * 创建按钮样式
+ * @param type 按钮类型：primary, secondary
+ */
+export function createButtonStyle(type: string = 'primary'): UTSJSONObject {
+  if (type === 'primary') {
+    return {
+      backgroundColor: currentTheme.colors.primary,
+      color: currentTheme.colors.text,
+      paddingHorizontal: '16px',
+      paddingVertical: '8px',
+      borderRadius: '4px',
+    };
+  } else if (type === 'secondary') {
+    return {
+      backgroundColor: currentTheme.colors.secondary,
+      color: currentTheme.colors.text,
+      paddingHorizontal: '16px',
+      paddingVertical: '8px',
+      borderRadius: '4px',
+    };
+  } else {
+    return {
+      backgroundColor: 'transparent',
+      color: currentTheme.colors.primary,
+      borderWidth: '1px',
+      borderStyle: 'solid',
+      borderColor: currentTheme.colors.primary,
+      paddingHorizontal: '16px',
+      paddingVertical: '8px',
+      borderRadius: '4px',
+    };
+  }
+}
+
+/**
+ * 创建卡片样式
+ */
+export function createCardStyle(): UTSJSONObject {
+  return {
+    backgroundColor: currentTheme.colors.card,
+    borderRadius: '8px',
+    padding: '16px',
+  };
+}
+
+/**
+ * 创建列表项样式
+ */
+export function createListItemStyle(): UTSJSONObject {
+  return {
+    backgroundColor: currentTheme.colors.card,
+    borderRadius: '4px',
+    padding: '12px 16px',
+    marginBottom: '8px',
+  };
+}
+
+// 初始化主题
+initTheme();

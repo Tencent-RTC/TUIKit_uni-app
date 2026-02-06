@@ -312,7 +312,7 @@
         // props.onStreamViewClick?.(options);
         // emit('streamViewClick', options);
         if (props.enableClickPanel) {
-          clickUserInfo.value = { ...(loginUserInfo.value || {}), userID: loginUserInfo.value?.userID } as any;
+          clickUserInfo.value = { ...(loginUserInfo.value || {}), userID: loginUserInfo.value?.userID, userName: loginUserInfo.value?.nickname } as any;
           isShowClickPanel.value = true;
         }
       }

@@ -1,0 +1,25 @@
+<template>
+  <view>
+    <GroupTypeInfo @selectType="handleSelectType" :showDocumentationLink="true"/>
+  </view>
+</template>
+
+<script lang="ts" setup>
+import { getGroupTypeById } from '@/uni_modules/tuikit-atomic-x/constants/groupTypes'
+import GroupTypeInfo from '@/uni_modules/tuikit-atomic-x/components/GroupTypeInfo/GroupTypeInfo.nvue'
+
+// 声明 uni 全局对象
+declare const uni: any
+
+/**
+ * 处理群类型选择
+ */
+const handleSelectType = (groupTypeId: string) => {
+  const groupType = getGroupTypeById(groupTypeId)
+  if (groupType) {
+    // 通过事件总线传递选择结果
+    uni.$emit('groupTypeSelected', groupType)
+    uni.navigateBack()
+  }
+}
+</script>

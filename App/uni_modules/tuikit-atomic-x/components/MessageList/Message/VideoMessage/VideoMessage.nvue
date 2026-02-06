@@ -1,0 +1,272 @@
+<template>
+  <view 
+    class="video-message"
+    :style="videoContainerStyle"
+  >
+    <view class="video-highlight">
+      <view class="video-cover">
+        <image
+          class="cover-image"
+          :src="videoSnapshotUrl"
+          mode="aspectFill"
+          @load="handleSizeLoad"
+          @error="handleCoverError"
+        />
+        
+        <view class="play-button" @tap="handlePlayTap">
+          <image
+            src="../../../../static/icon/play.png"
+            class="icon-image"
+            mode="aspectFill"
+          />
+        </view>
+      </view>
+    </view>
+  </view>
+</template>
+
+<script setup lang="ts">
+import { ref, computed, watch } from 'vue'
+import type { MessageInfo } from '../../../../types/message'
+import { MessageMediaFileType } from '../../../../types/message'
+import { useMessageListState } from '../../../../state/MessageListState'
+
+interface Props {
+  message: MessageInfo
+  conversationID: string
+}
+
+const props = defineProps<Props>()
+
+const actualSize = ref({ width: 0, height: 0 })
+const coverError = ref(false)
+const isDownloadingSnapshot = ref(false)
+const isDownloadingVideo = ref(false)
+
+// 获取消息列表状态，用于下载资源
+const { downloadMessageResource } = useMessageListState({
+  conversationID: props.conversationID
+})
+
+const videoSnapshotUrl = computed(() => {
+  let url = props.message.messageBody?.videoSnapshotPath || ''
+    // Add file:// prefix for local paths on iOS (paths starting with /)
+  if (url && url.startsWith('/') && !url.startsWith('file://')) {
+    url = 'file://' + url
+  }
+  return url
+})
+
+const videoUrl = computed(() => {
+  let url = props.message.messageBody?.videoPath || '';
+  if (url && url.startsWith('/') && !url.startsWith('file://')) {
+    url = 'file://' + url;
+  }
+  return url;
+})
+
+const videoDuration = computed(() => {
+  return props.message.messageBody?.videoDuration || 0
+})
+
+const videoSnapshotWidth = computed(() => {
+  return props.message.messageBody?.videoSnapshotWidth || 0
+})
+
+const videoSnapshotHeight = computed(() => {
+  return props.message.messageBody?.videoSnapshotHeight || 0
+})
+
+const MAX_WIDTH = 400
+const MAX_HEIGHT = 300
+const MIN_WIDTH = 200
+const MIN_HEIGHT = 150
+
+const videoContainerStyle = computed(() => {
+  const width = actualSize.value.width || videoSnapshotWidth.value || 400
+  const height = actualSize.value.height || videoSnapshotHeight.value || 400
+  
+  if (width === 200 && height === 200) {
+    return {
+      width: `${MIN_WIDTH}rpx`,
+      height: `${MIN_HEIGHT}rpx`
+    }
+  }
+
+  let displayWidth = width
+  let displayHeight = height
+  
+  if (displayWidth > MAX_WIDTH) {
+    displayHeight = (displayHeight * MAX_WIDTH) / displayWidth
+    displayWidth = MAX_WIDTH
+  }
+  
+  if (displayHeight > MAX_HEIGHT) {
+    displayWidth = (displayWidth * MAX_HEIGHT) / displayHeight
+    displayHeight = MAX_HEIGHT
+  }
+  
+  if (displayWidth < MIN_WIDTH) {
+    displayHeight = (displayHeight * MIN_WIDTH) / displayWidth
+    displayWidth = MIN_WIDTH
+  }
+  
+  if (displayHeight < MIN_HEIGHT) {
+    displayWidth = (displayWidth * MIN_HEIGHT) / displayHeight
+    displayHeight = MIN_HEIGHT
+  }
+  
+  return {
+    width: `${displayWidth}rpx`,
+    height: `${displayHeight}rpx`
+  }
+})
+
+const formatDuration = (duration: number) => {
+  if (!duration) return '00:00'
+  
+  const seconds = Math.floor(duration % 60)
+  const minutes = Math.floor(duration / 60 % 60)
+  const hours = Math.floor(duration / 3600)
+  
+  if (hours > 0) {
+    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
+  }
+  
+  return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
+}
+
+const handleSizeLoad = (e: any) => {
+  if (e.detail) {
+    actualSize.value = {
+      width: e.detail.width,
+      height: e.detail.height
+    }
+  }
+}
+
+const handleCoverError = () => {
+  coverError.value = true
+}
+
+const handlePlayTap = async () => {
+  // const url = videoUrl.value
+  // const poster = videoSnapshotUrl.value
+  
+  // if (!url) {
+  //   uni.showToast({ title: '视频地址无效', icon: 'none' });
+  //   return;
+  // }
+
+  // try {
+  //   await checkAndDownloadVideo();
+  //   // 使用 encodeURIComponent 编码参数，避免特殊字符问题
+  //   const params = [
+  //     `url=${encodeURIComponent(url)}`,
+  //   ].join('&');
+    
+  //   uni.navigateTo({
+  //     url: `/pages/scenes/chat/videoPlayer/videoPlayer?${params}`
+  //   });
+  // } catch {}
+}
+
+// 检查并下载视频封面资源
+const checkAndDownloadSnapshot = async () => {
+  // 确保 message 有数据且 videoSnapshotUrl 为空时才下载
+  if (props.message?.msgID && !videoSnapshotUrl.value && !isDownloadingSnapshot.value) {
+    isDownloadingSnapshot.value = true
+    try {
+      await downloadMessageResource(props.message, MessageMediaFileType.VIDEO_SNAPSHOT)
+    } catch (error) {
+      console.error('[VideoMessage] downloadMessageResource snapshot failed:', error)
+      coverError.value = true
+    } finally {
+      isDownloadingSnapshot.value = false
+    }
+  }
+}
+
+// 检查并下载视频资源
+const checkAndDownloadVideo = async () => {
+  // 确保 message 有数据且 videoUrl 为空时才下载
+  if (!props.message?.msgID || !videoUrl.value) {
+    uni.showToast({ title: '视频地址无效', icon: 'none' });
+    return;
+  }
+  if (isDownloadingVideo.value) {
+    uni.showToast({ title: '正在加载视频资源...', icon: 'none' });
+    return;
+  }
+  isDownloadingVideo.value = true;
+  try {
+    await downloadMessageResource(props.message, MessageMediaFileType.VIDEO);
+  } catch (error) {
+    console.error('[VideoMessage] downloadMessageResource video failed:', error);
+    uni.showToast({ title: '视频下载失败', icon: 'none' });
+  } finally {
+    isDownloadingVideo.value = false;
+  }
+  return;
+}
+
+// 监听 message 变化，当有数据且 videoSnapshotUrl 为空时下载资源
+watch(
+  () => props.message?.msgID,
+  (newMsgID) => {
+    if (newMsgID && !videoSnapshotUrl.value) {
+      checkAndDownloadSnapshot()
+    }
+  },
+  { immediate: true }
+)
+
+watch(
+  () => videoSnapshotUrl.value,
+  (newUrl, oldUrl) => {
+    if (newUrl && !oldUrl && coverError.value) {
+      coverError.value = false
+    }
+  }
+)
+
+</script>
+
+<style>
+.video-message {
+  position: relative;
+  border-radius: 12rpx;
+  overflow: hidden;
+}
+
+.video-highlight {
+  flex: 1;
+}
+
+.video-cover {
+  flex: 1;
+  position: relative;
+}
+
+.cover-image {
+  flex: 1;
+  border-radius: 20rpx;
+}
+
+.play-button {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: 20rpx;
+  background-color: rgba(0, 0, 0, 0.3);
+}
+
+.icon-image {
+  width: 80rpx;
+  height: 80rpx;
+}
+</style>

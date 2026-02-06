@@ -1,0 +1,71 @@
+<template>
+  <view class="user-picker-page">
+    <UserPickerList :maxCount="maxCount" :dataSource="userList" :lockedItems="lockedItems" :title="title"
+      @confirm="handleConfirm" />
+  </view>
+</template>
+
+<script setup lang="ts">
+import { onBeforeUnmount } from 'vue'
+import UserPickerList from './components/UserPickerList.nvue'
+import { useUserPicker, type User } from './service/index'
+
+interface UserPickerProps {
+  businessType: number
+  routeParams?: Record<string, any>
+}
+
+const props = withDefaults(defineProps<UserPickerProps>(), {
+  businessType: -1,
+  routeParams: () => ({})
+})
+
+const emit = defineEmits<{
+  (e: 'confirm', selectedUsers: User[]): void
+}>()
+
+// ============================================================================
+// 调用 Hook，获取响应式状态和方法
+// ============================================================================
+
+const {
+  userList,
+  lockedItems,
+  maxCount,
+  title,
+  hasMore,
+  handleConfirm: confirmHandler,
+  handleCancel: cancelHandler,
+  onReachEnd,
+} = useUserPicker(props.businessType, props.routeParams)
+
+// ============================================================================
+// 事件处理
+// ============================================================================
+
+/** 处理确认选择 */
+const handleConfirm = async (selectedUsers: User[]) => {
+  emit('confirm', selectedUsers)
+  await confirmHandler(selectedUsers)
+}
+
+/** 处理触底加载（预留给 UserPickerList 后续支持） */
+const handleReachEnd = async () => {
+  if (onReachEnd) {
+    await onReachEnd()
+  }
+}
+
+onBeforeUnmount(async () => {
+  if (cancelHandler) {
+    await cancelHandler()
+  }
+})
+</script>
+
+<style>
+.user-picker-page {
+  flex: 1;
+  background-color: #f5f5f5;
+}
+</style>

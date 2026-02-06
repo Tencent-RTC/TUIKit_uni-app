@@ -39,7 +39,7 @@ const totalLikeCount = ref<number>(0);
  * @example
  * import { useLikeState } from '@/uni_modules/tuikit-atomic-x/state/LikeState';
  * const { sendLike } = useLikeState("your_live_id");
- * sendLike({ count: 1 });
+ * sendLike({ liveID: 'your_live_id', count: 1 });
  */
 function sendLike(params: SendLikeOptions): void {
     callUTSFunction("sendLike", params);

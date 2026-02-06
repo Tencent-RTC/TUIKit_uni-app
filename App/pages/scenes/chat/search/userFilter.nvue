@@ -1,0 +1,397 @@
+<template>
+  <view class="user-filter-page">
+    <view class="content">
+      <view class="content-card">
+        <view class="row" @click="openGenderPicker">
+          <text class="row-label">性别</text>
+          <view class="row-right">
+            <text class="row-value">{{ currentGenderLabel }}</text>
+            <image class="row-icon" src="../../../../static/icon/chevron-right.png"></image>
+          </view>
+        </view>
+        <view class="row row-age">
+          <text class="row-label">年龄</text>
+          <text class="row-value row-age-value">{{ ageRangeText }}</text>
+        </view>
+        <view class="slider-container">
+          <view class="track-bg"></view>
+          <view class="track-active" :style="activeTrackStyle"></view>
+          <movable-area class="movable-area" :style="{ width: areaWidth + 'px' }">
+            <movable-view 
+              class="thumb thumb-min"
+              direction="horizontal"
+              :x="minThumbXPos"
+              :damping="40"
+              @change="onMinThumbChange"
+              @touchend="onMinThumbEnd"
+            ></movable-view>
+            <movable-view 
+              class="thumb thumb-max"
+              direction="horizontal"
+              :x="maxThumbXPos"
+              :damping="40"
+              @change="onMaxThumbChange"
+              @touchend="onMaxThumbEnd"
+            ></movable-view>
+          </movable-area>
+        </view>
+      </view>
+      <view class="confirm-btn" @click="handleConfirm">
+        <text class="confirm-btn-text">确定</text>
+      </view>
+    </view>
+    <view v-if="showGenderPicker" class="picker-mask" @click="closeGenderPicker">
+      <view class="picker-panel" @click.stop>
+        <list class="picker-list">
+          <cell v-for="option in genderOptions" :key="option.value">
+            <view class="picker-item" @click="handleGenderSelect(option.value)">
+              <text 
+                class="picker-item-text"
+                :class="{ 'picker-item-text--active': selectedGender === option.value }"
+              >{{ option.label }}</text>
+            </view>
+          </cell>
+          <cell>
+            <view class="picker-divider"></view>
+          </cell>
+          <cell>
+            <view class="picker-item" @click="closeGenderPicker">
+              <text class="picker-item-text">取消</text>
+            </view>
+          </cell>
+        </list>
+      </view>
+    </view>
+  </view>
+</template>
+
+<script lang="ts">
+import { Gender } from '@/uni_modules/tuikit-atomic-x/types/userProfile'
+
+interface GenderOption {
+  label: string
+  value: Gender
+}
+
+const MIN_GAP = 7 // 滑块最小差值，防止重合
+
+export default {
+  data() {
+    const systemInfo = uni.getSystemInfoSync()
+    const screenWidth = systemInfo.screenWidth
+    const rpxToPx = screenWidth / 750
+    const areaWidth = 606 * rpxToPx
+    const thumbSize = 40 * rpxToPx
+    const effectiveWidth = areaWidth - thumbSize
+    
+    return {
+      selectedMinAge: MIN_GAP,
+      selectedMaxAge: 99,
+      minThumbXPos: (MIN_GAP / 99) * effectiveWidth,
+      maxThumbXPos: effectiveWidth,
+      selectedGender: Gender.UNKNOWN as Gender,
+      showGenderPicker: false,
+      genderOptions: [
+        { label: '不限', value: Gender.UNKNOWN },
+        { label: '男', value: Gender.MALE },
+        { label: '女', value: Gender.FEMALE }
+      ] as GenderOption[],
+      areaWidth,
+      thumbSize,
+      effectiveWidth,
+      minAge: 0,
+      maxAge: 99
+    }
+  },
+  computed: {
+    currentGenderLabel(): string {
+      const option = this.genderOptions.find(o => o.value === this.selectedGender)
+      return option?.label || '不限'
+    },
+    ageRangeText(): string {
+      return `${this.selectedMinAge}-${this.selectedMaxAge}`
+    },
+    activeTrackStyle(): object {
+      const left = this.minThumbXPos + this.thumbSize / 2
+      const width = Math.max(0, this.maxThumbXPos - this.minThumbXPos)
+      return {
+        left: left + 'px',
+        width: width + 'px'
+      }
+    }
+  },
+  onLoad(options: any) {
+    if (options.minAge) {
+      this.selectedMinAge = Math.max(this.minAge, parseInt(options.minAge))
+    }
+    if (options.maxAge) {
+      this.selectedMaxAge = Math.min(this.maxAge, parseInt(options.maxAge))
+    }
+    // 确保加载时也满足最小差值
+    if (this.selectedMaxAge - this.selectedMinAge < MIN_GAP) {
+      this.selectedMinAge = Math.max(this.minAge, this.selectedMaxAge - MIN_GAP)
+    }
+    if (options.gender !== undefined) {
+      this.selectedGender = parseInt(options.gender)
+    }
+    // 初始化滑块位置
+    this.updateThumbPositions()
+  },
+  methods: {
+    valueToX(value: number): number {
+      const percent = (value - this.minAge) / (this.maxAge - this.minAge)
+      return percent * this.effectiveWidth
+    },
+    xToValue(x: number): number {
+      const percent = Math.max(0, Math.min(1, x / this.effectiveWidth))
+      return Math.round(this.minAge + percent * (this.maxAge - this.minAge))
+    },
+    updateThumbPositions() {
+      this.minThumbXPos = this.valueToX(this.selectedMinAge)
+      this.maxThumbXPos = this.valueToX(this.selectedMaxAge)
+    },
+    onMinThumbChange(e: any) {
+      const x = e.detail.x
+      const maxAllowedX = this.valueToX(this.selectedMaxAge - MIN_GAP)
+      
+      // 限制位置不超过右滑块
+      const clampedX = Math.max(0, Math.min(maxAllowedX, x))
+      this.minThumbXPos = clampedX
+      this.selectedMinAge = this.xToValue(clampedX)
+    },
+    onMinThumbEnd() {
+      // 松手时强制修正位置（处理越界拖动的情况）
+      const correctedX = this.valueToX(this.selectedMinAge)
+      this.minThumbXPos = -1
+      this.$nextTick(() => {
+        this.minThumbXPos = correctedX
+      })
+    },
+    onMaxThumbChange(e: any) {
+      const x = e.detail.x
+      const minAllowedX = this.valueToX(this.selectedMinAge + MIN_GAP)
+      
+      // 限制位置不低于左滑块
+      const clampedX = Math.max(minAllowedX, Math.min(this.effectiveWidth, x))
+      this.maxThumbXPos = clampedX
+      this.selectedMaxAge = this.xToValue(clampedX)
+    },
+    onMaxThumbEnd() {
+      // 松手时强制修正位置
+      const correctedX = this.valueToX(this.selectedMaxAge)
+      this.maxThumbXPos = -1
+      this.$nextTick(() => {
+        this.maxThumbXPos = correctedX
+      })
+    },
+    openGenderPicker() {
+      this.showGenderPicker = true
+    },
+    closeGenderPicker() {
+      this.showGenderPicker = false
+    },
+    handleGenderSelect(value: Gender) {
+      this.selectedGender = value
+      this.showGenderPicker = false
+    },
+    // 将年龄转换为生日格式 YYYYMMDD（如 19700101）
+    ageToBirthday(age: number): number {
+      const today = new Date()
+      const birthYear = today.getFullYear() - age
+      const month = String(today.getMonth() + 1).padStart(2, '0')
+      const day = String(today.getDate()).padStart(2, '0')
+      return parseInt(`${birthYear}${month}${day}`)
+    },
+    handleConfirm() {
+      const eventChannel = this.getOpenerEventChannel()
+      if (eventChannel) {
+        // minAge 对应 maxBirthday（年龄小 = 出生晚 = 生日数值大）
+        // maxAge 对应 minBirthday（年龄大 = 出生早 = 生日数值小）
+        // 如果是默认值（minAge=7, maxAge=99）则不传
+        eventChannel.emit('userFilterResult', {
+          minBirthday: this.selectedMaxAge !== 99 ? this.ageToBirthday(this.selectedMaxAge) : undefined,
+          maxBirthday: this.selectedMinAge !== MIN_GAP ? this.ageToBirthday(this.selectedMinAge) : undefined,
+          gender: this.selectedGender
+        })
+      }
+      uni.navigateBack()
+    }
+  }
+}
+</script>
+
+<style>
+.user-filter-page {
+  flex: 1;
+  background-color: #F0F2F7;
+}
+
+/* 内容区域 */
+.content {
+  padding: 20rpx 32rpx;
+}
+
+.content-card {
+  background-color: #ffffff;
+  border-radius: 12rpx;
+  padding: 22rpx 40rpx 0;
+}
+
+.row {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18rpx 0;
+  border-bottom: 2rpx solid rgba(0, 0, 0, 0.05);
+}
+
+.row-age {
+  border-bottom-width: 0;
+  padding-bottom: 52rpx;
+}
+
+.row-label {
+  font-size: 32rpx;
+  line-height: 48rpx;
+  font-weight: 400;
+  color: rgba(0, 0, 0, 0.9);
+}
+
+.row-right {
+  flex-direction: row;
+  align-items: center;
+}
+
+.row-value {
+  font-size: 32rpx;
+  line-height: 45rpx;
+  font-weight: 400;
+  color: rgba(0, 0, 0, 0.55);
+}
+
+.row-age-value {
+  color: rgba(0, 0, 0, 0.9);
+}
+
+.row-icon {
+  width: 32rpx;
+  height: 32rpx;
+  margin-left: 16rpx;
+}
+
+.row-arrow {
+  font-size: 36rpx;
+  color: #CCCCCC;
+  margin-left: 8rpx;
+}
+
+/* 双滑块样式 */
+.slider-container {
+  height: 80rpx;
+  margin-bottom: 32rpx;
+}
+
+.track-bg {
+  position: absolute;
+  left: 20rpx;
+  right: 20rpx;
+  top: 38rpx;
+  height: 8rpx;
+  background-color: #E6E9F0;
+  border-radius: 2rpx;
+}
+
+.track-active {
+  position: absolute;
+  top: 38rpx;
+  height: 8rpx;
+  background-color: #1C66E5;
+  border-radius: 2rpx;
+}
+
+.movable-area {
+  position: absolute;
+  left: 0;
+  top: 20rpx;
+  height: 40rpx;
+}
+
+.thumb {
+  position: absolute;
+  width: 40rpx;
+  height: 40rpx;
+  background-color: #FFFFFF;
+  border-radius: 20rpx;
+  border-width: 4rpx;
+  border-style: solid;
+  border-color: #1C66E5;
+}
+
+.thumb-min {
+  z-index: 2;
+}
+
+.thumb-max {
+  z-index: 1;
+}
+
+.confirm-btn {
+  background-color: #1C66E5;
+  border-radius: 16rpx;
+  margin-top: 40rpx;
+  align-items: center;
+  justify-content: center;
+}
+
+.confirm-btn-text {
+  font-size: 32rpx;
+  line-height: 45rpx;
+  padding: 22rpx 0;
+  color: #ffffff;
+  font-weight: 500;
+}
+
+/* 性别选择弹窗 */
+.picker-mask {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  justify-content: flex-end;
+}
+
+.picker-panel {
+  background-color: #ffffff;
+  border-top-left-radius: 24rpx;
+  border-top-right-radius: 24rpx;
+  padding-bottom: 68rpx;
+}
+
+.picker-list {
+  flex: 1;
+}
+
+.picker-item {
+  padding: 32rpx;
+  align-items: center;
+  border-bottom-width: 1rpx;
+  border-bottom-color: #F0F0F0;
+  border-bottom-style: solid;
+}
+
+.picker-item-text {
+  font-size: 34rpx;
+  color: #333333;
+}
+
+.picker-item-text--active {
+  color: #1C66E5;
+}
+
+.picker-divider {
+  height: 16rpx;
+  background-color: #F5F5F5;
+}
+</style>

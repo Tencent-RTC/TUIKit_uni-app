@@ -1,0 +1,224 @@
+<template>
+  <view 
+    class="image-message"
+    :style="imageContainerStyle"
+  >
+    <view class="image-highlight">
+      <image
+        class="image-content"
+        :class="{ 'image-hidden': loadingState !== 'loaded' }"
+        :src="imageUrl"
+        mode="aspectFill"
+        @load="handleImageLoad"
+        @error="handleImageError"
+        @tap="handleImageTap"
+      />
+      
+      <view v-if="loadingState === 'loading'" class="image-loading">
+        <text class="loading-text">加载中...</text>
+      </view>
+      
+      <view v-if="loadingState === 'error'" class="image-error">
+        <text class="error-text">图片加载失败</text>
+      </view>
+    </view>
+  </view>
+</template>
+
+<script setup lang="ts">
+import { ref, computed, watch } from 'vue'
+import type { MessageInfo } from '../../../../types/message'
+import { MessageMediaFileType } from '../../../../types/message'
+import { useMessageListState } from '../../../../state/MessageListState'
+
+interface Props {
+  message: MessageInfo
+  conversationID: string
+}
+
+const props = defineProps<Props>()
+
+const loadingState = ref<'loading' | 'loaded' | 'error'>('loading')
+const actualSize = ref({ width: 0, height: 0 })
+
+// 获取消息列表状态，用于下载资源
+const { downloadMessageResource } = useMessageListState({
+  conversationID: props.conversationID
+})
+
+const imageUrl = computed(() => {
+  const body = props.message.messageBody
+  let url = body?.originalImagePath || body?.largeImagePath || body?.thumbImagePath || ''
+  // Add file:// prefix for local paths on iOS (paths starting with /)
+  if (url && url.startsWith('/') && !url.startsWith('file://')) {
+    url = 'file://' + url
+  }
+  return url
+})
+
+watch(
+  imageUrl,
+  (newUrl, oldUrl) => {
+    if (newUrl && !oldUrl && loadingState.value === 'error') {
+      loadingState.value = 'loading'
+    }
+  }
+)
+
+const imageWidth = computed(() => props.message.messageBody?.originalImageWidth || 0)
+const imageHeight = computed(() => props.message.messageBody?.originalImageHeight || 0)
+
+const MAX_WIDTH = 400
+const MAX_HEIGHT = 600
+const MIN_WIDTH = 120
+const MIN_HEIGHT = 120
+
+const imageContainerStyle = computed(() => {
+  const width = actualSize.value.width || imageWidth.value || 200
+  const height = actualSize.value.height || imageHeight.value || 200
+  
+  if (width === 200 && height === 200) {
+    return {
+      width: `${MIN_WIDTH}rpx`,
+      height: `${MIN_WIDTH}rpx`,
+      borderRadius: '20rpx'
+    }
+  }
+  
+  let displayWidth = width
+  let displayHeight = height
+  
+  if (displayWidth > MAX_WIDTH) {
+    displayHeight = (displayHeight * MAX_WIDTH) / displayWidth
+    displayWidth = MAX_WIDTH
+  }
+  
+  if (displayHeight > MAX_HEIGHT) {
+    displayWidth = (displayWidth * MAX_HEIGHT) / displayHeight
+    displayHeight = MAX_HEIGHT
+  }
+  
+  if (displayWidth < MIN_WIDTH) {
+    displayHeight = (displayHeight * MIN_WIDTH) / displayWidth
+    displayWidth = MIN_WIDTH
+  }
+  
+  if (displayHeight < MIN_HEIGHT) {
+    displayWidth = (displayWidth * MIN_HEIGHT) / displayHeight
+    displayHeight = MIN_HEIGHT
+  }
+  
+  return {
+    width: `${displayWidth}rpx`,
+    height: `${displayHeight}rpx`,
+    borderRadius: '20rpx',
+    displayWidth,
+    displayHeight
+  }
+})
+
+const handleImageLoad = (e: any) => {
+  loadingState.value = 'loaded'
+  
+  if (e.detail) {
+    actualSize.value = {
+      width: e.detail.width,
+      height: e.detail.height
+    }
+  }
+}
+
+const handleImageError = () => {
+  loadingState.value = 'error'
+}
+
+const handleImageTap = () => {
+  // if (loadingState.value === 'loaded') {
+  //   uni.previewImage({
+	// 		urls: [imageUrl.value],
+	// 	});
+  // }
+}
+
+// 检查并下载图片资源
+const checkAndDownloadResource = async () => {
+  // 确保 message 有数据且 imageUrl 为空时才下载
+  if (props.message?.msgID && !imageUrl.value) {
+    loadingState.value = 'loading'
+    try {
+      await downloadMessageResource(props.message, MessageMediaFileType.ORIGINAL_IMAGE)
+    } catch (error) {
+      console.error('[ImageMessage] downloadMessageResource failed:', error)
+      loadingState.value = 'error'
+    }
+  }
+}
+
+// 监听 message 变化，当有数据且 imageUrl 为空时下载资源
+watch(
+  () => props.message?.msgID,
+  (newMsgID) => {
+    if (newMsgID && !imageUrl.value) {
+      checkAndDownloadResource()
+    }
+  },
+  { immediate: true }
+)
+</script>
+
+<style>
+.image-message {
+  position: relative;
+  border-radius: 20rpx;
+  overflow: hidden;
+}
+
+.image-highlight {
+  flex: 1;
+  position: relative;
+}
+
+.image-content {
+  flex: 1;
+  border-radius: 20rpx;
+}
+
+.image-hidden {
+  opacity: 0;
+}
+
+.image-loading {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  align-items: center;
+  justify-content: center;
+  background-color: #f5f5f5;
+  z-index: 10;
+}
+
+.loading-text {
+  font-size: 24rpx;
+  color: #999;
+}
+
+.image-error {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  align-items: center;
+  justify-content: center;
+  background-color: #f5f5f5;
+  z-index: 10;
+}
+
+.error-text {
+  font-size: 24rpx;
+  color: #ccc;
+  margin-top: 10rpx;
+}
+</style>

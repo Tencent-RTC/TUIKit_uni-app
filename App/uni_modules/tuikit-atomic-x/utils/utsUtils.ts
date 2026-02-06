@@ -6,12 +6,16 @@ import { getRTCRoomEngineManager } from "../state/rtcRoomEngine";
  * @param defaultValue 解析失败时的默认值
  */
 export function safeJsonParse<T>(jsonString: string, defaultValue: T): T {
-    try {
-        return JSON.parse(jsonString);
-    } catch (error) {
-        console.error("JSON parse error:", error);
-        return defaultValue;
+    if (typeof jsonString !== 'string') {
+        return jsonString;
     }
+    let result;
+    try {
+        result = JSON.parse(jsonString);
+    } catch (error) {
+        result = defaultValue;
+    }
+    return result;
 }
 
 /**

@@ -1,0 +1,422 @@
+<template>
+  <view class="group-management">
+    <!-- 导航栏 -->
+    <view class="navbar" :style="{ paddingTop: statusBarHeight + 'px' }">
+      <view class="navbar__content">
+        <view class="navbar__back" @tap="handleBack">
+          <image class="navbar__back-icon" :src="arrowLeftIcon" />
+        </view>
+        <text class="navbar__title">群管理</text>
+        <view class="navbar__placeholder"></view>
+      </view>
+    </view>
+
+    <!-- 内容区域 -->
+    <scroll-view class="content" scroll-y="true">
+      <!-- 群管理员区 -->
+      <view class="member-section">
+        <view class="member-section__header" @tap="handleMemberListClick">
+          <text class="member-section__label">群管理员</text>
+          <view class="member-section__right">
+            <text class="member-section__count">{{ adminAndOwnerMembers.length }}人</text>
+            <image class="member-section__arrow" :src="arrowRightIcon" />
+          </view>
+        </view>
+        <MemberAvatarList
+          :members="adminAndOwnerMembers"
+          :maxDisplay="5"
+          :showAddButton="canPromoteAdmin"
+          :showRemoveButton="canDemoteAdmin"
+          :showName="true"
+          @add="handlePromoteAdmin"
+          @remove="handleDemoteAdmin"
+          @member-click="handleMemberClick"
+        />
+      </view>
+
+      <!-- 分隔区 -->
+      <view class="section-gap"></view>
+
+      <!-- 全员禁言 -->
+      <view class="mute-all-section">
+        <SettingRowToggle
+          label="全员禁言"
+          :modelValue="isAllMuted"
+          :disabled="!canMuteAllMembers"
+          @change="handleMuteAllChange"
+        />
+      </view>
+      <text class="mute-all-section__desc">开启后，只允许群主和管理员发言</text>
+
+      <!-- 单独禁言人员 -->
+      <view v-if="canMuteMember && !isAllMuted" class="mute-member-section">
+        <view class="mute-member-section__header">
+          <text class="mute-member-section__label">单独禁言</text>
+        </view>
+        <MemberAvatarList
+          :members="mutedMembers"
+          :maxDisplay="500"
+          :showAddButton="true"
+          :showRemoveButton="mutedMembers.length > 0"
+          :showName="true"
+          @add="handleAddMuteMember"
+          @remove="handleRemoveMuteMember"
+          @member-click="handleMutedMemberClick"
+        />
+      </view>
+    </scroll-view>
+  </view>
+</template>
+
+<script setup lang="ts">
+import { ref, computed, onMounted, onUnmounted } from 'vue';
+import MemberAvatarList from './components/MemberAvatarList.nvue';
+import SettingRowToggle from './components/SettingRowToggle.nvue';
+import { useGroupMemberState } from '../../state/GroupMemberState';
+import { useGroupState } from '../../state/GroupState';
+import { GroupMemberRole, GroupType, type GroupInfo, type GroupMember} from '../../types/group';
+import { hasPermission, GroupPermission } from './utils/groupPermission';
+import { UserPickerType } from '../../types/userpicker';
+import arrowRightIcon from './assets/nvue_arrow-right.png';
+import arrowLeftIcon from './assets/nvue_arrow-left.png';
+
+interface Props {
+  conversationID: string;
+}
+
+const props = defineProps<Props>();
+
+// 获取 groupID
+const groupID = props.conversationID.startsWith('group_') ? props.conversationID.replace('group_', '') : '';
+
+// 获取群成员状态（管理员）
+const {
+  hasMoreGroupMembers: hasMoreAdminMembers,
+  groupMemberList: adminMembers,
+  fetchGroupMemberList: fetchAdminMembers,
+} = useGroupMemberState({
+  groupID,
+  role: GroupMemberRole.Admin,
+});
+
+// 获取群成员状态（群主）
+const {
+  groupMemberList: ownerMember,
+  fetchGroupMemberList: fetchOwnerMembers,
+} = useGroupMemberState({
+  groupID,
+  role: GroupMemberRole.Owner,
+});
+
+// 获取群成员状态（全部）
+const {
+  groupMemberList: allMembers,
+  setMuteAllMembers,
+  setGroupMemberMuteTime,
+  fetchGroupMemberList: fetchAllMembers,
+} = useGroupMemberState({
+  groupID,
+});
+
+// 获取群状态
+const { fetchGroupInfo } = useGroupState();
+
+// 群信息（通过 fetchGroupInfo 获取）
+const groupInfo = ref<GroupInfo | null>(null);
+
+// 从群信息中提取的计算属性
+const groupType = computed(() => (groupInfo.value as GroupInfo)?.groupType ?? GroupType.Work);
+const isAllMuted = computed(() => (groupInfo.value as GroupInfo)?.isAllMuted ?? false);
+const selfRole = computed(() => (groupInfo.value as GroupInfo)?.selfRole ?? GroupMemberRole.Member);
+const memberCount = computed(() => (groupInfo.value as GroupInfo)?.memberCount ?? 0);
+
+// 状态栏高度
+const statusBarHeight = ref(44);
+
+// ============================================================================
+// 权限计算属性
+// ============================================================================
+const canPromoteAdmin = computed(() => {
+  return selfRole.value === GroupMemberRole.Owner;
+});
+
+// 是否可删除成员
+const canDemoteAdmin = computed(() => {
+  return selfRole.value === GroupMemberRole.Owner;
+});
+
+// 是否可禁言成员
+const canMuteMember = computed(() => {
+  return hasPermission(groupType.value, selfRole.value, GroupPermission.MUTE_MEMBER);
+});
+
+// 是否可全员禁言
+const canMuteAllMembers = computed(() => {
+  return hasPermission(groupType.value, selfRole.value, GroupPermission.MUTE_ALL_MEMBERS);
+});
+
+// ============================================================================
+// 显示相关计算属性
+// ============================================================================
+
+const adminAndOwnerMembers = computed(() => {
+  // 群主和管理员可能重复，需要通过 userID 去重
+  const adminAndOwnerMembers = [...adminMembers.value, ...ownerMember.value].filter(member => member !== null);
+  const seenUserIDs = new Set<string>();
+  return adminAndOwnerMembers.filter((member: GroupMember) => {
+    if (seenUserIDs.has(member.userID)) {
+      return false;
+    }
+    if (member.role === GroupMemberRole.Owner || member.role === GroupMemberRole.Admin) {
+      seenUserIDs.add(member.userID);
+      return true;
+    }
+    return false;
+  });
+});
+
+// 已禁言的成员列表
+const mutedMembers = computed(() => {
+  return (allMembers.value).filter((member: GroupMember) => {
+    return member.muteUntil > (Date.now() / 1000);
+  });
+});
+
+// ============================================================================
+// 生命周期
+// ============================================================================
+
+async function fetchAllAdmin() {
+  while (hasMoreAdminMembers.value) {
+    await fetchAdminMembers(GroupMemberRole.Admin);
+  }
+}
+
+// 获取群信息
+async function loadGroupInfo() {
+  if (!groupID) return;
+  try {
+    const list = await fetchGroupInfo([groupID]);
+    if (list.length > 0) {
+      groupInfo.value = list[0];
+    }
+  } catch (error) {
+    console.error('[GroupManagement] Failed to fetch group info:', error);
+  }
+}
+
+onMounted(() => {
+  const systemInfo = uni.getSystemInfoSync();
+  statusBarHeight.value = systemInfo.statusBarHeight || 44;
+
+  loadGroupInfo();
+  fetchAllAdmin();
+  fetchOwnerMembers(GroupMemberRole.Owner);
+  fetchAllMembers(GroupMemberRole.All);
+});
+
+// ============================================================================
+// 事件处理
+// ============================================================================
+
+// 返回
+const handleBack = () => {
+  uni.navigateBack();
+};
+
+// 点击群成员列表
+const handleMemberListClick = () => {
+  uni.navigateTo({
+    url: `/pages/scenes/chat/groupMemberList/index?conversationID=${props.conversationID}&hideMember=true`,
+  });
+};
+
+// 添加成员
+const handlePromoteAdmin = () => {
+  uni.navigateTo({
+    url: `/pages/scenes/chat/userPicker/userPicker?businessType=${UserPickerType.PROMOTE_ADMIN}&conversationID=${props.conversationID}`,
+  });
+};
+
+// 删除成员
+const handleDemoteAdmin = () => {
+  uni.navigateTo({
+    url: `/pages/scenes/chat/userPicker/userPicker?businessType=${UserPickerType.DEMOTE_ADMIN}&conversationID=${props.conversationID}`,
+  });
+};
+
+// 点击成员
+const handleMemberClick = (member: GroupMember) => {
+  // TODO: 跳转到成员详情页面
+};
+
+// 切换全员禁言
+const handleMuteAllChange = (value: boolean) => {
+  setMuteAllMembers(value).then(() => {
+    loadGroupInfo();
+  });
+};
+
+// 添加禁言人员
+const handleAddMuteMember = () => {
+  uni.navigateTo({
+    url: `/pages/scenes/chat/userPicker/userPicker?businessType=${UserPickerType.MUTE_GROUP_MEMBER}&conversationID=${props.conversationID}`,
+  });
+};
+
+// 移除禁言人员
+const handleRemoveMuteMember = () => {
+  uni.navigateTo({
+    url: `/pages/scenes/chat/userPicker/userPicker?businessType=${UserPickerType.UNMUTE_GROUP_MEMBER}&conversationID=${props.conversationID}`,
+  });
+};
+
+// 点击已禁言成员
+const handleMutedMemberClick = (member: GroupMember) => {
+  // TODO: 显示操作菜单（查看详情、解除禁言）
+};
+</script>
+
+<style scoped>
+.group-management {
+  flex: 1;
+  background-color: #F0F2F7;
+}
+
+/* 导航栏 */
+.navbar {
+  background-color: #FFFFFF;
+  border-bottom-width: 1rpx;
+  border-bottom-style: solid;
+  border-bottom-color: #E5E5E5;
+}
+
+.navbar__content {
+  height: 88rpx;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 32rpx;
+}
+
+.navbar__back {
+  width: 60rpx;
+  height: 60rpx;
+  justify-content: center;
+  align-items: center;
+}
+
+.navbar__back-icon {
+  width: 54rpx;
+  height: 54rpx;
+}
+
+.navbar__title {
+  font-size: 36rpx;
+  font-weight: 500;
+  color: #333333;
+}
+
+.navbar__placeholder {
+  width: 60rpx;
+}
+
+/* 内容区域 */
+.content {
+  flex: 1;
+}
+
+/* 分隔区 */
+.section-gap {
+  height: 20rpx;
+  background-color: #F0F2F7;
+}
+
+/* 群成员区 */
+.member-section {
+  background-color: #FFFFFF;
+}
+
+.member-section__header {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24rpx 32rpx 0;
+}
+
+.member-section__label {
+  font-size: 32rpx;
+  color: rgba(0, 0, 0, 0.5);
+}
+
+.member-section__right {
+  flex-direction: row;
+  align-items: center;
+}
+
+.member-section__count {
+  font-size: 28rpx;
+  color: rgba(0, 0, 0, 0.55);
+}
+
+.member-section__arrow {
+  width: 28rpx;
+  height: 28rpx;
+}
+
+/* 全员禁言区 */
+.mute-all-section {
+  background-color: #FFFFFF;
+}
+
+.mute-all-section__row {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.mute-all-section__label {
+  font-size: 28rpx;
+  color: #333333;
+}
+
+.mute-all-section__switch {
+  transform: scale(0.8);
+}
+
+.mute-all-section__desc {
+  padding: 8rpx 32rpx 32rpx 32rpx;
+  font-size: 28rpx;
+  background-color: #F0F2F7;
+  color: rgba(0, 0, 0, 0.4);
+}
+
+/* 单独禁言人员区 */
+.mute-member-section {
+  background-color: #FFFFFF;
+}
+
+.mute-member-section__header {
+  padding: 24rpx 32rpx 0;
+}
+
+.mute-member-section__label {
+  font-size: 32rpx;
+  color: rgba(0, 0, 0, 0.55);
+}
+
+.mute-member-section__empty {
+  padding: 40rpx 32rpx;
+  align-items: center;
+}
+
+.mute-member-section__empty-text {
+  font-size: 26rpx;
+  color: #999999;
+}
+
+/* 底部安全区 */
+.safe-area-bottom {
+  height: 68rpx;
+}
+</style>

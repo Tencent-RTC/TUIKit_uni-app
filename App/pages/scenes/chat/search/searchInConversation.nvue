@@ -1,0 +1,75 @@
+<template>
+  <view class="search-page" :style="{ paddingTop: statusBarHeight + 'px' }">
+    <Search
+      ref="searchRef"
+      :conversationID="conversationID"
+      :initialKeyword="initialKeyword"
+      :initialOption="initialOption"
+      :placeholder="'搜索聊天记录'"
+      :showCancel="true"
+      :debounceTime="300"
+      @search="handleSearch"
+      @cancel="handleCancel"
+      @resultItemClick="handleResultItemClick"
+    />
+  </view>
+</template>
+
+<script setup>
+import { ref } from 'vue'
+import { onLoad } from '@dcloudio/uni-app'
+import Search from '@/uni_modules/tuikit-atomic-x/components/Search/Search.nvue'
+
+const searchRef = ref(null)
+const conversationID = ref('')
+const initialKeyword = ref('')
+const initialOption = ref({})
+
+const systemInfo = uni.getSystemInfoSync()
+const statusBarHeight = ref(systemInfo.statusBarHeight || 0)
+
+onLoad((options) => {
+  if (options.conversationID) {
+    conversationID.value = options.conversationID
+  }
+  if (options.keyword) {
+    initialKeyword.value = decodeURIComponent(options.keyword)
+  }
+  if (options.option) {
+    try {
+      initialOption.value = JSON.parse(decodeURIComponent(options.option))
+    } catch (e) {
+      console.error('[SearchInConversation] Parse option failed:', e)
+    }
+  }
+})
+
+const handleSearch = (keyword, option) => {
+  console.log('[SearchInConversation] Search:', keyword, option)
+}
+
+const handleCancel = () => {
+  uni.navigateBack()
+}
+
+const handleResultItemClick = (type, data) => {
+  if (type === 'message') {
+    // 单条消息：data 是 MessageInfo
+    const targetConversationID = conversationID.value
+    
+    // 通过全局变量传递完整的消息对象
+    uni.$locateMessage = data
+    
+    uni.navigateTo({
+      url: `/pages/scenes/chat/chat/index?conversationID=${targetConversationID}`
+    })
+  }
+}
+</script>
+
+<style>
+.search-page {
+  flex: 1;
+  background-color: #ffffff;
+}
+</style>

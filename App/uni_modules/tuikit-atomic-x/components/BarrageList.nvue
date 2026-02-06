@@ -7,11 +7,12 @@
         <view class="message-content-wrapper">
           <view class="nickname-content-gift" v-if="message?.gift">
             <text class="chat-nickname"
-              numberOfLines="1">{{ message?.sender?.userName || message?.sender?.userID }}：</text>
+              numberOfLines="1">{{ message?.sender?.userName || message?.sender?.userID }}</text>
             <view class="gift-row">
-              <text class="gift-prefix">{{ giftPrefix }}</text>
+              <text class="gift-prefix"> 送给 </text>
               <text class="gift-recipient">{{ giftReceiverName }}</text>
-              <text class="gift-name">{{ message?.textContent || '' }}</text>
+              <text class="gift-name"
+                :style="{ color: getRandomGiftColor(message) }">{{ message?.textContent || '' }}</text>
               <image class="gift-icon" :src="message?.gift?.iconURL || ''" alt="" />
               <text class="gift-count" style="font-size: 26rpx;">x{{ message?.count || '1' }}</text>
             </view>
@@ -28,7 +29,7 @@
           </view>
         </view>
       </cell>
-      <cell ref="ListBottom" style="height: 50rpx;"></cell>
+      <cell ref="ListBottom" style="height: 10rpx;"></cell>
     </list>
 
     <!-- GiftToast 提示 -->
@@ -53,7 +54,7 @@
 </template>
 
 <script setup lang="ts">
-  import { ref, watch, computed, onMounted, onUnmounted } from 'vue';
+  import { ref, watch, computed, onMounted, onUnmounted, nextTick } from 'vue';
   import { useBarrageState } from "@/uni_modules/tuikit-atomic-x/state/BarrageState";
   import { useGiftState } from "@/uni_modules/tuikit-atomic-x/state/GiftState";
   import { useLiveListState } from "@/uni_modules/tuikit-atomic-x/state/LiveListState";
@@ -79,12 +80,35 @@
   const dom = uni.requireNativePlugin('dom');
   const ListBottom = ref('ListBottom');
 
-  const giftPrefix = computed(() => mode.value === 'anchor' ? '送给我' : '送给');
   const giftReceiverName = computed(() => {
-    if (mode.value === 'anchor') return '';
+    if (mode.value === 'anchor') return '我';
     const owner = currentLive?.value?.liveOwner || {};
     return owner?.userName || owner?.userID || '';
   });
+
+  const giftColors = ['#FF4D4F', '#FAAD14', '#FF7A45', '#52C41A'];
+  const messageColorMap = new Map<string, string>();
+
+  const getRandomGiftColor = (message : any) => {
+    const key = String(message?.sequence || message?.id || message?.sender?.userID + '_' + message?.textContent);
+
+    if (!messageColorMap.has(key)) {
+      const randomColor = giftColors[Math.floor(Math.random() * giftColors.length)];
+      messageColorMap.set(key, randomColor);
+    }
+    return messageColorMap.get(key);
+  };
+
+  const scrollToBottom = () => {
+    nextTick(() => {
+      setTimeout(() => {
+        dom.scrollToElement(ListBottom.value, {
+          offset: 0,
+          animated: true
+        });
+      }, 100);
+    });
+  };
 
   // GiftToast 相关状态和逻辑
   const defaultAvatarURL = 'https://web.sdk.qcloud.com/component/TUIKit/assets/avatar_01.png';
@@ -117,7 +141,6 @@
     };
 
     visibleToasts.value.push(toast);
-
     if (toast.autoHide && toast.duration) {
       setTimeout(() => {
         hideToast(toast.id);
@@ -168,8 +191,11 @@
     const value = newVal.slice((oldVal || []).length, (newVal || []).length);
     if (value.length > 0) {
       mixMessageList.value = [...mixMessageList.value, ...value];
-      dom.scrollToElement(ListBottom.value);
+      scrollToBottom();
     }
+  }, {
+    deep: true,
+    immediate: true
   });
 
   const emit = defineEmits(['itemTap', 'toastClosed']);
@@ -185,7 +211,7 @@
         textContent: `${res.gift?.name || ''}`,
       };
       mixMessageList.value = [...mixMessageList.value, value];
-      dom.scrollToElement(ListBottom.value);
+      scrollToBottom();
     }
   }
 
@@ -299,7 +325,7 @@
   .chat-item {
     flex-direction: row;
     align-items: flex-start;
-    border-radius: 32rpx;
+    border-radius: 16rpx;
     padding: 6rpx;
     width: fit-content;
     max-width: 500rpx;
@@ -312,7 +338,7 @@
     max-width: 500rpx;
     width: fit-content;
     background-color: rgba(0, 0, 0, 0.25);
-    border-radius: 999rpx;
+    border-radius: 16rpx;
     padding: 8rpx 12rpx;
   }
 
@@ -375,9 +401,20 @@
     margin: 0;
   }
 
-  .gift-recipient,
+  .gift-recipient {
+    color: #80BEF6;
+    font-size: 24rpx;
+    line-height: 24rpx;
+    margin-right: 8rpx;
+    padding: 5rpx 0;
+    flex-shrink: 0;
+    max-width: 200rpx;
+    lines: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
   .gift-name {
-    color: #ffffff;
     font-size: 24rpx;
     line-height: 24rpx;
     font-weight: 500;

@@ -1,0 +1,60 @@
+<template>
+  <view class="search-loading">
+    <view class="search-loading__spinner">
+      <view class="search-loading__dot search-loading__dot--1"></view>
+      <view class="search-loading__dot search-loading__dot--2"></view>
+      <view class="search-loading__dot search-loading__dot--3"></view>
+    </view>
+    <text class="search-loading__text">{{ text }}</text>
+  </view>
+</template>
+
+<script setup lang="ts">
+import type { LoadingPlaceholderProps } from '../../../types/search'
+
+const props = withDefaults(defineProps<LoadingPlaceholderProps>(), {
+  text: '搜索中...'
+})
+</script>
+
+<style>
+.search-loading {
+  flex: 1;
+  justify-content: center;
+  align-items: center;
+  padding: 100rpx 60rpx;
+}
+
+.search-loading__spinner {
+  flex-direction: row;
+  align-items: center;
+  margin-bottom: 24rpx;
+}
+
+.search-loading__dot {
+  width: 16rpx;
+  height: 16rpx;
+  border-radius: 8rpx;
+  background-color: #147AFF;
+  margin: 0 8rpx;
+  opacity: 0.3;
+}
+
+.search-loading__dot--1 {
+  opacity: 1;
+}
+
+.search-loading__dot--2 {
+  opacity: 0.6;
+}
+
+.search-loading__dot--3 {
+  opacity: 0.3;
+}
+
+.search-loading__text {
+  font-size: 28rpx;
+  color: #999999;
+  text-align: center;
+}
+</style>

@@ -2,8 +2,7 @@
   <view class="live-list">
     <view class="live-list-quick-join">
       <input v-model="inputLiveId" class="quick-join-input" placeholder="输入房间名称、主播名称或房间ID" confirm-type="done"
-        @confirm="handleJoinLiveById" maxlength="64" />
-
+        @confirm="handleSearch" maxlength="64" />
     </view>
 
     <!-- 无匹配结果提示 -->
@@ -48,7 +47,8 @@
   import {
     ref,
     onMounted,
-    computed
+    computed,
+    watch
   } from 'vue';
   import {
     onLoad
@@ -57,19 +57,26 @@
   import {
     useLiveListState
   } from "@/uni_modules/tuikit-atomic-x/state/LiveListState";
+  import {
+    useDeviceState
+  } from '@/uni_modules/tuikit-atomic-x/state/DeviceState'
   const {
     liveList,
     liveListCursor,
-    joinLive,
-    fetchLiveList
+    fetchLiveList,
+    joinLive
   } = useLiveListState();
-
+  const {
+    openLocalCamera,
+    openLocalMicrophone,
+    isFrontCamera
+  } = useDeviceState()
   // 数据状态
   const inputLiveId = ref(''); // 'live_'
   const isLoadingJoin = ref(false);
   // 默认图片
   const defaultCoverURL =
-    'https://liteav-test-1252463788.cos.ap-guangzhou.myqcloud.com/voice_room/voice_room_cover1.png';
+    'https://web.sdk.qcloud.com/trtc/live/web/assets/defaultCoverLive.png';
   const defaultAvatarURL = 'https://web.sdk.qcloud.com/component/TUIKit/assets/avatar_01.png';
 
 
@@ -92,8 +99,24 @@
     try {
       uni.$liveID = live.liveID;
 
+      if (live?.liveOwner?.userID === uni.$userID) {
+        joinLive(({
+          liveID: live.liveID,
+          success: () => {
+            openLocalCamera({
+              isFront: isFrontCamera.value
+            })
+            openLocalMicrophone()
+            uni.redirectTo({
+              url: `/pages/scenes/live/anchor/index?isLiving=true`
+            });
+          }
+        }))
+        return;
+      }
+
       uni.redirectTo({
-        url: `/pages/audience/index?liveID=${live.liveID}`
+        url: `/pages/scenes/live/audience/index?liveID=${live.liveID}`
       });
     } catch (error) {
       console.error('进入直播间失败:', error);
@@ -105,36 +128,10 @@
   };
 
 
-  const handleJoinLiveById = () => {
-    if (!inputLiveId.value.trim()) {
-      uni.showToast({
-        title: '请输入 liveID',
-        icon: 'none'
-      });
-      return;
-    }
-    uni.$liveID = inputLiveId.value.trim();
-
-    isLoadingJoin.value = true;
-
-    joinLive({
-      liveID: inputLiveId.value.trim(),
-      success: () => {
-        isLoadingJoin.value = false;
-        uni.redirectTo({
-          url: `/pages/audience/index?liveID=${inputLiveId.value.trim()}`,
-        });
-      },
-      fail: (error) => {
-        isLoadingJoin.value = false;
-        console.error('进房失败 = ', JSON.stringify(error))
-
-        uni.showToast({
-          title: "进入失败",
-          icon: "none",
-          content: error?.message || "房间不存在或已关闭",
-        });
-      },
+  const handleSearch = () => {
+    uni.showToast({
+      title: '搜索完成',
+      icon: 'none'
     });
   };
 

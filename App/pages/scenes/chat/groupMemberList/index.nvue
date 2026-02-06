@@ -1,0 +1,26 @@
+<template>
+  <GroupMemberList :conversationID="conversationID" :hideMember="hideMember" />
+</template>
+
+<script setup lang="ts">
+import { ref } from 'vue';
+import { onLoad } from '@dcloudio/uni-app';
+import GroupMemberList from '@/uni_modules/tuikit-atomic-x/components/ChatSetting/GroupMemberList.nvue';
+
+const conversationID = ref('');
+const hideMember = ref(false);
+
+onLoad((options) => {
+  if (options.conversationID) {
+    conversationID.value = options.conversationID;
+  } else {
+    console.error('groupMemberList page 未接收到 conversationID 参数')
+  }
+  if (options.hideMember === 'true' || options.hideMember === '1') {
+    hideMember.value = true;
+  }
+});
+</script>
+
+<style scoped>
+</style>

@@ -1,0 +1,79 @@
+<template>
+  <view class="search-result-item" @click="handleClick">
+    <component
+      :is="ItemComponent"
+      v-bind="itemProps"
+      :keyword="keyword"
+      :Avatar="AvatarComp"
+    />
+  </view>
+</template>
+
+<script setup lang="ts">
+import { computed } from 'vue'
+import AvatarComponent from '../../Avatar'
+import UserItem from './User.nvue'
+import GroupItem from './Group.nvue'
+import MessageItem from './Message.nvue'
+import ConversationItem from './Conversation.nvue'
+import type { SearchResultItemProps, SearchResultItemEmits, FriendSearchInfo, MessageSearchResultItem } from '../../../types/search'
+import type { GroupSearchInfo, GroupMember } from '../../../types/group'
+import type { UserProfile } from '../../../types/userProfile'
+import type { MessageInfo } from '../../../types/message'
+
+const props = withDefaults(defineProps<SearchResultItemProps>(), {
+  keyword: '',
+  Avatar: undefined
+})
+
+const emit = defineEmits<SearchResultItemEmits>()
+
+const AvatarComp = computed(() => props.Avatar || AvatarComponent)
+
+const ItemComponent = computed(() => {
+  switch (props.type) {
+    case 'user':
+    case 'friend':
+      return UserItem
+    case 'group':
+      return GroupItem
+    case 'groupMember':
+      return UserItem
+    case 'message':
+      return MessageItem
+    case 'conversation':
+      return ConversationItem
+    default:
+      return UserItem
+  }
+})
+
+const itemProps = computed(() => {
+  switch (props.type) {
+    case 'user':
+      return { type: props.type,  user: props.data as UserProfile }
+    case 'friend':
+      return { type: props.type, user: props.data as FriendSearchInfo }
+    case 'group':
+      return { group: props.data as GroupSearchInfo }
+    case 'groupMember':
+      return { type: props.type,  user: props.data as GroupMember }
+    case 'message':
+      return { message: props.data as MessageInfo }
+    case 'conversation':
+      return { messageResult: props.data as MessageSearchResultItem }
+    default:
+      return {}
+  }
+})
+
+const handleClick = () => {
+  emit('click', props.type, props.data)
+}
+</script>
+
+<style>
+.search-result-item {
+  flex: 1;
+}
+</style>

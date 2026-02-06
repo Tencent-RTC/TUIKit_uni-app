@@ -1,0 +1,91 @@
+<template>
+  <ResultItem
+    :avatarURL="avatarURL"
+    :title="displayName"
+    :titleSuffix="titleSuffix"
+    :subtitle="subtitle"
+    :keyword="keyword"
+    :Avatar="Avatar"
+    defaultAvatarType="user"
+  />
+</template>
+
+<script setup lang="ts">
+import { computed } from 'vue'
+import AvatarComponent from '../../Avatar'
+import ResultItem from './ResultItem.nvue'
+import type { SearchResultItemUserProps, FriendSearchInfo } from '../../../types/search'
+import type { UserProfile } from '../../../types/userProfile'
+import type { GroupMember } from '../../../types/group'
+
+const props = withDefaults(defineProps<SearchResultItemUserProps>(), {
+  keyword: '',
+  Avatar: () => AvatarComponent
+})
+
+// 获取用户基础信息
+const getUserProfile = computed((): UserProfile | null => {
+  if (props.type === 'friend') {
+    return (props.user as FriendSearchInfo).userInfo || null
+  }
+  if (props.type === 'user') {
+    return props.user as UserProfile
+  }
+  return null
+})
+
+// 头像URL
+const avatarURL = computed(() => {
+  if (props.type === 'friend') {
+    const friend = props.user as FriendSearchInfo
+    return friend.userInfo?.avatarURL || ''
+  }
+  return (props.user as UserProfile | GroupMember).avatarURL || ''
+})
+
+// 显示名称
+const displayName = computed(() => {
+  if (props.type === 'friend') {
+    const friend = props.user as FriendSearchInfo
+    return friend.friendRemark || friend.userInfo?.nickname || friend.userID || '未知用户'
+  }
+  if (props.type === 'groupMember') {
+    const member = props.user as GroupMember
+    return member.nameCard || member.friendRemark || member.nickname || member.userID || '未知用户'
+  }
+  // type === 'user'
+  const user = props.user as UserProfile
+  return user.nickname || user.userID || '未知用户'
+})
+
+// 标题后缀（显示 userID）
+const titleSuffix = computed(() => {
+  const userID = props.user.userID
+  return userID ? `(${userID})` : ''
+})
+
+// 副标题
+const subtitle = computed(() => {
+  const parts: string[] = []
+  const profile = getUserProfile.value
+  
+  if (profile) {
+    // 性别
+    if (profile.gender === 1) {
+      parts.push('男')
+    } else if (profile.gender === 2) {
+      parts.push('女')
+    }
+    // 年龄
+    if (profile.birthday) {
+      const birthYear = new Date(profile.birthday * 1000).getFullYear()
+      const age = new Date().getFullYear() - birthYear
+      if (age > 0 && age < 150) {
+        parts.push(`${age}岁`)
+      }
+    }
+  }
+  
+  return parts.join(' ')
+})
+</script>

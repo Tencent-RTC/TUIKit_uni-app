@@ -7,10 +7,27 @@
  * 业务价值：为直播平台提供基础的用户认证能力，是所有其他业务模块的前置条件。
  * 应用场景：用户登录、身份验证、会话管理、权限控制等基础认证场景。
  */
-import { ref } from "vue";
+import { ref, type Ref } from "vue";
 import { UserProfileParam, LoginOptions, LogoutOptions, SetSelfInfoOptions } from "@/uni_modules/tuikit-atomic-x";
-import { getRTCRoomEngineManager } from "./rtcRoomEngine";
-import { callUTSFunction, safeJsonParse } from "../utils/utsUtils";
+import { safeJsonParse } from "../utils/utsUtils";
+import { addListener, callAPI, removeListener } from "@/uni_modules/tuikit-atomic-x";
+
+declare const uni: any;
+
+// 全局状态存储 key
+const LOGIN_STATE_KEY = '__TUIKIT_LOGIN_STATE__';
+
+// 初始化全局状态存储
+function getGlobalState() {
+  if (!uni[LOGIN_STATE_KEY]) {
+    uni[LOGIN_STATE_KEY] = {
+      loginUserInfo: ref<UserProfileParam>(),
+      loginStatus: ref<string>(),
+      bindEventDone: false
+    };
+  }
+  return uni[LOGIN_STATE_KEY];
+}
 
 /**
  * 当前登录用户信息
@@ -36,7 +53,7 @@ import { callUTSFunction, safeJsonParse } from "../utils/utsUtils";
  *   console.log('当前登录用户:', currentUser.nickname);
  * }
  */
-const loginUserInfo = ref<UserProfileParam>();
+const loginUserInfo: Ref<UserProfileParam | undefined> = getGlobalState().loginUserInfo;
 
 /**
  * 当前登录状态
@@ -50,7 +67,12 @@ const loginUserInfo = ref<UserProfileParam>();
  *   onError: (error) => console.error('登出失败:', error)
  * });
  */
-const loginStatus = ref<string>();
+const loginStatus: Ref<string | undefined> = getGlobalState().loginStatus;
+
+const createStoreParams = JSON.stringify({
+  storeName: "login",
+  id: ''
+})
 
 /**
  * 登录方法
@@ -69,7 +91,29 @@ const loginStatus = ref<string>();
  * });
  */
 function login(params: LoginOptions): void {
-    callUTSFunction("login", params);
+    callAPI({
+        api: "login",
+        params: {
+          createStoreParams: createStoreParams,
+          sdkAppID: params.sdkAppID,
+          userID: params.userID,
+          userSig: params.userSig
+        }
+    }, (res: string) =>{
+        try {
+          const data = safeJsonParse(res, {}) as any;
+          console.warn('--> ', data)
+          
+          if (data?.code === 0) {
+              params?.success();
+          } else {
+              params?.fail(data.code, data.message);
+          }
+        } catch (error) {
+          params?.fail(-1, error.message);
+        }
+
+    });
 }
 
 /**
@@ -86,7 +130,63 @@ function login(params: LoginOptions): void {
  * });
  */
 function logout(params?: LogoutOptions): void {
-    callUTSFunction("logout", params || {});
+    callAPI({
+        api: "logout",
+        params: {
+            createStoreParams: createStoreParams,
+        }
+    }, (res: string) =>{
+        try {
+            const data = safeJsonParse(res, {}) as any;
+			console.warn('logout data', data)
+            if (data?.code === 0) {
+                // 清除登录状态数据
+                clearLoginState();
+                params?.success();
+            } else {
+                params?.fail(data.code, data.message);
+            }
+        } catch (error) {
+            params?.fail(-1, error.message);
+        }
+    });
+}
+
+/**
+ * 清除登录状态数据
+ * @returns {void}
+ * @memberof module:LoginState
+ */
+function clearLoginState(): void {
+    // 解除事件绑定
+    unbindEvent();
+    
+    const globalState = getGlobalState();
+    // 清除用户信息
+    globalState.loginUserInfo.value = undefined;
+    globalState.loginStatus.value = undefined;
+    // 重置绑定标志，允许下次登录重新绑定
+    globalState.bindEventDone = false;
+}
+
+/**
+ * 解除事件监听
+ * @returns {void}
+ * @memberof module:LoginState
+ */
+function unbindEvent(): void {
+    const dataNames = ["loginStatus", "loginUserInfo"];
+    
+    dataNames.forEach(name => {
+      removeListener({
+		    type: "",
+        store: "LoginState",
+        name,
+        params: {
+          createStoreParams: createStoreParams
+        }
+      });
+    });
 }
 
 /**
@@ -97,7 +197,8 @@ function logout(params?: LogoutOptions): void {
  * @example
  * import { useLoginState } from '@/uni_modules/tuikit-atomic-x/state/LoginState';
  * const { setSelfInfo } = useLoginState();
- * setSelfInfo({
+ * setSelfInfo(
+ *  userProfile: {
  *   userID: 'user123',
  *   nickname: '张三',
  *   avatarURL: 'https://example.com/avatar.jpg',
@@ -105,29 +206,74 @@ function logout(params?: LogoutOptions): void {
  *   onError: (error) => console.error('用户信息设置失败:', error)
  * });
  */
-function setSelfInfo(userInfo: SetSelfInfoOptions): void {
-    callUTSFunction("setSelfInfo", userInfo);
+function setSelfInfo(params: SetSelfInfoOptions): void {
+    const { onSuccess, onError, ...userProfile} = params;
+    callAPI({
+        api: "setSelfInfo",
+        params: userProfile,
+    }, (res: string) =>{
+        try {
+            const data = safeJsonParse(res, {}) as any;
+            if (data?.code === 0) {
+                onSuccess?.(data);
+            } else {
+                onError?.(data);
+            }
+        } catch (error) {
+            
+        }
+
+    });
 }
 
 function getLoginUserInfo(): UserProfileParam | undefined {
     return loginUserInfo.value;
 }
 
-const onLoginStoreChanged = (eventName: string, res: string): void => {
-    try {
-        if (eventName === "loginUserInfo") {
-            const data = safeJsonParse<UserProfileParam>(res, {});
-            loginUserInfo.value = data;
-        } else if (eventName === "loginStatus") {
-            loginStatus.value = safeJsonParse<string>(res, "");
-        }
-    } catch (error) {
-        console.error("onLoginStoreChanged error:", error);
-    }
-};
-
 function bindEvent(): void {
-    getRTCRoomEngineManager().on("loginStoreChanged", onLoginStoreChanged, '');
+    const globalState = getGlobalState();
+    // 防止重复绑定事件
+    if (globalState.bindEventDone) {
+      return;
+    }
+    globalState.bindEventDone = true;
+    addListener({
+      type: '',
+      store: "LoginStore",
+      name: "loginStatus",
+      listenerID: "login",
+      params: {
+        createStoreParams: createStoreParams
+      }
+    }, (data) => {
+      console.warn('====> 登录结果', data)
+      try {
+        const result = safeJsonParse<any>(data, {});
+        loginStatus.value = result.loginStatus;
+        console.log(`[loginStatus listener] Data:`, result);
+      } catch (error) {
+        console.error(`[loginStatus listener] Error:`, error);
+      }
+    })
+
+
+    addListener({
+      type: '',
+      store: "LoginStore",
+      name: "loginUserInfo",
+      listenerID: "login",
+      params: {
+        createStoreParams: createStoreParams
+      }
+    }, (data) => {
+      try {
+        const result = safeJsonParse<any>(data, {});
+        loginUserInfo.value = safeJsonParse<any>(result.loginUserInfo, {}); 
+        console.log(`[loginUserInfo listener] Data:`, loginUserInfo.value);
+      } catch (error) {
+        console.error(`[loginUserInfo listener] Error:`, error);
+      }
+    })
 }
 
 export function useLoginState() {

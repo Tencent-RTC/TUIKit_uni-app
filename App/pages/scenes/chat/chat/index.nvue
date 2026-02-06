@@ -1,0 +1,168 @@
+<template>
+  <view class="page-container">
+    <CustomNavbar
+      position="fixed"
+      :title="navigationTitle"
+      :showBack="true"
+      :showMenu="true"
+      @back="onNavBack"
+      @menuSelect="onNavMenuSelect"
+    />
+    
+    <view
+      class="message-list-container"
+      :style="{ paddingBottom: inputToolbarHeight + 'px' }"
+      @tap="closeSoftKeyboard"
+    >
+      <MessageList
+        v-if="conversationID"
+        :conversationID="conversationID"
+        :locateMessage="locateMessage"
+        :inputToolbarHeight="inputToolbarHeight"
+        :inputPanelHeight="inputPanelHeight"
+        @onMessageListTap="closeSoftKeyboard"
+      />
+    </view>
+    
+    <MessageInput
+      v-if="conversationID"
+      ref="messageInputRef"
+      :conversationID="conversationID"
+      :toolList="customToolList"
+      @height-change="onMessageInputHeightChange"
+    />
+  </view>
+</template>
+
+<script setup lang="ts">
+import { ref, computed } from 'vue'
+import { onLoad, onShow } from '@dcloudio/uni-app'
+import MessageList from '@/uni_modules/tuikit-atomic-x/components/MessageList/MessageList.nvue'
+import MessageInput, { DEFAULT_TOOLS } from '@/uni_modules/tuikit-atomic-x/components/MessageInput/MessageInput.nvue'
+import CustomNavbar from '@/uni_modules/tuikit-atomic-x/components/CustomNavbar/CustomNavbar.nvue'
+import { useConversationListState } from '@/uni_modules/tuikit-atomic-x/state/ConversationListState'
+import { useGroupState } from '@/uni_modules/tuikit-atomic-x/state/GroupState'
+import { USER_PICKER_TYPE } from '@/uni_modules/tuikit-atomic-x/components/UserPicker/const'
+import voiceIcon from '@/static/icon/voice.png'
+import videoIcon from '@/static/icon/video.png'
+
+// ==================== State ====================
+const {
+  joinedGroupList,
+  fetchJoinedGroupList,
+} = useGroupState();
+
+// ==================== 状态 ====================
+const conversationID = ref('')
+const locateMessage = ref(null)
+const isInGroup = ref(false)
+const messageInputRef = ref(null)
+const inputToolbarHeight = ref(0)
+const inputPanelHeight = ref(0)
+
+const { fetchConversationInfo, conversationList } = useConversationListState('chat')
+
+// ==================== 计算属性 ====================
+const isC2CConversation = computed(() => conversationID.value.startsWith('c2c_'))
+
+const currentConversation = computed(() => 
+  conversationList.value.find(conv => conv.conversationID === conversationID.value)
+)
+
+const navigationTitle = computed(() => currentConversation.value?.title || '聊天')
+
+const customToolList = computed(() => [
+  ...DEFAULT_TOOLS,
+  { id: 'videoCall', name: '视频通话', icon: videoIcon, callback: () => startCall(2) },
+  { id: 'voiceCall', name: '语音通话', icon: voiceIcon, callback: () => startCall(1) },
+])
+
+// ==================== 通话功能 ====================
+const getPeerUserID = () => {
+  return isC2CConversation.value ? conversationID.value.replace('c2c_', '') : ''
+}
+
+const startCall = (mediaType: number) => {
+  if (isC2CConversation.value) {
+    uni.$TUICallKit.calls({
+      userIDList: [getPeerUserID()],
+      mediaType,
+    })
+  } else {
+    uni.navigateTo({
+      url: `/pages/scenes/chat/userPicker/userPicker?businessType=${USER_PICKER_TYPE.SELECT_GROUP_MEMBER}&conversationID=${conversationID.value}`,
+      events: {
+        onSelectGroupMember: (data) => {
+          const userIDList = data.selectedUsers.map(user => user.userID);
+          uni.$TUICallKit.calls({
+            callParams: {
+              chatGroupID: conversationID.value.replace('group_', ''),
+            },
+            userIDList,
+            mediaType: mediaType,
+          });
+        }
+      }
+    })
+  }
+}
+
+// ==================== 导航栏 ====================
+const onNavBack = () => uni.navigateBack()
+
+const onNavMenuSelect = () => {
+  if (!isC2CConversation.value) {
+    isInGroup.value
+      = joinedGroupList.value.some(group => group.groupID === conversationID.value?.replace('group_', ''));
+    if (!isInGroup.value) {
+      uni.showToast({ title: '您已不在群内，无法进行此操作', icon: 'none' })
+      return;
+    }
+  }
+  uni.navigateTo({
+    url: `/pages/scenes/chat/chatSetting/index?conversationID=${conversationID.value}&showType=0`
+  });
+}
+
+// ==================== 输入框 ====================
+const onMessageInputHeightChange = ({ inputToolbarHeight: toolbar, inputPanelHeight: panel }) => {
+  inputToolbarHeight.value = toolbar
+  inputPanelHeight.value = panel
+}
+
+const closeSoftKeyboard = () => messageInputRef.value?.collapse()
+
+// ==================== 生命周期 ====================
+onLoad((options) => {
+  if (!options.conversationID) {
+    console.error('未接收到 conversationID 参数')
+    return
+  }
+  
+  conversationID.value = options.conversationID
+  fetchConversationInfo(conversationID.value);
+  fetchJoinedGroupList();
+  
+  // 处理定位消息
+  if (uni.$locateMessage) {
+    locateMessage.value = uni.$locateMessage
+    uni.$locateMessage = null
+  }
+})
+
+onShow(() => fetchConversationInfo(conversationID.value))
+</script>
+
+<style>
+.page-container {
+  flex: 1;
+  flex-direction: column;
+  background-color: #F9FAFC;
+}
+
+.message-list-container {
+  flex: 1;
+  flex-direction: column;
+  background-color: #F9FAFC;
+}
+</style>

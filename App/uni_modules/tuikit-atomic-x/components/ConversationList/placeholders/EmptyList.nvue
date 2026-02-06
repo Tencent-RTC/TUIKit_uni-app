@@ -1,0 +1,23 @@
+<template>
+  <view class="empty-list">
+    <text class="empty-list__text">暂无会话</text>
+  </view>
+</template>
+
+<script setup lang="ts">
+</script>
+
+<style>
+.empty-list {
+  flex: 1;
+  justify-content: center;
+  align-items: center;
+  padding: 100rpx 60rpx;
+}
+
+.empty-list__text {
+  font-size: 28rpx;
+  color: #999999;
+  text-align: center;
+}
+</style>

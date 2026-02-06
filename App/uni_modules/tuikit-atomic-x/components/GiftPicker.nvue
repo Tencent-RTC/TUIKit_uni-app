@@ -3,13 +3,23 @@
     <view class="drawer-overlay" @tap="close"></view>
     <view class="bottom-drawer" :class="{ 'drawer-open': modelValue }">
       <view class="gift-header">
-        <view class="header-content">
-          <text class="gift-title">礼物</text>
+
+      </view>
+
+      <!-- 分类标签 -->
+      <view class="category-tabs">
+        <view 
+          v-for="(category, index) in giftLists" 
+          :key="category.categoryID"
+          class="tab-item"
+          :class="{ 'tab-active': currentCategoryIndex === index }"
+          @tap="switchCategory(index)">
+          <text class="tab-text" :class="{ 'tab-text-active': currentCategoryIndex === index }">{{ category.name }}</text>
         </view>
       </view>
 
-      <swiper class="gift-content" :current="currentPage" @change="handleSwiperChange" style="height: 710rpx;">
-        <swiper-item v-for="(page, pageIndex) in giftPages" :key="pageIndex" class="gift-page">
+      <swiper class="gift-content" :current="currentPage" @change="handleSwiperChange" style="height: 580rpx;">
+        <swiper-item v-for="(page, pageIndex) in currentCategoryPages" :key="pageIndex" class="gift-page">
           <view class="gift-container">
             <view class="gift-item" v-for="(giftInfo, index) in page" :key="giftInfo.giftID"
               :class="{ 'selected': selectedGiftIndex === (pageIndex * itemsPerPage + index) }"
@@ -29,6 +39,16 @@
           </view>
         </swiper-item>
       </swiper>
+
+      <!-- 分页指示器 -->
+      <view class="pagination-dots" v-if="currentCategoryPages.length > 1">
+        <view 
+          v-for="(page, index) in currentCategoryPages" 
+          :key="index"
+          class="dot"
+          :class="{ 'dot-active': currentPage === index }">
+        </view>
+      </view>
     </view>
   </view>
 </template>
@@ -68,6 +88,7 @@
         selectedGiftIndex: 0,
         giftLists: usableGifts,
         currentPage: 0,
+        currentCategoryIndex: 0,
         itemsPerPage: 8,
       };
     },
@@ -78,15 +99,24 @@
       handleSwiperChange(e) {
         this.currentPage = e.detail.current;
       },
+      switchCategory(index) {
+        this.currentCategoryIndex = index;
+        this.currentPage = 0;
+        this.selectedGiftIndex = -1;
+      },
       selectGift(index) {
         this.selectedGiftIndex = index;
       },
       handleSendGift(index) {
-        const gift = (this.flattenedGifts || [])[index];
+        const gift = (this.currentCategoryGifts || [])[index];
         if (this.selectedGiftIndex !== index) return;
-        if (this.onGiftSelect) {
-          this.onGiftSelect(gift);
-        }
+        sendGift({
+          liveID: uni.$liveID,
+          giftID: gift.giftID,
+          count: 1,
+          success: () => {},
+          fail: () => {},
+        })
         this.selectedGiftIndex = -1;
       },
       handleRecharge() {
@@ -94,7 +124,26 @@
       }
     },
     computed: {
-      // 兼容新的分类结构与旧的扁平结构
+      // 当前分类的礼物列表
+      currentCategoryGifts() {
+        const list = this.giftLists || [];
+        if (!Array.isArray(list) || list.length === 0) return [];
+        
+        const category = list[this.currentCategoryIndex];
+        if (!category || !Array.isArray(category.giftList)) return [];
+        
+        return category.giftList;
+      },
+      // 当前分类的分页数据
+      currentCategoryPages() {
+        const pages = [];
+        const list = this.currentCategoryGifts;
+        for (let i = 0; i < list.length; i += this.itemsPerPage) {
+          pages.push(list.slice(i, i + this.itemsPerPage));
+        }
+        return pages;
+      },
+      // 兼容新的分类结构与旧的扁平结构（用于下载资源）
       flattenedGifts() {
         const list = this.giftLists || [];
         if (!Array.isArray(list)) return [];
@@ -112,14 +161,6 @@
         }
         // 旧结构：直接为礼物数组
         return list;
-      },
-      giftPages() {
-        const pages = [];
-        const list = this.flattenedGifts;
-        for (let i = 0; i < list.length; i += this.itemsPerPage) {
-          pages.push(list.slice(i, i + this.itemsPerPage));
-        }
-        return pages;
       }
     },
     watch: {
@@ -143,7 +184,8 @@
           const giftData = flatList[i];
           if (giftData && giftData.resourceURL) {
             const giftKey = `${(giftData.name || '').split(' ').join('')}-${giftData.giftID}`;
-            if (plus && plus.storage && plus.storage.getAllKeys && plus.storage.getAllKeys().includes(giftKey)) continue;
+            if (plus && plus.storage && plus.storage.getAllKeys && plus.storage.getAllKeys().includes(giftKey))
+              continue;
             const svgaGiftSourceUrl = plus && plus.storage ? plus.storage.getItem(giftKey) : null;
             if (!svgaGiftSourceUrl) {
               const filePath = await downloadAndSaveToPath(`${giftData.resourceURL}`);
@@ -204,7 +246,7 @@
   }
 
   .gift-header {
-    padding: 40rpx 48rpx;
+    padding: 40rpx 48rpx 24rpx 48rpx;
     border-top-left-radius: 32rpx;
     border-top-right-radius: 32rpx;
     position: relative;
@@ -223,23 +265,58 @@
     font-weight: 600;
   }
 
+  /* 分类标签样式 */
+  .category-tabs {
+    flex-direction: row;
+    padding: 0 48rpx 0 48rpx;
+    align-items: center;
+    border-bottom: 2rpx solid rgba(255, 255, 255, 0.1);
+  }
+
+  .tab-item {
+    margin-right: 40rpx;
+    padding-bottom: 12rpx;
+    border-bottom-width: 4rpx;
+    border-bottom-color: transparent;
+    margin-bottom: -1rpx;
+  }
+
+  .tab-active {
+    border-bottom-color: white;
+  }
+
+  .tab-text {
+    font-size: 28rpx;
+    color: rgba(255, 255, 255, 0.5);
+    line-height: 40rpx;
+  }
+
+  .tab-text-active {
+    color: #ffffff;
+    font-weight: 400;
+  }
+
   .gift-content {
     flex: 1;
-    height: 710rpx;
+    height: 580rpx;
+    margin-top: 20rpx;
   }
 
   .gift-page {
     flex: 1;
-    height: 710rpx;
+    height: 580rpx;
   }
 
   .gift-container {
     display: flex;
     flex-direction: row;
     flex-wrap: wrap;
+    margin-top: 20rpx;
     padding: 0 20rpx;
     flex: 1;
-    height: 710rpx;
+    height: 580rpx;
+    justify-content: flex-start;
+    align-content: flex-start;
   }
 
   .gift-item {
@@ -316,5 +393,27 @@
     color: rgba(255, 255, 255, 0.7);
     line-height: 28rpx;
     text-align: center;
+  }
+
+  /* 分页指示器样式 */
+  .pagination-dots {
+    flex-direction: row;
+    justify-content: center;
+    align-items: center;
+    padding: 20rpx 0;
+    height: 60rpx;
+  }
+
+  .dot {
+    width: 12rpx;
+    height: 12rpx;
+    border-radius: 6rpx;
+    background-color: rgba(255, 255, 255, 0.3);
+    margin: 0 6rpx;
+  }
+
+  .dot-active {
+    width: 24rpx;
+    background-color: #2B6AD6;
   }
 </style>

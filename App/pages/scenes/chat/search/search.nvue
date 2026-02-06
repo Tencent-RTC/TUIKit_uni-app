@@ -1,0 +1,100 @@
+<template>
+  <view class="search-page" :style="{ paddingTop: statusBarHeight + 'px' }">
+    <Search
+      ref="searchRef"
+      :placeholder="'搜索联系人、群聊、聊天记录'"
+      :showAdvanced="true"
+      :showCancel="true"
+      :debounceTime="300"
+      :SearchAdvanced="SearchAdvanced"
+      @search="handleSearch"
+      @cancel="handleCancel"
+      @resultItemClick="handleResultItemClick"
+    />
+  </view>
+</template>
+
+<script>
+import { ref } from 'vue'
+import Search from '@/uni_modules/tuikit-atomic-x/components/Search/Search.nvue'
+import SearchAdvanced from './components/SearchAdvanced.nvue'
+
+export default {
+  components: {
+    Search,
+  },
+  setup() {
+    const searchRef = ref(null)
+    const keyword = ref('')
+    const searchOption = ref({})
+    
+    const systemInfo = uni.getSystemInfoSync()
+    const statusBarHeight = ref(systemInfo.statusBarHeight || 0)
+
+    const handleSearch = (searchKeyword, option) => {
+      keyword.value = searchKeyword
+      searchOption.value = option
+    }
+
+    const handleCancel = () => {
+
+      uni.navigateBack()
+    }
+
+    /**
+     * 统一处理搜索结果项点击
+     * @param type - 结果类型: 'user' | 'friend' | 'group' | 'groupMember' | 'message' | 'conversation'
+     * @param data - 对应的数据对象
+     */
+    const handleResultItemClick = (type, data) => {
+      switch (type) {
+        case 'user':
+          uni.navigateTo({
+            url: `/pages/user/detail?userID=${data.userID}`
+          })
+          break
+        case 'friend':
+          const friendConvID = `c2c_${data.userInfo?.userID || data.userID}`
+          uni.navigateTo({
+            url: `/pages/scenes/chat/chat/index?conversationID=${friendConvID}`
+          })
+          break
+        case 'group':
+          const groupConvID = `group_${data.groupID}`
+          uni.navigateTo({
+            url: `/pages/scenes/chat/chat/index?conversationID=${groupConvID}`
+          })
+          break
+        case 'groupMember':
+          uni.navigateTo({
+            url: `/pages/user/detail?userID=${data.userID}`
+          })
+          break
+        case 'conversation':
+          uni.navigateTo({
+            url: `/pages/scenes/chat/search/searchInConversation?conversationID=${data.conversationID}&keyword=${encodeURIComponent(keyword.value)}&option=${encodeURIComponent(JSON.stringify(searchOption.value))}`
+          })
+          break
+        default:
+          console.warn('[SearchPage] Unknown result type:', type)
+      }
+    }
+
+    return {
+      searchRef,
+      statusBarHeight,
+      SearchAdvanced,
+      handleSearch,
+      handleCancel,
+      handleResultItemClick
+    }
+  }
+}
+</script>
+
+<style>
+.search-page {
+  flex: 1;
+  background-color: #ffffff;
+}
+</style>

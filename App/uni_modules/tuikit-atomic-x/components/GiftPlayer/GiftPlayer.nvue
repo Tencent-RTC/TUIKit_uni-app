@@ -1,6 +1,7 @@
 <template>
-  <svga-player ref="playerRef" :url="computedUrl" style="position: absolute; z-index: -1;" @onFinished="handleFinished"
-    :style="modelValue ? {
+  <view class="svg-container" v-if="modelValue">
+    <svga-player ref="playerRef" :url="computedUrl" style="position: absolute; z-index: -1;"
+      @onFinished="handleFinished" :style="modelValue ? {
       top: 100 + 'px',
       left: (safeArea?.left || 0) + 'px',
       width: (safeArea?.width || 0) + 'px',
@@ -9,6 +10,7 @@
       width: 0 + 'rpx',
       height: 0 + 'rpx',
     }"></svga-player>
+  </view>
 </template>
 
 <script setup lang="ts">
@@ -317,11 +319,19 @@
   ) {
     addGiftToQueue(giftData, isFromSelf);
   }
-  
+
   defineExpose({
     playGift,
   });
 </script>
 
 <style>
+  .svg-container {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    top: 0;
+    z-index: 1;
+  }
 </style>

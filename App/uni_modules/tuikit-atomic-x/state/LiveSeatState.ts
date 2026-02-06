@@ -151,6 +151,7 @@ const speakingUsers = ref<Map<string, number> | null>(null);
  * import { useLiveSeatState } from '@/uni_modules/tuikit-atomic-x/state/LiveSeatState';
  * const { takeSeat } = useLiveSeatState('your_live_id');
  * takeSeat({
+ *   liveID: 'your_live_id',
  *   seatIndex: 1,
  *   onSuccess: () => console.log('上麦成功'),
  *   onError: (error) => console.error('上麦失败:', error)
@@ -169,6 +170,7 @@ function takeSeat(params : TakeSeatOptions) : void {
  * import { useLiveSeatState } from '@/uni_modules/tuikit-atomic-x/state/LiveSeatState';
  * const { leaveSeat } = useLiveSeatState('your_live_id');
  * leaveSeat({
+ *   liveID: 'your_live_id',
  *   onSuccess: () => console.log('下麦成功'),
  *   onError: (error) => console.error('下麦失败:', error)
  * });
@@ -186,6 +188,7 @@ function leaveSeat(params : LeaveSeatOptions) : void {
  * import { useLiveSeatState } from '@/uni_modules/tuikit-atomic-x/state/LiveSeatState';
  * const { muteMicrophone } = useLiveSeatState('your_live_id');
  * muteMicrophone({
+ *   liveID: 'your_live_id',
  *   onSuccess: () => console.log('麦克风静音成功'),
  *   onError: (error) => console.error('麦克风静音失败:', error)
  * });
@@ -203,6 +206,7 @@ function muteMicrophone(params : MuteMicrophoneOptions) : void {
  * import { useLiveSeatState } from '@/uni_modules/tuikit-atomic-x/state/LiveSeatState';
  * const { unmuteMicrophone } = useLiveSeatState('your_live_id');
  * unmuteMicrophone({
+ *   liveID: 'your_live_id',
  *   onSuccess: () => console.log('麦克风取消静音成功'),
  *   onError: (error) => console.error('麦克风取消静音失败:', error)
  * });
@@ -220,7 +224,8 @@ function unmuteMicrophone(params : UnmuteMicrophoneOptions) : void {
  * import { useLiveSeatState } from '@/uni_modules/tuikit-atomic-x/state/LiveSeatState';
  * const { kickUserOutOfSeat } = useLiveSeatState('your_live_id');
  * kickUserOutOfSeat({
- *   seatIndex: 1,
+ *   liveID: 'your_live_id',
+ *   userID: '用户 ID',
  *   onSuccess: () => console.log('踢出用户成功'),
  *   onError: (error) => console.error('踢出用户失败:', error)
  * });
@@ -238,8 +243,9 @@ function kickUserOutOfSeat(params : KickUserOutOfSeatOptions) : void {
  * import { useLiveSeatState } from '@/uni_modules/tuikit-atomic-x/state/LiveSeatState';
  * const { moveUserToSeat } = useLiveSeatState('your_live_id');
  * moveUserToSeat({
- *   fromSeatIndex: 1,
- *   toSeatIndex: 3,
+ *   liveID: 'your_live_id',
+ *   userID: '用户 ID',
+ *   targetIndex: 1,
  *   onSuccess: () => console.log('用户移动成功'),
  *   onError: (error) => console.error('用户移动失败:', error)
  * });
@@ -257,6 +263,7 @@ function moveUserToSeat(params : MoveUserToSeatOptions) : void {
  * import { useLiveSeatState } from '@/uni_modules/tuikit-atomic-x/state/LiveSeatState';
  * const { lockSeat } = useLiveSeatState('your_live_id');
  * lockSeat({
+ *   liveID: 'your_live_id',
  *   seatIndex: 2,
  *   onSuccess: () => console.log('座位锁定成功'),
  *   onError: (error) => console.error('座位锁定失败:', error)
@@ -275,6 +282,7 @@ function lockSeat(params : LockSeatOptions) : void {
  * import { useLiveSeatState } from '@/uni_modules/tuikit-atomic-x/state/LiveSeatState';
  * const { unlockSeat } = useLiveSeatState('your_live_id');
  * unlockSeat({
+ *   liveID: 'your_live_id',
  *   seatIndex: 2,
  *   onSuccess: () => console.log('座位解锁成功'),
  *   onError: (error) => console.error('座位解锁失败:', error)
@@ -293,7 +301,9 @@ function unlockSeat(params : UnlockSeatOptions) : void {
  * import { useLiveSeatState } from '@/uni_modules/tuikit-atomic-x/state/LiveSeatState';
  * const { openRemoteCamera } = useLiveSeatState('your_live_id');
  * openRemoteCamera({
- *   seatIndex: 1,
+ *   liveID: 'your_live_id',
+ *   userID: '用户 ID',
+ *   policy: 'UNLOCK_ONLY',
  *   onSuccess: () => console.log('远程摄像头开启成功'),
  *   onError: (error) => console.error('远程摄像头开启失败:', error)
  * });
@@ -311,7 +321,8 @@ function openRemoteCamera(params : OpenRemoteCameraOptions) : void {
  * import { useLiveSeatState } from '@/uni_modules/tuikit-atomic-x/state/LiveSeatState';
  * const { closeRemoteCamera } = useLiveSeatState('your_live_id');
  * closeRemoteCamera({
- *   seatIndex: 1,
+ *   liveID: 'your_live_id',
+ *   userID: '用户 ID',
  *   onSuccess: () => console.log('远程摄像头关闭成功'),
  *   onError: (error) => console.error('远程摄像头关闭失败:', error)
  * });
@@ -329,7 +340,9 @@ function closeRemoteCamera(params : CloseRemoteCameraOptions) : void {
  * import { useLiveSeatState } from '@/uni_modules/tuikit-atomic-x/state/LiveSeatState';
  * const { openRemoteMicrophone } = useLiveSeatState('your_live_id');
  * openRemoteMicrophone({
- *   seatIndex: 1,
+ *   liveID: 'your_live_id',
+ *   userID: '用户 ID',
+ *   policy: 'UNLOCK_ONLY',
  *   onSuccess: () => console.log('远程麦克风开启成功'),
  *   onError: (error) => console.error('远程麦克风开启失败:', error)
  * });
@@ -347,7 +360,8 @@ function openRemoteMicrophone(params : OpenRemoteMicrophoneOptions) : void {
  * import { useLiveSeatState } from '@/uni_modules/tuikit-atomic-x/state/LiveSeatState';
  * const { closeRemoteMicrophone } = useLiveSeatState('your_live_id');
  * closeRemoteMicrophone({
- *   seatIndex: 1,
+ *   liveID: 'your_live_id',
+ *   userID: '用户 ID',
  *   onSuccess: () => console.log('远程麦克风关闭成功'),
  *   onError: (error) => console.error('远程麦克风关闭失败:', error)
  * });

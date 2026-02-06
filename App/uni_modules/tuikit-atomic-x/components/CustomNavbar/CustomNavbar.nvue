@@ -1,0 +1,248 @@
+<template>
+  <view
+    :class="['custom-navbar', {
+      'fixed-navbar': position === 'fixed'
+    }]"
+    :style="navbarStyle"
+  >
+    <!-- 状态栏占位 -->
+    <view class="navbar__status-bar" :style="{ height: statusBarHeight + 'px' }"></view>
+    
+    <!-- 导航栏主体 -->
+    <view class="navbar__content">
+      <!-- 左侧区域 -->
+      <view class="navbar__left" @tap="handleBack">
+        <slot name="left">
+          <view v-if="showBack" class="navbar__back-btn">
+            <image class="navbar__back-icon" :src="arrowLeftIcon" />
+          </view>
+        </slot>
+      </view>
+      
+      <!-- 中间标题区域（绝对定位实现视觉居中） -->
+      <view class="navbar__center">
+        <slot name="center">
+          <text class="navbar__title" :style="titleStyle" :lines="1">{{ title }}</text>
+        </slot>
+      </view>
+      
+      <!-- 右侧区域 -->
+      <view v-if="showMenu" class="navbar__right" @tap="handleMenuTap">
+        <slot name="right">
+            <image class="navbar__menu-icon" :src="menuIcon" mode="aspectFit" />
+        </slot>
+      </view>
+    </view>
+    
+    <!-- 底部阴影/分割线 -->
+    <view v-if="showShadow" class="navbar__shadow"></view>
+  </view>
+</template>
+
+<script setup>
+import { ref, computed, onMounted } from 'vue';
+import arrowLeftIcon from './assets/nvue_arrow-left.png';
+import menuIcon from './assets/nvue_dots.png';
+
+/**
+ * CustomNavbar - 自定义导航栏组件
+ * 
+ * @description 适用于 Uniapp NVue (App端) 的自定义导航栏，支持配置驱动模式
+ * 
+ * @property {String} title - 导航栏标题
+ * @property {Boolean} showBack - 是否显示返回按钮，默认 true
+ * @property {Boolean} showShadow - 是否显示底部阴影，默认 true
+ * @property {String} backgroundColor - 导航栏背景色，默认 #FFFFFF
+ * @property {String} titleColor - 标题颜色，默认 #333333
+ * @property {String} homePath - 首页路径，默认 /pages/index/index
+ * 
+ * @event {Function} back - 返回按钮点击事件，返回 { type: 'back' | 'home' }
+ * @event {Function} menuSelect - 菜单选择事件，返回 { code: string, label: string, index: number }
+ */
+
+const props = defineProps({
+  position: {
+    type: String,
+    default: 'static'
+  },
+  // 导航栏标题
+  title: {
+    type: String,
+    default: ''
+  },
+  // 是否显示返回按钮
+  showBack: {
+    type: Boolean,
+    default: true
+  },
+  // 是否显示菜单按钮
+  showMenu: {
+    type: Boolean,
+    default: false
+  },
+  // 是否显示底部阴影
+  showShadow: {
+    type: Boolean,
+    default: true
+  },
+  // 背景颜色
+  backgroundColor: {
+    type: String,
+    default: '#FFFFFF'
+  },
+  // 标题颜色
+  titleColor: {
+    type: String,
+    default: '#333333'
+  },
+  // 首页路径（无上一页时跳转）
+  homePath: {
+    type: String,
+    default: '/pages/index/index'
+  }
+});
+
+const emit = defineEmits(['back', 'menuSelect']);
+
+// 状态栏高度
+const statusBarHeight = ref(44);
+
+// 初始化获取系统信息
+onMounted(() => {
+  try {
+    const systemInfo = uni.getSystemInfoSync();
+    statusBarHeight.value = systemInfo.statusBarHeight || 44;
+  } catch (e) {
+    console.error('获取系统信息失败:', e);
+    statusBarHeight.value = 44;
+  }
+});
+
+// 导航栏整体样式
+const navbarStyle = computed(() => ({
+  backgroundColor: props.backgroundColor,
+}));
+
+// 标题样式
+const titleStyle = computed(() => ({
+  color: props.titleColor
+}));
+
+/**
+ * 处理返回按钮点击
+ * 判断页面栈：有上一页则 navigateBack，否则 reLaunch 到首页
+ */
+const handleBack = () => {
+  emit('back');
+};
+
+/**
+ * 处理菜单按钮点击
+ * 使用原生 ActionSheet 显示菜单项
+ */
+const handleMenuTap = () => {
+  emit('menuSelect');
+};
+</script>
+
+<style scoped>
+.custom-navbar {
+  /* NVue 默认 flex-direction: column */
+  background-color: #FFFFFF;
+}
+
+.fixed-navbar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+}
+
+/* 状态栏占位 */
+.navbar__status-bar {
+  width: 750rpx;
+}
+
+/* 导航栏主体 - 固定高度 44px */
+.navbar__content {
+  height: 88rpx; /* 44px = 88rpx */
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  position: relative;
+}
+
+/* 左侧区域 - 固定宽度保证热区 */
+.navbar__left {
+  width: 100rpx;
+  height: 88rpx;
+  justify-content: center;
+  align-items: flex-start;
+  padding-left: 24rpx;
+  z-index: 2;
+}
+
+/* 返回按钮 */
+.navbar__back-btn {
+  width: 60rpx;
+  height: 60rpx;
+  justify-content: center;
+  align-items: center;
+}
+
+.navbar__back-icon {
+  width: 54rpx;
+  height: 54rpx;
+}
+
+/* 中间标题区域 - 绝对定位实现视觉居中 */
+.navbar__center {
+  position: absolute;
+  left: 100rpx;
+  right: 100rpx;
+  top: 0;
+  bottom: 0;
+  justify-content: center;
+  align-items: center;
+  z-index: 1;
+}
+
+.navbar__title {
+  font-size: 34rpx;
+  font-weight: 600;
+  color: rgba(0, 0, 0, 0.9);
+  text-align: center;
+  text-overflow: ellipsis;
+  lines: 1;
+}
+
+/* 右侧区域 - 固定宽度与左侧对称 */
+.navbar__right {
+  width: 100rpx;
+  height: 88rpx;
+  justify-content: center;
+  align-items: flex-end;
+  padding-right: 24rpx;
+  z-index: 2;
+}
+
+/* 菜单按钮 */
+.navbar__menu-btn {
+  width: 60rpx;
+  height: 60rpx;
+  justify-content: center;
+  align-items: center;
+}
+
+.navbar__menu-icon {
+  width: 48rpx;
+  height: 48rpx;
+}
+
+/* 底部阴影 */
+.navbar__shadow {
+  height: 2rpx;
+  background-color: #E5E5E5;
+  /* NVue 不支持 box-shadow，使用边框模拟 */
+}
+</style>

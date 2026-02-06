@@ -176,6 +176,17 @@
         liveID: props.liveID,
         seatIndex: props.seatIndex, // 申请上麦传 -1, 随机分配麦位, xinlxin 反馈
         timeout: 30,
+        success: () => {
+        },
+        fail: (errorCode) => {
+          if (errorCode === 100006) {
+            uni.showToast({
+              icon: 'none',
+              title: '您当前无法执行此操作（可能是无权限，或受场景限制等原因）'
+            })
+          }
+          uni.$localGuestStatus = 'IDLE'
+        },
       });
       uni.$localGuestStatus = 'USER_APPLYING'
       close();

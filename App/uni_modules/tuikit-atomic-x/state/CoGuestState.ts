@@ -124,7 +124,7 @@ const candidates = ref<LiveUserInfoParam[]>([]);
  * @example
  * import { useCoGuestState } from '@/uni_modules/tuikit-atomic-x/state/CoGuestState';
  * const { applyForSeat } = useCoGuestState("your_live_id");
- * applyForSeat({ seatIndex: 2, timeout: 10 , extension: 'extra info'});
+ * applyForSeat({ liveID: 'your_live_id', seatIndex: 2, timeout: 30 , extension: 'extra info'});
  */
 function applyForSeat(params: ApplyForSeatOptions): void {
   callUTSFunction("applyForSeat", params);
@@ -138,7 +138,7 @@ function applyForSeat(params: ApplyForSeatOptions): void {
  * @example
  * import { useCoGuestState } from '@/uni_modules/tuikit-atomic-x/state/CoGuestState';
  * const { cancelApplication } = useCoGuestState("your_live_id");
- * cancelApplication({});
+ * cancelApplication({ liveID: 'your_live_id' });
  */
 function cancelApplication(params: CancelApplicationOptions): void {
   callUTSFunction("cancelApplication", params);
@@ -152,7 +152,7 @@ function cancelApplication(params: CancelApplicationOptions): void {
  * @example
  * import { useCoGuestState } from '@/uni_modules/tuikit-atomic-x/state/CoGuestState';
  * const { acceptApplication } = useCoGuestState("your_live_id");
- * acceptApplication({ userID: 'user123', seatIndex: 0 });
+ * acceptApplication({ liveID: 'your_live_id', userID: 'user123', seatIndex: 0 });
  */
 function acceptApplication(params: AcceptApplicationOptions): void {
   callUTSFunction("acceptApplication", params);
@@ -166,7 +166,7 @@ function acceptApplication(params: AcceptApplicationOptions): void {
  * @example
  * import { useCoGuestState } from '@/uni_modules/tuikit-atomic-x/state/CoGuestState';
  * const { rejectApplication } = useCoGuestState("your_live_id");
- * rejectApplication({ userID: 'user123' });
+ * rejectApplication({ liveID: 'your_live_id', userID: 'user123' });
  */
 function rejectApplication(params: RejectApplicationOptions): void {
   callUTSFunction("rejectApplication", params);
@@ -180,7 +180,7 @@ function rejectApplication(params: RejectApplicationOptions): void {
  * @example
  * import { useCoGuestState } from '@/uni_modules/tuikit-atomic-x/state/CoGuestState';
  * const { inviteToSeat } = useCoGuestState("your_live_id");
- * inviteToSeat({ userID: 'user123', seatIndex: 2, timeout: 10 , extension: 'extra info'});
+ * inviteToSeat({ liveID: 'your_live_id', inviteeID: 'user123', seatIndex: 2, timeout: 30 , extension: 'extra info'});
  */
 function inviteToSeat(params: InviteToSeatOptions): void {
   callUTSFunction("inviteToSeat", params);
@@ -208,7 +208,7 @@ function cancelInvitation(params: CancelInvitationOptions): void {
  * @example
  * import { useCoGuestState } from '@/uni_modules/tuikit-atomic-x/state/CoGuestState';
  * const { acceptInvitation } = useCoGuestState("your_live_id");
- * acceptInvitation({ inviterID: 'user123' });
+ * acceptInvitation({ liveID: 'your_live_id', inviterID: 'user123' });
  */
 function acceptInvitation(params: AcceptInvitationOptions): void {
   callUTSFunction("acceptInvitation", params);
@@ -222,7 +222,7 @@ function acceptInvitation(params: AcceptInvitationOptions): void {
  * @example
  * import { useCoGuestState } from '@/uni_modules/tuikit-atomic-x/state/CoGuestState';
  * const { rejectInvitation } = useCoGuestState("your_live_id");
- * rejectInvitation({ inviterID: 'user123'});
+ * rejectInvitation({ liveID: 'your_live_id', inviterID: 'user123'});
  */
 function rejectInvitation(params: RejectInvitationOptions): void {
   callUTSFunction("rejectInvitation", params);
@@ -236,7 +236,7 @@ function rejectInvitation(params: RejectInvitationOptions): void {
  * @example
  * import { useCoGuestState } from '@/uni_modules/tuikit-atomic-x/state/CoGuestState';
  * const { disconnect } = useCoGuestState("your_live_id");
- * disconnect();
+ * disconnect({ liveID: 'your_live_id' });
  */
 function disconnect(params: DisconnectOptions): void {
   callUTSFunction("disconnect", params);

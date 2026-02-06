@@ -1,0 +1,854 @@
+<template>
+  <view class="group-chat-setting">
+    <!-- 导航栏 -->
+    <CustomNavbar
+      title="群设置"
+      :showBack="true"
+      @back="handleBack"
+    />
+
+    <view v-if="isGroupNotExist">
+      <text class="group-not-exist">群聊已不存在</text>
+    </view>
+
+    <!-- 内容区域 -->
+    <scroll-view v-else class="content" scroll-y="true">
+      <!-- 群名称区 -->
+      <view class="group-name-section">
+        <text class="group-name-section__label">群名称</text>
+        <view class="group-name-section__row" @tap="handleEditGroupName">
+          <text class="group-name-section__value">{{ groupName || '未设置' }}</text>
+          <image
+            v-if="canEditGroupName"
+            class="group-name-section__edit"
+            :src="editIcon"
+          />
+        </view>
+      </view>
+
+      <!-- 分隔区 -->
+      <view class="section-gap"></view>
+
+      <!-- 群成员区 -->
+      <view class="member-section">
+        <view class="member-section__header">
+          <text class="member-section__label">群成员</text>
+          <view class="member-section__right" @tap="handleMemberListClick">
+            <text class="member-section__count">{{ memberCount }}人</text>
+            <image class="member-section__arrow" :src="arrowRightIcon" />
+          </view>
+        </view>
+        <MemberAvatarList
+          :members="displayMembers"
+          :maxDisplay="4"
+          :showAddButton="canInviteMember"
+          :showRemoveButton="canRemoveMember"
+          :showName="true"
+          @add="handleAddMember"
+          @remove="handleRemoveMember"
+          @member-click="handleMemberClick"
+        />
+      </view>
+
+      <!-- 分隔区 -->
+      <view class="section-gap"></view>
+
+      <!-- 群公告 -->
+      <view class="notice-section">
+        <text class="notice-section__label">群公告</text>
+        <view class="notice-section__content" @tap="handleNoticeClick">
+          <text class="notice-section__value">{{ notice || '暂无公告' }}</text>
+          <image v-if="canEditGroupNotice" class="notice-section__arrow" :src="editIcon" />
+        </view>
+      </view>
+
+      <!-- 群管理（权限控制） -->
+      <SettingRowNavigate
+        v-if="showGroupManagementEntry"
+        label="群管理"
+        :value="''"
+        @click="handleGroupManagementClick"
+      />
+
+      <!-- 群类型 -->
+      <SettingRowNavigate
+        label="群类型"
+        :value="groupTypeText"
+        :disabled="true"
+      />
+
+      <!-- 主动加群审批方式 -->
+      <SettingRowNavigate
+        label="主动加群审批模式"
+        :value="joinOptionText"
+        :disabled="!canEditGroupProfile"
+        @click="handleJoinGroupApprovalTypeClick"
+      />
+
+      <!-- 邀请入群审批方式 -->
+      <SettingRowNavigate
+        label="邀请入群审批模式"
+        :value="inviteOptionText"
+        :disabled="!canEditGroupProfile"
+        @click="handleInviteGroupApprovalTypeClick"
+      />
+
+      <!-- 分隔区 -->
+      <view class="section-gap"></view>
+
+      <!-- 我的群昵称 -->
+      <view class="nickname-row">
+        <text class="nickname-row__label">我的群昵称</text>
+        <view class="nickname-row__right" @tap="handleEditNickname">
+          <text class="nickname-row__value">{{ selfNameCard || '未设置' }}</text>
+          <image class="nickname-row__edit" :src="editIcon" />
+        </view>
+      </view>
+
+      <!-- 分隔区 -->
+      <view class="section-gap"></view>
+
+      <!-- 开关设置区 -->
+      <SettingRowToggle
+        label="消息免打扰"
+        :modelValue="isNotDisturb"
+        @change="handleNotDisturbChange"
+      />
+      <SettingRowToggle
+        label="置顶聊天"
+        :modelValue="isPinned"
+        @change="handlePinnedChange"
+      />
+
+      <!-- 分隔区 -->
+      <view class="section-gap"></view>
+
+      <!-- 操作按钮区 -->
+      <!-- 转让群主 -->
+      <SettingRowButton
+        v-if="canTransferOwnership"
+        label="转让群主"
+        color="#0066FF"
+        @click="handleTransferOwnership"
+      />
+
+      <!-- 解散群 -->
+      <SettingRowButton
+        v-if="canDismissGroup"
+        label="解散群聊"
+        color="#FF3B30"
+        @click="handleDismissClick"
+      />
+
+      <!-- 退出群 -->
+      <SettingRowButton
+        v-if="canQuitGroup"
+        label="退出群聊"
+        color="#FF3B30"
+        @click="handleQuitClick"
+      />
+
+      <!-- 底部安全区 -->
+      <view class="safe-area-bottom"></view>
+    </scroll-view>
+
+    <!-- 群名称编辑弹窗 -->
+    <TextInputPopup
+      v-model:visible="showGroupNamePopup"
+      title="修改群名称"
+      :value="groupName"
+      placeholder="请输入群名称"
+      :maxLength="20"
+      :maxByteLength="100"
+      @confirm="handleGroupNameConfirm"
+    />
+
+    <!-- 群公告编辑弹窗 -->
+    <TextInputPopup
+      v-model:visible="showNoticePopup"
+      title="修改群公告"
+      :value="notice"
+      placeholder="请输入群公告"
+      :maxLength="100"
+      :maxByteLength="400"
+      @confirm="handleNoticeConfirm"
+    />
+
+    <!-- 我的群昵称编辑弹窗 -->
+    <TextInputPopup
+      v-model:visible="showNicknamePopup"
+      title="修改我的群昵称"
+      :value="selfNameCard || ''"
+      placeholder="请输入群昵称"
+      :maxLength="15"
+      :maxByteLength="50"
+      @confirm="handleNicknameConfirm"
+    />
+
+    <!-- 加群方式选择弹窗 -->
+    <ActionSheet
+      v-model:visible="showJoinOptionSheet"
+      :options="joinOptions"
+      @select="handleJoinOptionSelect"
+    />
+
+    <!-- 邀请入群方式选择弹窗 -->
+    <ActionSheet
+      v-model:visible="showInviteOptionSheet"
+      :options="inviteOptions"
+      @select="handleInviteOptionSelect"
+    />
+
+    <!-- 退出群聊确认弹窗 -->
+    <ConfirmDialog
+      v-model:visible="showQuitConfirm"
+      title="确定退出该群聊？"
+      description="退出后将不再接收该群聊的消息"
+      confirmText="确定退出"
+      @confirm="handleQuitConfirm"
+      @cancel="handleQuitCancel"
+    />
+
+    <!-- 解散群确认弹窗 -->
+    <ConfirmDialog
+      v-model:visible="showDismissConfirm"
+      title="确定解散该群聊？"
+      description="解散后所有群成员将被移出群聊，且无法恢复"
+      confirmText="确定解散"
+      @confirm="handleDismissConfirm"
+      @cancel="handleDismissCancel"
+    />
+  </view>
+</template>
+
+<script setup lang="ts">
+import { ref, computed, onBeforeMount, onUnmounted, watch } from 'vue';
+import SettingRowToggle from './components/SettingRowToggle.nvue';
+import SettingRowNavigate from './components/SettingRowNavigate.nvue';
+import SettingRowButton from './components/SettingRowButton.nvue';
+import TextInputPopup from './components/TextInputPopup.nvue';
+import ActionSheet, { type ActionSheetOption } from './components/ActionSheet.nvue';
+import ConfirmDialog from './components/ConfirmDialog.nvue';
+import MemberAvatarList from './components/MemberAvatarList.nvue';
+import CustomNavbar from '../CustomNavbar/CustomNavbar.nvue';
+import { useGroupMemberState } from '../../state/GroupMemberState';
+import { useGroupState } from '../../state/GroupState';
+import { useLoginState } from '../../state/LoginState';
+import {
+  GroupType,
+  GroupJoinOption,
+  ReceiveMessageOpt,
+  GroupMemberRole,
+} from '../../types/group';
+import { ConversationReceiveOption } from '../../types/conversation';
+import { useConversationListState } from '../../state/ConversationListState';
+import { hasPermission, showGroupManagement, GroupPermission } from './utils/groupPermission';
+import { UserPickerType } from '../../types/userpicker';
+import { throttle } from '../../utils/lodash';
+import editIcon from './assets/nvue_edit.png';
+import arrowRightIcon from './assets/nvue_arrow-right.png';
+import type { GroupInfo, GroupMember } from '../../types/group';
+
+interface Props {
+  conversationID: string;
+}
+
+const props = defineProps<Props>();
+
+// 获取 groupID
+const groupID = props.conversationID.startsWith('group_') ? props.conversationID.replace('group_', '') : '';
+
+// ============================================================================
+//                                  init states
+// ============================================================================
+// 获取会话置顶信息
+const {
+  conversationList,
+  pinConversation,
+  fetchConversationInfo
+} = useConversationListState('groupSetting');
+// 获取群基础信息
+const {
+  joinedGroupList,
+  fetchJoinedGroupList,
+  dismissGroup, 
+  quitGroup,
+  updateGroupProfile,
+  setGroupJoinOption: setGroupJoinOptionAPI,
+  setGroupInviteOption: setGroupInviteOptionAPI,
+  setReceiveMessageOpt: setReceiveMessageOptAPI
+} = useGroupState();
+
+// 获取群成员信息
+const {
+  groupMemberList: allMembers,
+  fetchGroupMembersInfo,
+  setSelfGroupNameCard,
+  destroyStore,
+} = useGroupMemberState({ groupID });
+
+// 获取登录用户信息
+const { loginUserInfo, getLoginUserInfo } = useLoginState();
+
+// ============================================================================
+//                                 UI variables
+// ============================================================================
+
+const isGroupNotExist = ref(false);
+
+// 群信息（从 joinedGroupList 响应式获取）
+const groupInfo = computed(() => {
+  const group = joinedGroupList.value.find(group => group.groupID === groupID) || null;
+  return group;
+});
+
+// 群信息(从上至下)
+const groupName = computed(() => (groupInfo.value as GroupInfo)?.groupName ?? '');
+const memberCount = computed(() => (groupInfo.value as GroupInfo)?.memberCount ?? 0);
+const notice = computed(() => (groupInfo.value as GroupInfo)?.notice ?? '');
+const selfRole = computed(() => (groupInfo.value as GroupInfo)?.selfRole ?? GroupMemberRole.Member);
+const groupType = computed(() => (groupInfo.value as GroupInfo)?.groupType ?? GroupType.Work);
+const joinGroupApprovalType = computed(() => (groupInfo.value as GroupInfo)?.joinOption ?? GroupJoinOption.Unknown);
+const inviteToGroupApprovalType = computed(() => (groupInfo.value as GroupInfo)?.inviteOption ?? GroupJoinOption.Unknown);
+const selfNameCard = ref('');
+const isNotDisturb = computed(() => (groupInfo.value as GroupInfo)?.receiveMessageOpt !== ReceiveMessageOpt.Receive);
+const isPinned = computed(() => {
+  const currentConversation = conversationList.value.find(conv => conv.conversationID === props.conversationID);
+  return currentConversation?.isPinned ?? false;
+});
+
+// 弹窗状态
+const showGroupNamePopup = ref(false);
+const showNicknamePopup = ref(false);
+const showJoinOptionSheet = ref(false);
+const showInviteOptionSheet = ref(false);
+const showQuitConfirm = ref(false);
+const showDismissConfirm = ref(false);
+const showNoticePopup = ref(false);
+
+// ActionSheet 选项
+const joinOptions: ActionSheetOption[] = [
+  { label: '自由加入', value: 2 },
+  { label: '需要审批', value: 1 },
+  { label: '禁止加入', value: 0 },
+];
+
+const inviteOptions: ActionSheetOption[] = [
+  { label: '自由加入', value: 2 },
+  { label: '需要审批', value: 1 },
+  { label: '禁止加入', value: 0 },
+];
+// ============================================================================
+// 权限计算属性
+// ============================================================================
+
+// 是否可编辑群名称
+const canEditGroupName = computed(() => {
+  return hasPermission(groupType.value, selfRole.value, GroupPermission.EDIT_GROUP_PROFILE_NAME);
+});
+
+const canEditGroupNotice = computed(() => {
+  return hasPermission(groupType.value, selfRole.value, GroupPermission.EDIT_GROUP_PROFILE_NOTIFICATION);
+});
+
+// 是否可编辑群资料（加群方式等）
+const canEditGroupProfile = computed(() => {
+  return hasPermission(groupType.value, selfRole.value, GroupPermission.EDIT_GROUP_PROFILE_ELSE);
+});
+
+// 是否可删除成员
+const canRemoveMember = computed(() => {
+  return hasPermission(groupType.value, selfRole.value, GroupPermission.REMOVE_MEMBER);
+});
+
+// 是否可邀请成员（邀请模式为"禁止加入"时不显示添加按钮）
+const canInviteMember = computed(() => {
+  return inviteToGroupApprovalType.value !== GroupJoinOption.Forbid;
+});
+
+// 是否显示群管理入口
+const showGroupManagementEntry = computed(() => {
+  return showGroupManagement(groupType.value, selfRole.value);
+});
+
+// 是否可转让群主
+const canTransferOwnership = computed(() => {
+  return hasPermission(groupType.value, selfRole.value, GroupPermission.TRANSFER_OWNERSHIP);
+});
+
+// 是否可解散群
+const canDismissGroup = computed(() => {
+  return hasPermission(groupType.value, selfRole.value, GroupPermission.DISMISS_GROUP);
+});
+
+// 是否可退出群
+const canQuitGroup = computed(() => {
+  return hasPermission(groupType.value, selfRole.value, GroupPermission.QUIT_GROUP);
+});
+
+// ============================================================================
+// 显示相关计算属性
+// ============================================================================
+
+// 显示的成员列表
+const displayMembers = computed(() => {
+  return allMembers.value || [];
+});
+
+// 群类型文字
+const groupTypeText = computed(() => {
+  const typeMap: Record<GroupType, string> = {
+    [GroupType.Work]: '工作群',
+    [GroupType.Public]: '公开群',
+    [GroupType.Meeting]: '会议群',
+    [GroupType.AVChatRoom]: '直播群',
+    [GroupType.Community]: '社群',
+  };
+  return typeMap[groupType.value] || '暂无';
+});
+
+// 加群方式文字
+const joinOptionText = computed(() => {
+  const optionMap: Record<GroupJoinOption, string> = {
+    [GroupJoinOption.Any]: '自由加入',
+    [GroupJoinOption.Auth]: '需要审批',
+    [GroupJoinOption.Forbid]: '禁止加入',
+    [GroupJoinOption.Unknown]: '暂无',
+  };
+  return optionMap[joinGroupApprovalType.value] || '暂无';
+});
+
+// 邀请入群方式文字
+const inviteOptionText = computed(() => {
+  const optionMap: Record<GroupJoinOption, string> = {
+    [GroupJoinOption.Any]: '自由加入',
+    [GroupJoinOption.Auth]: '需要审批',
+    [GroupJoinOption.Forbid]: '禁止加入',
+    [GroupJoinOption.Unknown]: '暂无',
+  };
+  return optionMap[inviteToGroupApprovalType.value] || '暂无';
+});
+
+// ============================================================================
+// 生命周期
+// ============================================================================
+
+/**
+ * 拉取自己的群名片
+ * fetchGroupMembersInfo
+ * - SelfNameCard
+ */
+async function fetchSelfNameCard() {
+  if (!groupID) return;
+  try {
+    const loginUserInfo = uni['__TUIKIT_LOGIN_STATE__']['loginUserInfo'].value;
+    if (loginUserInfo.userID) {
+      const groupMemberList = await fetchGroupMembersInfo([loginUserInfo.userID]);
+      const [selfMemberInfo] = groupMemberList;
+      if (selfMemberInfo) {
+        selfNameCard.value = selfMemberInfo.nameCard;
+      }
+    } else {
+      console.error('[GroupChatSetting] Failed to fetch login user info');
+    }
+  } catch (error) {
+    if (error.errCode === 10010) {
+      isGroupNotExist.value = true;
+      return;
+    }
+    console.error('[GroupChatSetting] Failed to fetch self name card:', error);
+  }
+}
+
+onBeforeMount(async () => {
+  if (!groupID) return;
+  // 拉取已加入群列表（响应式自动更新 groupInfo）
+  await fetchJoinedGroupList();
+  // 拉取会话置顶状态
+  await fetchConversationInfo(props.conversationID);
+  // 拉取群名片
+  await fetchSelfNameCard();
+});
+
+onUnmounted(() => {
+  destroyStore();
+});
+
+// ============================================================================
+// 事件处理
+// ============================================================================
+
+// 返回
+const handleBack = () => {
+  uni.navigateBack();
+};
+
+// 编辑群名称
+const handleEditGroupName = () => {
+  if (canEditGroupName.value) {
+    showGroupNamePopup.value = true;
+  }
+};
+
+// 确认修改群名称
+const handleGroupNameConfirm = async (newName: string) => {
+  const newGroupName = newName.trim();
+  if (newGroupName === '') {
+    uni.showToast({
+      title: '群名称不能为空',
+      icon: 'none',
+    });
+    return;
+  }
+  if (newGroupName !== groupName.value) {
+    await updateGroupProfile({ groupID, groupName: newGroupName });
+    // joinedGroupList 会自动更新
+  }
+};
+
+// 点击群成员列表
+const handleMemberListClick = () => {
+  uni.navigateTo({
+    url: `/pages/scenes/chat/groupMemberList/index?conversationID=${props.conversationID}`,
+  });
+};
+
+// 添加成员
+const handleAddMember = () => {
+  uni.navigateTo({
+    url: `/pages/scenes/chat/userPicker/userPicker?businessType=${UserPickerType.INVITE_GROUP_MEMBER}&conversationID=${props.conversationID}`,
+  });
+};
+
+// 删除成员
+const handleRemoveMember = () => {
+  uni.navigateTo({
+    url: `/pages/scenes/chat/userPicker/userPicker?businessType=${UserPickerType.REMOVE_GROUP_MEMBER}&conversationID=${props.conversationID}`,
+  });
+};
+
+// 点击成员
+const handleMemberClick = (member: GroupMember) => {
+  // TODO: 跳转到成员详情页面
+};
+
+// 点击群公告
+const handleNoticeClick = () => {
+  if (canEditGroupNotice.value) {
+    showNoticePopup.value = true;
+  }
+};
+
+// 确认修改群公告
+const handleNoticeConfirm = async (newNotice: string) => {
+  const newGroupNotice = newNotice.trim();
+  if (newGroupNotice !== notice.value) {
+    await updateGroupProfile({ groupID, notice: newGroupNotice });
+    // joinedGroupList 会自动更新
+  }
+};
+
+// 点击群管理
+const handleGroupManagementClick = () => {
+  uni.navigateTo({
+    url: `/pages/scenes/chat/groupManagement/index?conversationID=${props.conversationID}`,
+  });
+};
+
+// 点击加群方式
+const handleJoinGroupApprovalTypeClick = () => {
+  if (canEditGroupProfile.value) {
+    showJoinOptionSheet.value = true;
+  }
+};
+
+// 选择加群方式
+const handleJoinOptionSelect = async (option: ActionSheetOption) => {
+  await setGroupJoinOptionAPI(groupID, option.value as GroupJoinOption);
+  // joinedGroupList 会自动更新
+};
+
+// 点击邀请入群方式
+const handleInviteGroupApprovalTypeClick = () => {
+  if (canEditGroupProfile.value) {
+    showInviteOptionSheet.value = true;
+  }
+};
+
+// 选择邀请入群方式
+const handleInviteOptionSelect = async (option: ActionSheetOption) => {
+  await setGroupInviteOptionAPI(groupID, option.value as GroupJoinOption);
+  // joinedGroupList 会自动更新
+};
+
+// 编辑我的群昵称
+const handleEditNickname = () => {
+  showNicknamePopup.value = true;
+};
+
+// 确认修改我的群昵称
+const handleNicknameConfirm = async (newNickname: string) => {
+  const newSelfNameCard = newNickname.trim();
+  if (newSelfNameCard !== selfNameCard.value) {
+    await setSelfGroupNameCard(newSelfNameCard);
+    // 修改群名片后需要重新拉取
+    await fetchSelfNameCard();
+  }
+};
+
+// 切换免打扰 (使用 throttle 防止限频，trailing: true 确保最后一次操作生效)
+const handleNotDisturbChange = throttle(async (value: boolean) => {
+  await setReceiveMessageOptAPI(groupID, value ? ReceiveMessageOpt.NotNotify : ReceiveMessageOpt.Receive);
+  // joinedGroupList 会自动更新
+}, 1000, { leading: true, trailing: true });
+
+// 切换置顶
+const handlePinnedChange = (value: boolean) => {
+  pinConversation(props.conversationID, value);
+};
+
+// 转让群主
+const handleTransferOwnership = () => {
+  uni.navigateTo({
+    url: `/pages/scenes/chat/userPicker/userPicker?businessType=${UserPickerType.TRANSFER_GROUP_OWNER}&conversationID=${props.conversationID}`,
+  });
+};
+
+// 点击退出群聊
+const handleQuitClick = () => {
+  showQuitConfirm.value = true;
+};
+
+// 取消退出
+const handleQuitCancel = () => {
+  // ConfirmDialog 会自动关闭
+};
+
+// 确认退出
+const handleQuitConfirm = () => {
+  quitGroup(groupID).then(() => {
+    uni.navigateBack({ delta: 2 });
+  });
+};
+
+// 点击解散群
+const handleDismissClick = () => {
+  showDismissConfirm.value = true;
+};
+
+// 取消解散
+const handleDismissCancel = () => {
+  // ConfirmDialog 会自动关闭
+};
+
+// 确认解散
+const handleDismissConfirm = () => {
+  dismissGroup(groupID).then(() => {
+    uni.navigateBack({ delta: 2 });
+  });
+};
+</script>
+
+<style scoped>
+.group-chat-setting {
+  flex: 1;
+  background-color: #F0F2F7;
+}
+
+.group-not-exist {
+  text-align: center;
+  color: rgba(0, 0, 0, 0.55);
+  font-size: 32rpx;
+  padding: 40rpx;
+}
+
+/* 内容区域 */
+.content {
+  flex: 1;
+}
+
+/* 分隔区 */
+.section-gap {
+  height: 20rpx;
+  background-color: #F0F2F7;
+}
+
+/* 群名称区 */
+.group-name-section {
+  background-color: #FFFFFF;
+  padding: 24rpx 32rpx;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.group-name-section__label {
+  font-size: 32rpx;
+  color: rgba(0, 0, 0, 0.55);
+}
+
+.group-name-section__row {
+  flex-direction: row;
+  align-items: center;
+}
+
+.group-name-section__value {
+  font-size: 32rpx;
+  color: rgba(0, 0, 0, 0.9);
+  lines: 1;
+  text-overflow: ellipsis;
+  max-width: 400rpx;
+}
+
+.group-name-section__edit {
+  width: 28rpx;
+  height: 28rpx;
+  margin-left: 12rpx;
+}
+
+/* 群成员区 */
+.member-section {
+  background-color: #FFFFFF;
+}
+
+.member-section__header {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24rpx 32rpx 0;
+}
+
+.member-section__label {
+  font-size: 32rpx;
+  color: rgba(0, 0, 0, 0.55);
+}
+
+.member-section__right {
+  flex-direction: row;
+  align-items: center;
+}
+
+.member-section__count {
+  font-size: 32rpx;
+  color: rgba(0, 0, 0, 0.9);
+}
+
+.member-section__arrow {
+  width: 28rpx;
+  height: 28rpx;
+}
+
+/* 群公告区 */
+.notice-section {
+  background-color: #FFFFFF;
+  padding: 24rpx 32rpx;
+  border-bottom-width: 1rpx;
+  border-bottom-style: solid;
+  border-bottom-color: #E5E5E5;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.notice-section__label {
+  font-size: 32rpx;
+  color: rgba(0, 0, 0, 0.55);
+}
+
+.notice-section__content {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.notice-section__value {
+  font-size: 32rpx;
+  color: rgba(0, 0, 0, 0.9);
+  flex: 1;
+  lines: 1;
+  text-overflow: ellipsis;
+  max-width: 450rpx;
+}
+
+.notice-section__arrow {
+  margin-left: 12rpx;
+  width: 28rpx;
+  height: 28rpx;
+}
+
+/* 加群方式行 */
+.join-option-row {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  height: 100rpx;
+  padding: 0 32rpx;
+  background-color: #FFFFFF;
+  border-bottom-width: 1rpx;
+  border-bottom-style: solid;
+  border-bottom-color: #E5E5E5;
+}
+
+.join-option-row__label {
+  font-size: 32rpx;
+  color: #333333;
+}
+
+.join-option-row__right {
+  flex-direction: row;
+  align-items: center;
+}
+
+.join-option-row__value {
+  font-size: 32rpx;
+  color: #999999;
+  margin-right: 8rpx;
+}
+
+.join-option-row__arrow {
+  font-size: 32rpx;
+  color: #CCCCCC;
+}
+
+/* 我的群昵称行 */
+.nickname-row {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24rpx 32rpx;
+  background-color: #FFFFFF;
+  border-bottom-width: 1rpx;
+  border-bottom-style: solid;
+  border-bottom-color: #E5E5E5;
+}
+
+.nickname-row__label {
+  flex: 0 1 auto;
+  font-size: 32rpx;
+  color: rgba(0, 0, 0, 0.55);
+}
+
+.nickname-row__right {
+  flex-direction: row;
+  align-items: center;
+}
+
+.nickname-row__value {
+  font-size: 32rpx;
+  color: rgba(0, 0, 0, 0.9);
+  margin-right: 8rpx;
+  lines: 1;
+  text-overflow: ellipsis;
+  max-width: 400rpx;
+}
+
+.nickname-row__edit {
+  width: 28rpx;
+  height: 28rpx;
+}
+
+/* 底部安全区 */
+.safe-area-bottom {
+  height: 68rpx;
+}
+</style>

@@ -1,0 +1,178 @@
+<template>
+  <view class="presearch">
+    <view v-if="filteredHistory.length > 0" class="presearch__section">
+      <text class="presearch__title">搜索历史</text>
+      <view 
+        v-for="(item, index) in filteredHistory" 
+        :key="index"
+        class="presearch__item"
+        @click="handleHistoryClick(item)"
+      >
+        <image 
+          class="presearch__item-icon" 
+          src="../../../static/icon/search.png" 
+          mode="aspectFit"
+        />
+        <view class="presearch__item-text-wrapper">
+          <text v-if="highlightParts(item).before" class="presearch__item-text">{{ highlightParts(item).before }}</text>
+          <text v-if="highlightParts(item).match" class="presearch__item-text presearch__highlight">{{ highlightParts(item).match }}</text>
+          <text v-if="highlightParts(item).after" class="presearch__item-text">{{ highlightParts(item).after }}</text>
+        </view>
+      </view>
+    </view>
+    
+   <view 
+      v-if="showCloudSearch" 
+      class="presearch__cloud"
+      @click="handleCloudSearchClick"
+    >
+      <view class="presearch__cloud-icon-wrapper">
+        <image 
+          class="presearch__cloud-icon" 
+          src="../../../static/icon/search-white.png" 
+          mode="aspectFit"
+        />
+      </view>
+      <text class="presearch__cloud-text">进入全局搜索</text>
+    </view>
+  </view>
+</template>
+
+<script setup lang="ts">
+import { computed } from 'vue'
+import type { PresearchPlaceholderEmits } from '../../../types/search'
+
+const props = defineProps({
+  searchHistory: {
+    type: Array as () => string[],
+    default: () => []
+  },
+  keyword: {
+    type: String,
+    default: ''
+  },
+  showCloudSearch: {
+    type: Boolean,
+    default: false
+  }
+})
+
+const emit = defineEmits<PresearchPlaceholderEmits>()
+
+// 根据当前输入过滤历史记录
+const filteredHistory = computed(() => {
+  if (!props.keyword) {
+    return props.searchHistory
+  }
+  const kw = props.keyword.toLowerCase()
+  return props.searchHistory.filter(item => 
+    item.toLowerCase().includes(kw)
+  )
+})
+
+// 高亮匹配部分
+const highlightParts = (text: string) => {
+  if (!props.keyword) {
+    return { before: text, match: '', after: '' }
+  }
+  const kw = props.keyword.toLowerCase()
+  const lowerText = text.toLowerCase()
+  const index = lowerText.indexOf(kw)
+  
+  if (index === -1) {
+    return { before: text, match: '', after: '' }
+  }
+  
+  return {
+    before: text.substring(0, index),
+    match: text.substring(index, index + props.keyword.length),
+    after: text.substring(index + props.keyword.length)
+  }
+}
+
+const handleHistoryClick = (keyword: string) => {
+  emit('historyClick', keyword)
+}
+
+const handleCloudSearchClick = () => {
+  emit('cloudSearchClick')
+}
+</script>
+
+<style>
+.presearch {
+  flex: 1;
+  background-color: #F0F2F7;
+}
+
+.presearch__section {
+  padding: 20rpx 40rpx 10rpx;
+  background: #FFFFFF;
+}
+
+.presearch__title {
+  font-size: 28rpx;
+  font-weight: 400;
+  line-height: 48rpx;
+  color: rgba(0, 0, 0, 0.55);
+  padding-bottom: 8rpx;
+}
+
+.presearch__item {
+  flex-direction: row;
+  align-items: center;
+  padding: 16rpx 0;
+}
+
+.presearch__item-icon {
+  width: 36rpx;
+  height: 36rpx;
+  margin-right: 16rpx;
+}
+
+.presearch__item-text-wrapper {
+  flex: 1;
+  flex-direction: row;
+}
+
+.presearch__item-text {
+  font-size: 32rpx;
+  font-weight: 400;
+  line-height: 45rpx;
+  color: rgba(0, 0, 0, 0.9);
+}
+
+.presearch__highlight {
+  color: #1C66E5;
+}
+
+.presearch__cloud {
+  flex-direction: row;
+  align-items: center;
+  background: #FFFFFF;
+  padding: 20rpx 40rpx;
+  border-top: 2rpx solid #F0F2F7;
+}
+
+.presearch__cloud-icon-wrapper {
+  width: 60rpx;
+  height: 60rpx;
+  border-radius: 30rpx;
+  background-color: #1C66E5;
+  justify-content: center;
+  align-items: center;
+  margin-right: 20rpx;
+}
+
+.presearch__cloud-icon {
+  width: 32rpx;
+  height: 32rpx;
+}
+
+.presearch__cloud-text {
+  font-size: 28rpx;
+  font-weight: 400;
+  line-height: 40rpx;
+  color: rgba(0, 0, 0, 0.9);
+}
+</style>

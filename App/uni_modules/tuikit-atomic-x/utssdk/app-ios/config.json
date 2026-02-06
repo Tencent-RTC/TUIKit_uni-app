@@ -1,19 +1,23 @@
 {
-    "deploymentTarget": "14",
-    "dependencies-pods": [{
+	"frameworks": [
+		"CoreTelephony.framework"
+	],
+    "deploymentTarget": "13",
+    "dependencies-pods": [
+		{
             "name": "SVGAPlayer",
-            "version": "2.5.7"
-        }, {
+            "version": "2.5.7",
+			"source": "https://cdn.cocoapods.org/"
+        }, 
+		{
             "name": "Protobuf",
-            "version": "3.22.1"
+            "version": "3.22.1",
+			"source": "https://cdn.cocoapods.org/"
         },
         {
-            "name": "TXIMSDK_Plus_iOS_XCFramework",
-            "version": "8.7.7201"
-        },
-        {
-            "name": "TXLiteAVSDK_Professional",
-            "version": "12.7.19324"
+            "name": "AtomicXCore",
+            "version": "4.0.0",
+			"source": "https://cdn.cocoapods.org/"
         }
     ]
 }

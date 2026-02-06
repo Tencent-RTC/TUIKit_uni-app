@@ -1,0 +1,220 @@
+<template>
+  <view class="avatar-container" :class="{ 'pure-mode': pureMode }">
+    <!-- 头像图片 -->
+    <image 
+      v-if="avatarSrc || defaultAvatarUrl"
+      :src="avatarSrc || defaultAvatarUrl"
+      :style="avatarStyle"
+      class="avatar-image"
+      mode="aspectFill"
+      @error="handleImageError"
+    />
+    
+    <!-- 默认头像（显示首字符） -->
+    <view v-else class="avatar-default" :style="avatarStyle">
+      <text class="avatar-text" :style="textStyle">{{ firstChar }}</text>
+    </view>
+
+    <!-- 在线状态指示器 -->
+    <view v-if="showOnline" class="online-indicator"></view>
+    
+    <!-- 未读消息数量徽章 -->
+    <view v-if="badgeCount > 0" class="badge" :class="{ 'badge-dot': showBadgeDot }">
+      <text v-if="!showBadgeDot" class="badge-text">{{ badgeCount > 99 ? '99+' : badgeCount }}</text>
+    </view>
+  </view>
+</template>
+
+<script setup>
+import { ref, computed, watch } from 'vue'
+
+const props = defineProps({
+  // 头像图片地址
+  src: {
+    type: String,
+    default: ''
+  },
+  // 用户名称（用于生成默认头像）
+  name: {
+    type: String,
+    default: ''
+  },
+  // 头像大小
+  size: {
+    type: Number,
+    default: 96
+  },
+  // 是否显示在线状态
+  showOnline: {
+    type: Boolean,
+    default: false
+  },
+  // 徽章数量
+  badgeCount: {
+    type: Number,
+    default: 0
+  },
+  // 是否只显示红点，不显示数字
+  showBadgeDot: {
+    type: Boolean,
+    default: false
+  },
+  // 头像形状：circle(圆形) | square(方形)
+  shape: {
+    type: String,
+    default: 'square'
+  },
+  // 默认头像类型：none | user | work | public | meeting | avchatroom
+  // 当 src 为空时，使用对应的默认头像图片；none 表示显示首字符
+  defaultAvatarType: {
+    type: String,
+    default: 'none'
+  },
+  // 纯净模式，没有外层的 padding
+  pureMode: {
+    type: Boolean,
+    default: false
+  }
+})
+
+// 头像图片地址
+const avatarSrc = ref(props.src)
+
+watch(() => props.src, (newVal) => {
+  avatarSrc.value = newVal;
+});
+
+/**
+ * 头像样式
+ */
+const avatarStyle = computed(() => ({
+  width: `${props.size}rpx`,
+  height: `${props.size}rpx`,
+  borderRadius: props.shape === 'circle' ? `${props.size / 2}rpx` : '10rpx'
+}))
+
+/**
+ * 文字样式
+ */
+const textStyle = computed(() => ({
+  fontSize: `${Math.floor(props.size * 0.4)}rpx`,
+  color: 'rgba(0, 0, 0, 0.9)'
+}))
+
+/**
+ * 默认头像在线资源 URL
+ */
+const DEFAULT_AVATAR_URLS = {
+  user: 'https://web.sdk.qcloud.com/im/assets/all-in-one/user.png',
+  work: 'https://web.sdk.qcloud.com/im/assets/all-in-one/work.png',
+  public: 'https://web.sdk.qcloud.com/im/assets/all-in-one/public.png',
+  meeting: 'https://web.sdk.qcloud.com/im/assets/all-in-one/meeting.png',
+  avchatroom: 'https://web.sdk.qcloud.com/im/assets/all-in-one/avchatroom.png'
+}
+
+/**
+ * 默认头像 URL
+ */
+const defaultAvatarUrl = computed(() => {
+  return DEFAULT_AVATAR_URLS[props.defaultAvatarType] || ''
+})
+
+/**
+ * 首字符（用于默认头像）
+ */
+const firstChar = computed(() => {
+  if (!props.name) return '?'
+  
+  // 提取中文、英文或数字的第一个字符
+  const match = props.name.match(/[\u4e00-\u9fa5]|[a-zA-Z]|[0-9]/)
+  return match ? match[0].toUpperCase() : '?'
+})
+
+/**
+ * 处理图片加载错误
+ */
+const handleImageError = () => {
+  avatarSrc.value = ''
+}
+
+/**
+ * 生成默认头像背景色
+ */
+const getDefaultBgColor = () => {
+  const colors = [
+    '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7',
+    '#DDA0DD', '#98D8C8', '#F7DC6F', '#BB8FCE', '#85C1E9'
+  ]
+  
+  let hash = 0
+  for (let i = 0; i < props.name.length; i++) {
+    hash = props.name.charCodeAt(i) + ((hash << 5) - hash)
+  }
+  
+  return colors[Math.abs(hash) % colors.length]
+}
+</script>
+
+<style>
+.avatar-container {
+  position: relative;
+  padding: 10rpx;
+}
+
+.pure-mode {
+  padding: 0rpx;
+}
+
+.avatar-image {
+  background-color: #f5f5f5;
+}
+
+.avatar-default {
+  background-color: #EBF3FF;
+  justify-content: center;
+  align-items: center;
+}
+
+.avatar-text {
+  font-weight: 500;
+  text-align: center;
+}
+
+.online-indicator {
+  position: absolute;
+  bottom: 0rpx;
+  right: 0rpx;
+  width: 20rpx;
+  height: 20rpx;
+  border-radius: 10rpx;
+  background-color: #4CAF50;
+  border-width: 2rpx;
+  border-color: #ffffff;
+}
+
+.badge {
+  position: absolute;
+  top: 0rpx;
+  right: 0rpx;
+  background-color: #ff4444;
+  min-width: 36rpx;
+  height: 36rpx;
+  border-radius: 36rpx;
+  justify-content: center;
+  align-items: center;
+}
+
+.badge-dot {
+  width: 20rpx;
+  height: 20rpx;
+  border-radius: 10rpx;
+}
+
+.badge-text {
+  font-weight: 500;
+  font-size: 24rpx;
+  line-height: 24rpx;
+  text-align: center;
+  color: #ffffff;
+}
+</style>

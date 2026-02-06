@@ -1379,3 +1379,39 @@ export type FetchLogfileListOptions = {
 export type ILiveListener = {
   callback : (res : string) => void
 }
+
+/**
+ * hybridBridge addListener 参数
+ * @interface HybridListenerOptions
+ * @description addListener options
+ * @param {string} store -  store 名称（必填）
+ * @param {string} name -  监听的变量名称（必填）
+ * @param {any} params - 参数
+ */
+export type HybridListenerOptions = {
+  type: string;
+  store: string;
+  name: string;
+  roomID?: string;
+  listenerID?: string;
+  params?: any;
+}
+
+/**
+ * hybridBridge callAPI参数
+ * @interface HybridCallOptions
+ * @description callAPI options
+ * @param {string} api -  api 名称（必填）
+ * @param {any} params - 参数（可选）
+ */
+export type HybridCallOptions = {
+  api: string;
+  params?: any;
+}
+
+export type HybridResponseData = {
+  api: string;
+  code: number;
+  message?: string;
+  data?: any;
+}

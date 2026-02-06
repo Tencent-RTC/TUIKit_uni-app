@@ -1,0 +1,275 @@
+<template>
+	<view class="conversation-list-page">
+		<CustomNavbar title="消息" :showBack="true" :showMenu="true" @back="handleBack" @menuSelect="handleCreateConversation">
+			<!-- 自定义右侧菜单图标 -->
+			<template #right>
+				<view class="navbar-menu-btn" ref="menuTrigger">
+					<image class="navbar-add-icon" src="/static/icon/add-circle.png" mode="aspectFit" />
+				</view>
+			</template>
+		</CustomNavbar>
+
+		<!-- 页面内容 -->
+		<view class="page-content">
+			<!-- 搜索入口 -->
+			<view class="search-entry" @click="handleSearchTap">
+				<view class="search-entry__inner">
+					<image class="search-entry__icon" src="/static/icon/search.png" mode="aspectFit" />
+					<text class="search-entry__placeholder">搜索</text>
+				</view>
+			</view>
+			<!-- 会话列表组件 -->
+			<ConversationList @conversationSelect="handleConversationTap" />
+		</view>
+
+		<!-- 右上角弹出菜单 -->
+		<view v-if="showMenu" class="menu-popup" @tap="handleMenuClose">
+			<view class="menu-popup__content" :style="menuStyle">
+				<!-- 小尖尖箭头 -->
+				<view class="menu-arrow" :style="arrowStyle"></view>
+				<view class="menu-item-wrapper" @tap="handleCreateC2CChat">
+					<view class="menu-item" @tap="handleCreateC2CChat">
+						<image class="menu-item__icon" src="/static/icon/create-c2c.png" mode="aspectFit"></image>
+						<text class="menu-item__text">发起单聊</text>
+					</view>
+				</view>
+				<view class="menu-item-wrapper" @tap="handleCreateGroupChat">
+					<view class="menu-item" @tap="handleCreateGroupChat">
+						<image class="menu-item__icon" src="/static/icon/create-group.png" mode="aspectFit"></image>
+						<text class="menu-item__text">创建群聊</text>
+					</view>
+				</view>
+			</view>
+		</view>
+	</view>
+</template>
+
+<script setup lang="ts">
+import { ref, computed, nextTick } from 'vue'
+import ConversationList from '@/uni_modules/tuikit-atomic-x/components/ConversationList/ConversationList.nvue'
+import CustomNavbar from '@/uni_modules/tuikit-atomic-x/components/CustomNavbar/CustomNavbar.nvue'
+
+// 菜单显示状态
+const showMenu = ref(false)
+// 菜单位置信息
+const menuPosition = ref({ top: 0, right: 0 })
+
+// 动态计算菜单样式
+const menuStyle = computed(() => ({
+	top: `${menuPosition.value.top}px`,
+	right: `${menuPosition.value.right}px`
+}))
+
+// 动态计算箭头样式
+const arrowStyle = computed(() => ({
+	right: '10rpx' // 箭头相对于菜单的位置保持不变
+}))
+
+/**
+ * 获取导航栏按钮位置并计算菜单位置
+ */
+const calculateMenuPosition = () => {
+	// 获取系统信息
+	const systemInfo = uni.getSystemInfoSync()
+	const statusBarHeight = systemInfo.statusBarHeight || 0
+	
+	// 获取实际导航栏高度，如果没有则使用默认值
+	const navBarHeight = systemInfo.navigationBarHeight || 44
+	const totalNavHeight = statusBarHeight + navBarHeight
+	
+	menuPosition.value = {
+		top: totalNavHeight,
+		right: 14
+	}
+}
+
+/**
+ * 处理返回按钮点击
+ */
+const handleBack = () => {
+	uni.navigateBack({
+		delta: 1
+	})
+}
+
+/**
+ * 处理菜单按钮点击 - 显示/隐藏弹出菜单
+ */
+const handleCreateConversation = () => {
+	if (!showMenu.value) {
+		// 显示菜单前先计算位置
+		calculateMenuPosition()
+	}
+	showMenu.value = !showMenu.value
+}
+
+/**
+ * 关闭菜单
+ */
+const handleMenuClose = () => {
+	showMenu.value = false
+}
+
+/**
+ * 处理添加好友
+ */
+const handleCreateC2CChat = () => {
+	showMenu.value = false
+	uni.navigateTo({
+		url: '/pages/scenes/chat/userPicker/userPicker?businessType=1'
+	})
+}
+
+/**
+ * 处理创建群聊（跳转到选人页面）
+ */
+const handleCreateGroupChat = () => {
+	showMenu.value = false
+	uni.navigateTo({
+		url: '/pages/scenes/chat/userPicker/userPicker?businessType=2'
+	})
+}
+
+/**
+ * 处理搜索点击
+ */
+const handleSearchTap = () => {
+	uni.navigateTo({
+		url: '/pages/scenes/chat/search/search'
+	})
+}
+
+/**
+ * 处理会话点击事件
+ */
+const handleConversationTap = (conversation: any) => {
+	console.log('会话点击:', conversation)
+	// 跳转到聊天页面
+	uni.navigateTo({
+		url: `/pages/scenes/chat/chat/index?conversationID=${conversation.conversationID}`
+	})
+}
+</script>
+
+<style>
+.conversation-list-page {
+	flex: 1;
+	background-color: #f5f5f5;
+	position: relative;
+}
+
+/* 页面内容区域 */
+.page-content {
+	flex: 1;
+}
+
+/* 自定义导航栏加号按钮 */
+.navbar-add-btn {
+	width: 40rpx;
+	height: 40rpx;
+	border-radius: 30rpx;
+	background-color: #f0f0f0;
+	align-items: center;
+	justify-content: center;
+}
+
+.navbar-add-icon {
+	width: 40rpx;
+	height: 40rpx;
+	color: #666666;
+	font-weight: 500;
+}
+
+.search-entry {
+	background-color: #ffffff;
+	padding: 32rpx;
+}
+
+.search-entry__inner {
+	background-color: #F0F2F7;
+	border-radius: 8rpx;
+	flex-direction: row;
+	justify-content: center;
+	align-items: center;
+	padding: 20rpx 0;
+}
+
+.search-entry__icon {
+	width: 30rpx;
+	height: 30rpx;
+	margin: 5rpx;
+}
+
+.search-entry__placeholder {
+	margin-left: 6rpx;
+	font-weight: 400;
+	font-size: 28rpx;
+	line-height: 40rpx;
+	color: rgba(0, 0, 0, 0.4);
+}
+
+/* 右上角弹出菜单 */
+.menu-popup {
+	position: fixed;
+	top: 0;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	z-index: 1000;
+}
+
+.menu-popup__content {
+	position: absolute;
+	background-color: #FFFFFF;
+	border-radius: 12px;
+	box-shadow: 0 8rpx 32rpx rgba(0, 0, 0, 0.1);
+	padding: 16rpx 40rpx;
+	min-width: 200rpx;
+}
+
+.menu-arrow {
+	position: absolute;
+	top: -8rpx;
+	width: 16rpx;
+	height: 16rpx;
+	background-color: #FFFFFF;
+	transform: rotate(45deg);
+	box-shadow: -2rpx -2rpx 4rpx rgba(0, 0, 0, 0.05);
+}
+
+.menu-item-wrapper {
+	width: 100%;
+	min-height: 80rpx;
+	align-items: center;
+	justify-content: center;
+}
+
+.menu-item-wrapper:active {
+	background-color: #f5f5f5;
+}
+
+.menu-item {
+	flex-direction: row;
+	align-items: center;
+	margin: 0;
+}
+
+.menu-item:active {
+	background-color: #f5f5f5;
+}
+
+.menu-item__icon {
+	width: 40rpx;
+	height: 40rpx;
+	margin-right: 13rpx;
+	font-size: 32rpx;
+	text-align: center;
+	line-height: 40rpx;
+}
+
+.menu-item__text {
+	font-family: PingFang SC;
+	font-weight: 400;
+	font-size: 32rpx;
+}
+</style>

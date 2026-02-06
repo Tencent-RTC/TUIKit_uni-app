@@ -1,0 +1,150 @@
+<template>
+  <view class="group-type-info">
+    <!-- 群类型列表 -->
+    <view class="group-type-list">
+      <view v-for="(groupType, index) in groupTypes" :key="groupType.id" class="group-type-item"
+        @click="selectGroupType(groupType.id)">
+        <view class="group-type-header">
+          <view class="group-type-icon">
+            <image class="icon-image" :src="getIconPath(groupType.id)" mode="aspectFit" />
+          </view>
+          <text class="group-type-title">{{ groupType.name }}</text>
+        </view>
+
+        <text class="group-type-desc">{{ groupType.description }}详见产品文档</text>
+      </view>
+    </view>
+
+    <!-- 底部链接 -->
+    <view v-if="showDocumentationLink" class="bottom-link">
+      <text class="link-text" @click="viewDocumentation()">查看产品文档</text>
+    </view>
+  </view>
+</template>
+
+<script setup lang="ts">
+import { GROUP_TYPES } from '../../constants/groupTypes'
+
+// 声明 uni 全局对象
+declare const uni: any
+
+// 定义 props
+interface Props {
+  showDocumentationLink?: boolean
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  showDocumentationLink: false
+})
+
+// 使用常量中的群类型列表
+const groupTypes = GROUP_TYPES
+
+// 定义 emits
+const emit = defineEmits<{
+  selectType: [type: string]
+  back: []
+}>()
+
+/**
+ * 获取图标路径
+ */
+const getIconPath = (groupTypeId: string): string => {
+  const iconMap: { [key: string]: string } = {
+    'Work': '/uni_modules/tuikit-atomic-x/static/icon/work-group.png',
+    'Public': '/uni_modules/tuikit-atomic-x/static/icon/public-group.png',
+    'Meeting': '/uni_modules/tuikit-atomic-x/static/icon/meeting-group.png',
+    'AVChatRoom': '/uni_modules/tuikit-atomic-x/static/icon/AVChatRoom-group.png'
+  }
+  return iconMap[groupTypeId] || '/uni_modules/tuikit-atomic-x/static/icon/work-group.png'
+}
+
+
+/**
+ * 选择群类型
+ */
+const selectGroupType = (type: string) => {
+  emit('selectType', type)
+}
+
+/**
+ * 查看产品文档
+ */
+const viewDocumentation = (docUrl?: string) => {
+  const defaultDocUrl = 'https://cloud.tencent.com/document/product/269/75697'
+  const targetUrl = docUrl || defaultDocUrl
+  
+  // 使用系统默认浏览器打开文档链接
+  plus.runtime.openURL(targetUrl)
+}
+</script>
+
+<style scoped>
+.group-type-info {
+  flex: 1;
+  background-color: #f5f5f5;
+}
+
+/* 群类型列表 */
+.group-type-list {
+  padding: 32rpx 0;
+}
+
+.group-type-item {
+  background-color: #ffffff;
+  border-radius: 16rpx;
+  padding: 32rpx;
+  margin-bottom: 24rpx;
+}
+
+/* 头像和标题行 */
+.group-type-header {
+  flex-direction: row;
+  align-items: center;
+  margin-bottom: 16rpx;
+}
+
+.group-type-icon {
+  width: 80rpx;
+  height: 80rpx;
+  border-radius: 16rpx;
+  align-items: center;
+  justify-content: center;
+  margin-right: 24rpx;
+}
+
+.icon-image {
+  width: 80rpx;
+  height: 80rpx;
+  border-radius: 10px;
+}
+
+.group-type-title {
+  font-family: PingFang SC;
+  font-weight: 400;
+  font-size: 32rpx;
+  color: black;
+  opacity: 0.9;
+  flex: 1;
+}
+
+.group-type-desc {
+  font-family: PingFang SC;
+  font-weight: 400;
+  font-size: 26rpx;
+  color: black;
+  opacity: 0.55;
+  line-height: 40rpx;
+}
+
+/* 底部链接 */
+.bottom-link {
+  align-items: center;
+  padding: 100rpx 32rpx;
+}
+
+.link-text {
+  font-size: 30rpx;
+  color: #4285f4;
+}
+</style>

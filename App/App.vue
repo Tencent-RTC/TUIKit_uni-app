@@ -1,12 +1,17 @@
-<!-- HBuilder X 版本要求: 3.6.11+ -->
 <script lang="ts">
-  import { setSdkLanguageFromSystem } from '@/uni_modules/tuikit-atomic-x/utils/setSdkLanguageFromSystem'
+  import { loginFromStorage } from './server/loginService';
+  import { pushService } from './server/pushService';
 
   let firstBackTime = 0
+
   export default {
     onLaunch: function () {
       console.log('App Launch')
-      setSdkLanguageFromSystem()
+      pushService.init();
+      loginFromStorage();
+      uni?.removeStorage({
+        key: 'showSecurity',
+      });
     },
     onShow: function () {
       console.log('App Show')
@@ -38,12 +43,16 @@
     onExit() {
       console.log('App Exit')
     },
-  }
+  };
 </script>
 
 <style>
-  /*每个页面公共css */
-  /* uni.css - 通用组件、模板样式库，可以当作一套ui库应用 */
-  /* #ifdef APP-VUE */
-  /* #endif */
+  uni-page-body,
+  html,
+  body,
+  page {
+    width: 100% !important;
+    height: 100% !important;
+    overflow: hidden;
+  }
 </style>

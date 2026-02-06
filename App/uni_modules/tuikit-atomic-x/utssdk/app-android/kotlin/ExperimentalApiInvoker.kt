@@ -5,6 +5,7 @@ import android.text.TextUtils
 import com.google.gson.Gson
 import com.tencent.cloud.tuikit.engine.room.TUIRoomDefine
 import com.tencent.cloud.tuikit.engine.room.TUIRoomEngine
+import com.tencent.imsdk.v2.V2TIMManager;
 
 private const val TAG = "UTS-CallExperimentalApi: "
 
@@ -21,6 +22,10 @@ object ExperimentalApiInvoker {
         val requestData: RequestData = gson.fromJson(jsonString, RequestData::class.java)
         if (requestData.api == "setLocalVideoMuteImage") {
             setLocalVideoMuteImage(requestData, callback)
+            return
+        }
+        if (requestData.api == "setTestEnvironment") {
+            V2TIMManager.getInstance().callExperimentalAPI("setTestEnvironment", true, null);
             return
         }
 

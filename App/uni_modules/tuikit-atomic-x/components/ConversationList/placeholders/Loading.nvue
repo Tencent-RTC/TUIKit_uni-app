@@ -1,0 +1,23 @@
+<template>
+  <view class="loading">
+    <text class="loading__text">加载中...</text>
+  </view>
+</template>
+
+<script setup lang="ts">
+</script>
+
+<style>
+.loading {
+  flex: 1;
+  justify-content: center;
+  align-items: center;
+  padding: 100rpx 60rpx;
+}
+
+.loading__text {
+  font-size: 28rpx;
+  color: #999999;
+  text-align: center;
+}
+</style>
