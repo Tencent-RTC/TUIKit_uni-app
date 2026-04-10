@@ -1,3 +1,0 @@
-export * from "./paramsCovert.uts";
-export * from "./const.uts";
-export * from "./callObserve.uts";

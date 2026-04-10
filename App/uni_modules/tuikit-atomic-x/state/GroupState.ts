@@ -162,7 +162,7 @@ class GroupState implements IGroupState {
       },
     };
 
-    callAPI(options, (response: string) => {
+    callAPI(JSON.stringify(options), (response: string) => {
       try {
         const result = safeJsonParse<HybridResponseData<void>>(response, { code: -1 });
 
@@ -246,7 +246,7 @@ class GroupState implements IGroupState {
         }
       };
 
-      callAPI(options, (response: string) => {
+      callAPI(JSON.stringify(options), (response: string) => {
         try {
           const result = safeJsonParse<HybridResponseData<{ groupInfoList: GroupInfo[] }>>(response, { code: -1 });
 
@@ -277,7 +277,7 @@ class GroupState implements IGroupState {
         }
       };
 
-      callAPI(options, (response: string) => {
+      callAPI(JSON.stringify(options), (response: string) => {
         try {
           const result = safeJsonParse<HybridResponseData>(response, { code: -1 });
           console.log(`[${this.instanceId}][fetchJoinedGroupList] Response:`, result);
@@ -309,7 +309,7 @@ class GroupState implements IGroupState {
         }
       };
 
-      callAPI(options, (response: string) => {
+      callAPI(JSON.stringify(options), (response: string) => {
         try {
           const result = safeJsonParse<HybridResponseData>(response, { code: -1 });
           console.log(`[${this.instanceId}][fetchGroupApplicationList] Response:`, result);
@@ -344,7 +344,7 @@ class GroupState implements IGroupState {
         }
       };
 
-      callAPI(options, (response: string) => {
+      callAPI(JSON.stringify(options), (response: string) => {
         try {
           const result = safeJsonParse<HybridResponseData>(response, { code: -1 });
 
@@ -383,7 +383,7 @@ class GroupState implements IGroupState {
       };
 
 
-      callAPI(options, (response: string) => {
+      callAPI(JSON.stringify(options), (response: string) => {
         try {
           const result = safeJsonParse<HybridResponseData<{ groupID: string }>>(response, { code: -1 });
 
@@ -418,7 +418,7 @@ class GroupState implements IGroupState {
         }
       };
 
-      callAPI(options, (response: string) => {
+      callAPI(JSON.stringify(options), (response: string) => {
         try {
           const result = safeJsonParse<HybridResponseData>(response, { code: -1 });
 
@@ -450,7 +450,7 @@ class GroupState implements IGroupState {
         }
       };
 
-      callAPI(options, (response: string) => {
+      callAPI(JSON.stringify(options), (response: string) => {
         try {
           const result = safeJsonParse<HybridResponseData>(response, { code: -1 });
 
@@ -482,7 +482,7 @@ class GroupState implements IGroupState {
         }
       };
 
-      callAPI(options, (response: string) => {
+      callAPI(JSON.stringify(options), (response: string) => {
         try {
           const result = safeJsonParse<HybridResponseData>(response, { code: -1 });
 
@@ -514,7 +514,7 @@ class GroupState implements IGroupState {
         }
       };
 
-      callAPI(options, (response: string) => {
+      callAPI(JSON.stringify(options), (response: string) => {
         try {
           const result = safeJsonParse<HybridResponseData>(response, { code: -1 });
 
@@ -546,7 +546,7 @@ class GroupState implements IGroupState {
         }
       };
 
-      callAPI(options, (response: string) => {
+      callAPI(JSON.stringify(options), (response: string) => {
         try {
           const result = safeJsonParse<HybridResponseData>(response, { code: -1 });
 
@@ -578,7 +578,7 @@ class GroupState implements IGroupState {
         }
       };
 
-      callAPI(options, (response: string) => {
+      callAPI(JSON.stringify(options), (response: string) => {
         try {
           const result = safeJsonParse<HybridResponseData>(response, { code: -1 });
 
@@ -612,7 +612,7 @@ class GroupState implements IGroupState {
         }
       };
 
-      callAPI(options, (response: string) => {
+      callAPI(JSON.stringify(options), (response: string) => {
         try {
           const result = safeJsonParse<HybridResponseData>(response, { code: -1 });
 
@@ -644,7 +644,7 @@ class GroupState implements IGroupState {
         }
       };
 
-      callAPI(options, (response: string) => {
+      callAPI(JSON.stringify(options), (response: string) => {
         try {
           const result = safeJsonParse<HybridResponseData>(response, { code: -1 });
 
@@ -678,7 +678,7 @@ class GroupState implements IGroupState {
         }
       };
 
-      callAPI(options, (response: string) => {
+      callAPI(JSON.stringify(options), (response: string) => {
         try {
           const result = safeJsonParse<HybridResponseData>(response, { code: -1 });
 
@@ -712,7 +712,7 @@ class GroupState implements IGroupState {
         }
       };
 
-      callAPI(options, (response: string) => {
+      callAPI(JSON.stringify(options), (response: string) => {
         try {
           const result = safeJsonParse<HybridResponseData>(response, { code: -1 });
 
@@ -746,7 +746,7 @@ class GroupState implements IGroupState {
         }
       };
 
-      callAPI(options, (response: string) => {
+      callAPI(JSON.stringify(options), (response: string) => {
         try {
           const result = safeJsonParse<HybridResponseData>(response, { code: -1 });
 
@@ -780,7 +780,7 @@ class GroupState implements IGroupState {
         }
       };
 
-      callAPI(options, (response: string) => {
+      callAPI(JSON.stringify(options), (response: string) => {
         try {
           const result = safeJsonParse<HybridResponseData>(response, { code: -1 });
 

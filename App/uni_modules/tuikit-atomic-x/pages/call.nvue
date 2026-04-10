@@ -1,0 +1,230 @@
+<template>
+  <view class="call-view-container">
+    <view :style="{ height: systemInfo?.windowHeight + 'px',width: systemInfo?.safeArea?.width + 'px', paddingTop: layoutTemplate === 'Grid' ? gridPaddingTop + 'px' : '0px'}">
+      <call-core-view :style="{ height: systemInfo?.windowHeight + 'px',width: systemInfo?.safeArea?.width + 'px'}" :layoutTemplate="layoutTemplate" :participantAvatars="participantAvatars" :volumeLevelIcons="volumeLevelIcons" :waitingAnimation="waitingAnimation" :networkQualityIcons="networkQualityIcons"></call-core-view>
+    </view>
+    <CallTopBar />
+
+    <view class="button-panel-wrapper">
+      <CallBottomButton />
+    </view>
+  </view>
+</template>
+
+<script setup>
+  import {
+    ref,
+    watch,
+    computed,
+    onMounted,
+  } from 'vue';
+  import {
+    onLoad,
+    onBackPress
+  } from '@dcloudio/uni-app';
+  import {
+    useCallState
+  } from '../state/CallState';
+  import CallBottomButton from '../components/CallBottomButton.vue';
+  import CallTopBar from '../components/CallTopBar.vue';
+
+  const {
+    allParticipants,
+    activeCall,
+  } = useCallState();
+  const systemInfo = ref({});
+  const safeArea = ref()
+  const layoutTemplate = ref("Grid");
+
+  // Grid 模式下的顶部 padding：iOS 返回 0，安卓返回安全距离 + 200rpx
+  const gridPaddingTop = computed(() => {
+    const info = systemInfo.value;
+    const safeTop = info?.safeArea?.top || 0;
+    const extraPx = (info?.screenWidth || 750) / 750 * 200;
+    return extraPx;
+  });
+
+  onLoad((option) => {
+    if (option.layoutTemplate) {
+      layoutTemplate.value = option.layoutTemplate;
+      console.log('Received layoutTemplate:', option.layoutTemplate);
+    }
+  });
+
+  onBackPress((option) => {
+    if (option.from === 'backbutton')
+      return true; // 拦截系统侧滑和物理返回键
+  });
+
+  watch(() => activeCall.value, (newValue, oldValue) => {
+    if (!newValue || !newValue.inviteeIds) {
+      return;
+    }
+    const newTemplate = (newValue.inviteeIds.length > 1 || newValue.chatGroupId !== '') ? 'Grid' : 'Float';
+    // 仅在 layoutTemplate 真正变化时才更新，避免不必要的底层视图重建
+    if (layoutTemplate.value !== newTemplate) {
+      console.log('[CallPage] layoutTemplate changing:', layoutTemplate.value, '->', newTemplate);
+      layoutTemplate.value = newTemplate;
+    }
+  }, {
+    immediate: true,
+    deep: true
+  })
+  /**
+   * 将 /static/ 相对路径转为原生层可用的本地绝对路径
+   */
+  function toAbsolutePath(relativePath) {
+    if (plus && plus.io && plus.io.convertLocalFileSystemURL) {
+      return plus.io.convertLocalFileSystemURL(relativePath);
+    }
+    return relativePath;
+  }
+
+  /**
+   * 批量转换对象中所有 value 的路径为绝对路径
+   */
+  function convertIconPaths(iconMap) {
+    const result = {};
+    Object.keys(iconMap).forEach(key => {
+      result[key] = toAbsolutePath(iconMap[key]);
+    });
+    return result;
+  }
+
+  const waitingAnimation = ref(toAbsolutePath("/static/images/callview-loading.gif"));
+
+  const volumeLevelIcons = ref(convertIconPaths({
+    "Mute": "/static/images/callview-self-mute.png",
+    "Low": "/static/images/callview-network.png",
+    "Medium": "/static/images/callview-network.png",
+    "High": "/static/images/callview-network.png",
+    "Peak": "/static/images/callview-network.png"
+  }));
+
+  const networkQualityIcons = ref({
+    "BAD": "/static/images/callview-network-bad.png",
+    "VERY_BAD": "/static/images/callview-network-bad.png"
+  });
+
+  const participantAvatars = ref({});
+  const avatarCache = {};
+
+  const DEFAULT_AVATAR_URL = "https://liteav.sdk.qcloud.com/app/res/picture/voiceroom/avatar/user_avatar1.png";
+  let defaultAvatarLocalPath = "";
+  let defaultAvatarReady = false;
+  let defaultAvatarPromise = null;
+
+  // 预下载默认头像并缓存
+  defaultAvatarPromise = downloadAvatar(DEFAULT_AVATAR_URL).then(localPath => {
+    defaultAvatarLocalPath = localPath;
+    defaultAvatarReady = true;
+    console.log('[CallPage] default avatar cached:', localPath);
+    // 默认头像就绪后，补刷一次参与者头像（修复首次触发时默认头像未就绪的问题）
+    if (allParticipants.value && allParticipants.value.length > 0) {
+      updateParticipantAvatars(allParticipants.value);
+    }
+  });
+
+  function getDefaultAvatarPath() {
+    return defaultAvatarLocalPath || "";
+  }
+
+  function downloadAvatar(url) {
+    if (avatarCache[url]) {
+      return Promise.resolve(avatarCache[url]);
+    }
+    return new Promise((resolve) => {
+      uni.downloadFile({
+        url,
+        success: (res) => {
+          if (res.statusCode === 200) {
+            const absolutePath = plus.io.convertLocalFileSystemURL(res.tempFilePath);
+            console.log('[CallPage] downloadAvatar success, temp:', res.tempFilePath, 'absolute:', absolutePath);
+            avatarCache[url] = absolutePath;
+            resolve(absolutePath);
+          } else {
+            console.warn('[CallPage] downloadAvatar failed, statusCode:', res.statusCode, url);
+            resolve(getDefaultAvatarPath());
+          }
+        },
+        fail: (err) => {
+          console.error('[CallPage] downloadAvatar error:', url, err);
+          resolve(getDefaultAvatarPath());
+        }
+      });
+    });
+  }
+
+  async function updateParticipantAvatars(participants) {
+    if (!participants || participants.length === 0) {
+      participantAvatars.value = {};
+      return;
+    }
+    // 等待默认头像下载完成，确保兜底路径可用
+    if (!defaultAvatarReady && defaultAvatarPromise) {
+      await defaultAvatarPromise;
+    }
+    const avatarMap = {};
+    const tasks = [];
+    participants.forEach(participant => {
+      console.log('[CallPage] participant fields:', participant, participant.id, 'avatarURL:', participant.avatarURL, 'keys:', Object.keys(participant));
+      if (participant.id && participant.avatarURL) {
+        tasks.push(
+          downloadAvatar(participant.avatarURL).then(localPath => {
+            avatarMap[participant.id] = localPath;
+          })
+        );
+      } else if (participant.id) {
+        avatarMap[participant.id] = getDefaultAvatarPath();
+      }
+    });
+    await Promise.all(tasks);
+    console.log('[CallPage] participantAvatars updated:', avatarMap);
+    participantAvatars.value = avatarMap;
+    volumeLevelIcons.value = convertIconPaths({
+      "Mute": "/static/images/callview-self-mute.png",
+      "Low": "/static/images/callview-network.png",
+      "Medium": "/static/images/callview-network.png",
+      "High": "/static/images/callview-network.png",
+      "Peak": "/static/images/callview-network.png"
+    })
+    networkQualityIcons.value = convertIconPaths({
+      "BAD": "/static/images/callview-network-bad.png",
+      "VERY_BAD": "/static/images/callview-network-bad.png"
+    })
+  }
+
+  watch(() => allParticipants.value, async (newVal, oldVal) => {
+    if (!newVal) {
+      return;
+    }
+    console.log('[CallPage] allParticipants changed, count:', newVal?.length, 'data:', JSON.stringify(newVal));
+    await updateParticipantAvatars(newVal);
+  }, {
+    immediate: true,
+    deep: true
+  });
+
+  onMounted(() => {
+    uni.getSystemInfo({
+      success: (res) => {
+        systemInfo.value = res;
+        safeArea.value = res.safeArea;
+      }
+    });
+  });
+</script>
+
+<style>
+  .call-view-container {
+    background: rgba(15, 16, 20, 0.5);
+    overflow: hidden;
+  }
+
+  .button-panel-wrapper {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+  }
+</style>

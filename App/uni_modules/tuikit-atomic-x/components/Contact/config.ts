@@ -13,5 +13,7 @@ export interface FriendInfoAction {
 /** FriendInfo 默认操作按钮 */
 export const defaultFriendInfoActions: FriendInfoAction[] = [
   { key: 'sendMessage', label: '发送消息' },
-  { key: 'deleteFriend', label: '清除好友', color: '#FF584C' }
+  { key: 'voiceCall', label: '语音通话' },
+  { key: 'videoCall', label: '视频通话' },
+  { key: 'deleteFriend', label: '删除好友', color: '#FF584C' }
 ]

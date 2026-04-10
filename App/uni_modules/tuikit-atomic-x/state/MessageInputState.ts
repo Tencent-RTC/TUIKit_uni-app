@@ -82,7 +82,7 @@ class MessageInputState {
       }
     };
 
-    callAPI(options, (response: string) => {
+    callAPI(JSON.stringify(options), (response: string) => {
       try {
         const result = safeJsonParse<any>(response, {});
         console.log(`[${this.instanceId}][createStore] Response:`, result);
@@ -147,7 +147,7 @@ class MessageInputState {
         },
       };
 
-      callAPI(options, (result: string) => {
+      callAPI(JSON.stringify(options), (result: string) => {
         try {
           const data = safeJsonParse(result, {}) as HybridResponseData;
           // console.log(`[${this.instanceId}][sendMessage] Response:`, data);
@@ -185,7 +185,7 @@ class MessageInputState {
         },
       };
 
-      callAPI(hybridCallOptions, (result: string) => {
+      callAPI(JSON.stringify(hybridCallOptions), (result: string) => {
         try {
           const data = safeJsonParse(result, {}) as HybridResponseData;
           // console.log(`[${this.instanceId}][sendTextMessage] Response:`, data);
@@ -226,7 +226,7 @@ class MessageInputState {
         },
       };
 
-      callAPI(hybridCallOptions, (result: string) => {
+      callAPI(JSON.stringify(hybridCallOptions), (result: string) => {
         try {
           const data = safeJsonParse(result, {}) as HybridResponseData;
           // console.log(`[${this.instanceId}][sendImageMessage] Response:`, data);
@@ -269,7 +269,7 @@ class MessageInputState {
         },
       };
       
-      callAPI(hybridCallOptions, (result: string) => {
+      callAPI(JSON.stringify(hybridCallOptions), (result: string) => {
         try {
           const data = safeJsonParse(result, {}) as HybridResponseData;
           // console.log(`[${this.instanceId}][sendVideoMessage] Response:`, data);
@@ -304,7 +304,7 @@ class MessageInputState {
         },
       };
 
-      callAPI(hybridCallOptions, (result: string) => {
+      callAPI(JSON.stringify(hybridCallOptions), (result: string) => {
         try {
           const data = safeJsonParse(result, {}) as HybridResponseData;
 		  
@@ -344,7 +344,7 @@ class MessageInputState {
         }
       };
 
-      callAPI(hybridCallOptions, (result: string) => {
+      callAPI(JSON.stringify(hybridCallOptions), (result: string) => {
         try {
           const data = safeJsonParse(result, {}) as HybridResponseData;
           // console.log(`[${this.instanceId}][destroyStore] Response:`, data);

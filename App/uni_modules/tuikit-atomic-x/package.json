@@ -1,8 +1,8 @@
 {
   "id": "tuikit-atomic-x",
-  "displayName": "【官方】腾讯云实时音视频响应式 SDK",
-  "version": "4.0.4",
-  "description": "该 SDK 是腾讯云推出的面向即时通信、音视频通话、视频直播、语聊房等场景的响应式 API，支持单聊/群聊/消息管理、房间管理、主播开播、观众观看、成员管理、麦位控制、基础美颜等功能。",
+  "displayName": "【官方】腾讯云聊天+通话+直播响应式 SDK",
+  "version": "4.0.5",
+  "description": "tuikit-atomic-x sdk 是腾讯云推出的面向即时通信、音视频通话、视频直播、语聊房等场景的响应式 API sdk，支持房间管理、主播开播、观众观看、成员管理、麦位控制、基础美颜等功能。",
   "keywords": [
     "腾讯云",
     "直播",
@@ -51,16 +51,16 @@
       "client": {
         "uni-app": {
           "vue": {
-            "vue2": "√",
-            "vue3": "√"
+            "vue2": {},
+            "vue3": {}
           },
           "web": {
             "safari": "x",
             "chrome": "x"
           },
           "app": {
-            "vue": "√",
-            "nvue": "√",
+            "vue": {},
+            "nvue": {},
             "android": "x",
             "ios": "x",
             "harmony": "x"
@@ -74,8 +74,7 @@
             "jd": "x",
             "harmony": "x",
             "qq": "x",
-            "lark": "x",
-            "xhs": "-"
+            "lark": "x"
           },
           "quickapp": {
             "huawei": "x",

@@ -10,23 +10,11 @@ export interface ModuleItem {
   isTabbar?: boolean;
 }
 
-export interface SecurityDialogConfig {
-  title: string;
-  intro: string;
-  tips: string[];
-  footer: string;
-  buttonText: string;
-  countdownSeconds: number;
-}
-
 export interface HomeConfig {
-  noticeText: string;
   modules: ModuleItem[];
-  securityDialog: SecurityDialogConfig;
 }
 
 const homeConfig: HomeConfig = {
-  noticeText: '仅用于业务功能体验，请勿轻信汇款、中奖等涉及钱款的信息，谨防上当受骗，立即举报',
   modules: [
     {
       id: 'call',
@@ -57,21 +45,7 @@ const homeConfig: HomeConfig = {
       route: '/pages/scenes/chat/conversationList/conversationList',
       isTabbar: true
     }
-  ],
-
-  securityDialog: {
-    title: '安全提示',
-    intro: '腾讯云音视频 App 为您提供腾讯云音视频及通信云服务的演示与体验,请注意:',
-    tips: [
-      '1. 本 App 用途仅适用于演示和体验,请勿用于日常沟通或商业交易。',
-      '2. 请勿向陌生人透露您的个人信息、账号密码等敏感信息,以保护您的隐私安全。',
-      '3. 请务必警惕汇款、中奖等涉及钱款的信息,避免上当受骗。',
-      '4. 如遇到可疑情况,请及时向我们反馈,我们将尽快为您核实处理。'
-    ],
-    footer: '感谢您的理解与支持,祝您使用愉快!',
-    buttonText: '我知道了',
-    countdownSeconds: 5
-  }
+  ]
 };
 
 export default homeConfig;

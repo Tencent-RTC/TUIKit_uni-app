@@ -5,17 +5,17 @@ import SVGAPlayer
 public class SVGAAnimationView: UIView {
     private var playerView: SVGAPlayer?
     private var svgaDelegate : SVGAAnimationViewDelegate?
-    
+
     private func cleanupOldPlayer() {
         playerView?.removeFromSuperview()
         playerView?.delegate = nil
         playerView = nil
     }
-    
+
     public func setDelegate(_ delegate : SVGAAnimationViewDelegate){
         self.svgaDelegate = delegate
     }
-    
+
     public func startAnimation(_ playUrl: String) {
         console.log("======startAnimation, playUrl: ", playUrl)
         guard isSVGAFile(url: playUrl) else {
@@ -27,11 +27,11 @@ public class SVGAAnimationView: UIView {
         cleanupOldPlayer()
 
         let player = SVGAPlayer(frame: bounds)
-        player.contentMode = .scaleAspectFill
+        player.contentMode = .scaleAspectFit
         player.delegate = self
         player.loops = 1
         addSubview(player)
-    
+
         player.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
             player.leadingAnchor.constraint(equalTo: leadingAnchor),
@@ -39,9 +39,9 @@ public class SVGAAnimationView: UIView {
             player.topAnchor.constraint(equalTo: topAnchor),
             player.bottomAnchor.constraint(equalTo: bottomAnchor)
         ])
-        
+
         self.playerView = player // 保存实例
-        
+
         // 异步加载并播放动画
         DispatchQueue.global().async { [weak self] in
             guard let self = self else { return }
@@ -61,7 +61,7 @@ public class SVGAAnimationView: UIView {
                 }
                 return
             }
-            
+
             let parser = SVGAParser()
             parser.parse(with: animationData, cacheKey: validUrl.lastPathComponent) { [weak self] videoItem in
                 DispatchQueue.main.async {
@@ -84,16 +84,16 @@ public class SVGAAnimationView: UIView {
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
             self.playerView?.stopAnimation()
-            
+
             // 移除视图并清理代理
             self.playerView?.removeFromSuperview()
             self.playerView?.delegate = nil
-            
+
             // 清空实例并通知中断
             self.playerView = nil
         }
     }
-    
+
     private func isSVGAFile(url: String) -> Bool {
         guard let urlObj = URL(string: url) else { return false }
         let svgaExtension = "svga"

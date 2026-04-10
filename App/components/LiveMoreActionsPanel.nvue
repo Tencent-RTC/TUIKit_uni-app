@@ -56,6 +56,7 @@
   import BeautyPanel from '@/uni_modules/tuikit-atomic-x/components/BeautyPanel.nvue';
   import AudioEffectPanel from '@/uni_modules/tuikit-atomic-x/components/AudioEffectPanel.nvue';
   import {
+    MirrorType,
     useDeviceState
   } from "@/uni_modules/tuikit-atomic-x/state/DeviceState";
 
@@ -104,24 +105,25 @@
     })
   };
   const handleSwitchMirror = () => {
-    if(!isFrontCamera.value) {
+    if (!isFrontCamera.value) {
       uni.showToast({
         icon: 'none',
         title: '仅前置摄像头支持该设置'
       })
       return
     }
-    if (localMirrorType.value === 'AUTO') {
+
+    if (localMirrorType.value === MirrorType.AUTO) {
       switchMirror({
-        mirrorType: 'DISABLE'
+        mirrorType: MirrorType.DISABLE
       })
-    } else if (localMirrorType.value === 'DISABLE') {
+    } else if (localMirrorType.value === MirrorType.DISABLE) {
       switchMirror({
-        mirrorType: 'ENABLE'
+        mirrorType: MirrorType.ENABLE
       })
-    } else if (localMirrorType.value === 'ENABLE') {
+    } else if (localMirrorType.value === MirrorType.ENABLE) {
       switchMirror({
-        mirrorType: 'DISABLE'
+        mirrorType: MirrorType.DISABLE
       })
     }
 

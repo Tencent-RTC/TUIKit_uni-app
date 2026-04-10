@@ -4,27 +4,22 @@
     <view class="bottom-drawer" :class="{ 'drawer-open': modelValue }">
       <view class="drawer-header">
         <text style="color: rgba(213, 224, 242, 1); font-size: 32rpx;">选择连麦方式</text>
-        <text
-          style="font-size: 24rpx; font-weight: 400; color: rgba(124, 133, 166, 1); margin-top: 20rpx;">选择连麦方式，主播同意后接通</text>
+        <text style="font-size: 24rpx; font-weight: 400; color: rgba(124, 133, 166, 1); margin-top: 20rpx;">选择连麦方式，主播同意后接通</text>
       </view>
 
       <view class="drawer-content">
         <view class="drawer-actions">
           <view style="height: 2rpx; color: rgba(79, 88, 107, 0.3); width: 750rpx;  background: #fff; opacity: 0.2;">
           </view>
-          <view style="display: flex; flex-direction: row; align-items: center; padding: 30rpx;"
-            @click="handleSendCoGuest('video')">
+          <view style="display: flex; flex-direction: row; align-items: center; padding: 30rpx;" @click="handleSendCoGuest('video')">
             <image src="/static/images/mode.png" style="width: 36rpx; height: 36rpx;"></image>
-            <text
-              style="font-size: 32rpx; font-weight: 400; color: rgba(213, 224, 242, 1); padding-left: 10rpx;">申请视频连麦</text>
+            <text style="font-size: 32rpx; font-weight: 400; color: rgba(213, 224, 242, 1); padding-left: 10rpx;">申请视频连麦</text>
           </view>
           <view style="height: 2rpx; color: rgba(79, 88, 107, 0.3); width: 750rpx;  background: #fff; opacity: 0.2;">
           </view>
-          <view style="display: flex; flex-direction: row; align-items: center; padding: 30rpx;"
-            @click="handleSendCoGuest('mic')">
+          <view style="display: flex; flex-direction: row; align-items: center; padding: 30rpx;" @click="handleSendCoGuest('mic')">
             <image src="/static/images/live-comic.png" style="width: 36rpx; height: 36rpx;"></image>
-            <text
-              style="font-size: 32rpx; font-weight: 400; color: rgba(213, 224, 242, 1); padding-left: 10rpx;">申请语音连麦</text>
+            <text style="font-size: 32rpx; font-weight: 400; color: rgba(213, 224, 242, 1); padding-left: 10rpx;">申请语音连麦</text>
           </view>
         </view>
         <!-- <view class="divider-line-container">
@@ -39,10 +34,11 @@
   import { watch, onMounted, ref, onUnmounted } from 'vue';
 
   import { useDeviceState } from "@/uni_modules/tuikit-atomic-x/state/DeviceState";
-  import { useCoGuestState } from "@/uni_modules/tuikit-atomic-x/state/CoGuestState";
+  import { useCoGuestState, NoResponseReason } from "@/uni_modules/tuikit-atomic-x/state/CoGuestState";
   import { useLoginState } from "@/uni_modules/tuikit-atomic-x/state/LoginState";
   const { loginUserInfo } = useLoginState()
   const currentCoGuestType = ref('')
+
   const {
     // 响应式状态 - 麦克风相关
     microphoneStatus, microphoneStatusReason, microphoneLastError, hasPublishAudioPermission, captureVolume,
@@ -90,68 +86,63 @@
   };
 
   onMounted(() => {
-    addCoGuestGuestListener(uni.$liveID, 'onGuestApplicationResponded', handleGuestApplicationResponded)
-    addCoGuestGuestListener(uni.$liveID, 'onGuestApplicationNoResponse', handleGuestApplicationNoResponse)
+    addCoGuestGuestListener(uni?.$liveID, 'onGuestApplicationResponded', handleGuestApplicationResponded)
+    addCoGuestGuestListener(uni?.$liveID, 'onGuestApplicationNoResponse', handleGuestApplicationNoResponse)
   })
 
   onUnmounted(() => {
     currentCoGuestType.value = ''
-    removeCoGuestGuestListener(uni.$liveID, 'onGuestApplicationResponded', handleGuestApplicationResponded)
-    removeCoGuestGuestListener(uni.$liveID, 'onGuestApplicationNoResponse', handleGuestApplicationNoResponse)
+    removeCoGuestGuestListener(uni?.$liveID, 'onGuestApplicationResponded', handleGuestApplicationResponded)
+    removeCoGuestGuestListener(uni?.$liveID, 'onGuestApplicationNoResponse', handleGuestApplicationNoResponse)
   })
 
 
-  const handleGuestApplicationResponded = {
-    callback: (event) => {
-      const res = JSON.parse(event)
-      if (res.isAccept) {
-        uni.$localGuestStatus = 'CONNECTED'
-        if (currentCoGuestType.value === 'video') {
-          openLocalCamera({
-            isFront: true,
-            success: () => {
-              console.log('openLocalCamera success.');
-            },
-            fail: (errCode, errMsg) => {
-              console.error(`openLocalCamera fail errCode: ${errCode}, errMsg: ${errMsg}`);
-            },
-          });
-        }
-        openLocalMicrophone({
+  const handleGuestApplicationResponded = (event) => {
+    const res = JSON.parse(event)
+    if (res.isAccept) {
+      uni.$localGuestStatus = 'CONNECTED'
+      if (currentCoGuestType.value === 'video') {
+        openLocalCamera({
+          isFront: true,
           success: () => {
-            console.log('openLocalMicrophone success.');
+            console.log('openLocalCamera success.');
           },
           fail: (errCode, errMsg) => {
-            console.error(`openLocalMicrophone fail errCode: ${errCode}, errMsg: ${errMsg}`);
+            console.error(`openLocalCamera fail errCode: ${errCode}, errMsg: ${errMsg}`);
           },
         });
-      } else {
-        uni.$localGuestStatus = 'IDLE'
-        uni.showToast({
-          title: '上麦申请被拒绝',
-          icon: 'none',
-          duration: 2000,
-        });
       }
+      openLocalMicrophone({
+        success: () => {
+          console.log('openLocalMicrophone success.');
+        },
+        fail: (errCode, errMsg) => {
+          console.error(`openLocalMicrophone fail errCode: ${errCode}, errMsg: ${errMsg}`);
+        },
+      });
+    } else {
+      uni.$localGuestStatus = 'IDLE'
+      uni.showToast({
+        title: '上麦申请被拒绝',
+        icon: 'none',
+        duration: 2000,
+      });
     }
   }
-  const handleGuestApplicationNoResponse = {
-    callback: (event) => {
-      const res = JSON.parse(event)
-      if (res.reason === 'TIMEOUT') {
-        uni.$localGuestStatus = 'IDLE'
-        uni.showToast({
-          title: '上麦申请超时',
-          icon: 'none',
-          duration: 2000,
-        });
-      }
+  const handleGuestApplicationNoResponse = (event) => {
+    console.log('miles-test-handleGuestApplicationNoResponse', event)
+    const res = JSON.parse(event)
+    if (res.reason === NoResponseReason.TIMEOUT) {
+      uni.$localGuestStatus = 'IDLE'
+      uni.showToast({
+        title: '上麦申请超时',
+        icon: 'none',
+        duration: 2000,
+      });
     }
-
   }
 
-
-  const handleSendCoGuest = (type : string) => {
+  const handleSendCoGuest = (type: string) => {
     console.log(`goGuest localStatus: ${uni.$localGuestStatus}`);
     currentCoGuestType.value = type
     if (uni.$localGuestStatus === 'USER_APPLYING') {

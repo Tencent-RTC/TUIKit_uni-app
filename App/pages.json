@@ -1,6 +1,5 @@
 {
-  "pages": [
-    {
+  "pages": [{
       "path": "pages/login/login",
       "style": {
         "navigationStyle": "custom"
@@ -33,36 +32,33 @@
       }
     },
     {
-      "path": "uni_modules/TencentCloud-Call/callkit/callPage",
+      "path": "pages/scenes/call/index",
       "style": {
-        "navigationBarTitleText": "",
-        "navigationStyle": "custom"
+        "navigationBarTitleText": "腾讯云 CallKit",
+        "disableSwipeBack": true,
+        "navigationBarBackgroundColor": "#EBF0F6"
       }
-	  },
-	{
-		"path": "pages/scenes/call/index",
-		"style": {
-			"navigationBarTitleText": "腾讯云 CallKit",
-      "navigationBarBackgroundColor": "#EBF0F6"
-		}
-	},
-	{
-		"path": "pages/scenes/call/call",
-		"style": {
-			"navigationBarTitleText": "腾讯云 CallKit",
-      "navigationBarBackgroundColor": "#EBF0F6"
-		}
-	},
-	{
-		"path": "pages/scenes/call/groupCall",
-		"style": {
-			"navigationBarTitleText": "腾讯云 CallKit",
-      "navigationBarBackgroundColor": "#EBF0F6"
-		}
-	},
-      {
+    },
+    {
+      "path": "pages/scenes/call/singleCall",
+      "style": {
+        "navigationBarTitleText": "腾讯云 CallKit",
+        "disableSwipeBack": true,
+        "navigationBarBackgroundColor": "#EBF0F6"
+      }
+    },
+    {
+      "path": "pages/scenes/call/groupCall",
+      "style": {
+        "navigationBarTitleText": "腾讯云 CallKit",
+        "disableSwipeBack": true,
+        "navigationBarBackgroundColor": "#EBF0F6"
+      }
+    },
+    {
       "path": "pages/scenes/live/livelist/index",
       "style": {
+        "disableSwipeBack": true,
         "navigationStyle": "custom"
       }
     },
@@ -71,6 +67,7 @@
       "style": {
         "navigationBarTextStyle": "white",
         "app-plus": {
+          "disableSwipeBack": true,
           "titleNView": false
         }
       }
@@ -81,6 +78,7 @@
       "style": {
         "backgroundColor": "#000000",
         "navigationBarTextStyle": "white",
+        "disableSwipeBack": true,
         "app-plus": {
           "titleNView": false
         }
@@ -91,6 +89,7 @@
       "disableSwipeBack": true,
       "style": {
         "navigationBarTextStyle": "white",
+        "disableSwipeBack": true,
         "app-plus": {
           "titleNView": false
         }
@@ -245,6 +244,16 @@
         "navigationStyle": "custom",
         "backgroundColor": "#f5f5f5"
       }
+    },
+    {
+      "path": "uni_modules/tuikit-atomic-x/pages/call",
+      "style": {
+        "navigationBarTextStyle": "white",
+        "disableSwipeBack": true,
+        "app-plus": {
+          "titleNView": false
+        }
+      }
     }
   ],
   "tabBar": {
@@ -252,8 +261,7 @@
     "selectedColor": "#147AFF",
     "borderStyle": "black",
     "backgroundColor": "#ffffff",
-    "list": [
-      {
+    "list": [{
         "pagePath": "pages/scenes/chat/conversationList/conversationList",
         "text": "消息",
         "iconPath": "static/message.png",

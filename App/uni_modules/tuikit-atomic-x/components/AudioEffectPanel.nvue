@@ -53,7 +53,6 @@
         </view>
 
 
-
         <!--        <view class="slider-item">
           <text class="slider-label">音乐升降调</text>
           <text class="slider-value">{{ pitchValue }}</text>
@@ -109,6 +108,8 @@
     watch
   } from 'vue';
   import {
+    AudioChangerType,
+    AudioReverbType,
     useAudioEffectState
   } from '@/uni_modules/tuikit-atomic-x/state/AudioEffectState'
 
@@ -144,58 +145,58 @@
     width: 375,
     height: 750,
   });
-  const currentEffect = ref('NONE');
-  const currentReverb = ref('NONE');
+  const currentEffect = ref(AudioChangerType.NONE);
+  const currentReverb = ref(AudioReverbType.NONE);
 
   const voiceEffects = [{
-      key: 'NONE',
+      key: AudioChangerType.NONE,
       name: '原声',
       icon: '/static/images/no-effect.png'
     },
     {
-      key: 'CHILD',
+      key: AudioChangerType.CHILD,
       name: '熊孩子',
       icon: '/static/images/voice-wild.png'
     },
     {
-      key: 'LITTLE_GIRL',
+      key: AudioChangerType.LITTLE_GIRL,
       name: '萝莉',
       icon: '/static/images/voice-loli.png'
     },
     {
-      key: 'MAN',
+      key: AudioChangerType.MAN,
       name: '大叔',
       icon: '/static/images/voice-uncle.png'
     },
     {
-      key: 'ETHEREAL',
+      key: AudioChangerType.ETHEREAL,
       name: '空灵',
       icon: '/static/images/voice-ghost.png'
     }
   ];
 
   const reverbEffects = [{
-      key: 'NONE',
+      key: AudioReverbType.NONE,
       name: '无效果',
       icon: '/static/images/no-effect.png'
     },
     {
-      key: 'KTV',
+      key: AudioReverbType.KTV,
       name: 'Karaoke',
       icon: '/static/images/reverb-ktv.png'
     },
     {
-      key: 'METALLIC',
+      key: AudioReverbType.METALLIC,
       name: '金属声',
       icon: '/static/images/reverb-metal.png'
     },
     {
-      key: 'DEEP',
+      key: AudioReverbType.DEEP,
       name: '低沉',
       icon: '/static/images/reverb-bass.png'
     },
     {
-      key: 'LOUD',
+      key: AudioReverbType.LOUD,
       name: '洪亮',
       icon: '/static/images/reverb-bright.png'
     }
@@ -222,23 +223,22 @@
       // 同步耳返音量
       musicVolume.value = earMonitorVolume.value;
 
-
       // 同步变声类型 - 确保值有效
-      if (audioChangerType.value && typeof audioChangerType.value === 'string') {
+      if (audioChangerType.value !== undefined && typeof audioChangerType.value === 'number') {
         currentEffect.value = audioChangerType.value;
         console.log('变声类型同步:', audioChangerType.value);
       } else {
         console.warn('变声类型无效:', audioChangerType.value);
-        currentEffect.value = 'NONE';
+        currentEffect.value = AudioChangerType.NONE;
       }
 
       // 同步混响类型 - 确保值有效
-      if (audioReverbType.value && typeof audioReverbType.value === 'string') {
+      if (audioReverbType.value !== undefined && typeof audioReverbType.value === 'number') {
         currentReverb.value = audioReverbType.value;
         console.log('混响类型同步:', audioReverbType.value);
       } else {
         console.warn('混响类型无效:', audioReverbType.value);
-        currentReverb.value = 'NONE';
+        currentReverb.value = AudioReverbType.NONE;
       }
 
       console.log('同步后的本地状态:', {
@@ -297,7 +297,6 @@
       volume: musicVolume.value
     })
   };
-
 
   const handlePitchChange = (e) => {
     pitchValue.value = e.detail.value;

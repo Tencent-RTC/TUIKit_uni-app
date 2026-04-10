@@ -5,9 +5,7 @@
                                        }">
     <!-- 主播画面区域 -->
     <view class="live-content">
-      <LiveStreamView v-if="liveID.length > 0" :liveID="liveID" :isAnchor="false" :templateLayout="templateLayout"
-        :currentLoginUserId="currentLoginUserId" :onStreamViewClick="ShowAudienceViewClickPanel"
-        :enableClickPanel="true" :isLiving="true">
+      <LiveStreamView v-if="liveID.length > 0" :liveID="liveID" :isAnchor="false" :templateLayout="templateLayout" :currentLoginUserId="currentLoginUserId" :onStreamViewClick="ShowAudienceViewClickPanel" :enableClickPanel="true" :isLiving="true">
       </LiveStreamView>
 
       <!-- 顶部信息栏 -->
@@ -16,8 +14,7 @@
           <view class="stream-info">
             <image class="avatar" :src="currentLive?.liveOwner?.avatarURL || defaultAvatarURL" mode="aspectFill" />
             <view class="stream-details">
-              <text class="stream-title"
-                :numberOfLines="1">{{ currentLive?.liveOwner?.userName || currentLive?.liveOwner?.userID}}</text>
+              <text class="stream-title" :numberOfLines="1">{{ currentLive?.liveOwner?.userName || currentLive?.liveOwner?.userID}}</text>
             </view>
             <!-- <view
               class="follow-btn"
@@ -52,7 +49,7 @@
       </view>
 
       <!-- 聊天消息列表 -->
-      <BarrageList mode="audience" :bottomPx="safeArea.height * 1/8" @itemTap="audienceOperator" ref="barrageListRef" />
+      <BarrageList mode="audience" :bottomPx="safeArea.height * 1/8" @itemTap="audienceOperator" @receiveGift="onBarrageReceiveGift" ref="barrageListRef" />
 
       <!-- 底部互动区域 -->
       <view class="footer">
@@ -60,13 +57,9 @@
         <view class="action-buttons">
           <image class="action-btn" @click="showNetworkQualityPanel()" src="/static/images/dashboard.png" />
           <image class="action-btn" @click="showGiftPicker()" src="/static/images/live-gift.png" />
-          <image class="action-btn" :class="{ 'disabled': shouldDisableCoGuestButton }"
-            v-if="templateLayout !== 200 && uni.$localGuestStatus === 'IDLE'" @click="handleCoGuestButtonClick"
-            src="/static/images/link-guest.png" />
-          <image class="action-btn" v-if="templateLayout !== 200 && uni.$localGuestStatus === 'USER_APPLYING'"
-            @click="ShowCoGuestRequestPanel()" src="/static/images/live-request.png" />
-          <image class="action-btn" v-if="templateLayout !== 200 && uni.$localGuestStatus === 'CONNECTED'"
-            @click="ShowCoGuestRequestPanel()" src="/static/images/live-disconnect.png" />
+          <image class="action-btn" :class="{ 'disabled': shouldDisableCoGuestButton }" v-if="templateLayout !== 200 && uni.$localGuestStatus === 'IDLE'" @click="handleCoGuestButtonClick" src="/static/images/link-guest.png" />
+          <image class="action-btn" v-if="templateLayout !== 200 && uni.$localGuestStatus === 'USER_APPLYING'" @click="ShowCoGuestRequestPanel()" src="/static/images/live-request.png" />
+          <image class="action-btn" v-if="templateLayout !== 200 && uni.$localGuestStatus === 'CONNECTED'" @click="ShowCoGuestRequestPanel()" src="/static/images/live-disconnect.png" />
           <Like />
         </view>
       </view>
@@ -74,27 +67,22 @@
       <UserInfoPanel v-model="isShowUserInfoPanel" :userInfo="clickUserInfo" :isShowAnchor="isShowAnchorInfo">
       </UserInfoPanel>
       <LiveAudienceList v-model="isShowAudienceList"></LiveAudienceList>
-      <CoGuestRequestPanel v-model="isShowCoGuestRequestPanel" :liveID="currentLive.liveID" :userID="currentLoginUserId"
-        :seatIndex="seatIndex"></CoGuestRequestPanel>
+      <CoGuestRequestPanel v-model="isShowCoGuestRequestPanel" :liveID="currentLive.liveID" :userID="currentLoginUserId" :seatIndex="seatIndex"></CoGuestRequestPanel>
 
 
       <GiftPicker v-model="isShowGiftPicker"></GiftPicker>
-      <GiftPlayer ref="giftPlayerRef" v-model="isLargeSizeGiftPlayer" :url="giftInfo?.resourceURL" :safeArea="safeArea"
-        @finished="svgaPlayerFinished" />
+      <GiftPlayer ref="giftPlayerRef" v-model="isLargeSizeGiftPlayer" :url="giftInfo?.resourceURL" :safeArea="safeArea" @finished="svgaPlayerFinished" />
 
       <NetworkQualityPanel v-model="isShowNewWorkPanel"></NetworkQualityPanel>
     </view>
   </view>
-  <LiveStatusInfoCard v-model="isShowLiveStatusInfoCard" videoQuality="4K" audioMode="高保真人声" :audioVolume="70"
-    :latency="45" :downLoss="0" :upLoss="2" />
-  <ActionSheet v-model="isShowExitSheet" :title="exitSheetTitle" :itemList="exitSheetItems"
-    @select="onExitSheetSelect" />
-  <ActionSheet v-model="isShowCoGuestSheet" :title="coGuestSheetTitle" :itemList="coGuestSheetItems"
-    @select="onCoGuestSheetSelect" />
+  <LiveStatusInfoCard v-model="isShowLiveStatusInfoCard" videoQuality="4K" audioMode="高保真人声" :audioVolume="70" :latency="45" :downLoss="0" :upLoss="2" />
+  <ActionSheet v-model="isShowExitSheet" :title="exitSheetTitle" :itemList="exitSheetItems" @select="onExitSheetSelect" />
+  <ActionSheet v-model="isShowCoGuestSheet" :title="coGuestSheetTitle" :itemList="coGuestSheetItems" @select="onCoGuestSheetSelect" />
 </template>
 
 <script setup lang="ts">
-  import { onLoad } from '@dcloudio/uni-app';
+  import { onLoad, onBackPress } from '@dcloudio/uni-app';
   import { ref, onMounted, computed, onUnmounted, watch, nextTick } from 'vue';
   import UserInfoPanel from '@/uni_modules/tuikit-atomic-x/components/LiveStreamView/UserInfoPanel.nvue';
   import LiveAudienceList from '@/uni_modules/tuikit-atomic-x/components/LiveAudienceList/LiveAudienceList.nvue';
@@ -108,7 +96,6 @@
   import BarrageList from '@/uni_modules/tuikit-atomic-x/components/BarrageList.nvue';
   import GiftPlayer from '@/uni_modules/tuikit-atomic-x/components/GiftPlayer/GiftPlayer.nvue';
   import { giftService } from '@/uni_modules/tuikit-atomic-x/components/GiftPlayer/giftService'
-  import { useBarrageState } from "@/uni_modules/tuikit-atomic-x/state/BarrageState";
   import { useLiveListState } from "@/uni_modules/tuikit-atomic-x/state/LiveListState";
   import { useLiveSeatState } from "@/uni_modules/tuikit-atomic-x/state/LiveSeatState";
   import { useLiveAudienceState } from '@/uni_modules/tuikit-atomic-x/state/LiveAudienceState';
@@ -119,13 +106,17 @@
   import ActionSheet from '@/components/ActionSheet.nvue';
   import { setSdkLanguageFromSystem } from '@/uni_modules/tuikit-atomic-x/utils/setSdkLanguageFromSystem'
   uni.$localGuestStatus = 'IDLE'
+
+  onBackPress((option) => {
+    if (option.from === 'backbutton')
+      return true; // 拦截系统侧滑和物理返回键
+  });
+
   const { loginUserInfo } = useLoginState()
-  const { messageList, sendTextMessage, sendCustomMessage } = useBarrageState(uni?.$liveID);
   const { joinLive, createLive, fetchLiveList, liveList, leaveLive, currentLive, addLiveListListener, removeLiveListListener } = useLiveListState(uni?.$liveID);
   const { seatList, addLiveSeatEventListener, removeLiveSeatEventListener } = useLiveSeatState(uni?.$liveID);
   const { audienceList, audienceCount } = useLiveAudienceState(uni?.$liveID);
   const { disconnect, connected, cancelApplication } = useCoGuestState(uni?.$liveID)
-  const { addGiftListener, removeGiftListener } = useGiftState(uni?.$liveID);
   const { connected: hostConnected } = useCoHostState(uni?.$liveID)
 
   const dom = uni.requireNativePlugin('dom')
@@ -165,7 +156,7 @@
   // Removed direct svga-player ref; handled inside GiftPlayer
   const liveDuration = ref(0); // 秒
   const liveDurationText = ref('00:00:00');
-  let timer : any = null;
+  let timer: any = null;
   const currentLoginUserId = ref();
   const clickUserInfo = ref({});
   const templateLayout = ref(600);
@@ -204,7 +195,7 @@
   // 页面加载
   onLoad((options) => {
     console.warn('Live page onLoad = ', options);
-    liveID.value = options?.liveID;
+    liveID.value = uni.$liveID;
 
     if (liveID.value) {
       joinLive({
@@ -250,17 +241,35 @@
     }
   }
 
+  // 通话结束后回到观众页，重新加入直播间恢复状态
+  const handleCallEndedBackToLive = () => {
+    console.warn('[Audience] callEndedBackToLive: rejoining live room');
+    if (liveID.value) {
+      joinLive({
+        liveID: liveID.value,
+        success: () => {
+          templateLayout.value = currentLive.value?.seatLayoutTemplateID || templateLayout.value;
+          console.log('[Audience] rejoinLive success after call ended');
+        },
+        fail: () => {
+          uni.showToast({ icon: 'none', title: '直播已结束' });
+          setTimeout(() => uni.redirectTo({ url: `/pages/scenes/live/livelist/index` }), 500);
+        },
+      });
+    }
+  };
+
   onUnmounted(() => {
     if (timer) clearInterval(timer);
     removeLiveListListener('onLiveEnded', handleLiveEnded)
     removeLiveListListener('onKickedOutOfLive', handleKickedOutOfLive)
-    removeGiftListener(uni.$liveID, 'onReceiveGift', handleReceiveGift)
-    removeLiveSeatEventListener(uni.$liveID, 'onLocalCameraOpenedByAdmin', handleLocalCameraOpenedByAdmin)
-    removeLiveSeatEventListener(uni.$liveID, 'onLocalCameraClosedByAdmin', handleLocalCameraClosedByAdmin)
-    removeLiveSeatEventListener(uni.$liveID, 'onLocalMicrophoneOpenedByAdmin', handleLocalMicrophoneOpenedByAdmin)
-    removeLiveSeatEventListener(uni.$liveID, 'onLocalMicrophoneClosedByAdmin', handleLocalMicrophoneClosedByAdmin)
-
+    removeLiveSeatEventListener(uni?.$liveID, 'onLocalCameraOpenedByAdmin', handleLocalCameraOpenedByAdmin)
+    removeLiveSeatEventListener(uni?.$liveID, 'onLocalCameraClosedByAdmin', handleLocalCameraClosedByAdmin)
+    removeLiveSeatEventListener(uni?.$liveID, 'onLocalMicrophoneOpenedByAdmin', handleLocalMicrophoneOpenedByAdmin)
+    removeLiveSeatEventListener(uni?.$liveID, 'onLocalMicrophoneClosedByAdmin', handleLocalMicrophoneClosedByAdmin)
+    uni.$off('callEndedBackToLive', handleCallEndedBackToLive);
   });
+
   onMounted(() => {
     setSdkLanguageFromSystem()
     uni.setKeepScreenOn({
@@ -274,56 +283,50 @@
     });
     addLiveListListener('onLiveEnded', handleLiveEnded)
     addLiveListListener('onKickedOutOfLive', handleKickedOutOfLive)
-    addGiftListener(uni.$liveID, 'onReceiveGift', handleReceiveGift)
-    addLiveSeatEventListener(uni.$liveID, 'onLocalCameraOpenedByAdmin', handleLocalCameraOpenedByAdmin)
-    addLiveSeatEventListener(uni.$liveID, 'onLocalCameraClosedByAdmin', handleLocalCameraClosedByAdmin)
-    addLiveSeatEventListener(uni.$liveID, 'onLocalMicrophoneOpenedByAdmin', handleLocalMicrophoneOpenedByAdmin)
-    addLiveSeatEventListener(uni.$liveID, 'onLocalMicrophoneClosedByAdmin', handleLocalMicrophoneClosedByAdmin)
+    addLiveSeatEventListener(uni?.$liveID, 'onLocalCameraOpenedByAdmin', handleLocalCameraOpenedByAdmin)
+    addLiveSeatEventListener(uni?.$liveID, 'onLocalCameraClosedByAdmin', handleLocalCameraClosedByAdmin)
+    addLiveSeatEventListener(uni?.$liveID, 'onLocalMicrophoneOpenedByAdmin', handleLocalMicrophoneOpenedByAdmin)
+    addLiveSeatEventListener(uni?.$liveID, 'onLocalMicrophoneClosedByAdmin', handleLocalMicrophoneClosedByAdmin)
+    uni.$on('callEndedBackToLive', handleCallEndedBackToLive);
   });
 
-  const handleLocalCameraOpenedByAdmin = {
-
-    callback: (event) => {
+  const handleLocalCameraOpenedByAdmin =
+    (event) => {
       uni.showToast({
         title: `您已被解除禁画`,
         icon: 'none'
       })
     }
-  }
-  const handleLocalCameraClosedByAdmin = {
-    callback: (event) => {
+  const handleLocalCameraClosedByAdmin =
+    (event) => {
       uni.showToast({
         title: `您已被禁画`,
         icon: 'none'
       })
     }
-  }
-  const handleLocalMicrophoneOpenedByAdmin = {
-    callback: (event) => {
+  const handleLocalMicrophoneOpenedByAdmin =
+    (event) => {
       uni.showToast({
         title: `您已被解除静音`,
         icon: 'none'
       })
     }
-  }
-  const handleLocalMicrophoneClosedByAdmin = {
-    callback: (event) => {
+  const handleLocalMicrophoneClosedByAdmin =
+    (event) => {
       uni.showToast({
         title: `您已被静音`,
         icon: 'none'
       })
     }
-  }
-  const handleLiveEnded = {
-    callback: (event) => {
+  const handleLiveEnded =
+    (event) => {
       if (timer) clearInterval(timer);
       removeLiveListListener('onLiveEnded', handleLiveEnded)
       removeLiveListListener('onKickedOutOfLive', handleKickedOutOfLive)
-      removeGiftListener(uni.$liveID, 'onReceiveGift', handleReceiveGift)
-      removeLiveSeatEventListener(uni.$liveID, 'onLocalCameraOpenedByAdmin', handleLocalCameraOpenedByAdmin)
-      removeLiveSeatEventListener(uni.$liveID, 'onLocalCameraClosedByAdmin', handleLocalCameraClosedByAdmin)
-      removeLiveSeatEventListener(uni.$liveID, 'onLocalMicrophoneOpenedByAdmin', handleLocalMicrophoneOpenedByAdmin)
-      removeLiveSeatEventListener(uni.$liveID, 'onLocalMicrophoneClosedByAdmin', handleLocalMicrophoneClosedByAdmin)
+      removeLiveSeatEventListener(uni?.$liveID, 'onLocalCameraOpenedByAdmin', handleLocalCameraOpenedByAdmin)
+      removeLiveSeatEventListener(uni?.$liveID, 'onLocalCameraClosedByAdmin', handleLocalCameraClosedByAdmin)
+      removeLiveSeatEventListener(uni?.$liveID, 'onLocalMicrophoneOpenedByAdmin', handleLocalMicrophoneOpenedByAdmin)
+      removeLiveSeatEventListener(uni?.$liveID, 'onLocalMicrophoneClosedByAdmin', handleLocalMicrophoneClosedByAdmin)
       uni.showToast({
         icon: 'none',
         title: '直播已结束'
@@ -340,17 +343,15 @@
         }
       });
     }
-  }
-  const handleKickedOutOfLive = {
-    callback: (event) => {
+  const handleKickedOutOfLive =
+    (event) => {
       if (timer) clearInterval(timer);
       removeLiveListListener('onLiveEnded', handleLiveEnded)
       removeLiveListListener('onKickedOutOfLive', handleKickedOutOfLive)
-      removeGiftListener(uni.$liveID, 'onReceiveGift', handleReceiveGift)
-      removeLiveSeatEventListener(uni.$liveID, 'onLocalCameraOpenedByAdmin', handleLocalCameraOpenedByAdmin)
-      removeLiveSeatEventListener(uni.$liveID, 'onLocalCameraClosedByAdmin', handleLocalCameraClosedByAdmin)
-      removeLiveSeatEventListener(uni.$liveID, 'onLocalMicrophoneOpenedByAdmin', handleLocalMicrophoneOpenedByAdmin)
-      removeLiveSeatEventListener(uni.$liveID, 'onLocalMicrophoneClosedByAdmin', handleLocalMicrophoneClosedByAdmin)
+      removeLiveSeatEventListener(uni?.$liveID, 'onLocalCameraOpenedByAdmin', handleLocalCameraOpenedByAdmin)
+      removeLiveSeatEventListener(uni?.$liveID, 'onLocalCameraClosedByAdmin', handleLocalCameraClosedByAdmin)
+      removeLiveSeatEventListener(uni?.$liveID, 'onLocalMicrophoneOpenedByAdmin', handleLocalMicrophoneOpenedByAdmin)
+      removeLiveSeatEventListener(uni?.$liveID, 'onLocalMicrophoneClosedByAdmin', handleLocalMicrophoneClosedByAdmin)
 
       uni.showToast({
         icon: 'none',
@@ -368,14 +369,14 @@
         }
       });
     }
-  }
 
-  const handleReceiveGift = {
-    callback: (event) => {
-      const res = JSON.parse(event)
-      showGiftToast(res || {}, true);
-    }
-  }
+  // 接收 BarrageList 抛出的礼物事件，播放 SVGA 动画
+  const onBarrageReceiveGift = (giftData: any) => {
+    if (!giftData) return;
+    giftInfo.value = giftData;
+    showGift(giftData, { onlyDisplay: true });
+  };
+
   const currentAudienceCount = computed(() => audienceList.value?.length > 100 ? audienceCount : audienceList.value?.length);
 
   watch(liveList, (newValue, oldValue) => {
@@ -396,7 +397,7 @@
   }, { immediate: true, deep: true });
 
 
-  const audienceOperator = (message : any) => {
+  const audienceOperator = (message: any) => {
     console.warn(`click message: ${JSON.stringify(message)}`);
     if (message?.sender?.userID === loginUserInfo.value.userID) {
       return;
@@ -415,19 +416,21 @@
     if (uni.$localGuestStatus === 'CONNECTED') {
       exitSheetItems.value = ['断开连麦', '退出直播间']
       exitSheetTitle.value = '当前处于连麦状态，是否需要「断开连麦」或「退出直播间」'
+    } else {
+      exitSheetItems.value = ['退出直播间']
+      exitSheetTitle.value = ''
     }
     isShowExitSheet.value = true
   };
 
-  const onExitSheetSelect = (res : { tapIndex : number }) => {
+  const onExitSheetSelect = (res: { tapIndex: number }) => {
     const index = res.tapIndex
     // 当处于连麦，索引0是“断开连麦”，索引1是“退出直播间”；否则只有“退出直播间”在索引0
     if (uni.$localGuestStatus === 'CONNECTED' && index === 0) {
       disconnect({
         liveID: uni?.$liveID,
       })
-      exitSheetItems.value = ['退出直播间']
-      exitSheetTitle.value = ''
+
       uni.$localGuestStatus = 'IDLE'
       return
     }
@@ -435,6 +438,7 @@
       leaveLive({
         success: () => {
           uni.$liveID = ''
+
           uni.redirectTo({
             url: `/pages/scenes/live/livelist/index`,
             delta: 1,
@@ -496,7 +500,7 @@
     }
   };
 
-  const onCoGuestSheetSelect = (res : { tapIndex : number }) => {
+  const onCoGuestSheetSelect = (res: { tapIndex: number }) => {
     if (uni.$localGuestStatus === 'CONNECTED') {
       if (res.tapIndex === 0) {
         disconnect({
@@ -537,23 +541,6 @@
       icon: 'success',
       duration: 1500
     });
-  };
-
-  // 显示礼物提示
-  const showGiftToast = async (giftData ?: any, isOnlyDisplay : boolean = false) => {
-    if (!giftData) return;
-    giftInfo.value = giftData;
-    showGift(giftData, { onlyDisplay: isOnlyDisplay });
-
-    if (barrageListRef.value) {
-      barrageListRef.value.showToast({
-        name: giftData?.sender?.userName || giftData?.sender?.userID || '',
-        avatarURL: giftData?.sender?.avatarURL || '',
-        desc: giftData?.gift.name || '',
-        iconURL: giftData?.gift.iconURL || '',
-        duration: 3000
-      });
-    }
   };
 
   const svgaPlayerFinished = () => {
@@ -688,9 +675,6 @@
     height: 48rpx;
     margin-left: 16rpx;
   }
-
-
-
 
   .footer {
     flex: 1;

@@ -13,8 +13,9 @@
   import { useLiveAudienceState } from '@/uni_modules/tuikit-atomic-x/state/LiveAudienceState';
   const {
     sendTextMessage,
+    appendLocalTip,
   } = useBarrageState(uni?.$liveID);
-  const { audienceList } = useLiveAudienceState(uni?.$liveID);
+  const { messageBannedUserList } = useLiveAudienceState(uni?.$liveID);
   const inputValue = ref("");
   const isDisableSendMessage = ref(false);
   const sendMessage = (event : any) => {
@@ -38,30 +39,42 @@
     inputValue.value = ""
   };
 
-  watch(audienceList, (newValue, oldValue) => {
-    (newValue || []).forEach((obj, index) => {
-      if (obj?.userID === uni.$userID) {
-        const oldUserInfo = (oldValue || [])[index] || {};
-        if (obj.isMessageDisabled && !oldUserInfo?.isMessageDisabled) {
-          isDisableSendMessage.value = true;
-          uni.showToast({
-            title: '当前房间内\n您已被禁言',
-            icon: 'none',
-            duration: 2000,
-            position: 'center',
-          });
-        }
-        if (!obj.isMessageDisabled && oldUserInfo?.isMessageDisabled) {
-          isDisableSendMessage.value = false;
-          uni.showToast({
-            title: '当前房间内\n您已被解除禁言',
-            icon: 'none',
-            duration: 2000,
-            position: 'center',
-          });
-        }
+  //only for test
+  const testAppendLocalTip = () => {
+    appendLocalTip({
+      liveID: uni?.$liveID,
+      message:{
+        liveID: uni?.$liveID,
+        sender: { userID: uni.$userID },
+        sequence: 0,
+        timestampInSecond: Math.floor(Date.now() / 1000),
+        messageType: 0,
+        textContent: "This is a local tip message",
       }
     });
+  };
+
+  watch(messageBannedUserList, (newValue, oldValue) => {
+    const isBanned = (newValue || []).some(obj => obj?.userID === uni.$userID);
+    const wasBanned = (oldValue || []).some(obj => obj?.userID === uni.$userID);
+    if (isBanned && !wasBanned) {
+      isDisableSendMessage.value = true;
+      uni.showToast({
+        title: '当前房间内\n您已被禁言',
+        icon: 'none',
+        duration: 2000,
+        position: 'center',
+      });
+    }
+    if (!isBanned && wasBanned) {
+      isDisableSendMessage.value = false;
+      uni.showToast({
+        title: '当前房间内\n您已被解除禁言',
+        icon: 'none',
+        duration: 2000,
+        position: 'center',
+      });
+    }
   }, { immediate: true, deep: true });
 </script>
 

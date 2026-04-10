@@ -8,18 +8,15 @@
             <text class="active-text">发起连线</text>
             <view class="end-right" @tap.stop="handleExitCoHost" v-if="connected?.length > 0">
               <image class="end-connect" src="/static/images/logout.png"></image>
-              <text style="color: #E6594C; padding-left: 10rpx;">断开</text>
+              <text style="color: #E6594C; padding-left: 10rpx;">断开连线</text>
             </view>
           </view>
         </view>
       </view>
-      <view
-        style="display: flex; width: 800rpx; flex-direction: row; padding-left: 80rpx; padding-right: 80rpx;margin-bottom: 40rpx; justify-content:space-between; "
-        @click.stop v-if="filteredConnected?.length > 0">
-        <text class="title-text">连线中</text>
+      <view style="display: flex; width: 800rpx; flex-direction: row; padding-left: 80rpx; padding-right: 80rpx;margin-bottom: 40rpx; justify-content:space-between; " @click.stop v-if="filteredConnected?.length > 0">
+        <text class="title-text">连线中({{ filteredConnected?.length || 0 }})</text>
       </view>
-      <list v-if="filteredConnected?.length > 0"
-        style="display: flex; width: 800rpx; padding-left: 80rpx; margin-bottom: 40rpx;">
+      <list v-if="filteredConnected?.length > 0" style="display: flex; width: 800rpx; padding-left: 80rpx; margin-bottom: 40rpx;">
         <cell v-for="connect in filteredConnected" :key="connect.userID" class="audience-item">
           <view class="audience-info">
             <view class="audience-avatar-container">
@@ -36,9 +33,7 @@
       <view v-if="liveList?.length > 0" class="audience-grid">
 
       </view>
-      <view
-        style="display: flex; width: 800rpx; flex-direction: row; padding-left: 80rpx; padding-right: 80rpx;margin-bottom: 40rpx; justify-content:space-between; "
-        @click.stop>
+      <view style="display: flex; width: 800rpx; flex-direction: row; padding-left: 80rpx; padding-right: 80rpx;margin-bottom: 40rpx; justify-content:space-between; " @click.stop>
         <text class="title-text">推荐列表</text>
         <text class="title-text" @click="handleRefresh">刷新</text>
       </view>
@@ -52,11 +47,10 @@
             </view>
             <view class="audience-item-right">
               <view class="audience-detail">
-                <text class="audience-name"
-                  :numberOfLines="1">{{ host?.liveOwner?.userName || host?.liveOwner?.userID}}</text>
+                <text class="audience-name" :numberOfLines="1">{{ host?.liveOwner?.userName || host?.liveOwner?.userID}}</text>
               </view>
               <view :class=" isHostInviting(host) ? 'start-link-waiting' : 'start-link' " @tap="onStartLinkTap(host)">
-                <text class="start-link-text">{{ isHostInviting(host) ? '邀请中' : '邀请连线' }}</text>
+                <text class="start-link-text">{{ isHostInviting(host) ? '邀请中' : '邀请' }}</text>
               </view>
             </view>
           </view>
@@ -79,6 +73,7 @@
     nextTick
   } from 'vue'
   import {
+    CoHostLayoutTemplateType,
     useCoHostState
   } from "@/uni_modules/tuikit-atomic-x/state/CoHostState"
   import {
@@ -261,11 +256,11 @@
     requestHostConnection({
       liveID: uni?.$liveID,
       targetHostLiveID: host.liveID,
-      layoutTemplate: 'HOST_DYNAMIC_GRID',
+      layoutTemplate: CoHostLayoutTemplateType.HOST_DYNAMIC_GRID,
       timeout: 30,
-      extensionInfo: "",
-      success: (res) => {
-        console.log(res)
+      extraInfo: "",
+      success: () => {
+        console.log("requestHostConnection success")
       },
       fail: (errorCode) => {
         console.log(errorCode)
@@ -285,11 +280,9 @@
             title: '连线失败'
           })
         }
-
       }
     },)
   }
-
 
   const handleExitCoHost = () => {
     uni.showModal({
@@ -406,7 +399,7 @@
 
   .end-right {
     position: absolute;
-    right: 80rpx;
+    right: 50rpx;
     left: auto;
     display: flex;
     flex-direction: row;

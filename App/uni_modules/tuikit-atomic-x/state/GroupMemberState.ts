@@ -155,7 +155,7 @@ class GroupMemberState implements IGroupMemberState {
       },
     };
 
-    callAPI(options, (response: string) => {
+    callAPI(JSON.stringify(options), (response: string) => {
       try {
         const result = safeJsonParse<any>(response, {});
         // console.log(`[${this.instanceId}][createStore] Response:`, result);
@@ -239,7 +239,7 @@ class GroupMemberState implements IGroupMemberState {
         }
       };
 
-      callAPI(options, (response: string) => {
+      callAPI(JSON.stringify(options), (response: string) => {
         try {
           const result = safeJsonParse<any>(response, {});
 
@@ -269,7 +269,7 @@ class GroupMemberState implements IGroupMemberState {
         }
       };
 
-      callAPI(options, (response: string) => {
+      callAPI(JSON.stringify(options), (response: string) => {
         try {
           const result = safeJsonParse<any>(response, {});
           // console.log(`[${this.instanceId}][fetchMoreGroupMemberList] Response:`, result);
@@ -301,7 +301,7 @@ class GroupMemberState implements IGroupMemberState {
         }
       };
 
-      callAPI(options, (response: string) => {
+      callAPI(JSON.stringify(options), (response: string) => {
         try {
           const result = safeJsonParse<HybridResponseData<{ membersInfo: GroupMember[] }>>(response, { code: -1 });
 
@@ -333,7 +333,7 @@ class GroupMemberState implements IGroupMemberState {
         }
       };
 
-      callAPI(options, (response: string) => {
+      callAPI(JSON.stringify(options), (response: string) => {
         try {
           const result = safeJsonParse<any>(response, {});
 
@@ -364,7 +364,7 @@ class GroupMemberState implements IGroupMemberState {
         }
       };
 
-      callAPI(options, (response: string) => {
+      callAPI(JSON.stringify(options), (response: string) => {
         try {
           const result = safeJsonParse<any>(response, {});
           // console.log(`[${this.instanceId}][deleteGroupMember] Response:`, result);
@@ -396,7 +396,7 @@ class GroupMemberState implements IGroupMemberState {
         }
       };
 
-      callAPI(options, (response: string) => {
+      callAPI(JSON.stringify(options), (response: string) => {
         try {
           const result = safeJsonParse<any>(response, {});
           // console.log(`[${this.instanceId}][setMuteAllMembers] Response:`, result);
@@ -429,7 +429,7 @@ class GroupMemberState implements IGroupMemberState {
         }
       };
 
-      callAPI(options, (response: string) => {
+      callAPI(JSON.stringify(options), (response: string) => {
         try {
           const result = safeJsonParse<any>(response, {});
           // console.log(`[${this.instanceId}][setGroupMemberMuteTime] Response:`, result);
@@ -461,7 +461,7 @@ class GroupMemberState implements IGroupMemberState {
         }
       };
 
-      callAPI(options, (response: string) => {
+      callAPI(JSON.stringify(options), (response: string) => {
         try {
           const result = safeJsonParse<any>(response, {});
           // console.log(`[${this.instanceId}][setSelfGroupNameCard] Response:`, result);
@@ -494,7 +494,7 @@ class GroupMemberState implements IGroupMemberState {
         }
       };
 
-      callAPI(options, (response: string) => {
+      callAPI(JSON.stringify(options), (response: string) => {
         try {
           const result = safeJsonParse<any>(response, {});
           // console.log(`[${this.instanceId}][setGroupMemberRole] Response:`, result);
@@ -529,7 +529,7 @@ class GroupMemberState implements IGroupMemberState {
         }
       };
 
-      callAPI(options, (response: string) => {
+      callAPI(JSON.stringify(options), (response: string) => {
         try {
           const result = safeJsonParse<any>(response, {});
           // console.log(`[${this.instanceId}][destroyStore] Response:`, result);

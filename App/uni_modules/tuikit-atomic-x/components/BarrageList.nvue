@@ -2,17 +2,14 @@
   <view class="barrage-container">
     <!-- 聊天消息列表 -->
     <list class="chat-list" scroll-y :show-scrollbar="false" :style="{ bottom: bottomPx + 'px' }">
-      <cell class="chat-item" v-if="mixMessageList.length > 0" v-for="(message) in mixMessageList"
-        :key="message?.sequence" @tap="onItemTap(message)">
+      <cell class="chat-item" v-if="mixMessageList.length > 0" v-for="(message) in mixMessageList" :key="message?.sequence" @tap="onItemTap(message)">
         <view class="message-content-wrapper">
           <view class="nickname-content-gift" v-if="message?.gift">
-            <text class="chat-nickname"
-              numberOfLines="1">{{ message?.sender?.userName || message?.sender?.userID }}</text>
+            <text class="chat-nickname" numberOfLines="1">{{ message?.sender?.userName || message?.sender?.userID }}</text>
             <view class="gift-row">
               <text class="gift-prefix"> 送给 </text>
               <text class="gift-recipient">{{ giftReceiverName }}</text>
-              <text class="gift-name"
-                :style="{ color: getRandomGiftColor(message) }">{{ message?.textContent || '' }}</text>
+              <text class="gift-name" :style="{ color: getRandomGiftColor(message) }">{{ message?.textContent || '' }}</text>
               <image class="gift-icon" :src="message?.gift?.iconURL || ''" alt="" />
               <text class="gift-count" style="font-size: 26rpx;">x{{ message?.count || '1' }}</text>
             </view>
@@ -22,8 +19,7 @@
               <text class="message-role">主播</text>
             </view>
             <view class="nickname-content-wrapper">
-              <text class="chat-nickname"
-                numberOfLines="1">{{ message?.sender?.userName || message?.sender?.userID }}：</text>
+              <text class="chat-nickname" numberOfLines="1">{{ message?.sender?.userName || message?.sender?.userID }}：</text>
               <text class="chat-content">{{ message?.textContent || '' }}</text>
             </view>
           </view>
@@ -60,10 +56,10 @@
   import { useLiveListState } from "@/uni_modules/tuikit-atomic-x/state/LiveListState";
 
   const props = defineProps<{
-    mode ?: 'anchor' | 'audience',
-    bottomPx ?: number,
-    liveID ?: string,
-    toast ?: any, // GiftToast 的 toast 属性
+    mode?: 'anchor' | 'audience',
+    bottomPx?: number,
+    liveID?: string,
+    toast?: any, // GiftToast 的 toast 属性
   }>();
 
   const mode = computed(() => props.mode || 'audience');
@@ -72,7 +68,7 @@
   const liveID = computed(() => props.liveID || uni?.$liveID);
 
   const { messageList } = useBarrageState(liveID.value);
-  const { addGiftListener, removeGiftListener } = useGiftState(liveID.value);
+  const { addGiftListener, removeGiftListener } = useGiftState(uni?.$liveID);
   const { currentLive } = useLiveListState(liveID.value);
 
   const mixMessageList = ref<any[]>(messageList.value || []);
@@ -89,7 +85,7 @@
   const giftColors = ['#FF4D4F', '#FAAD14', '#FF7A45', '#52C41A'];
   const messageColorMap = new Map<string, string>();
 
-  const getRandomGiftColor = (message : any) => {
+  const getRandomGiftColor = (message: any) => {
     const key = String(message?.sequence || message?.id || message?.sender?.userID + '_' + message?.textContent);
 
     if (!messageColorMap.has(key)) {
@@ -126,7 +122,7 @@
     return Date.now().toString(36) + Math.random().toString(36).substr(2);
   };
 
-  const showToast = (toastConfig : Partial<any>) => {
+  const showToast = (toastConfig: Partial<any>) => {
     const toast = {
       id: generateId(),
       duration: 3000,
@@ -150,7 +146,7 @@
     return toast.id;
   };
 
-  const hideToast = (id : string) => {
+  const hideToast = (id: string) => {
     const index = visibleToasts.value.findIndex(toast => toast.id === id);
     if (index > -1) {
       const removedToast = visibleToasts.value.splice(index, 1)[0];
@@ -162,8 +158,8 @@
     visibleToasts.value = [];
   };
 
-  const getToastStyle = (toast : any) => {
-    const style : any = {
+  const getToastStyle = (toast: any) => {
+    const style: any = {
       position: 'fixed',
       zIndex: 999
     };
@@ -175,7 +171,7 @@
       if (toast.position.bottom !== undefined) {
         style.bottom = typeof toast.position.bottom === 'number' ? `${toast.position.bottom}rpx` : toast.position.bottom;
       }
-      if (toast.position.left !== undefined) {
+      if (toast.position?.left !== undefined) {
         style.left = typeof toast.position.left === 'number' ? `${toast.position.left}rpx` : toast.position.left;
       }
       if (toast.position.right !== undefined) {
@@ -198,22 +194,36 @@
     immediate: true
   });
 
-  const emit = defineEmits(['itemTap', 'toastClosed']);
-  const onItemTap = (message : any) => {
+  const emit = defineEmits(['itemTap', 'toastClosed', 'receiveGift']);
+  const onItemTap = (message: any) => {
     emit('itemTap', message);
   };
 
-  const handleReceiveGift = {
-    callback: (event) => {
+  const handleReceiveGift =
+    (event) => {
       const res = JSON.parse(event)
+      const gift = typeof res.gift === 'string' ? JSON.parse(res.gift) : res.gift;
+      const sender = typeof res.sender === 'string' ? JSON.parse(res.sender) : res.sender;
+      const giftData = { ...res, gift, sender };
+
+      // 将礼物消息插入弹幕列表
       const value = {
-        ...res,
-        textContent: `${res.gift?.name || ''}`,
+        ...giftData,
+        textContent: `${gift?.name || ''}`,
       };
       mixMessageList.value = [...mixMessageList.value, value];
       scrollToBottom();
+
+      showToast({
+        name: sender?.userName || sender?.userID || '',
+        avatarURL: sender?.avatarURL || '',
+        desc: gift?.name || '',
+        iconURL: gift?.iconURL || '',
+        duration: 3000,
+      });
+
+      emit('receiveGift', giftData);
     }
-  }
 
   onMounted(() => {
     if (props.toast && Object.keys(props.toast).length > 0) {
