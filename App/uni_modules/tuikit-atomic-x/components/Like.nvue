@@ -6,12 +6,11 @@
     </view>
 
     <!-- 点赞动画容器 - 平台适配 -->
-    <view class="like-animations-container" :class="{ 'ios-container': isIOS, 'android-container': !isIOS }" :style="{ 
+    <view class="like-animations-container" :class="{ 'ios-container': isIOS, 'android-container': !isIOS }" :style="{
         width: likeAnimations.length > 0 ? '400rpx' : '0',
         height: likeAnimations.length > 0 ? '600rpx' : '0'
       }">
-      <view v-for="(like, index) in likeAnimations" :key="like.id" class="like-animation"
-        :class="{ 'ios-animation': isIOS, 'android-animation': !isIOS }" :style="getAnimationStyle(like)">
+      <view v-for="(like, index) in likeAnimations" :key="like.id" class="like-animation" :class="{ 'ios-animation': isIOS, 'android-animation': !isIOS }" :style="getAnimationStyle(like)">
         <image class="heart-icon" :src="like.imageSrc" mode="aspectFit" />
       </view>
     </view>
@@ -81,7 +80,6 @@
   const BATCH_DELAY = 6000; // 6秒批量发送延迟
   const lastSendTime = ref(0); // 记录上次发送时间
   const isFirstClick = ref(true); // 是否第一次点击
-  
   // 存储每次接收到的总点赞数
   const lastTotalLikesReceived = ref(0); // 上次接收到的总点赞数
 
@@ -144,7 +142,7 @@
     }
   };
 
-  const createLikeAnimation = (count : number) => {
+  const createLikeAnimation = (count: number) => {
     console.log('=== createLikeAnimation 开始 ===');
     console.log('传入的count参数:', count);
     console.log('当前动画数组长度:', likeAnimations.value.length);
@@ -355,7 +353,7 @@
           console.error(`批量sendLike failed, code: ${code}, msg: ${msg}`);
         },
       });
-      
+
       // 清空待发送数量
       pendingLikeCount.value = 0;
     }
@@ -399,7 +397,7 @@
     // 智能发送策略：判断是否需要立即发送
     const timeSinceLastSend = currentTime - lastSendTime.value;
     const shouldSendImmediately = isFirstClick.value || timeSinceLastSend >= BATCH_DELAY;
-    
+
     console.log('智能发送判断:', {
       isFirstClick: isFirstClick.value,
       timeSinceLastSend: timeSinceLastSend,
@@ -413,17 +411,17 @@
       // 第一次点击或距离上次发送超过6秒，立即发送
       console.log('立即发送点赞');
       sendBatchLikes();
-      
+
       // 立即发送时显示动画
       console.log('立即发送，显示动画');
       createLikeAnimation(3);
     } else {
       // 距离上次发送不足6秒，累积并设置定时器
       console.log('累积点赞，设置延迟发送');
-      
+
       // 6秒内点击不显示动画，只累积数量
       console.log('6秒内点击，不显示动画，只累积数量');
-      
+
       // 清除之前的定时器
       if (batchTimer.value) {
         clearTimeout(batchTimer.value);
@@ -432,7 +430,7 @@
       // 计算剩余等待时间
       const remainingTime = BATCH_DELAY - timeSinceLastSend;
       console.log('剩余等待时间:', remainingTime, 'ms');
-      
+
       // 设置剩余时间的定时器
       batchTimer.value = setTimeout(() => {
         sendBatchLikes();
@@ -446,7 +444,7 @@
   };
 
   // 对外暴露触发方法
-  function triggerLike(count : number = 1) {
+  function triggerLike(count: number = 1) {
     createLikeAnimation(count);
   }
 
@@ -468,7 +466,7 @@
   };
 
   // 方案二：统一兼容方案 - 使用更简单的动画实现
-  const createSimpleAnimation = (count : number) => {
+  const createSimpleAnimation = (count: number) => {
     console.log('=== createSimpleAnimation 开始 ===');
     console.log('传入的count参数:', count);
     console.log('当前动画数组长度:', likeAnimations.value.length);
@@ -527,14 +525,14 @@
     console.log('=== createSimpleAnimation 结束 ===');
   };
 
-  const handleReceiveLikesMessage = {
-    callback: (event) => {
+  const handleReceiveLikesMessage =
+    (event) => {
       const res = JSON.parse(event)
-      if (res.sender.userID !== uni.$userID) {
+      const sender = typeof res.sender === 'string' ? JSON.parse(res.sender) : res.sender;
+      if (sender.userID !== uni.$userID) {
         createLikeAnimation(3);
       }
     }
-  }
 
   watch(totalLikeCount, (newVal, oldVal) => {
     if (oldVal) {

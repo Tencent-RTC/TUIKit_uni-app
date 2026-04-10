@@ -1,9 +1,5 @@
 import App from './App'
-import { TUICallKit } from "@/uni_modules/TencentCloud-Call/callkit/callServices/services/index";
-import { TUIStore } from "@/uni_modules/TencentCloud-Call/callkit/callServices/TUIStore/index";
 
-uni.$TUICallKit = TUICallKit;
-uni.$TUIStore = TUIStore;
 
 
 // #ifndef VUE3
@@ -18,7 +14,9 @@ app.$mount()
 // #endif
 
 // #ifdef VUE3
-import { createSSRApp } from 'vue'
+import {
+  createSSRApp
+} from 'vue'
 export function createApp() {
   const app = createSSRApp(App)
   return {

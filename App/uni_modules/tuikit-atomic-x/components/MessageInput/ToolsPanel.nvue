@@ -2,18 +2,9 @@
   <view class="tools-panel">
     <scroll-view class="tools-scroll" scroll-y="true">
       <view class="tools-grid">
-        <view 
-          v-for="(tool, index) in displayToolList" 
-          :key="tool.id"
-          class="tool-item"
-          :class="{ 'last-in-row': (index + 1) % 4 === 0 }"
-        >
+        <view v-for="(tool, index) in displayToolList" :key="tool.id" class="tool-item" :class="{ 'last-in-row': (index + 1) % 4 === 0 }">
           <view class="tool-icon-wrapper" @tap="handleToolClick(tool)">
-            <image
-              class="tool-icon"
-              :src="tool.icon"
-              mode="aspectFit"
-            ></image>
+            <image class="tool-icon" :src="tool.icon" mode="aspectFit"></image>
           </view>
           <text class="tool-name">{{ tool.name }}</text>
         </view>
@@ -23,235 +14,361 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
-import { UserPickerType } from '../../types/userpicker';
-import { useMessageInputState } from '../../state/MessageInputState';
-import { DEFAULT_TOOLS } from './types';
-import type { ToolItem } from './types';
+  import { computed, ref } from 'vue';
+  import { UserPickerType } from '../../types/userpicker';
+  import { useMessageInputState } from '../../state/MessageInputState';
+  import { DEFAULT_TOOLS } from './types';
+  import type { ToolItem } from './types';
+  import {
+    useCallState
+  } from '@/uni_modules/tuikit-atomic-x/state/CallState';
+  import {
+    useDeviceState
+  } from "@/uni_modules/tuikit-atomic-x/state/DeviceState";
+  import { getCurrentPageFullPath, isNavigating, isCallEnding } from "../../server/callService"
+  import { checkCallPermissionWithDialog } from "@/uni_modules/tuikit-atomic-x/utils/callPermission";
+  import { reportScene } from '@/uni_modules/tuikit-atomic-x';
 
-interface ChooseImageSuccessResult {
-  tempFiles: Array<{
-    path: string;
+  interface ChooseImageSuccessResult {
+    tempFiles: Array<{
+      path: string;
+      size: number;
+    }>;
+  }
+
+  interface ChooseVideoSuccessResult {
+    tempFilePath: string;
+    duration: number;
     size: number;
-  }>;
-}
-
-interface ChooseVideoSuccessResult {
-  tempFilePath: string;
-  duration: number;
-  size: number;
-  height: number;
-  width: number;
-}
-
-interface ChooseMediaSuccessResult {
-  type: 'image' | 'video' | 'mix';
-  tempFiles: Array<{
     height: number;
     width: number;
-    fileType: 'video' | 'image';
-    tempFilePath: string;
-    thumbTempFilePath: string;
-    // seconds
-    duration: number;
-    type: 'video' | 'image';
-    byteSize: number;
-  }>;
-}
-
-interface ToolsPanelProps {
-  conversationID: string;
-  toolList?: ToolItem[];
-}
-
-const props = withDefaults(defineProps<ToolsPanelProps>(), {
-  conversationID: '',
-});
-
-const messageInputState = useMessageInputState({
-  conversationID: props.conversationID,
-});
-
-// 计算属性
-const displayToolList = computed(() => {
-  if (props.toolList && props.toolList.length > 0) {
-    return props.toolList;
   }
-  return DEFAULT_TOOLS;
-});
 
-const isC2CConversation = computed(() => props.conversationID.startsWith('c2c_'))
-
-// 移除无用的资源路径前缀
-const removeUnusedResourcePrefix = (path: string) => {
-  return path.startsWith('file:///') ? path.substring(7) : path;
-};
-
-const handleToolClick = (tool: ToolItem) => {
-  // 如果有自定义 callback，优先执行 callback
-  if (tool.callback) {
-    tool.callback();
-    return;
+  interface ChooseMediaSuccessResult {
+    type: 'image' | 'video' | 'mix';
+    tempFiles: Array<{
+      height: number;
+      width: number;
+      fileType: 'video' | 'image';
+      tempFilePath: string;
+      thumbTempFilePath: string;
+      // seconds
+      duration: number;
+      type: 'video' | 'image';
+      byteSize: number;
+    }>;
   }
-  
-  // 内置工具处理
-  switch (tool.id) {
-    case 'image':
-      uni.chooseImage({
-        count: 9,
-        sourceType: ['camera', 'album'],
-        success: (chooseImageResult: ChooseImageSuccessResult) => {
-          chooseImageResult.tempFiles.forEach(file => {
-            uni.getImageInfo({
-              src: file.path,
-              success: (getImageInfoResult: any) => {
-                messageInputState?.sendImageMessage({
-                  imagePath: removeUnusedResourcePrefix(getImageInfoResult.path),
-                  imageWidth: getImageInfoResult.width,
-                  imageHeight: getImageInfoResult.height,
-                });
-              },
-              fail: (err: any) => {
-                uni.showToast({
-                  title: '获取图片信息失败',
-                  icon: 'none',
-                });
-              },
+
+  interface ToolsPanelProps {
+    conversationID: string;
+    toolList?: ToolItem[];
+  }
+
+  const {
+    calls,
+    selfInfo,
+    setFramework
+  } = useCallState()
+  const {
+    openLocalCamera,
+    openLocalMicrophone,
+  } = useDeviceState();
+  const props = withDefaults(defineProps<ToolsPanelProps>(), {
+    conversationID: '',
+  });
+
+  const messageInputState = useMessageInputState({
+    conversationID: props.conversationID,
+  });
+
+  // 计算属性
+  const displayToolList = computed(() => {
+    if (props.toolList && props.toolList.length > 0) {
+      return props.toolList;
+    }
+    return DEFAULT_TOOLS;
+  });
+
+  const isC2CConversation = computed(() => props.conversationID.startsWith('c2c_'))
+
+  // 移除无用的资源路径前缀
+  const removeUnusedResourcePrefix = (path: string) => {
+    return path.startsWith('file:///') ? path.substring(7) : path;
+  };
+
+  const handleToolClick = (tool: ToolItem) => {
+    // 如果有自定义 callback，优先执行 callback
+    if (tool.callback) {
+      tool.callback();
+      return;
+    }
+
+    // 内置工具处理
+    switch (tool.id) {
+      case 'image':
+        uni.chooseImage({
+          count: 9,
+          sourceType: ['camera', 'album'],
+          success: (chooseImageResult: ChooseImageSuccessResult) => {
+            chooseImageResult.tempFiles.forEach(file => {
+              uni.getImageInfo({
+                src: file.path,
+                success: (getImageInfoResult: any) => {
+                  messageInputState?.sendImageMessage({
+                    imagePath: removeUnusedResourcePrefix(getImageInfoResult.path),
+                    imageWidth: getImageInfoResult.width,
+                    imageHeight: getImageInfoResult.height,
+                  });
+                },
+                fail: (err: any) => {
+                  uni.showToast({
+                    title: '获取图片信息失败',
+                    icon: 'none',
+                  });
+                },
+              });
             });
-          });
-        },
-        fail: (err: any) => {
-          if (err.errMsg.includes('mission')) {
-            uni.showToast({
-              title: '请检查相关访问权限',
-              icon: 'none',
+          },
+          fail: (err: any) => {
+            if (err.errMsg.includes('mission')) {
+              uni.showToast({
+                title: '请检查相关访问权限',
+                icon: 'none',
+              });
+            }
+          },
+        });
+        break;
+      case 'video':
+        uni.chooseMedia({
+          count: 1,
+          mediaType: ['video'],
+          success: (chooseMediaResult: ChooseMediaSuccessResult) => {
+            chooseMediaResult.tempFiles.forEach(file => {
+              messageInputState?.sendVideoMessage({
+                videoPath: removeUnusedResourcePrefix(file.tempFilePath),
+                videoSnapshotPath: removeUnusedResourcePrefix(file.thumbTempFilePath),
+                videoSnapshotWidth: file.width,
+                videoSnapshotHeight: file.height,
+                videoDuration: Math.round(file.duration),
+                videoType: file.type,
+              })
             });
-          }
-        },
-      });
-      break;
-    case 'video':
-      uni.chooseMedia({
-        count: 1,
-        mediaType: ['video'],
-        success: (chooseMediaResult: ChooseMediaSuccessResult) => {
-          chooseMediaResult.tempFiles.forEach(file => {
-            messageInputState?.sendVideoMessage({
-              videoPath: removeUnusedResourcePrefix(file.tempFilePath),
-              videoSnapshotPath: removeUnusedResourcePrefix(file.thumbTempFilePath),
-              videoSnapshotWidth: file.width,
-              videoSnapshotHeight: file.height,
-              videoDuration: Math.round(file.duration),
-              videoType: file.type,
-            })
-          });
-        },
-        fail: (err: any) => {
-          if (err.errMsg.includes('mission')) {
-            uni.showToast({
-              title: '请检查相关访问权限',
-              icon: 'none',
-            });
-          }
-        },
-      });
-      break;
-    case 'voiceCall':
-      startCall(1);
-      break;
-    case 'videoCall':
-      startCall(2);
-      break;
-    default:
-      console.log('Tool clicked:', tool);
-  }
-};
+          },
+          fail: (err: any) => {
+            if (err.errMsg.includes('mission')) {
+              uni.showToast({
+                title: '请检查相关访问权限',
+                icon: 'none',
+              });
+            }
+          },
+        });
+        break;
+      case 'voiceCall':
+        startCall(0);
+        break;
+      case 'videoCall':
+        startCall(1);
+        break;
+      default:
+        console.log('Tool clicked:', tool);
+    }
+  };
 
-const startCall = (mediaType: number) => {
-  if (!uni.$TUICallKit || !uni.$TUIStore) {
-    plus.nativeUI.toast('请先集成 TUICallKit', { verticalAlign: 'top' });
-    return;
-  }
-  const getPeerUserID = () => {
-    return isC2CConversation.value ? props.conversationID.replace('c2c_', '') : ''
-  }
-  if (isC2CConversation.value) {
-    uni.$TUICallKit.calls({
-      userIDList: [getPeerUserID()],
-      mediaType,
-    })
-  } else {
-    uni.navigateTo({
-      url: `/pages/scenes/chat/userPicker/userPicker?businessType=${UserPickerType.SELECT_GROUP_MEMBER}&conversationID=${props.conversationID}`,
-      events: {
-        onSelectGroupMember: (data) => {
-          const userIDList = data.selectedUsers.map(user => user.userID);
-          uni.$TUICallKit.calls({
-            callParams: {
-              chatGroupID: props.conversationID.replace('group_', ''),
-            },
-            userIDList,
-            mediaType,
-          });
-        }
+  // 呼叫防抖锁，防止频繁点击呼叫按钮
+  const isCalling = ref(false);
+
+  const startCall = async (mediaType: number) => {
+    setFramework(15)
+    // 防抖：上一次呼叫流程尚未完成时，不允许再次呼叫
+    if (isCalling.value) {
+      console.log('[ToolsPanel] call skipped: isCalling is true');
+      return;
+    }
+    if (isNavigating()) {
+      console.log('[ToolsPanel] call skipped: navigation in progress');
+      return;
+    }
+    if (isCallEnding()) {
+      console.log('[ToolsPanel] call skipped: previous call end still processing');
+      return;
+    }
+
+    const getPeerUserID = () => {
+      return isC2CConversation.value ? props.conversationID.replace('c2c_', '') : ''
+    }
+    if (isC2CConversation.value) {
+      if (selfInfo.value.status === 1 || selfInfo.value.status === 2) {
+        plus.nativeUI.toast('您正在通话中，无法再次发起通话', {
+          align: 'center',
+          verticalAlign: 'center'
+        });
+        return
       }
-    })
+
+      isCalling.value = true;
+
+      if (mediaType === 1) {
+        openLocalCamera({
+          isFront: true
+        })
+      }
+      openLocalMicrophone({
+        fail: (error) => {
+          if (error === -1104) {
+            setTimeout(() => {
+              openLocalMicrophone();
+            }, 200);
+          }
+        }
+      })
+      const hasPermission = await checkCallPermissionWithDialog(mediaType);
+      if (!hasPermission) {
+        isCalling.value = false;
+        return;
+      }
+      reportScene('CHAT_INVOKE_CALL');
+      calls({
+        participantIds: [getPeerUserID()],
+        mediaType,
+        success: () => {
+          uni.$callSource = 'caller'
+          uni.$lastPage = getCurrentPageFullPath()
+          uni.navigateTo({
+            url: '/uni_modules/tuikit-atomic-x/pages/call?layoutTemplate=Float',
+            complete: () => { isCalling.value = false; }
+          })
+        },
+        fail: () => {
+          isCalling.value = false;
+        }
+      })
+    } else {
+      uni.navigateTo({
+        url: `/pages/scenes/chat/userPicker/userPicker?businessType=${UserPickerType.SELECT_GROUP_MEMBER}&conversationID=${props.conversationID}`,
+        events: {
+          onSelectGroupMember: async (data) => {
+            if (isCalling.value) return;
+            if (isNavigating()) return;
+            if (isCallEnding()) return;
+
+            if (selfInfo.value.status === 1 || selfInfo.value.status === 2) {
+              plus.nativeUI.toast('您正在通话中，无法再次发起通话', {
+                align: 'center',
+                verticalAlign: 'center'
+              });
+              return
+            }
+
+            isCalling.value = true;
+
+            if (mediaType === 1) {
+              openLocalCamera({
+                isFront: true
+              })
+            }
+            openLocalMicrophone({
+              fail: (error) => {
+                if (error === -1104) {
+                  setTimeout(() => {
+                    openLocalMicrophone();
+                  }, 200);
+                }
+              }
+            })
+            const hasPermission = await checkCallPermissionWithDialog(mediaType);
+            if (!hasPermission) {
+              isCalling.value = false;
+              return;
+            }
+            reportScene('CHAT_INVOKE_CALL');
+            const userIDList = data.selectedUsers.map(user => user.userID);
+            if (userIDList.length > 8) {
+              uni.showToast({
+                icon: "none",
+                title: "当前通话最多支持 9 人同时在线",
+              });
+              isCalling.value = false;
+              return;
+            }
+            calls({
+              participantIds: userIDList,
+              mediaType,
+              params: {
+                chatGroupId: props.conversationID.replace('group_', ''),
+              },
+              success: () => {
+                uni.$callSource = 'caller'
+                uni.$lastPage = getCurrentPageFullPath()
+                uni.navigateTo({
+                  url: '/uni_modules/tuikit-atomic-x/pages/call?layoutTemplate=Grid',
+                  complete: () => { isCalling.value = false; }
+                })
+              },
+              fail: () => {
+                isCalling.value = false;
+              }
+            })
+          }
+        }
+      })
+    }
   }
-}
 </script>
 
 <style scoped>
-.tools-panel {
-  flex: 1;
-  background-color: #FFF;
-  border-top-width: 1rpx;
-  border-top-style: solid;
-  border-top-color: #F0F2F7;
-}
+  .tools-panel {
+    flex: 1;
+    background-color: #FFF;
+    border-top-width: 1rpx;
+    border-top-style: solid;
+    border-top-color: #F0F2F7;
+  }
 
-.tools-scroll {
-  flex: 1;
-  padding: 20rpx 48rpx;
-}
+  .tools-scroll {
+    flex: 1;
+    padding: 20rpx 48rpx;
+  }
 
-.tools-grid {
-  flex-direction: row;
-  flex-wrap: wrap;
-}
+  .tools-grid {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
 
-.tool-item {
-  align-items: center;
-  margin-bottom: 8rpx;
-  margin-right: 45rpx;
-  margin-bottom: 38rpx;
-}
+  .tool-item {
+    align-items: center;
+    margin-bottom: 8rpx;
+    margin-right: 45rpx;
+    margin-bottom: 38rpx;
+  }
 
-.tool-item.last-in-row {
-  margin-right: 0;
-}
+  .tool-item.last-in-row {
+    margin-right: 0;
+  }
 
-.tool-icon-wrapper {
-  width: 128rpx;
-  height: 128rpx;
-  background-color: #F9FAFC;
-  border-radius: 28rpx;
-  justify-content: center;
-  align-items: center;
-  margin-bottom: 8rpx;
-}
+  .tool-icon-wrapper {
+    width: 128rpx;
+    height: 128rpx;
+    background-color: #F9FAFC;
+    border-radius: 28rpx;
+    justify-content: center;
+    align-items: center;
+    margin-bottom: 8rpx;
+  }
 
-.tool-icon-wrapper:active {
-  background-color: #F0F2F7;
-}
+  .tool-icon-wrapper:active {
+    background-color: #F0F2F7;
+  }
 
-.tool-icon {
-  width: 52rpx;
-  height: 42rpx;
-}
+  .tool-icon {
+    width: 52rpx;
+    height: 42rpx;
+  }
 
-.tool-name {
-  font-size: 24rpx;
-  color: rgba(0, 0, 0, 0.40);
-  text-align: center;
-}
+  .tool-name {
+    font-size: 24rpx;
+    color: rgba(0, 0, 0, 0.40);
+    text-align: center;
+  }
 </style>

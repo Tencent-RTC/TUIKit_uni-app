@@ -58,7 +58,7 @@ class MessageActionState {
       }
     };
     
-    callAPI(options, (response: string) => {
+    callAPI(JSON.stringify(options), (response: string) => {
       try {
         const result = safeJsonParse<any>(response, {});
         
@@ -108,7 +108,7 @@ class MessageActionState {
           createStoreParams: this.instanceId,
         }
       }
-      callAPI(options, (data: string) => {
+      callAPI(JSON.stringify(options), (data: string) => {
         try {
           const result = safeJsonParse(data, {}) as any;
           if (result.code === 0) {
@@ -136,7 +136,7 @@ class MessageActionState {
         }
       }
 
-      callAPI(options, (data: string) => {
+      callAPI(JSON.stringify(options), (data: string) => {
         try {
           const result = safeJsonParse(data, {}) as any;
           if (result.code === 0) {
@@ -182,7 +182,7 @@ class MessageActionState {
       }
     };
 
-    callAPI(options, (response: string) => {
+    callAPI(JSON.stringify(options), (response: string) => {
       try {
         const result = safeJsonParse(response, {}) as any;
         console.log(`[${this.instanceId}][destroyStore] Response:`, result);

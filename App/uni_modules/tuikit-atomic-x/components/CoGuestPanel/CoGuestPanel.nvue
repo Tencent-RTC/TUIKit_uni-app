@@ -4,8 +4,8 @@
     <view class="bottom-drawer" :class="{ 'drawer-open': modelValue }">
       <view class="audience-header">
         <view class="tab-container">
-          <!-- <view 
-            class="tab-item" 
+          <!-- <view
+            class="tab-item"
             :class="activeTab === 'invite' ? 'active' : 'inactive'"
             @tap="activeTab = 'invite'"
           >
@@ -16,7 +16,7 @@
           </view> -->
           <view class="tab-item" :class="activeTab === 'requests' ? 'active' : 'inactive'"
             @tap="activeTab = 'requests'">
-            <text :class="activeTab === 'requests' ? 'active-text' : 'inactive-text'">连麦申请</text>
+            <text :class="activeTab === 'requests' ? 'active-text' : 'inactive-text'">连麦管理</text>
             <!-- 						<view class="active-line-container" v-if="activeTab === 'requests'">
 							<view class="active-line"></view>
 						</view> -->
@@ -64,14 +64,10 @@
                   >
                     <text class="link-text">{{ audience?.isMessageDisabled ? '发起连线' : '邀请中(30)s' }}</text>
                   </view>
-                </view> 
+                </view>
               </view>-->
               <view class="audience-item-bottom-line"></view>
             </view>
-          </view>
-          <view v-else class="empty-state">
-            <text class="empty-text">暂无观众申请连麦</text>
-            <view></view>
           </view>
         </view>
 

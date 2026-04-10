@@ -131,7 +131,7 @@ class MessageListState {
       }
     };
     
-    callAPI(options, (response: string) => {
+    callAPI(JSON.stringify(options), (response: string) => {
       try {
         const result = safeJsonParse<any>(response, {});
         if (result.code === 0) {
@@ -393,7 +393,7 @@ class MessageListState {
           })
         },
       }
-      callAPI(options, (data: string) => {
+      callAPI(JSON.stringify(options), (data: string) => {
         try {
           const result = safeJsonParse(data, {}) as any;
           if (result.code === 0) {
@@ -423,7 +423,7 @@ class MessageListState {
         },
       }
 
-      callAPI(options, (data: string) => {
+      callAPI(JSON.stringify(options), (data: string) => {
         try {
           const result = safeJsonParse(data, {}) as any;
           if (result.code === 0) {
@@ -467,7 +467,7 @@ class MessageListState {
         },
       }
 
-      callAPI(options, (data: string) => {
+      callAPI(JSON.stringify(options), (data: string) => {
         downloadingMsgIDs.delete(downloadKey);
         try {
           const result = safeJsonParse(data, {}) as any;
@@ -498,7 +498,7 @@ class MessageListState {
         },
       }
 
-      callAPI(options, (data: string) => {
+      callAPI(JSON.stringify(options), (data: string) => {
         try {
           const result = safeJsonParse(data, {}) as any;
           if (result.code === 0) {
@@ -533,7 +533,7 @@ class MessageListState {
         },
       }
 
-      callAPI(options, (data: string) => {
+      callAPI(JSON.stringify(options), (data: string) => {
         try {
           const result = safeJsonParse(data, {}) as any;
           if (result.code === 0) {
@@ -563,7 +563,7 @@ class MessageListState {
         },
       }
 
-      callAPI(options, (data: string) => {
+      callAPI(JSON.stringify(options), (data: string) => {
         try {
           const result = safeJsonParse(data, {}) as any;
           if (result.code === 0) {
@@ -606,7 +606,7 @@ class MessageListState {
         },
       }
 
-      callAPI(options, (data: string) => {
+      callAPI(JSON.stringify(options), (data: string) => {
         try {
           const result = safeJsonParse(data, {}) as any;
           if (result.code === 0) {
@@ -663,7 +663,7 @@ class MessageListState {
       }
     };
 
-    callAPI(options, (response: string) => {
+    callAPI(JSON.stringify(options), (response: string) => {
       try {
         const result = safeJsonParse(response, {}) as any;
         console.log(`[${this.instanceId}][destroyStore] Response:`, result);

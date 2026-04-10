@@ -3,8 +3,7 @@
                                           height: systemInfo?.windowHeight + 'px',
                                           width: systemInfo?.safeArea?.width + 'px',
                                        }">
-    <LiveStreamView v-if="liveID.length > 0" :liveID="liveID || ''" :isAnchor="true" :templateLayout="templateLayout"
-      :isLiving="isStartLive" :enableClickPanel="true" :onStreamViewClick="ShowAnchorViewClickPanel"></LiveStreamView>
+    <LiveStreamView v-if="liveID.length > 0" :liveID="liveID || ''" :isAnchor="true" :templateLayout="templateLayout" :isLiving="isStartLive" :enableClickPanel="true" :onStreamViewClick="ShowAnchorViewClickPanel"></LiveStreamView>
 
     <view class="navigate-back-arrow" @tap="goBackToTabBar" v-if="!isStartLive">
       <image class="navigate-back-arrow-image" src="/static/images/left-arrow.png"></image>
@@ -16,8 +15,7 @@
         <view class="stream-info" @tap="showAnchorInfoDrawer">
           <image class="avatar" :src="loginUserInfo?.avatarURL || defaultAvatarURL" mode="aspectFill" />
           <view class="stream-details">
-            <text class="stream-title"
-              :numberOfLines="1">{{ loginUserInfo?.nickname || loginUserInfo?.userID || '' }}</text>
+            <text class="stream-title" :numberOfLines="1">{{ loginUserInfo?.nickname || loginUserInfo?.userID || '' }}</text>
           </view>
         </view>
       </view>
@@ -38,10 +36,7 @@
     </view>
 
     <!-- 主播开播前画面区域 -->
-    <BeforeLivePanel v-if="!isStartLive" :coverURL="coverURL" :liveCategory="liveCategory" :liveMode="liveMode"
-      :templateLayout="templateLayout" :liveTitle="liveTitle" @editCover="editCover" @editTitle="editTitle"
-      @chooseCategory="chooseCategory" @chooseMode="chooseMode" @chooseTemplate="chooseTemplate" @startLive="startLive"
-      @camera="handleCamera" @settings="handleSettings" ref="beforeLivePanelRef" />
+    <BeforeLivePanel v-if="!isStartLive" :coverURL="coverURL" :liveCategory="liveCategory" :liveMode="liveMode" :templateLayout="templateLayout" :liveTitle="liveTitle" @editCover="editCover" @editTitle="editTitle" @chooseCategory="chooseCategory" @chooseMode="chooseMode" @chooseTemplate="chooseTemplate" @startLive="startLive" @camera="handleCamera" @settings="handleSettings" ref="beforeLivePanelRef" />
 
     <!-- 主播直播画面区域 -->
     <view class="live-content" v-if="isStartLive">
@@ -50,20 +45,16 @@
         <text class="live-timer">{{ liveDurationText }}</text>
       </view>
 
-      <view class="go-guest-request-container" v-if="(applicants || []).length > 0 && isShowCoGuestPanelAvatar"
-        @tap="showCoGuestPanel('requests')">
+      <view class="go-guest-request-container" v-if="(applicants || []).length > 0 && isShowCoGuestPanelAvatar" @tap="showCoGuestPanel('requests')">
         <view class="avatar-overlay-container" :style="getAvatarContainerStyle()">
           <!-- 显示前两张申请者的头像 -->
-          <image v-for="(applicant, index) in applicants.slice(0, 2)" :key="index" class="go-guest-request-img"
-            :style="getAvatarStyle(index, Math.min(applicants.length, 3))"
-            :src="applicant?.avatarURL || defaultAvatarURL" />
+          <image v-for="(applicant, index) in applicants.slice(0, 2)" :key="index" class="go-guest-request-img" :style="getAvatarStyle(index, Math.min(applicants.length, 3))" :src="applicant?.avatarURL || defaultAvatarURL" />
           <!-- 第三张图片始终显示默认头像 -->
-          <image v-if="applicants.length >= 3" class="go-guest-request-img" :style="getAvatarStyle(2, 3)"
-            src="/static/images/live-more.png" />
+          <image v-if="applicants.length >= 3" class="go-guest-request-img" :style="getAvatarStyle(2, 3)" src="/static/images/live-more.png" />
         </view>
         <text class="go-guest-request-text">申请连麦({{ (applicants || []).length }})</text>
       </view>
-      <BarrageList mode="anchor" :bottomPx="safeArea.height * 1/8" @itemTap="audienceOperator" ref="barrageListRef" />
+      <BarrageList mode="anchor" :bottomPx="safeArea.height * 1/8" @itemTap="audienceOperator" @receiveGift="onBarrageReceiveGift" ref="barrageListRef" />
       <view class="live-bottom-Panel" :style="{ width: safeArea.width + 'px' }">
         <BarrageInput></BarrageInput>
         <view class="action-buttons">
@@ -88,18 +79,15 @@
       </view>
 
       <LiveAudienceList v-model="isShowAudienceList"></LiveAudienceList>
-      <AudienceActionPanel v-if="liveID" v-model="isShowAudienceActionPanel" :userInfo="selectedAudience"
-        :liveID="liveID"></AudienceActionPanel>
+      <AudienceActionPanel v-if="liveID" v-model="isShowAudienceActionPanel" :userInfo="selectedAudience" :liveID="liveID"></AudienceActionPanel>
 
       <CoGuestPanel v-if="liveID" v-model="isShowCoGuestPanel" :activeTab="activeTab"></CoGuestPanel>
       <CoHostPanel v-if="liveID" v-model="isShowCoHostPanel"></CoHostPanel>
       <LiveMoreActionsPanel v-if="liveID" v-model="isShowLiveMoreActionsPanel"></LiveMoreActionsPanel>
-      <UserInfoPanel v-if="liveID" v-model="isShowUserInfoPanel" :userInfo="clickUserInfo"
-        :isShowAnchor="isShowAnchorInfo"></UserInfoPanel>
+      <UserInfoPanel v-if="liveID" v-model="isShowUserInfoPanel" :userInfo="clickUserInfo" :isShowAnchor="isShowAnchorInfo"></UserInfoPanel>
     </view>
 
-    <GiftPlayer ref="giftPlayerRef" v-model="isLargeSizeGiftPlayer" :url="giftInfo?.resourceURL" :safeArea="safeArea"
-      @finished="svgaPlayerFinished" />
+    <GiftPlayer ref="giftPlayerRef" v-model="isLargeSizeGiftPlayer" :url="giftInfo?.resourceURL" :safeArea="safeArea" @finished="svgaPlayerFinished" />
 
     <LiveStatusInfoCard v-model="isShowLiveStatusInfoCard" />
     <ActionSheet v-model="isShowEndSheet" :title="endSheetTitle" :itemList="endSheetItems" @select="onEndSheetSelect" />
@@ -123,7 +111,7 @@
 </template>
 
 <script setup lang="ts">
-  import { onLoad } from '@dcloudio/uni-app';
+  import { onLoad, onBackPress } from '@dcloudio/uni-app';
   import { ref, onMounted, onUnmounted, computed, watch } from 'vue';
 
   import BeforeLivePanel from '@/components/BeforeLivePanel.nvue';
@@ -140,19 +128,23 @@
   import Like from '@/uni_modules/tuikit-atomic-x/components/Like.nvue';
   import BarrageInput from '@/uni_modules/tuikit-atomic-x/components/BarrageInput.vue';
   import BarrageList from '@/uni_modules/tuikit-atomic-x/components/BarrageList.nvue';
-  import { useLiveListState } from "@/uni_modules/tuikit-atomic-x/state/LiveListState";
+  import { TakeSeatMode, LiveModifyFlag, useLiveListState } from "@/uni_modules/tuikit-atomic-x/state/LiveListState";
   import { useCoGuestState } from "@/uni_modules/tuikit-atomic-x/state/CoGuestState";
   import { useDeviceState } from "@/uni_modules/tuikit-atomic-x/state/DeviceState";
-  import { useBarrageState } from "@/uni_modules/tuikit-atomic-x/state/BarrageState";
   import { useLiveAudienceState } from "@/uni_modules/tuikit-atomic-x/state/LiveAudienceState";
-  import { useCoHostState } from "@/uni_modules/tuikit-atomic-x/state/CoHostState";
+  import { CoHostStatusType, useCoHostState } from "@/uni_modules/tuikit-atomic-x/state/CoHostState";
   import { useLiveSeatState } from "@/uni_modules/tuikit-atomic-x/state/LiveSeatState";
   import { useLoginState } from "@/uni_modules/tuikit-atomic-x/state/LoginState";
-  import { useAudioEffectState } from '@/uni_modules/tuikit-atomic-x/state/AudioEffectState'
+  import { AudioChangerType, AudioReverbType, useAudioEffectState } from '@/uni_modules/tuikit-atomic-x/state/AudioEffectState'
   import { useBaseBeautyState } from '@/uni_modules/tuikit-atomic-x/state/BaseBeautyState'
-  import { useGiftState } from "@/uni_modules/tuikit-atomic-x/state/GiftState";
   import ActionSheet from '@/components/ActionSheet.nvue';
   import { setSdkLanguageFromSystem } from '@/uni_modules/tuikit-atomic-x/utils/setSdkLanguageFromSystem'
+
+  onBackPress((option) => {
+    if (option.from === 'backbutton')
+      return true; // 拦截系统侧滑和物理返回键
+  });
+
   const dom = uni.requireNativePlugin('dom')
   const { loginUserInfo } = useLoginState();
   uni.$liveID = `live_${uni.$userID}`
@@ -163,17 +155,14 @@
     setAudioReverbType,
     isEarMonitorOpened,
     earMonitorVolume,
-    changerType,
-    reverbType } = useAudioEffectState(uni.$liveID)
+  } = useAudioEffectState(uni.$liveID)
   const { setSmoothLevel, setWhitenessLevel, setRuddyLevel, whitenessLevel, ruddyLevel, smoothLevel } = useBaseBeautyState(uni.$liveID)
   const { addCoHostListener, removeCoHostListener, acceptHostConnection, rejectHostConnection, exitHostConnection, coHostStatus, invitees } = useCoHostState(uni?.$liveID)
-  const { joinLive, createLive, fetchLiveList, liveList, endLive, currentLive, liveListCursor, callExperimentalAPI } = useLiveListState();
+  const { joinLive, createLive, fetchLiveList, liveList, endLive, currentLive, liveListCursor, callExperimentalAPI, updateLiveInfo, updateLiveMetaData } = useLiveListState();
   const { applicants, rejectApplication, connected } = useCoGuestState(uni?.$liveID);
-  const { messageList, sendTextMessage, sendCustomMessage } = useBarrageState(uni?.$liveID);
   const { openLocalCamera, openLocalMicrophone, isFrontCamera, switchCamera, closeLocalMicrophone, closeLocalCamera } = useDeviceState(uni?.$liveID);
   const { audienceList, audienceCount } = useLiveAudienceState(uni?.$liveID);
   const { seatList, canvas, lockSeat, } = useLiveSeatState(uni?.$liveID);
-  const { addGiftListener, removeGiftListener } = useGiftState(uni?.$liveID);
 
   const defaultCoverURL = 'https://liteav-test-1252463788.cos.ap-guangzhou.myqcloud.com/voice_room/voice_room_cover1.png';
   const defaultAvatarURL = 'https://web.sdk.qcloud.com/component/TUIKit/assets/avatar_01.png';
@@ -249,20 +238,20 @@
     }
   }, { immediate: true, deep: true });
 
-  const editCover = (data : string) => {
+  const editCover = (data: string) => {
     coverURL.value = data
   };
-  const editTitle = (data : string) => {
+  const editTitle = (data: string) => {
     liveTitle.value = data
   };
-  const chooseCategory = (data : string) => {
+  const chooseCategory = (data: string) => {
     liveCategory.value = data
   };
-  const chooseMode = (data : string) => {
+  const chooseMode = (data: string) => {
     liveMode.value = data
   };
 
-  const chooseTemplate = (data : number) => {
+  const chooseTemplate = (data: number) => {
     templateLayout.value = data;
   }
 
@@ -321,7 +310,7 @@
   })
 
   watch(coHostStatus, (newVal) => {
-    if (newVal === 'DISCONNECTED') {
+    if (newVal === CoHostStatusType.DISCONNECTED) {
       isShowCoGuestPanelAvatar.value = true
     }
   }, {
@@ -342,31 +331,10 @@
     }
   })
 
-  // 聊天渲染与自动滚动由 ChatList 组件处理
-
-  const handleReceiveGift = {
-    callback: (event) => {
-      const res = JSON.parse(event)
-      showGiftToast(res);
-    }
-  }
-
-  // 显示礼物提示
-  const showGiftToast = async (giftData ?: any) => {
+  const onBarrageReceiveGift = (giftData: any) => {
     if (!giftData) return;
     giftInfo.value = giftData;
     showGift(giftData, { onlyDisplay: true });
-
-    // 使用 BarrageList 的 showToast 方法显示礼物提示
-    if (barrageListRef.value) {
-      barrageListRef.value.showToast({
-        name: giftData?.sender?.userName || giftData?.sender?.userID || '',
-        avatarURL: giftData?.sender?.avatarURL || '',
-        desc: giftData?.gift.name || '',
-        iconURL: giftData?.gift.iconURL || '',
-        duration: 3000
-      });
-    }
   };
 
   // 页面加载
@@ -383,6 +351,13 @@
       }
     }
   });
+
+  // 通话结束后回到主播页，恢复摄像头和麦克风（开播前需要预览，开播后需要推流）
+  const handleCallEndedBackToLive = () => {
+    console.warn('[Anchor] callEndedBackToLive: restoring camera and microphone, isStartLive:', isStartLive.value);
+    openLocalCamera({ isFront: isFrontCamera.value });
+    openLocalMicrophone();
+  };
 
   onMounted(() => {
     setSdkLanguageFromSystem()
@@ -417,8 +392,7 @@
       'onCoHostRequestReceived',
       handleCoHostRequestReceived
     )
-    addGiftListener(uni.$liveID, 'onReceiveGift', handleReceiveGift)
-
+    uni.$on('callEndedBackToLive', handleCallEndedBackToLive);
   });
   onUnmounted(() => {
     removeCoHostListener(uni.$liveID,
@@ -437,57 +411,50 @@
       'onCoHostRequestReceived',
       handleCoHostRequestReceived
     )
-    removeGiftListener(uni.$liveID, 'onReceiveGift', handleReceiveGift)
+    uni.$off('callEndedBackToLive', handleCallEndedBackToLive);
   })
 
-  const handleCoHostRequestAccepted = {
-    callback: (event) => {
+  const handleCoHostRequestAccepted =
+    (event) => {
       uni.showToast({
         icon: 'none',
         title: '连线被同意'
       })
     }
+
+  const handleCoHostRequestRejected = (event) => {
+    uni.showToast({
+      icon: 'none',
+      title: '连线被拒绝'
+    })
   }
 
-  const handleCoHostRequestRejected = {
-    callback: (event) => {
-      uni.showToast({
-        icon: 'none',
-        title: '连线被拒绝'
-      })
-    }
+  const handleCoHostRequestTimeout = (event) => {
+    uni.showToast({
+      icon: 'none',
+      title: '连线请求超时'
+    })
+    isShowCoGuestPanelAvatar.value = true
+    closeCustomModal();
   }
 
-  const handleCoHostRequestTimeout = {
-
-    callback: (event) => {
-      uni.showToast({
-        icon: 'none',
-        title: '连线请求超时'
-      })
-      isShowCoGuestPanelAvatar.value = true
-      closeCustomModal();
-    },
-
-  }
-
-  const handleCoHostRequestReceived = {
-    callback: (event) => {
+  const handleCoHostRequestReceived =
+    (event) => {
       if (isShowCoGuestPanelAvatar.value && applicants.value.length === 0) {
         isShowCoGuestPanelAvatar.value = false
       }
-      const res = JSON.parse(event)
+      const res = JSON.parse(event);
+      const inviter = JSON.parse(res.inviter);
       if (connected.value.length > 1 || applicants.value.length > 0) {
         rejectHostConnection({
           liveID: uni?.$liveID,
-          fromHostLiveID: res.inviter.liveID
+          fromHostLiveID: inviter.liveID
         })
         return
       }
       // 使用自定义Modal替代uni.showModal
-      showCustomModalDialog(res.inviter);
+      showCustomModalDialog(inviter);
     }
-  }
 
   const clearAudioEffectSet = () => {
     setVoiceEarMonitorEnable({
@@ -497,10 +464,10 @@
       volume: 100
     })
     setAudioChangerType({
-      changerType: 'NONE'
+      changerType: AudioChangerType.NONE
     })
     setAudioReverbType({
-      reverbType: 'NONE'
+      reverbType: AudioReverbType.NONE
     })
   }
 
@@ -533,24 +500,25 @@
     });
   };
   const navigateBack = () => {
-    if (coHostStatus.value === 'CONNECTED') {
+    if (coHostStatus.value === CoHostStatusType.CONNECTED) {
       endSheetItems.value = ['断开连线', '关闭直播间']
       endSheetTitle.value = '当前处于连线状态，是否需要「断开连线」或「关闭直播间」'
+    } else {
+      endSheetItems.value = ['关闭直播间']
+      endSheetTitle.value = ''
     }
     isShowEndSheet.value = true
   };
 
-  const onEndSheetSelect = (res : { tapIndex : number }) => {
+  const onEndSheetSelect = (res: { tapIndex: number }) => {
     const index = res.tapIndex
-    if (coHostStatus.value === 'CONNECTED' && index === 0) {
+    if (coHostStatus.value === CoHostStatusType.CONNECTED && index === 0) {
       exitHostConnection({
         liveID: uni?.$liveID,
       })
-      endSheetItems.value = ['关闭直播间']
-      endSheetTitle.value = ''
       return
     }
-    if (coHostStatus.value === 'CONNECTED' && index === 1 || coHostStatus.value !== 'CONNECTED' && index === 0) {
+    if (coHostStatus.value === CoHostStatusType.CONNECTED && index === 1 || coHostStatus.value !== CoHostStatusType.CONNECTED && index === 0) {
       clearAudioEffectSet()
       clearBeautyPanelSet()
       endLive({
@@ -578,7 +546,7 @@
         totalViewerCount: 4,
         coverURL: coverURL.value,
         isSeatEnabled: true,
-        seatMode: 'APPLY',
+        seatMode: TakeSeatMode.APPLY,
         maxSeatCount: 0,
         isPublicVisible: liveMode.value === '公开',
         keepOwnerOnSeat: true,
@@ -594,6 +562,9 @@
         openLocalCamera({ isFront: isFrontCamera.value });
         openLocalMicrophone();
         setLocalVideoMuteImage();
+        // only for test
+        // testUpdateLiveInfo()
+        // testUpdateLiveMetaData()
       },
       fail: (errCode, errMsg) => {
         uni.showToast({
@@ -604,6 +575,41 @@
     isStartLive.value = true;
   };
 
+  watch(currentLive, (newVal, oldVal) => {
+    if (newVal) {
+      console.log(`currentLive change: ${JSON.stringify(newVal)}`);
+    }
+  });
+  const testUpdateLiveInfo = () => {
+    updateLiveInfo({
+      liveInfo: {
+        liveID: uni.$liveID,
+        liveName: liveTitle.value + "-changed",
+        coverURL: coverURL.value,
+      },
+      modifyFlagList: [LiveModifyFlag.LIVE_NAME, LiveModifyFlag.COVER_URL],
+      success: () => {
+        // currentLive changed
+        console.log('updateLiveInfo success');
+      },
+      fail: (errCode, errMsg) => {
+        console.error('updateLiveInfo fail:', errCode, errMsg);
+      },
+    });
+  };
+
+  const testUpdateLiveMetaData = () => {
+    updateLiveMetaData({
+      metaData: JSON.stringify({ key: "test", data: "testData" }),
+      success: () => {
+        // currentLive meta changed
+        console.log('updateLiveMetaData success');
+      },
+      fail: (errCode, errMsg) => {
+        console.error('updateLiveMetaData fail:', errCode, errMsg);
+      },
+    });
+  };
   const ShowAnchorViewClickPanel = (userInfo) => {
     clickUserInfo.value = userInfo,
       showUserInfoPanel()
@@ -646,7 +652,7 @@
     showUserInfoPanel()
   }
 
-  const audienceOperator = (message : any) => {
+  const audienceOperator = (message: any) => {
     console.warn(`click message: ${JSON.stringify(message)}`);
     if (message?.sender?.userID === currentLive?.value.liveOwner.userID) return;
 
@@ -679,7 +685,7 @@
     fetchLiveList(params);
     isShowCoHostPanel.value = true;
   };
-  const showCoGuestPanel = (activeTabValue : string = 'requests') => {
+  const showCoGuestPanel = (activeTabValue: string = 'requests') => {
     console.warn(`go guest Panel activeTab = ${activeTabValue}`);
     activeTab.value = activeTabValue;
     isShowCoGuestPanel.value = true;
@@ -691,7 +697,7 @@
   import { ref as vueRef, onMounted as vueOnMounted, onUnmounted as vueOnUnmounted } from 'vue';
   const liveDuration = vueRef(0); // 秒
   const liveDurationText = vueRef('00:00:00');
-  let timer : any = null;
+  let timer: any = null;
 
   watch(isStartLive, (val) => {
     if (val) {
@@ -755,7 +761,7 @@
   };
 
   // 计算每个头像的样式，实现真正的叠加效果
-  const getAvatarStyle = (index : number, totalCount : number) => {
+  const getAvatarStyle = (index: number, totalCount: number) => {
     // 使用配置计算叠加偏移量
     const overlapOffset = avatarOverlayConfig.size * (1 - avatarOverlayConfig.overlapRatio);
 
@@ -910,7 +916,6 @@
     margin-left: 16rpx;
   }
 
-
   .live-content {
     flex: 1;
     position: absolute;
@@ -968,9 +973,6 @@
     align-items: center;
     justify-content: space-between;
   }
-
-
-
 
   .action-buttons {
     flex-direction: row;
@@ -1050,8 +1052,6 @@
     flex-direction: column;
     align-items: center;
   }
-
-
 
   .modal-content {
     flex: 1;

@@ -7,7 +7,7 @@
                 height: isAnchor ? systemInfo.safeArea?.height + 'px' : systemInfo.windowHeight + 'px',
               }">
       <!-- 主播模式：显示默认头像 -->
-      <view v-if="isAnchor && cameraStatus === 'OFF' && seatList.length === 1 && isLiving" class="default-avatar"
+      <view v-if="isAnchor && cameraStatus === DeviceStatus.OFF && seatList.length === 1 && isLiving" class="default-avatar"
         :style="{ top: safeArea.height * 1/2 + 'px' }">
         <image style="width: 96rpx; height: 96rpx; border-radius: 99px;"
           :src="loginUserInfo.avatarURL || defaultAvatarURL" />
@@ -27,14 +27,14 @@
         v-for="(participant, colIndex) in seatList" :key="`${colIndex}`" @tap="streamViewClick(participant)" :style="{
                   left: participant?.region?.x * scale.scaleX + 'px',
                   top: (calculateTopValue(participant) - 2) + 'px',
-                  'background-color': participant?.userInfo?.cameraStatus === 'OFF' ? '#000' : 'transparent',
+                  'background-color': participant?.userInfo?.cameraStatus === DeviceStatus.OFF ? '#000' : 'transparent',
                 }">
         <view style="display: flex; flex-direction: row; width: 120rpx; justify-content: center; align-items: center;"
           :style="{
                     width: participant?.region?.w * scale.scaleX + 'px',
                     height: (streamViewHeight + 10) + 'px',
                   }">
-          <view v-if="participant?.userInfo?.cameraStatus === 'OFF'" class="video-container">
+          <view v-if="participant?.userInfo?.cameraStatus === DeviceStatus.OFF" class="video-container">
             <image class="participant-video" :src="participant?.userInfo?.avatarURL || defaultAvatarURL"
               mode="aspectFill" />
           </view>
@@ -47,20 +47,20 @@
         @tap="streamViewClick(participant)" style="border-radius: 0rpx;" :style="{
                   left: participant?.region?.x * scale.scaleX + 'px',
                   top: calculateTopValue(participant) + (isAnchor ? 0 : -2) + 'px',
-                  'background-color': !isAnchor && participant?.userInfo?.cameraStatus === 'OFF' ? '#000' : 'transparent',
+                  'background-color': !isAnchor && participant?.userInfo?.cameraStatus === DeviceStatus.OFF ? '#000' : 'transparent',
                 }">
         <view style="display: flex; flex-direction: row; width: 120rpx; justify-content: center; align-items: center;"
           :style="{
                     width: participant?.region?.w * scale.scaleX + 'px',
                     height: isAnchor ? (participant?.region?.h * scale.scaleY + 'px') : (participant?.region?.h * scale.scaleY + 2) + 'px',
                   }">
-          <view v-if="participant?.userInfo?.cameraStatus === 'OFF'" class="video-container">
+          <view v-if="participant?.userInfo?.cameraStatus === DeviceStatus.OFF" class="video-container">
             <image class="participant-video" :src="participant?.userInfo?.avatarURL || defaultAvatarURL"
               mode="aspectFill" />
           </view>
 
           <view class="participant-info-container">
-            <image v-if="participant?.userInfo?.microphoneStatus === 'OFF'" class="mic-icon"
+            <image v-if="participant?.userInfo?.microphoneStatus === DeviceStatus.OFF" class="mic-icon"
               src="/static/images/unmute-mic.png" mode="aspectFit" />
             <text class="participant-name" :style="{ 'max-width': participant?.region.w * scale.scaleX * 0.85 + 'px' }">
               {{ participant?.userInfo?.userName || participant?.userInfo?.userID }}
@@ -76,7 +76,7 @@
         style="border-radius: 0rpx;" :style="{
                   left: participant?.region?.x * scale.scaleX + 'px',
                   top: calculateTopValue(participant) + (isAnchor ? 0 : -2) + 'px',
-                  'background-color': !isAnchor && participant?.userInfo?.cameraStatus === 'OFF' ? '#000' : 'transparent',
+                  'background-color': !isAnchor && participant?.userInfo?.cameraStatus === DeviceStatus.OFF ? '#000' : 'transparent',
                 }">
         <view v-if="participant?.userInfo.userID"
           style="display: flex; flex-direction: row; width: 120rpx; justify-content: center; align-items: center;"
@@ -84,13 +84,13 @@
                     width: participant?.region?.w * scale.scaleX + 'px',
                     height: isAnchor ? (participant?.region?.h * scale.scaleY + 'px') : (participant?.region?.h * scale.scaleY + 2) + 'px',
                   }">
-          <view v-if="participant?.userInfo?.cameraStatus === 'OFF'" class="video-container">
+          <view v-if="participant?.userInfo?.cameraStatus === DeviceStatus.OFF" class="video-container">
             <image class="participant-video" :src="participant?.userInfo?.avatarURL || defaultAvatarURL"
               mode="aspectFill" />
           </view>
 
           <view class="participant-info-container" :class="{ 'audience-mode': !isAnchor }">
-            <image v-if="participant?.userInfo?.microphoneStatus === 'OFF'" class="mic-icon"
+            <image v-if="participant?.userInfo?.microphoneStatus === DeviceStatus.OFF" class="mic-icon"
               src="/static/images/unmute-mic.png" mode="aspectFit" />
             <text class="participant-name" :style="{ 'max-width': participant?.region.w * scale.scaleX * 0.85 + 'px' }">
               {{ participant?.userInfo?.userName || participant?.userInfo?.userID }}
@@ -134,7 +134,7 @@
     useCoHostState
   } from "@/uni_modules/tuikit-atomic-x/state/CoHostState";
   import {
-    useDeviceState
+    useDeviceState, DeviceStatus
   } from "@/uni_modules/tuikit-atomic-x/state/DeviceState";
   import {
     useCoGuestState

@@ -1,8 +1,7 @@
 <template>
   <view class="live-list">
     <view class="live-list-quick-join">
-      <input v-model="inputLiveId" class="quick-join-input" placeholder="输入房间名称、主播名称或房间ID" confirm-type="done"
-        @confirm="handleSearch" maxlength="64" />
+      <input v-model="inputLiveId" class="quick-join-input" placeholder="输入房间名称、主播名称或房间ID" confirm-type="done" @confirm="handleSearch" maxlength="64" />
     </view>
 
     <!-- 无匹配结果提示 -->
@@ -16,8 +15,7 @@
         <view class="live-row">
           <view v-for="(live, index) in row" :key="live.liveID" class="live-card" @tap="handleJoinLive(live)">
             <view class="live-cover">
-              <image :src="live.coverURL || defaultCoverURL" :mode="'aspectFill'" class="cover-image"
-                @error="handleCoverError(live)" />
+              <image :src="live.coverURL || defaultCoverURL" :mode="'aspectFill'" class="cover-image" @error="handleCoverError(live)" />
               <view class="live-status">
                 <view class="live-bar-container">
                   <view class="bar bar-1"></view>
@@ -31,8 +29,7 @@
                 <text class="live-title" :lines="1">{{ live.liveName }}</text>
                 <view class="live-owner">
                   <image :src="live?.liveOwner?.avatarURL || defaultAvatarURL" class="owner-avatar" mode="aspectFill" />
-                  <text class="owner-name"
-                    :numberOfLines="1">{{ live?.liveOwner?.userName || live?.liveOwner?.userID}}</text>
+                  <text class="owner-name" :numberOfLines="1">{{ live?.liveOwner?.userName || live?.liveOwner?.userID}}</text>
                 </view>
               </view>
             </view>
@@ -78,7 +75,6 @@
   const defaultCoverURL =
     'https://web.sdk.qcloud.com/trtc/live/web/assets/defaultCoverLive.png';
   const defaultAvatarURL = 'https://web.sdk.qcloud.com/component/TUIKit/assets/avatar_01.png';
-
 
   onMounted(() => {
     const params = {
@@ -127,7 +123,6 @@
     }
   };
 
-
   const handleSearch = () => {
     uni.showToast({
       title: '搜索完成',
@@ -147,7 +142,7 @@
       const id = (item?.liveID || '').toLowerCase();
       const name = (item?.liveName || '').toLowerCase();
       const ownerName = (item?.liveOwner?.userName || item?.liveOwner?.userID || '').toLowerCase();
-      return id.includes(keyword) || name.includes(keyword) || ownerName.includes(keyword);
+      return id?.includes(keyword) || name?.includes(keyword) || ownerName?.includes(keyword);
     });
   });
 

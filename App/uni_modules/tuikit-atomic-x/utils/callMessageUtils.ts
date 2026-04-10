@@ -8,8 +8,8 @@ import { safeJsonParse } from './utsUtils'
 
 // 通话类型枚举
 export const CallType = {
-  AUDIO: 1,
-  VIDEO: 2
+  AUDIO: 0,
+  VIDEO: 1
 } as const
 
 // 通话消息解析结果类型
@@ -47,7 +47,7 @@ export function isCallMessage(message: MessageInfo): boolean {
   if (!customMessage?.data) {
     return false
   }
-  
+
   const dataContent = safeJsonParse<any>(customMessage.data as string, null)
   return dataContent && dataContent.businessID === 1
 }
@@ -72,17 +72,17 @@ export function parseCallMessageData(message: MessageInfo): CallMessageData | nu
   if (!customMessage?.data) {
     return null
   }
-  
+
   const dataContent = safeJsonParse<any>(customMessage.data as string, null)
   if (!dataContent || dataContent.businessID !== 1) {
     return null
   }
-  
+
   const callInfo = safeJsonParse<any>(dataContent.data, null)
   if (!callInfo) {
     return null
   }
-  
+
   return {
     businessID: dataContent.businessID,
     timeout: dataContent.timeout,
@@ -115,18 +115,18 @@ export function parseCallMessageData(message: MessageInfo): CallMessageData | nu
  */
 export function isVideoCall(data: CallMessageData | null): boolean {
   if (!data) return false
-  
+
   // 通过 call_type 判断
-  if (data.callInfo.call_type === CallType.VIDEO) {
+  if (data.callInfo.call_type === 2) {
     return true
   }
-  
+
   // 通过 cmd 判断
   const cmd = data.callInfo.data?.cmd
   if (cmd === 'videoCall' || cmd === 'switchToVideo') {
     return true
   }
-  
+
   return false
 }
 
@@ -137,11 +137,11 @@ export function formatCallDuration(seconds: number): string {
   if (!seconds || seconds <= 0) {
     return '00:00'
   }
-  
+
   const hours = Math.floor(seconds / 3600)
   const minutes = Math.floor((seconds % 3600) / 60)
   const secs = Math.floor(seconds % 60)
-  
+
   if (hours > 0) {
     return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
   }
@@ -178,12 +178,12 @@ export function getCallMessageText(message: MessageInfo, showSenderName = true):
   if (!data) {
     return '通话消息'
   }
-  
+
   const { actionType, callInfo, groupID } = data
   const objectData = callInfo
   const isSelfInviter = message.isSelf
   const senderName = showSenderName ? getMessageSenderName(message) : ''
-  
+
   switch (actionType) {
     case 1: {
       // 发起/挂断
@@ -209,7 +209,7 @@ export function getCallMessageText(message: MessageInfo, showSenderName = true):
       // CMD 异常时默认返回发起通话
       return '发起通话'
     }
-    
+
     case 2:
       // 取消
       if (groupID && senderName) {
@@ -219,7 +219,7 @@ export function getCallMessageText(message: MessageInfo, showSenderName = true):
         return '已取消'
       }
       return '对方已取消'
-    
+
     case 3:
       // 接听
       if (objectData.data?.cmd === 'switchToAudio') {
@@ -232,7 +232,7 @@ export function getCallMessageText(message: MessageInfo, showSenderName = true):
         return `${senderName} 已接听`
       }
       return '已接听'
-    
+
     case 4:
       // 拒绝
       if (groupID && senderName) {
@@ -249,7 +249,7 @@ export function getCallMessageText(message: MessageInfo, showSenderName = true):
         return '对方已拒绝'
       }
       return '已拒绝'
-    
+
     case 5:
       // 超时无应答
       if (objectData.data?.cmd === 'switchToAudio') {
@@ -265,7 +265,7 @@ export function getCallMessageText(message: MessageInfo, showSenderName = true):
         return '对方无应答'
       }
       return '未接听'
-    
+
     default:
       return '通话消息'
   }

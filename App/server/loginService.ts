@@ -1,4 +1,3 @@
-import { TUILogin } from '@tencentcloud/tui-core-lite';
 import { useLoginState } from "@/uni_modules/tuikit-atomic-x/state/LoginState";
 import { genTestUserSig } from "@/debug/GenerateTestUserSig.js";
 import { DEFAULT_USER_NAMES, DEFAULT_AVATAR } from "./constants";
@@ -37,34 +36,6 @@ let vueVersion: number = 2;
 vueVersion = 3;
 // #endif
 
-const loginChat = (loginInfo: LoginInfo): Promise<any> => {
-  return TUILogin.login({
-    SDKAppID: loginInfo.sdkAppId,
-    userID: loginInfo.userId,
-    userSig: loginInfo.userSig,
-    framework: `vue${vueVersion}`
-  });
-};
-
-const loginCall = (loginInfo: LoginInfo): Promise<Record<string, never>> => {
-  return new Promise((resolve, reject) => {
-    uni.$TUICallKit.login({
-      SDKAppID: loginInfo.sdkAppId,
-      userID: loginInfo.userId,
-      userSig: loginInfo.userSig,
-      success: () => {
-        uni.$TUICallKit.enableMultiDeviceAbility()
-        resolve({});
-      },
-      fail: (errCode: number, errMsg: string) => {
-        reject({
-          code: errCode,
-          msg: errMsg
-        });
-      },
-    });
-  })
-};
 
 const loginAtomicx = (loginInfo: LoginInfo): Promise<Record<string, never>> => {
   return new Promise((resolve, reject) => {
@@ -102,35 +73,33 @@ const loginAtomicx = (loginInfo: LoginInfo): Promise<Record<string, never>> => {
  */
 export const loginKit = async (params: { userId: string }): Promise<void> => {
   const { userId } = params;
-  
+
   if (!userId) {
     throw new Error('userId is required');
   }
-  
+
   const { SDKAppID, userSig } = genTestUserSig(userId);
-  
+
   const loginInfo: LoginInfo = {
     sdkAppId: SDKAppID,
     userId: userId,
     userSig: userSig,
   };
-  
+
   try {
-    await loginChat(loginInfo);
-    await loginCall(loginInfo);
     await loginAtomicx(loginInfo);
-    
+
     loginUserInfo.value = {
       apaasUserId: userId,
       token: userSig,
       userId: userId,
     };
-    
+
     uni?.setStorage({
       key: 'userInfo',
       data: loginUserInfo.value,
     });
-    
+
     uni.reLaunch({
       url: '/pages/index/index',
       complete: () => {
@@ -166,9 +135,7 @@ export const loginFromStorage = (): void => {
   });
 };
 
-const logoutChat = (): Promise<void> => {
-  return TUILogin.logout();
-};
+
 
 const logoutTRTC = (): Promise<void> => {
   return new Promise((resolve, reject) => {
@@ -186,7 +153,6 @@ const logoutTRTC = (): Promise<void> => {
 
 export const logoutKit = async (): Promise<void> => {
   try {
-    await logoutChat();
     await logoutTRTC();
     loginUserInfo.value = null;
     uni?.removeStorage({ key: 'userInfo' });

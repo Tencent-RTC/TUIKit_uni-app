@@ -1,27 +1,11 @@
 <template>
   <view class="friend-info">
     <scroll-view class="friend-info__content" scroll-y="true">
-    
-    <!-- 删除好友确认弹窗 -->
-    <ConfirmDialog
-      v-model="showDeleteDialog"
-      title="确定删除该好友"
-      message="删除联系人同时清空聊天记录"
-      cancelText="取消"
-      confirmText="确定删除"
-      @confirm="confirmDeleteFriend"
-      @cancel="showDeleteDialog = false"
-    />
+
+      <!-- 删除好友确认弹窗 -->
+      <ConfirmDialog v-model="showDeleteDialog" title="确定删除该好友" message="删除联系人同时清空聊天记录" cancelText="取消" confirmText="确定删除" @confirm="confirmDeleteFriend" @cancel="showDeleteDialog = false" />
       <view class="friend-info__header">
-        <component 
-          :is="Avatar"
-          :src="currentFriendInfo?.avatarURL || ''"
-          :name="currentFriendInfo?.nickname || currentFriendInfo?.userID || ''"
-          :size="96"
-          shape="square"
-          defaultAvatarType="user"
-          pureMode
-        />
+        <component :is="Avatar" :src="currentFriendInfo?.avatarURL || ''" :name="currentFriendInfo?.nickname || currentFriendInfo?.userID || ''" :size="96" shape="square" defaultAvatarType="user" pureMode />
         <view class="friend-info__header-info">
           <text class="friend-info__name" :numberOfLines="1">{{ currentFriendInfo?.nickname || currentFriendInfo?.userID }}</text>
           <text class="friend-info__id" :numberOfLines="1">ID: {{ currentFriendInfo?.userID }}</text>
@@ -42,44 +26,24 @@
       <view class="friend-info__section">
         <view class="friend-info__row">
           <text class="friend-info__label">消息免打扰</text>
-          <switch 
-            :checked="isMuted" 
-            @change="handleMuteChange"
-            color="#1C66E5"
-          />
+          <switch :checked="isMuted" @change="handleMuteChange" color="#1C66E5" />
         </view>
         <view class="friend-info__row">
           <text class="friend-info__label">置顶聊天</text>
-          <switch 
-            :checked="isPinned" 
-            @change="handlePinChange"
-            color="#1C66E5"
-          />
+          <switch :checked="isPinned" @change="handlePinChange" color="#1C66E5" />
         </view>
       </view>
 
       <view class="friend-info__section">
         <view class="friend-info__row">
           <text class="friend-info__label">加入黑名单</text>
-          <switch 
-            :checked="isBlacklisted" 
-            @change="handleBlacklistChange"
-            color="#1C66E5"
-          />
+          <switch :checked="isBlacklisted" @change="handleBlacklistChange" color="#1C66E5" />
         </view>
       </view>
 
       <view class="friend-info__section">
-        <view 
-          v-for="action in actionList" 
-          :key="action.key"
-          class="friend-info__row friend-info__actions"
-          @click="handleActionClick(action)"
-        >
-          <text 
-            class="friend-info__link" 
-            :style="{ color: action.color || '#147AFF' }"
-          >{{ action.label }}</text>
+        <view v-for="action in actionList" :key="action.key" class="friend-info__row friend-info__actions" @click="handleActionClick(action)">
+          <text class="friend-info__link" :style="{ color: action.color || '#147AFF' }">{{ action.label }}</text>
         </view>
       </view>
     </scroll-view>
@@ -87,338 +51,420 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from 'vue'
-import AvatarComponent from '../../Avatar'
-import ConfirmDialog from '../../ConfirmDialog/ConfirmDialog.nvue'
-import { useContactState } from '../../../state/ContactState'
-import { useConversationListState } from '../../../state/ConversationListState'
-import { ContactInfo } from '../../../types/Contact'
-import { ConversationReceiveOption } from '../../../types/conversation'
-import { defaultFriendInfoActions, type FriendInfoAction } from '../config'
-import { showToast } from '../../../utils/toast'
+  import { ref, computed, watch, onMounted } from 'vue'
+  import AvatarComponent from '../../Avatar'
+  import ConfirmDialog from '../../ConfirmDialog/ConfirmDialog.nvue'
+  import { useContactState } from '../../../state/ContactState'
+  import { useConversationListState } from '../../../state/ConversationListState'
+  import { useCallState } from '@/uni_modules/tuikit-atomic-x/state/CallState';
+  import { ContactInfo } from '../../../types/Contact'
+  import { ConversationReceiveOption } from '../../../types/conversation'
+  import { defaultFriendInfoActions, type FriendInfoAction } from '../config'
+  import { showToast } from '../../../utils/toast'
+  import { getCurrentPageFullPath, isNavigating, isCallEnding } from "../../../server/callService"
+  import { checkCallPermissionWithDialog } from "@/uni_modules/tuikit-atomic-x/utils/callPermission"
+  import {
+    useDeviceState
+  } from "@/uni_modules/tuikit-atomic-x/state/DeviceState";
+  import { onShow } from '@dcloudio/uni-app'
+  import { reportScene } from '@/uni_modules/tuikit-atomic-x';
 
-import { onShow } from '@dcloudio/uni-app'
+  interface FriendInfoProps {
+    friendInfo?: ContactInfo | null
+    Avatar?: any
+    /** 自定义操作按钮列表 */
+    actions?: FriendInfoAction[]
+  }
 
-interface FriendInfoProps {
-  friendInfo?: ContactInfo | null
-  Avatar?: any
-  /** 自定义操作按钮列表 */
-  actions?: FriendInfoAction[]
-}
+  interface FriendInfoEmits {
+    (e: 'sendMessage', userID: string): void
+    (e: 'remarkEdit', friendInfo: ContactInfo): void
+    (e: 'muteChange', value: boolean): void
+    (e: 'pinChange', value: boolean): void
+    (e: 'blacklistChange', value: boolean): void
+    (e: 'deleteFriend', userID: string): void
+  }
 
-interface FriendInfoEmits {
-  (e: 'sendMessage', userID: string): void
-  (e: 'remarkEdit', friendInfo: ContactInfo): void
-  (e: 'muteChange', value: boolean): void
-  (e: 'pinChange', value: boolean): void
-  (e: 'blacklistChange', value: boolean): void
-  (e: 'deleteFriend', userID: string): void
-}
+  const props = withDefaults(defineProps<FriendInfoProps>(), {
+    friendInfo: null,
+    Avatar: () => AvatarComponent,
+    actions: () => []
+  })
 
-const props = withDefaults(defineProps<FriendInfoProps>(), {
-  friendInfo: null,
-  Avatar: () => AvatarComponent,
-  actions: () => []
-})
+  const emit = defineEmits<FriendInfoEmits>()
 
-const emit = defineEmits<FriendInfoEmits>()
-
-const { deleteFriend, addToBlacklist, removeFromBlacklist, fetchUserInfo, friendList } = useContactState()
-const {
+  const { deleteFriend, addToBlacklist, removeFromBlacklist, fetchUserInfo, friendList } = useContactState()
+  const {
     conversationList,
     fetchConversationInfo,
     muteConversation,
     pinConversation,
-} = useConversationListState('FriendInfo')
+  } = useConversationListState('FriendInfo')
+  const { calls, selfInfo, setFramework } = useCallState()
 
+  const {
+    openLocalCamera,
+    openLocalMicrophone,
+  } = useDeviceState();
+  const showDeleteDialog = ref(false)
+  // 呼叫防抖锁，防止频繁点击呼叫按钮
+  const isCalling = ref(false)
 
-const showDeleteDialog = ref(false)
+  // 用户信息（通过 fetchUserInfo 获取）
+  const fetchedUserInfo = ref<ContactInfo | null>(null)
 
-// 用户信息（通过 fetchUserInfo 获取）
-const fetchedUserInfo = ref<ContactInfo | null>(null)
-
-// 从 friendList 中查找当前用户信息
-const friendListUserInfo = computed(() => {
-  if (!props.friendInfo?.userID) return null
-  return friendList.value.find((item: ContactInfo) => item.userID === props.friendInfo?.userID) || null
-})
-
-// 当前好友信息：权重优先级 friendList > fetchPeerUserInfo > props
-const currentFriendInfo = computed(() => {
-  return friendListUserInfo.value || fetchedUserInfo.value || props.friendInfo
-})
-
-const isFriend = computed(() => currentFriendInfo.value?.isFriend ?? false)
-
-const isBlacklisted = computed(() => {
-  if (!currentFriendInfo.value?.userID) return false
-  if (fetchedUserInfo.value?.userID === currentFriendInfo.value?.userID) {
-    return fetchedUserInfo.value?.isInBlacklist ?? false
-  }
-  return currentFriendInfo.value?.isInBlacklist ?? false
-})
-
-const actionList = computed(() => {
-  const actions = props.actions.length > 0 ? props.actions : defaultFriendInfoActions
-  return actions.filter(action => {
-    if (action.key === 'deleteFriend') {
-      // 仅好友可显示删除好友按钮
-      return isFriend.value
-    }
-    return true
+  // 从 friendList 中查找当前用户信息
+  const friendListUserInfo = computed(() => {
+    if (!props.friendInfo?.userID) return null
+    return friendList.value.find((item: ContactInfo) => item.userID === props.friendInfo?.userID) || null
   })
-})
 
-const conversationID = computed(() => {
-  return currentFriendInfo.value?.userID ? `c2c_${currentFriendInfo.value.userID}` : ''
-})
+  // 当前好友信息：权重优先级 friendList > fetchPeerUserInfo > props
+  const currentFriendInfo = computed(() => {
+    return friendListUserInfo.value || fetchedUserInfo.value || props.friendInfo
+  })
 
-const isMuted = computed(() => {
-  if (!conversationID.value) return false
-  const conversation = conversationList.value.find(
-    (c: any) => c.conversationID === conversationID.value
-  )
-  return conversation?.receiveOption === ConversationReceiveOption.NOT_NOTIFY;
-})
+  const isFriend = computed(() => currentFriendInfo.value?.isFriend ?? false)
 
-const isPinned = computed(() => {
-  if (!conversationID.value) return false
-  const conversation = conversationList.value.find(
-    (c: any) => c.conversationID === conversationID.value
-  )
-  return conversation?.isPinned || false
-})
-
-watch(() => props.friendInfo?.userID, () => {
-  if (conversationID.value) {
-    fetchPeerUserInfo()
-    fetchConversationInfo(conversationID.value)
-  }
-}, { immediate: true })
-
-// 获取用户信息
-const fetchPeerUserInfo = async () => {
-  if (!props.friendInfo?.userID) return
-  try {
-    const list = await fetchUserInfo([props.friendInfo.userID])
-    console.warn('[FriendInfo] fetchPeerUserInfo success', list)
-    if (list && list.length > 0) {
-      fetchedUserInfo.value = list[0]
+  const isBlacklisted = computed(() => {
+    if (!currentFriendInfo.value?.userID) return false
+    if (fetchedUserInfo.value?.userID === currentFriendInfo.value?.userID) {
+      return fetchedUserInfo.value?.isInBlacklist ?? false
     }
-  } catch (error) {
-    console.error('[FriendInfo] fetchPeerUserInfo failed:', error)
-  }
-}
+    return currentFriendInfo.value?.isInBlacklist ?? false
+  })
 
-// 初始化
-onMounted(async () => {
-  await fetchPeerUserInfo()
-})
+  const actionList = computed(() => {
+    const actions = props.actions.length > 0 ? props.actions : defaultFriendInfoActions
+    return actions.filter(action => {
+      if (action.key === 'deleteFriend') {
+        // 仅好友可显示删除好友按钮
+        return isFriend.value
+      }
+      return true
+    })
+  })
 
-// 页面显示时刷新数据
-onShow(async () => {
-  await fetchPeerUserInfo()
-})
+  const conversationID = computed(() => {
+    return currentFriendInfo.value?.userID ? `c2c_${currentFriendInfo.value.userID}` : ''
+  })
 
-const handleRemarkEdit = () => {
-  if (currentFriendInfo.value) {
-    emit('remarkEdit', currentFriendInfo.value)
-  }
-}
+  const isMuted = computed(() => {
+    if (!conversationID.value) return false
+    const conversation = conversationList.value.find(
+      (c: any) => c.conversationID === conversationID.value
+    )
+    return conversation?.receiveOption === ConversationReceiveOption.NOT_NOTIFY;
+  })
 
-const handleMuteChange = async (e: any) => {
-  const value = e.detail.value
-  if (!conversationID.value) return
-  
-  try {
-    await muteConversation(conversationID.value, value)
-    emit('muteChange', value)
-  } catch (error: any) {
-    showToast({ message: error.message || '设置失败', type: 'error' })
-  }
-}
+  const isPinned = computed(() => {
+    if (!conversationID.value) return false
+    const conversation = conversationList.value.find(
+      (c: any) => c.conversationID === conversationID.value
+    )
+    return conversation?.isPinned || false
+  })
 
-const handlePinChange = async (e: any) => {
-  const value = e.detail.value
-  if (!conversationID.value) return
-  
-  try {
-    await pinConversation(conversationID.value, value)
-    emit('pinChange', value)
-  } catch (error: any) {
-    showToast({ message: error.message || '设置失败', type: 'error' })
-  }
-}
-
-const handleBlacklistChange = async (e: any) => {
-  const value = e.detail.value
-  if (!currentFriendInfo.value?.userID) return
-  try {
-    if (value) {
-      await addToBlacklist(currentFriendInfo.value.userID)
-      showToast({ message: '已加入黑名单', type: 'success' })
-    } else {
-      await removeFromBlacklist(currentFriendInfo.value.userID)
-      showToast({ message: '已移出黑名单', type: 'success' })
+  watch(() => props.friendInfo?.userID, () => {
+    if (conversationID.value) {
+      fetchPeerUserInfo()
+      fetchConversationInfo(conversationID.value)
     }
-    emit('blacklistChange', value)
-  } catch (error: any) {
-    showToast({ message: error.message || '操作失败', type: 'error' })
-  }
-  await fetchPeerUserInfo()
-}
+  }, { immediate: true })
 
-const handleSendMessage = () => {
-  if (currentFriendInfo.value?.userID) {
-    emit('sendMessage', currentFriendInfo.value.userID)
-  }
-}
-
-const handleActionClick = (action: FriendInfoAction) => {
-  if (!currentFriendInfo.value?.userID) return
-  
-  if (action.click) {
-    action.click(currentFriendInfo.value.userID)
-    return
-  }
-  
-  switch (action.key) {
-    case 'sendMessage':
-      handleSendMessage()
-      break
-    case 'deleteFriend':
-      handleDeleteFriend()
-      break
-  }
-}
-
-const handleDeleteFriend = () => {
-  showDeleteDialog.value = true
-}
-
-const confirmDeleteFriend = async () => {
-  if (currentFriendInfo.value?.userID) {
+  // 获取用户信息
+  const fetchPeerUserInfo = async () => {
+    if (!props.friendInfo?.userID) return
     try {
-      await deleteFriend(currentFriendInfo.value.userID)
-      showToast({ message: '已删除', type: 'success' })
-      emit('deleteFriend', currentFriendInfo.value.userID)
-    } catch (error: any) {
-      showToast({ message: error.message || '删除失败', type: 'error' })
+      const list = await fetchUserInfo([props.friendInfo.userID])
+      console.warn('[FriendInfo] fetchPeerUserInfo success', list)
+      if (list && list.length > 0) {
+        fetchedUserInfo.value = list[0]
+      }
+    } catch (error) {
+      console.error('[FriendInfo] fetchPeerUserInfo failed:', error)
     }
   }
-}
+
+  // 初始化
+  onMounted(async () => {
+    await fetchPeerUserInfo()
+  })
+
+  // 页面显示时刷新数据
+  onShow(async () => {
+    await fetchPeerUserInfo()
+  })
+
+  const handleRemarkEdit = () => {
+    if (currentFriendInfo.value) {
+      emit('remarkEdit', currentFriendInfo.value)
+    }
+  }
+
+  const handleMuteChange = async (e: any) => {
+    const value = e.detail.value
+    if (!conversationID.value) return
+
+    try {
+      await muteConversation(conversationID.value, value)
+      emit('muteChange', value)
+    } catch (error: any) {
+      showToast({ message: error.message || '设置失败', type: 'error' })
+    }
+  }
+
+  const handlePinChange = async (e: any) => {
+    const value = e.detail.value
+    if (!conversationID.value) return
+
+    try {
+      await pinConversation(conversationID.value, value)
+      emit('pinChange', value)
+    } catch (error: any) {
+      showToast({ message: error.message || '设置失败', type: 'error' })
+    }
+  }
+
+  const handleBlacklistChange = async (e: any) => {
+    const value = e.detail.value
+    if (!currentFriendInfo.value?.userID) return
+    try {
+      if (value) {
+        await addToBlacklist(currentFriendInfo.value.userID)
+        showToast({ message: '已加入黑名单', type: 'success' })
+      } else {
+        await removeFromBlacklist(currentFriendInfo.value.userID)
+        showToast({ message: '已移出黑名单', type: 'success' })
+      }
+      emit('blacklistChange', value)
+    } catch (error: any) {
+      showToast({ message: error.message || '操作失败', type: 'error' })
+    }
+    await fetchPeerUserInfo()
+  }
+
+  const handleSendMessage = () => {
+    if (currentFriendInfo.value?.userID) {
+      emit('sendMessage', currentFriendInfo.value.userID)
+    }
+  }
+
+  const handleActionClick = (action: FriendInfoAction) => {
+    if (!currentFriendInfo.value?.userID) return
+
+    if (action.click) {
+      action.click(currentFriendInfo.value.userID)
+      return
+    }
+
+    switch (action.key) {
+      case 'sendMessage':
+        handleSendMessage()
+        break
+      case 'deleteFriend':
+        handleDeleteFriend()
+        break
+      case 'voiceCall':
+        startCall(0);
+        break;
+      case 'videoCall':
+        startCall(1);
+        break;
+      default:
+        console.log('Tool clicked:', tool);
+    }
+  }
+
+  const handleDeleteFriend = () => {
+    showDeleteDialog.value = true
+  }
+
+  const confirmDeleteFriend = async () => {
+    if (currentFriendInfo.value?.userID) {
+      try {
+        await deleteFriend(currentFriendInfo.value.userID)
+        showToast({ message: '已删除', type: 'success' })
+        emit('deleteFriend', currentFriendInfo.value.userID)
+      } catch (error: any) {
+        showToast({ message: error.message || '删除失败', type: 'error' })
+      }
+    }
+  }
+
+  const startCall = async (mediaType: number) => {
+    // 防抖：上一次呼叫流程尚未完成时，不允许再次呼叫
+    if (isCalling.value) {
+      console.log('[FriendInfo] call skipped: isCalling is true');
+      return;
+    }
+    if (isNavigating()) {
+      console.log('[FriendInfo] call skipped: navigation in progress');
+      return;
+    }
+    if (isCallEnding()) {
+      console.log('[FriendInfo] call skipped: previous call end still processing');
+      return;
+    }
+    if (selfInfo.value.status === 1 || selfInfo.value.status === 2) {
+      plus.nativeUI.toast('您正在通话中，无法再次发起通话', {
+        align: 'center',
+        verticalAlign: 'center'
+      });
+      return
+    }
+
+    isCalling.value = true;
+
+    if (mediaType === 1) {
+      openLocalCamera({
+        isFront: true
+      })
+    }
+    openLocalMicrophone({
+      fail: (error) => {
+        if (error === -1104) {
+          setTimeout(() => {
+            openLocalMicrophone();
+          }, 200);
+        }
+      }
+    })
+    const hasPermission = await checkCallPermissionWithDialog(mediaType);
+    if (!hasPermission) {
+      isCalling.value = false;
+      return;
+    }
+    reportScene('CHAT_INVOKE_CALL');
+    setFramework(15)
+    calls({
+      participantIds: [currentFriendInfo.value?.userID],
+      mediaType,
+      success: () => {
+        uni.$callSource = 'caller'
+        uni.$lastPage = getCurrentPageFullPath()
+        uni.navigateTo({
+          url: '/uni_modules/tuikit-atomic-x/pages/call?layoutTemplate=Float',
+          complete: () => { isCalling.value = false; }
+        })
+      },
+      fail: () => {
+        isCalling.value = false;
+      }
+    })
+  }
 </script>
 
 <style>
-.friend-info {
-  flex: 1;
-  background-color: #F5F5F5;
-}
+  .friend-info {
+    flex: 1;
+    background-color: #F5F5F5;
+  }
 
-.friend-info__content {
-  flex: 1;
-}
+  .friend-info__content {
+    flex: 1;
+  }
 
-.friend-info__header {
-  flex-direction: row;
-  align-items: flex-start;
-  padding: 24rpx 32rpx;
-  background-color: #FFFFFF;
-}
+  .friend-info__header {
+    flex-direction: row;
+    align-items: flex-start;
+    padding: 24rpx 32rpx;
+    background-color: #FFFFFF;
+  }
 
-.friend-info__header-info {
-  flex: 1;
-  margin-left: 32rpx;
-}
+  .friend-info__header-info {
+    flex: 1;
+    margin-left: 32rpx;
+  }
 
-.friend-info__name {
-  font-size: 36rpx;
-  font-weight: 400;
-  color: #000000;
-  line-height: 48rpx;
-  lines: 1;
-  text-overflow: ellipsis;
-}
+  .friend-info__name {
+    font-size: 36rpx;
+    font-weight: 400;
+    color: #000000;
+    line-height: 48rpx;
+    lines: 1;
+    text-overflow: ellipsis;
+  }
 
-.friend-info__id {
-  font-size: 26rpx;
-  color: #888888;
-  line-height: 40rpx;
-  margin-top: 8rpx;
-  lines: 1;
-  text-overflow: ellipsis;
-}
+  .friend-info__id {
+    font-size: 26rpx;
+    color: #888888;
+    line-height: 40rpx;
+    margin-top: 8rpx;
+    lines: 1;
+    text-overflow: ellipsis;
+  }
 
-.friend-info__signature {
-  font-size: 26rpx;
-  color: #888888;
-  line-height: 40rpx;
-  margin-top: 4rpx;
-  lines: 2;
-  text-overflow: ellipsis;
-}
+  .friend-info__signature {
+    font-size: 26rpx;
+    color: #888888;
+    line-height: 40rpx;
+    margin-top: 4rpx;
+    lines: 2;
+    text-overflow: ellipsis;
+  }
 
-.friend-info__section {
-  margin-top: 20rpx;
-  background-color: #FFFFFF;
-}
+  .friend-info__section {
+    margin-top: 20rpx;
+    background-color: #FFFFFF;
+  }
 
-.friend-info__row {
-  flex-direction: row;
-  align-items: center;
-  padding: 24rpx 32rpx;
-  border-bottom: 1rpx solid #E6E9F0;
-}
+  .friend-info__row {
+    flex-direction: row;
+    align-items: center;
+    padding: 24rpx 32rpx;
+    border-bottom: 1rpx solid #E6E9F0;
+  }
 
-.friend-info__label {
-  flex: 1;
-  font-size: 32rpx;
-  font-weight: 400;
-  line-height: 48rpx;
-  color: #444444;
-}
+  .friend-info__label {
+    flex: 1;
+    font-size: 32rpx;
+    font-weight: 400;
+    line-height: 48rpx;
+    color: #444444;
+  }
 
-.friend-info__row-value {
-  flex-direction: row;
-  align-items: center;
-}
+  .friend-info__row-value {
+    flex-direction: row;
+    align-items: center;
+  }
 
-.friend-info__value {
-  font-size: 30rpx;
-  color: rgba(0, 0, 0, 0.5);
-  max-width: 400rpx;
-  lines: 1;
-  text-overflow: ellipsis;
-}
+  .friend-info__value {
+    font-size: 30rpx;
+    color: rgba(0, 0, 0, 0.5);
+    max-width: 400rpx;
+    lines: 1;
+    text-overflow: ellipsis;
+  }
 
-.friend-info__arrow {
-  width: 14rpx;
-  height: 24rpx;
-  margin-left: 22rpx;
-}
+  .friend-info__arrow {
+    width: 14rpx;
+    height: 24rpx;
+    margin-left: 22rpx;
+  }
 
-.friend-info__actions {
-  padding: 30rpx 32rpx;
-  justify-content: center;
-  align-items: center;
-}
+  .friend-info__actions {
+    padding: 30rpx 32rpx;
+    justify-content: center;
+    align-items: center;
+  }
 
-.friend-info__link {
-  font-size: 34rpx;
-  line-height: 52rpx;
-  font-weight: 400;
-  color: #147AFF;
-}
+  .friend-info__link {
+    font-size: 34rpx;
+    line-height: 52rpx;
+    font-weight: 400;
+    color: #147AFF;
+  }
 
-.friend-info__danger-actions {
-  padding: 30rpx 32rpx;
-  align-items: center;
-}
+  .friend-info__danger-actions {
+    padding: 30rpx 32rpx;
+    align-items: center;
+  }
 
-.friend-info__danger-link {
-  font-size: 34rpx;
-  line-height: 52rpx;
-  font-weight: 400;
-  color: #FF584C;
-}
+  .friend-info__danger-link {
+    font-size: 34rpx;
+    line-height: 52rpx;
+    font-weight: 400;
+    color: #FF584C;
+  }
 </style>

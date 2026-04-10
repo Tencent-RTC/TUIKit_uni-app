@@ -168,7 +168,7 @@ class SearchState {
       }
     };
 
-    callAPI(options, (response: string) => {
+    callAPI(JSON.stringify(options), (response: string) => {
       try {
         const result = safeJsonParse<any>(response, {});
         if (result.code === 0) {
@@ -263,7 +263,7 @@ class SearchState {
         }
       };
 
-      callAPI(options, (response: string) => {
+      callAPI(JSON.stringify(options), (response: string) => {
         try {
           const result = safeJsonParse<any>(response, {});
           if (result.code === 0) {
@@ -295,7 +295,7 @@ class SearchState {
         }
       };
 
-      callAPI(options, (response: string) => {
+      callAPI(JSON.stringify(options), (response: string) => {
         try {
           const result = safeJsonParse<any>(response, {});
           if (result.code === 0) {
@@ -375,7 +375,7 @@ class SearchState {
       }
     };
 
-    callAPI(options, (response: string) => {
+    callAPI(JSON.stringify(options), (response: string) => {
       try {
         const result = safeJsonParse<any>(response, {});
         console.log(`[${this.instanceId}][destroyStore] Response:`, result);

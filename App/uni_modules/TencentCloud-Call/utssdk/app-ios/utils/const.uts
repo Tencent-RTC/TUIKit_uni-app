@@ -1,5 +1,0 @@
-export const NAME = {
-  PREFIX: "【CallEngine】【iOS】",
-  STRING: "string",
-  NUMBER: "number",
-};

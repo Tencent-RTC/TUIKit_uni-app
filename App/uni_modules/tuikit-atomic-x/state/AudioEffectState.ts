@@ -7,47 +7,93 @@
  * 业务价值：为直播平台提供差异化的音效体验，增强用户参与度和直播趣味性。
  * 应用场景：变声直播、K歌直播、音效娱乐、专业音效等需要音频处理的场景。
  */
-import { ref } from "vue";
+import { ref, watch } from "vue";
 import {
-    SetAudioChangerTypeOptions, SetAudioReverbTypeOptions, SetVoiceEarMonitorEnableOptions,
-    VolumeOptions, AudioChangerTypeParam, AudioReverbTypeParam
+  callAPI, addListener, removeListener
 } from "@/uni_modules/tuikit-atomic-x";
-import { getRTCRoomEngineManager } from "./rtcRoomEngine";
-import { callUTSFunction, safeJsonParse } from "../utils/utsUtils";
+import { currentLive } from "./LiveListState";
+import { VolumeOptions } from "./DeviceState";
+import { safeJsonParse } from "../utils/utsUtils";
 
 /**
- * 变声器类型映射表
- * @internal
+ * 音频变声效果
+ * @remarks
+ * 可用值：
+ * - `NONE`: 0，无效果
+ * - `CHILD`: 1，小孩
+ * - `LITTLE_GIRL`: 2，小女孩
+ * - `MAN`: 3，男人
+ * - `HEAVY_METAL`: 4，重金属
+ * - `COLD`: 5，冷酷
+ * - `FOREIGNER`: 6，外国人
+ * - `TRAPPED_BEAST`: 7，野兽
+ * - `FATSO`: 8，胖子
+ * - `STRONG_CURRENT`: 9，电流
+ * - `HEAVY_MACHINERY`: 10，机械
+ * - `ETHEREAL`: 11，空灵
  */
-const CHANGER_TYPE_MAP: Record<number, AudioChangerTypeParam> = {
-    0: 'NONE',
-    1: 'CHILD',
-    2: 'LITTLE_GIRL',
-    3: 'MAN',
-    4: 'HEAVY_METAL',
-    5: 'COLD',
-    6: 'FOREIGNER',
-    7: 'TRAPPED_BEAST',
-    8: 'FATSO',
-    9: 'STRONG_CURRENT',
-    10: 'HEAVY_MACHINERY',
-    11: 'ETHEREAL',
-} as const;
+export enum AudioChangerType {
+  NONE = 0,
+  CHILD = 1,
+  LITTLE_GIRL = 2,
+  MAN = 3,
+  HEAVY_METAL = 4,
+  COLD = 5,
+  FOREIGNER = 6,
+  TRAPPED_BEAST = 7,
+  FATSO = 8,
+  STRONG_CURRENT = 9,
+  HEAVY_MACHINERY = 10,
+  ETHEREAL = 11,
+}
 
 /**
- * 混响类型映射表
- * @internal
+ * 音频混响效果
+ * @remarks
+ * 可用值：
+ * - `NONE`: 0，无效果
+ * - `KTV`: 1，KTV
+ * - `SMALL_ROOM`: 2，小房间
+ * - `AUDITORIUM`: 3，礼堂
+ * - `DEEP`: 4，深沉
+ * - `LOUD`: 5，洪亮
+ * - `METALLIC`: 6，金属
+ * - `MAGNETIC`: 7，磁性
  */
-const REVERB_TYPE_MAP: Record<number, AudioReverbTypeParam> = {
-    0: 'NONE',
-    1: 'KTV',
-    2: 'SMALL_ROOM',
-    3: 'AUDITORIUM',
-    4: 'DEEP',
-    5: 'LOUD',
-    6: 'METALLIC',
-    7: 'MAGNETIC',
-} as const;
+export enum AudioReverbType {
+  NONE = 0,
+  KTV = 1,
+  SMALL_ROOM = 2,
+  AUDITORIUM = 3,
+  DEEP = 4,
+  LOUD = 5,
+  METALLIC = 6,
+  MAGNETIC = 7,
+}
+
+/**
+ * 设置音频变声器类型参数
+ * @interface SetAudioChangerTypeOptions
+ */
+export type SetAudioChangerTypeOptions = {
+  changerType: AudioChangerType;
+}
+
+/**
+ * 设置音频混响类型参数
+ * @interface SetAudioReverbTypeOptions
+ */
+export type SetAudioReverbTypeOptions = {
+  reverbType: AudioReverbType;
+}
+
+/**
+ * 设置语音耳返开关参数
+ * @interface SetVoiceEarMonitorEnableOptions
+ */
+export type SetVoiceEarMonitorEnableOptions = {
+  enable: boolean;
+}
 
 /**
  * 耳返开关状态
@@ -56,12 +102,12 @@ const REVERB_TYPE_MAP: Record<number, AudioReverbTypeParam> = {
  * @example
  * import { useAudioEffectState } from '@/uni_modules/tuikit-atomic-x/state/AudioEffectState';
  * const { isEarMonitorOpened } = useAudioEffectState('your_live_id');
- * 
+ *
  * // 监听耳返开关状态变化
  * watch(isEarMonitorOpened, (newStatus) => {
  *   console.log('耳返开关状态:', newStatus);
  * });
- * 
+ *
  * // 获取当前耳返开关状态
  * const isOpen = isEarMonitorOpened.value;
  * console.log('当前耳返状态:', isOpen);
@@ -75,55 +121,55 @@ const isEarMonitorOpened = ref<boolean>(false);
  * @example
  * import { useAudioEffectState } from '@/uni_modules/tuikit-atomic-x/state/AudioEffectState';
  * const { earMonitorVolume } = useAudioEffectState('your_live_id');
- * 
+ *
  * // 监听耳返音量变化
  * watch(earMonitorVolume, (newVolume) => {
  *   console.log('耳返音量:', newVolume);
  * });
- * 
+ *
  * // 获取当前耳返音量
  * const volume = earMonitorVolume.value;
  * console.log('当前耳返音量:', volume);
  */
-const earMonitorVolume = ref<number>(0);
+const earMonitorVolume = ref<number>(100);
 
 /**
  * 变声状态
- * @type {Ref<AudioChangerTypeParam>}
+ * @type {Ref<AudioChangerType>}
  * @memberof module:AudioEffectState
  * @example
  * import { useAudioEffectState } from '@/uni_modules/tuikit-atomic-x/state/AudioEffectState';
  * const { audioChangerType } = useAudioEffectState('your_live_id');
- * 
+ *
  * // 监听变声类型变化
  * watch(audioChangerType, (newType) => {
  *   console.log('变声类型:', newType);
  * });
- * 
+ *
  * // 获取当前变声类型
  * const type = audioChangerType.value;
  * console.log('当前变声类型:', type);
  */
-const audioChangerType = ref<AudioChangerTypeParam>('NONE');
+const audioChangerType = ref<AudioChangerType>(AudioChangerType.NONE); // 底层返回 number，与枚举值对应
 
 /**
  * 混响状态
- * @type {Ref<AudioReverbTypeParam>}
+ * @type {Ref<AudioReverbType>}
  * @memberof module:AudioEffectState
  * @example
  * import { useAudioEffectState } from '@/uni_modules/tuikit-atomic-x/state/AudioEffectState';
  * const { audioReverbType } = useAudioEffectState('your_live_id');
- * 
+ *
  * // 监听混响类型变化
  * watch(audioReverbType, (newType) => {
  *   console.log('混响类型:', newType);
  * });
- * 
+ *
  * // 获取当前混响类型
  * const type = audioReverbType.value;
  * console.log('当前混响类型:', type);
  */
-const audioReverbType = ref<AudioReverbTypeParam>('NONE');
+const audioReverbType = ref<AudioReverbType>(AudioReverbType.NONE);
 
 /**
  * 设置变声效果
@@ -136,21 +182,27 @@ const audioReverbType = ref<AudioReverbTypeParam>('NONE');
  * setAudioChangerType({ changerType: 'MAN' });
  */
 function setAudioChangerType(params: SetAudioChangerTypeOptions): void {
-    callUTSFunction("setAudioChangerType", params);
+  callAPI(JSON.stringify({
+    api: "setAudioChangerType",
+    params: { changerType: params.changerType }
+  }), () => { });
 }
 
 /**
  * 设置混响效果
  * @param {SetAudioReverbTypeOptions} params - 混响效果参数
  * @returns {void}
- * @memberof module:AudioEffectState 
+ * @memberof module:AudioEffectState
  * @example
  * import { useAudioEffectState } from '@/uni_modules/tuikit-atomic-x/state/AudioEffectState';
  * const { setAudioReverbType } = useAudioEffectState("your_live_id");
  * setAudioReverbType({ reverbType: 'KTV' });
  */
 function setAudioReverbType(params: SetAudioReverbTypeOptions): void {
-    callUTSFunction("setAudioReverbType", params);
+  callAPI(JSON.stringify({
+    api: "setAudioReverbType",
+    params: { reverbType: params.reverbType }
+  }), () => { });
 }
 
 /**
@@ -164,90 +216,125 @@ function setAudioReverbType(params: SetAudioReverbTypeOptions): void {
  * setVoiceEarMonitorEnable({ enable: true });
  */
 function setVoiceEarMonitorEnable(params: SetVoiceEarMonitorEnableOptions): void {
-    callUTSFunction("setVoiceEarMonitorEnable", params);
+  callAPI(JSON.stringify({
+    api: "setVoiceEarMonitorEnable",
+    params: params
+  }), () => { });
 }
 
 /**
  * 设置耳返音量大小
  * @param {VolumeOptions} params - 耳返音量参数
  * @returns {void}
- * @memberof module:AudioEffectState 
+ * @memberof module:AudioEffectState
  * @example
  * import { useAudioEffectState } from '@/uni_modules/tuikit-atomic-x/state/AudioEffectState';
  * const { setVoiceEarMonitorVolume } = useAudioEffectState("your_live_id");
  * setVoiceEarMonitorVolume({ volume: 50 });
  */
 function setVoiceEarMonitorVolume(params: VolumeOptions): void {
-    callUTSFunction("setVoiceEarMonitorVolume", params);
+  callAPI(JSON.stringify({
+    api: "setVoiceEarMonitorVolume",
+    params: params
+  }), () => { });
 }
 
-const onAudioEffectStoreChanged = (eventName: string, res: string): void => {
-    try {
-        if (eventName === "isEarMonitorOpened") {
-            const data = safeJsonParse<boolean>(res, false);
-            isEarMonitorOpened.value = data;
-        } else if (eventName === "earMonitorVolume") {
-            const data = safeJsonParse<number>(res, 0);
-            earMonitorVolume.value = data;
-        } else if (eventName === "audioChangerType") {
-            const typeCode = safeJsonParse<number>(res, -1);
-            const type = mapChangerTypeCodeToChangerType(typeCode);
+const BINDABLE_DATA_NAMES = [
+  "isEarMonitorOpened",
+  "earMonitorVolume",
+  "audioChangerType",
+  "audioReverbType",
+] as const;
 
-            if (type) {
-                audioChangerType.value = type;
-            } else {
-                console.error(`Invalid changer type code received: ${typeCode}`);
-            }
-        } else if (eventName === "audioReverbType") {
-            const typeCode = safeJsonParse<number>(res, -1);
-            const type = mapReverbTypeCodeToReverbType(typeCode);
-
-            if (type) {
-                audioReverbType.value = type;
-            } else {
-                console.error(`Invalid reverb type code received: ${typeCode}`);
-            }
-        }
-    } catch (error) {
-        console.error("onAudioEffectStoreChanged error:", error);
-    }
-};
-function mapChangerTypeCodeToChangerType(typeCode: number): AudioChangerTypeParam | null {
-    const mappedType = CHANGER_TYPE_MAP[typeCode];
-    if (mappedType === undefined) {
-        console.warn(`Unknown changer type code: ${typeCode}`);
-        return null;
-    }
-    return mappedType;
-}
-
-function mapReverbTypeCodeToReverbType(typeCode: number): AudioReverbTypeParam | null {
-    const mappedType = REVERB_TYPE_MAP[typeCode];
-    if (mappedType === undefined) {
-        console.warn(`Unknown reverb type code: ${typeCode}`);
-        return null;
-    }
-    return mappedType;
-}
+let boundLiveID: string | null = null;
 
 function bindEvent(liveID: string): void {
-    getRTCRoomEngineManager().on("audioEffectStoreChanged", onAudioEffectStoreChanged, liveID);
+  if (boundLiveID === liveID) {
+    return;
+  }
+  if (boundLiveID) {
+    unbindEvent(boundLiveID);
+  }
+  boundLiveID = liveID;
+
+  BINDABLE_DATA_NAMES.forEach(dataName => {
+    addListener({
+      type: "state",
+      store: "AudioEffectStore",
+      name: dataName,
+      params: {}
+    }, (data: string) => {
+      try {
+        const result = safeJsonParse<any>(data, {});
+        console.log(`[audioEffect][${dataName}] Data:`, result);
+        onAudioEffectStoreChanged[dataName]?.(result);
+      } catch (error) {
+        console.error(`[audioEffect][${dataName}] Error:`, error);
+      }
+    });
+  });
 }
 
+function unbindEvent(liveID: string): void {
+  BINDABLE_DATA_NAMES.forEach(dataName => {
+    removeListener({
+      type: "state",
+      store: "AudioEffectStore",
+      name: dataName,
+      params: {}
+    });
+  });
+  if (boundLiveID === liveID) {
+    boundLiveID = null;
+  }
+}
+
+let stopWatchingCurrentLive: (() => void) | null = null;
+
+function ensureWatchCurrentLive() {
+  if (stopWatchingCurrentLive) return;
+  stopWatchingCurrentLive = watch(
+    () => currentLive.value,
+    (newVal, oldVal) => {
+      if (oldVal && oldVal.liveID !== '') {
+        if (newVal.liveID === '' && boundLiveID) {
+          unbindEvent(boundLiveID);
+        }
+      }
+    }
+  );
+}
+
+const onAudioEffectStoreChanged: Record<string, (result: any) => void> = {
+  isEarMonitorOpened: (res) => {
+    isEarMonitorOpened.value = safeJsonParse<boolean>(res.isEarMonitorOpened, false);
+  },
+  earMonitorVolume: (res) => {
+    earMonitorVolume.value = safeJsonParse<number>(res.earMonitorVolume, 100);
+  },
+  audioChangerType: (res) => {
+    audioChangerType.value = safeJsonParse<AudioChangerType>(res.audioChangerType, AudioChangerType.NONE);
+  },
+  audioReverbType: (res) => {
+    audioReverbType.value = safeJsonParse<AudioReverbType>(res.audioReverbType, AudioReverbType.NONE);
+  },
+};
+
 export function useAudioEffectState(liveID: string) {
-    bindEvent(liveID);
+  bindEvent(liveID);
+  ensureWatchCurrentLive();
 
-    return {
-        audioChangerType,         // 变声状态
-        audioReverbType,          // 混响状态
-        isEarMonitorOpened,       // 耳返开关状态
-        earMonitorVolume,         // 耳返音量大小
+  return {
+    audioChangerType,         // 变声状态
+    audioReverbType,          // 混响状态
+    isEarMonitorOpened,       // 耳返开关状态
+    earMonitorVolume,         // 耳返音量大小
 
-        setAudioChangerType,      // 设置变声效果
-        setAudioReverbType,       // 设置混响效果
-        setVoiceEarMonitorEnable, // 设置耳返开关
-        setVoiceEarMonitorVolume, // 设置耳返音量
-    };
+    setAudioChangerType,      // 设置变声效果
+    setAudioReverbType,       // 设置混响效果
+    setVoiceEarMonitorEnable, // 设置耳返开关
+    setVoiceEarMonitorVolume, // 设置耳返音量
+  };
 }
 
 export default useAudioEffectState;

@@ -19,7 +19,7 @@ import type { HybridResponseData } from "../types/hybridService";
 /**
  * 获取全局 InstanceMap
  */
-function getGlobalInstanceMap(): Map<string, ContactState> {
+function getGlobalInstanceMap() : Map<string, ContactState> {
   try {
     const app = getApp();
     if (app && app.globalData) {
@@ -41,28 +41,28 @@ const InstanceMap = getGlobalInstanceMap();
  */
 class ContactState {
   /** Store 实例ID */
-  public readonly instanceId: string;
+  public readonly instanceId : string;
 
   /** 黑名单列表 */
-  public readonly blackList: Ref<ContactInfo[]>;
+  public readonly blackList : Ref<ContactInfo[]>;
 
   /** 好友列表 */
-  public readonly friendList: Ref<ContactInfo[]>;
+  public readonly friendList : Ref<ContactInfo[]>;
 
   /** 好友申请列表 */
-  public readonly friendApplicationList: Ref<FriendApplicationInfo[]>;
+  public readonly friendApplicationList : Ref<FriendApplicationInfo[]>;
 
   /** 好友申请未读数 */
-  public readonly friendApplicationUnreadCount: Ref<number>;
+  public readonly friendApplicationUnreadCount : Ref<number>;
 
   /** 添加好友信息 */
-  public readonly addFriendInfo: Ref<ContactInfo | null>;
+  public readonly addFriendInfo : Ref<ContactInfo | null>;
 
   /**
    * 私有构造函数，使用 getInstance 获取实例
    * @param instanceId Store 实例ID
    */
-  private constructor(instanceId: string) {
+  private constructor(instanceId : string) {
     this.instanceId = instanceId;
     this.blackList = ref<ContactInfo[]>([]);
     this.friendList = ref<ContactInfo[]>([]);
@@ -78,7 +78,7 @@ class ContactState {
    * 获取实例（单例模式）
    * @param instanceId Store 实例ID
    */
-  public static getInstance(instanceId: string): ContactState {
+  public static getInstance(instanceId : string) : ContactState {
     if (!InstanceMap.has(instanceId)) {
       InstanceMap.set(instanceId, new ContactState(instanceId));
     }
@@ -86,14 +86,14 @@ class ContactState {
   }
 
   private createStore() {
-    const options: HybridCallOptions = {
+    const options : HybridCallOptions = {
       api: "createStore",
       params: {
         createStoreParams: this.instanceId
       }
     };
 
-    callAPI(options, (response: string) => {
+    callAPI(JSON.stringify(options), (response : string) => {
       try {
         const result = safeJsonParse<any>(response, {});
         console.log(`[${this.instanceId}][createStore] Response:`, result);
@@ -117,14 +117,14 @@ class ContactState {
   /**
    * 绑定事件监听
    */
-  private bindEvent(): void {
+  private bindEvent() : void {
     // 监听黑名单列表变化
     addListener({
       type: "",
       store: "Contact",
       name: "blackList",
       params: { createStoreParams: this.instanceId }
-    }, (data: string) => {
+    }, (data : string) => {
       try {
         const result = safeJsonParse<any>(data, {});
         const list = safeJsonParse<ContactInfo[]>(result.blackList, []);
@@ -141,7 +141,7 @@ class ContactState {
       store: "Contact",
       name: "friendList",
       params: { createStoreParams: this.instanceId }
-    }, (data: string) => {
+    }, (data : string) => {
       try {
         const result = safeJsonParse<any>(data, {});
         const list = safeJsonParse<ContactInfo[]>(result.friendList, []);
@@ -158,7 +158,7 @@ class ContactState {
       store: "Contact",
       name: "friendApplicationList",
       params: { createStoreParams: this.instanceId }
-    }, (data: string) => {
+    }, (data : string) => {
       try {
         const result = safeJsonParse<any>(data, {});
         const list = safeJsonParse<FriendApplicationInfo[]>(result.friendApplicationList, []);
@@ -175,7 +175,7 @@ class ContactState {
       store: "Contact",
       name: "friendApplicationUnreadCount",
       params: { createStoreParams: this.instanceId }
-    }, (data: string) => {
+    }, (data : string) => {
       try {
         const result = safeJsonParse<any>(data, {});
         console.log(`[${this.instanceId}][friendApplicationUnreadCount listener] Data:`, result);
@@ -191,9 +191,9 @@ class ContactState {
    * @param userIDList 用户ID列表
    * @returns {Promise<ContactInfo[]>}
    */
-  fetchUserInfo = async (userIDList: string[]): Promise<ContactInfo[]> => {
+  fetchUserInfo = async (userIDList : string[]) : Promise<ContactInfo[]> => {
     return new Promise((resolve, reject) => {
-      const options: HybridCallOptions = {
+      const options : HybridCallOptions = {
         api: "fetchUserInfo",
         params: {
           createStoreParams: this.instanceId,
@@ -201,9 +201,9 @@ class ContactState {
         }
       };
 
-      callAPI(options, (response: string) => {
+      callAPI(JSON.stringify(options), (response : string) => {
         try {
-          const result = safeJsonParse<HybridResponseData<{userInfoList: ContactInfo[]}>>(response, {});
+          const result = safeJsonParse<HybridResponseData<{ userInfoList : ContactInfo[] }>>(response, {});
           console.log(`[${this.instanceId}][fetchUserInfo] Response:`, result);
 
           if (result.code === 0) {
@@ -211,7 +211,7 @@ class ContactState {
             resolve(userInfoList);
           } else {
             console.error(`[${this.instanceId}][fetchUserInfo] Failed:`, result.message);
-            reject(new Error(result.message || 'Failed to fetch user info list'));
+            reject(result);
           }
         } catch (error) {
           console.error(`[${this.instanceId}][fetchUserInfo] Parse error:`, error);
@@ -225,16 +225,16 @@ class ContactState {
    * 拉取好友列表
    * @returns {Promise<void>}
    */
-  fetchFriendList = async (): Promise<void> => {
+  fetchFriendList = async () : Promise<void> => {
     return new Promise((resolve, reject) => {
-      const options: HybridCallOptions = {
+      const options : HybridCallOptions = {
         api: "fetchFriendList",
         params: {
           createStoreParams: this.instanceId
         }
       };
 
-      callAPI(options, (response: string) => {
+      callAPI(JSON.stringify(options), (response : string) => {
         try {
           const result = safeJsonParse<any>(response, {});
           console.log(`[${this.instanceId}][fetchFriendList] Response:`, result);
@@ -257,16 +257,16 @@ class ContactState {
    * 拉取黑名单列表
    * @returns {Promise<void>}
    */
-  fetchBlackList = async (): Promise<void> => {
+  fetchBlackList = async () : Promise<void> => {
     return new Promise((resolve, reject) => {
-      const options: HybridCallOptions = {
+      const options : HybridCallOptions = {
         api: "fetchBlackList",
         params: {
           createStoreParams: this.instanceId
         }
       };
 
-      callAPI(options, (response: string) => {
+      callAPI(JSON.stringify(options), (response : string) => {
         try {
           const result = safeJsonParse<any>(response, {});
           console.log(`[${this.instanceId}][fetchBlackList] Response:`, result);
@@ -289,16 +289,16 @@ class ContactState {
    * 拉取好友申请列表
    * @returns {Promise<void>}
    */
-  fetchFriendApplicationList = async (): Promise<void> => {
+  fetchFriendApplicationList = async () : Promise<void> => {
     return new Promise((resolve, reject) => {
-      const options: HybridCallOptions = {
+      const options : HybridCallOptions = {
         api: "fetchFriendApplicationList",
         params: {
           createStoreParams: this.instanceId
         }
       };
 
-      callAPI(options, (response: string) => {
+      callAPI(JSON.stringify(options), (response : string) => {
         try {
           const result = safeJsonParse<any>(response, {});
           console.log(`[${this.instanceId}][fetchFriendApplicationList] Response:`, result);
@@ -324,9 +324,9 @@ class ContactState {
    * @param addWording 添加附言
    * @returns {Promise<void>}
    */
-  addFriend = async (userID: string, remark?: string, addWording?: string): Promise<void> => {
+  addFriend = async (userID : string, remark ?: string, addWording ?: string) : Promise<void> => {
     return new Promise((resolve, reject) => {
-      const options: HybridCallOptions = {
+      const options : HybridCallOptions = {
         api: "addFriend",
         params: {
           createStoreParams: this.instanceId,
@@ -336,7 +336,7 @@ class ContactState {
         }
       };
 
-      callAPI(options, (response: string) => {
+      callAPI(JSON.stringify(options), (response : string) => {
         try {
           const result = safeJsonParse<any>(response, {});
           console.log(`[${this.instanceId}][addFriend] Response:`, result);
@@ -360,9 +360,9 @@ class ContactState {
    * @param userID 用户ID
    * @returns {Promise<void>}
    */
-  deleteFriend = async (userID: string): Promise<void> => {
+  deleteFriend = async (userID : string) : Promise<void> => {
     return new Promise((resolve, reject) => {
-      const options: HybridCallOptions = {
+      const options : HybridCallOptions = {
         api: "deleteFriend",
         params: {
           createStoreParams: this.instanceId,
@@ -370,7 +370,7 @@ class ContactState {
         }
       };
 
-      callAPI(options, (response: string) => {
+      callAPI(JSON.stringify(options), (response : string) => {
         try {
           const result = safeJsonParse<any>(response, {});
           console.log(`[${this.instanceId}][deleteFriend] Response:`, result);
@@ -395,9 +395,9 @@ class ContactState {
    * @param remark 备注
    * @returns {Promise<void>}
    */
-  setUserRemark = async (userID: string, remark: string): Promise<void> => {
+  setUserRemark = async (userID : string, remark : string) : Promise<void> => {
     return new Promise((resolve, reject) => {
-      const options: HybridCallOptions = {
+      const options : HybridCallOptions = {
         api: "setUserRemark",
         params: {
           createStoreParams: this.instanceId,
@@ -406,7 +406,7 @@ class ContactState {
         }
       };
 
-      callAPI(options, (response: string) => {
+      callAPI(JSON.stringify(options), (response : string) => {
         try {
           const result = safeJsonParse<any>(response, {});
           console.log(`[${this.instanceId}][setUserRemark] Response:`, result);
@@ -430,9 +430,9 @@ class ContactState {
    * @param userID 用户ID
    * @returns {Promise<void>}
    */
-  addToBlacklist = async (userID: string): Promise<void> => {
+  addToBlacklist = async (userID : string) : Promise<void> => {
     return new Promise((resolve, reject) => {
-      const options: HybridCallOptions = {
+      const options : HybridCallOptions = {
         api: "addToBlacklist",
         params: {
           createStoreParams: this.instanceId,
@@ -440,7 +440,7 @@ class ContactState {
         }
       };
 
-      callAPI(options, (response: string) => {
+      callAPI(JSON.stringify(options), (response : string) => {
         try {
           const result = safeJsonParse<any>(response, {});
           console.log(`[${this.instanceId}][addToBlacklist] Response:`, result);
@@ -464,9 +464,9 @@ class ContactState {
    * @param userID 用户ID
    * @returns {Promise<void>}
    */
-  removeFromBlacklist = async (userID: string): Promise<void> => {
+  removeFromBlacklist = async (userID : string) : Promise<void> => {
     return new Promise((resolve, reject) => {
-      const options: HybridCallOptions = {
+      const options : HybridCallOptions = {
         api: "removeFromBlacklist",
         params: {
           createStoreParams: this.instanceId,
@@ -474,7 +474,7 @@ class ContactState {
         }
       };
 
-      callAPI(options, (response: string) => {
+      callAPI(JSON.stringify(options), (response : string) => {
         try {
           const result = safeJsonParse<any>(response, {});
           console.log(`[${this.instanceId}][removeFromBlacklist] Response:`, result);
@@ -498,9 +498,9 @@ class ContactState {
    * @param application 申请信息
    * @returns {Promise<void>}
    */
-  acceptFriendApplication = async (application: FriendApplicationInfo): Promise<void> => {
+  acceptFriendApplication = async (application : FriendApplicationInfo) : Promise<void> => {
     return new Promise((resolve, reject) => {
-      const options: HybridCallOptions = {
+      const options : HybridCallOptions = {
         api: "acceptFriendApplication",
         params: {
           createStoreParams: this.instanceId,
@@ -508,7 +508,7 @@ class ContactState {
         }
       };
 
-      callAPI(options, (response: string) => {
+      callAPI(JSON.stringify(options), (response : string) => {
         try {
           const result = safeJsonParse<any>(response, {});
           console.log(`[${this.instanceId}][acceptFriendApplication] Response:`, result);
@@ -532,9 +532,9 @@ class ContactState {
    * @param application 申请信息
    * @returns {Promise<void>}
    */
-  refuseFriendApplication = async (application: FriendApplicationInfo): Promise<void> => {
+  refuseFriendApplication = async (application : FriendApplicationInfo) : Promise<void> => {
     return new Promise((resolve, reject) => {
-      const options: HybridCallOptions = {
+      const options : HybridCallOptions = {
         api: "refuseFriendApplication",
         params: {
           createStoreParams: this.instanceId,
@@ -542,7 +542,7 @@ class ContactState {
         }
       };
 
-      callAPI(options, (response: string) => {
+      callAPI(JSON.stringify(options), (response : string) => {
         try {
           const result = safeJsonParse<any>(response, {});
           console.log(`[${this.instanceId}][refuseFriendApplication] Response:`, result);
@@ -565,16 +565,16 @@ class ContactState {
    * 清空好友申请未读数
    * @returns {Promise<void>}
    */
-  clearFriendApplicationUnreadCount = async (): Promise<void> => {
+  clearFriendApplicationUnreadCount = async () : Promise<void> => {
     return new Promise((resolve, reject) => {
-      const options: HybridCallOptions = {
+      const options : HybridCallOptions = {
         api: "clearFriendApplicationUnreadCount",
         params: {
           createStoreParams: this.instanceId
         }
       };
 
-      callAPI(options, (response: string) => {
+      callAPI(JSON.stringify(options), (response : string) => {
         try {
           const result = safeJsonParse<any>(response, {});
           console.log(`[${this.instanceId}][clearFriendApplicationUnreadCount] Response:`, result);
@@ -599,9 +599,9 @@ class ContactState {
    * @param opt 消息接收选项
    * @returns {Promise<void>}
    */
-  setReceiveMessageOpt = async (userID: string, opt: ReceiveMessageOpt): Promise<void> => {
+  setReceiveMessageOpt = async (userID : string, opt : ReceiveMessageOpt) : Promise<void> => {
     return new Promise((resolve, reject) => {
-      const options: HybridCallOptions = {
+      const options : HybridCallOptions = {
         api: "setReceiveMessageOpt",
         params: {
           createStoreParams: this.instanceId,
@@ -610,7 +610,7 @@ class ContactState {
         }
       };
 
-      callAPI(options, (response: string) => {
+      callAPI(JSON.stringify(options), (response : string) => {
         try {
           const result = safeJsonParse<any>(response, {});
           console.log(`[${this.instanceId}][setReceiveMessageOpt] Response:`, result);
@@ -632,7 +632,7 @@ class ContactState {
   /**
    * 移除事件监听
    */
-  private unbindEvent(): void {
+  private unbindEvent() : void {
     const dataNames = [
       "blackList",
       "friendList",
@@ -653,7 +653,7 @@ class ContactState {
   /**
    * 重置数据
    */
-  private resetData(): void {
+  private resetData() : void {
     this.blackList.value = [];
     this.friendList.value = [];
     this.friendApplicationList.value = [];
@@ -664,19 +664,19 @@ class ContactState {
   /**
    * 销毁 Store
    */
-  destroyStore = (): void => {
+  destroyStore = () : void => {
     this.unbindEvent();
     this.resetData();
     InstanceMap.delete(this.instanceId);
 
-    const options: HybridCallOptions = {
+    const options : HybridCallOptions = {
       api: "destroyStore",
       params: {
         createStoreParams: this.instanceId
       }
     };
 
-    callAPI(options, (response: string) => {
+    callAPI(JSON.stringify(options), (response : string) => {
       try {
         const result = safeJsonParse<any>(response, {});
         console.log(`[${this.instanceId}][destroyStore] Response:`, result);
@@ -697,8 +697,8 @@ class ContactState {
  * 联系人状态管理 Hook
  * @param instanceId Store 实例ID，默认为 "default_contact_store"
  */
-export function useContactState(instanceId?: string) {
-  const options: any = {
+export function useContactState(instanceId ?: string) {
+  const options : any = {
     storeName: "Contact",
   }
   if (instanceId) {

@@ -19,40 +19,34 @@
     onMounted,
     onUnmounted
   } from 'vue';
-
   const template = ref('1v1');
 
   const entryInfos = computed(() => [{
       icon: 'https://web.sdk.qcloud.com/component/miniApp/resources/audio-card.png',
       title: '语音通话',
       desc: '丢包率70%仍可正常语音通话',
-      navigateTo: '/pages/scenes/call/call?type=1',
+      navigateTo: '/pages/scenes/call/singleCall?type=0',
     },
     {
       icon: 'https://web.sdk.qcloud.com/component/miniApp/resources/video-card.png',
       title: '视频通话',
       desc: '丢包率50%仍可正常视频通话',
-      navigateTo: '/pages/scenes/call/call?type=2',
+      navigateTo: '/pages/scenes/call/singleCall?type=1',
     },
     {
       icon: 'https://web.sdk.qcloud.com/component/miniApp/resources/audio-card.png',
       title: '多人语音通话',
       desc: '丢包率70%仍可正常语音通话',
-      navigateTo: '/pages/scenes/call/groupCall?type=1',
+      navigateTo: '/pages/scenes/call/groupCall?type=0',
     },
     {
       icon: 'https://web.sdk.qcloud.com/component/miniApp/resources/video-card.png',
       title: '多人视频通话',
       desc: '丢包率50%仍可正常视频通话',
-      navigateTo: '/pages/scenes/call/groupCall?type=2',
+      navigateTo: '/pages/scenes/call/groupCall?type=1',
     },
   ]);
 
-  const joinAPI = () => {
-    uni.$TUICallKit.join({
-      callId: 'xxx',
-    });
-  };
 
   const handleEntry = (e) => {
     const url = entryInfos.value[e.currentTarget.id].navigateTo;

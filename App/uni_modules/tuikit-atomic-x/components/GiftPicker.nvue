@@ -8,12 +8,7 @@
 
       <!-- 分类标签 -->
       <view class="category-tabs">
-        <view 
-          v-for="(category, index) in giftLists" 
-          :key="category.categoryID"
-          class="tab-item"
-          :class="{ 'tab-active': currentCategoryIndex === index }"
-          @tap="switchCategory(index)">
+        <view v-for="(category, index) in giftLists" :key="category.categoryID" class="tab-item" :class="{ 'tab-active': currentCategoryIndex === index }" @tap="switchCategory(index)">
           <text class="tab-text" :class="{ 'tab-text-active': currentCategoryIndex === index }">{{ category.name }}</text>
         </view>
       </view>
@@ -21,9 +16,7 @@
       <swiper class="gift-content" :current="currentPage" @change="handleSwiperChange" style="height: 580rpx;">
         <swiper-item v-for="(page, pageIndex) in currentCategoryPages" :key="pageIndex" class="gift-page">
           <view class="gift-container">
-            <view class="gift-item" v-for="(giftInfo, index) in page" :key="giftInfo.giftID"
-              :class="{ 'selected': selectedGiftIndex === (pageIndex * itemsPerPage + index) }"
-              @tap="selectGift(pageIndex * itemsPerPage + index)">
+            <view class="gift-item" v-for="(giftInfo, index) in page" :key="giftInfo.giftID" :class="{ 'selected': selectedGiftIndex === (pageIndex * itemsPerPage + index) }" @tap="selectGift(pageIndex * itemsPerPage + index)">
               <view class="gift-image-container">
                 <image class="gift-image" :src="giftInfo.iconURL" mode="aspectFit" />
               </view>
@@ -32,8 +25,7 @@
                   <text class="send-text">赠送</text>
                 </view>
               </view>
-              <text
-                class="gift-name">{{ selectedGiftIndex === (pageIndex * itemsPerPage + index) ? '' : (giftInfo.name || '') }}</text>
+              <text class="gift-name">{{ selectedGiftIndex === (pageIndex * itemsPerPage + index) ? '' : (giftInfo.name || '') }}</text>
               <text class="gift-price">{{ giftInfo.coins }}</text>
             </view>
           </view>
@@ -42,20 +34,19 @@
 
       <!-- 分页指示器 -->
       <view class="pagination-dots" v-if="currentCategoryPages.length > 1">
-        <view 
-          v-for="(page, index) in currentCategoryPages" 
-          :key="index"
-          class="dot"
-          :class="{ 'dot-active': currentPage === index }">
+        <view v-for="(page, index) in currentCategoryPages" :key="index" class="dot" :class="{ 'dot-active': currentPage === index }">
         </view>
       </view>
     </view>
   </view>
 </template>
 
-<script>
+<script setup>
   import {
-    ref
+    ref,
+    computed,
+    watch,
+    onMounted
   } from 'vue';
   import {
     downloadAndSaveToPath
@@ -63,147 +54,174 @@
   import {
     useGiftState
   } from "@/uni_modules/tuikit-atomic-x/state/GiftState";
+
+  const props = defineProps({
+    modelValue: {
+      type: Boolean,
+      default: false
+    },
+    onGiftSelect: {
+      type: Function,
+      default: null
+    },
+  });
+
+  const emit = defineEmits(['update:modelValue', 'recharge']);
+
+  const liveID = uni?.$liveID || '';
   const {
     usableGifts,
-    latestGift,
     sendGift,
-    refreshUsableGifts
+    refreshUsableGifts,
+    setLanguage
   } = useGiftState(uni?.$liveID);
 
-  export default {
-    name: 'GiftPanel',
-    props: {
-      modelValue: {
-        type: Boolean,
-        default: false
-      },
-      onGiftSelect: {
-        type: Function,
-        default: null
-      },
-    },
-    data() {
-      return {
-        scrollTop: 0,
-        selectedGiftIndex: 0,
-        giftLists: usableGifts,
-        currentPage: 0,
-        currentCategoryIndex: 0,
-        itemsPerPage: 8,
-      };
-    },
-    methods: {
-      close() {
-        this.$emit('update:modelValue', false);
-      },
-      handleSwiperChange(e) {
-        this.currentPage = e.detail.current;
-      },
-      switchCategory(index) {
-        this.currentCategoryIndex = index;
-        this.currentPage = 0;
-        this.selectedGiftIndex = -1;
-      },
-      selectGift(index) {
-        this.selectedGiftIndex = index;
-      },
-      handleSendGift(index) {
-        const gift = (this.currentCategoryGifts || [])[index];
-        if (this.selectedGiftIndex !== index) return;
-        sendGift({
+  const scrollTop = ref(0);
+  const selectedGiftIndex = ref(0);
+  const currentPage = ref(0);
+  const currentCategoryIndex = ref(0);
+  const itemsPerPage = 8;
+
+  // 通过 computed 追踪 usableGifts.value 的变化，实现响应式
+  const giftLists = computed(() => {
+    return usableGifts.value || [];
+  });
+
+  // 当前分类的礼物列表
+  const currentCategoryGifts = computed(() => {
+    const list = giftLists.value;
+    if (!Array.isArray(list) || list.length === 0) return [];
+
+    const category = list[currentCategoryIndex.value];
+    if (!category || !Array.isArray(category.giftList)) return [];
+
+    return category.giftList;
+  });
+
+  // 当前分类的分页数据
+  const currentCategoryPages = computed(() => {
+    const pages = [];
+    const list = currentCategoryGifts.value;
+    for (let i = 0; i < list.length; i += itemsPerPage) {
+      pages.push(list.slice(i, i + itemsPerPage));
+    }
+    return pages;
+  });
+
+  // 兼容新的分类结构与旧的扁平结构（用于下载资源）
+  const flattenedGifts = computed(() => {
+    const list = giftLists.value;
+    if (!Array.isArray(list)) return [];
+    // 新结构：[{ categoryID, name, giftList: [...] }, ...]
+    if (list.length > 0 && list[0] && Array.isArray(list[0].giftList)) {
+      const merged = [];
+      for (let i = 0; i < list.length; i++) {
+        const category = list[i];
+        const gifts = Array.isArray(category.giftList) ? category.giftList : [];
+        for (let j = 0; j < gifts.length; j++) {
+          merged.push(gifts[j]);
+        }
+      }
+      return merged;
+    }
+    // 旧结构：直接为礼物数组
+    return list;
+  });
+
+  // methods
+  function close() {
+    emit('update:modelValue', false);
+  }
+
+  function handleSwiperChange(e) {
+    currentPage.value = e.detail.current;
+  }
+
+  function switchCategory(index) {
+    currentCategoryIndex.value = index;
+    currentPage.value = 0;
+    selectedGiftIndex.value = -1;
+  }
+
+  function selectGift(index) {
+    selectedGiftIndex.value = index;
+  }
+
+  function handleSendGift(index) {
+    const gift = (currentCategoryGifts.value || [])[index];
+    if (selectedGiftIndex.value !== index) return;
+    sendGift({
+      liveID: uni.$liveID,
+      giftID: gift.giftID,
+      count: 1,
+      success: () => {},
+      fail: () => {},
+    });
+    selectedGiftIndex.value = -1;
+  }
+
+  function handleRecharge() {
+    emit('recharge');
+  }
+
+  // watch: 礼物列表变化时预下载资源
+  watch(giftLists, async (newVal) => {
+    const flatten = () => {
+      if (!Array.isArray(newVal)) return [];
+      if (newVal.length > 0 && newVal[0] && Array.isArray(newVal[0].giftList)) {
+        const out = [];
+        for (let i = 0; i < newVal.length; i++) {
+          const gifts = Array.isArray(newVal[i].giftList) ? newVal[i].giftList : [];
+          for (let j = 0; j < gifts.length; j++) out.push(gifts[j]);
+        }
+        return out;
+      }
+      return newVal;
+    };
+    const flatList = flatten();
+    if (!flatList || flatList.length === 0) return;
+    for (let i = 0; i < flatList.length; i++) {
+      const giftData = flatList[i];
+      if (giftData && giftData.resourceURL) {
+        const giftKey = `${(giftData.name || '').split(' ').join('')}-${giftData.giftID}`;
+        if (plus && plus.storage && plus.storage.getAllKeys && plus.storage.getAllKeys().includes(giftKey))
+          continue;
+        const svgaGiftSourceUrl = plus && plus.storage ? plus.storage.getItem(giftKey) : null;
+        if (!svgaGiftSourceUrl) {
+          const filePath = await downloadAndSaveToPath(`${giftData.resourceURL}`);
+          if (plus && plus.storage) plus.storage.setItem(giftKey, filePath);
+        }
+      }
+    }
+  });
+
+  // mounted
+  onMounted(() => {
+    if (!uni?.$liveID) {
+      return;
+    }
+    const LanguageMap = {
+      'zh-CN': 'zh-Hans', // android
+      'zh-TW': 'zh-Hant', // android
+      'zh-Hans-US': 'zh-Hans', // iOS
+      en: 'en',
+    };
+    uni.getSystemInfo()
+      .then((systemInfo) => {
+        console.log(`systemInfo.language: ${systemInfo.language}`);
+        setLanguage({
           liveID: uni.$liveID,
-          giftID: gift.giftID,
-          count: 1,
-          success: () => {},
-          fail: () => {},
+          language: LanguageMap[systemInfo.language] || LanguageMap['zh-CN'],
         })
-        this.selectedGiftIndex = -1;
-      },
-      handleRecharge() {
-        this.$emit('recharge');
-      }
-    },
-    computed: {
-      // 当前分类的礼物列表
-      currentCategoryGifts() {
-        const list = this.giftLists || [];
-        if (!Array.isArray(list) || list.length === 0) return [];
-        
-        const category = list[this.currentCategoryIndex];
-        if (!category || !Array.isArray(category.giftList)) return [];
-        
-        return category.giftList;
-      },
-      // 当前分类的分页数据
-      currentCategoryPages() {
-        const pages = [];
-        const list = this.currentCategoryGifts;
-        for (let i = 0; i < list.length; i += this.itemsPerPage) {
-          pages.push(list.slice(i, i + this.itemsPerPage));
-        }
-        return pages;
-      },
-      // 兼容新的分类结构与旧的扁平结构（用于下载资源）
-      flattenedGifts() {
-        const list = this.giftLists || [];
-        if (!Array.isArray(list)) return [];
-        // 新结构：[{ categoryID, name, giftList: [...] }, ...]
-        if (list.length > 0 && list[0] && Array.isArray(list[0].giftList)) {
-          const merged = [];
-          for (let i = 0; i < list.length; i++) {
-            const category = list[i];
-            const gifts = Array.isArray(category.giftList) ? category.giftList : [];
-            for (let j = 0; j < gifts.length; j++) {
-              merged.push(gifts[j]);
-            }
-          }
-          return merged;
-        }
-        // 旧结构：直接为礼物数组
-        return list;
-      }
-    },
-    watch: {
-      async giftLists(newVal) {
-        const flatten = () => {
-          if (!Array.isArray(newVal)) return [];
-          if (newVal.length > 0 && newVal[0] && Array.isArray(newVal[0].giftList)) {
-            // 分类结构
-            const out = [];
-            for (let i = 0; i < newVal.length; i++) {
-              const gifts = Array.isArray(newVal[i].giftList) ? newVal[i].giftList : [];
-              for (let j = 0; j < gifts.length; j++) out.push(gifts[j]);
-            }
-            return out;
-          }
-          return newVal;
-        };
-        const flatList = flatten();
-        if (!flatList || flatList.length === 0) return;
-        for (let i = 0; i < flatList.length; i++) {
-          const giftData = flatList[i];
-          if (giftData && giftData.resourceURL) {
-            const giftKey = `${(giftData.name || '').split(' ').join('')}-${giftData.giftID}`;
-            if (plus && plus.storage && plus.storage.getAllKeys && plus.storage.getAllKeys().includes(giftKey))
-              continue;
-            const svgaGiftSourceUrl = plus && plus.storage ? plus.storage.getItem(giftKey) : null;
-            if (!svgaGiftSourceUrl) {
-              const filePath = await downloadAndSaveToPath(`${giftData.resourceURL}`);
-              if (plus && plus.storage) plus.storage.setItem(giftKey, filePath);
-            }
-          }
-        }
-      }
-    },
-    mounted() {
-      if (!uni?.$liveID) {
-        return;
-      }
-      refreshUsableGifts({
-        liveID: uni.$liveID
+        refreshUsableGifts({
+          liveID: uni.$liveID
+        });
       })
-    },
-  };
+      .catch((e) => {
+        console.error('获取系统信息失败', e);
+      });
+
+  });
 </script>
 
 <style>

@@ -2,11 +2,11 @@
   <view class="login-page">
     <view class="status-bar" :style="{ height: statusBarHeight + 'px' }"></view>
     <view class="top-bar"></view>
-    
+
     <view class="logo-section">
       <image class="logo-image" src="/static/images/logo.png" mode="aspectFit"></image>
     </view>
-    
+
     <view class="form-container">
       <view class="login-form-section">
         <view v-if="loginUserInfo && loginUserInfo.userId" class="form-item">
@@ -17,34 +17,18 @@
         <view v-else class="login-form">
           <view class="form-item">
             <image class="form-icon" src="/static/images/login/phone.svg" mode="aspectFit"></image>
-            <input 
-              class="form-input" 
-              type="text" 
-              placeholder="请输入 userID" 
+            <input
+              class="form-input"
+              type="text"
+              placeholder="请输入 userID"
               placeholder-class="input-placeholder"
               v-model="userID"
             />
           </view>
-          
-          <!-- 协议勾选 -->
-          <view class="agreement-row">
-            <view class="checkbox" :class="{ checked: agreedProtocol }" @tap="toggleAgreement">
-              <text v-if="agreedProtocol" class="check-icon">✓</text>
-            </view>
-            <view class="agreement-content">
-              <view class="agreement-line">
-                <text class="agreement-text">我已阅读并同意</text>
-                <text class="link-text" @tap="viewPrivacy">《隐私协议摘要》</text>
-                <text class="link-text" @tap="viewPrivacy">《隐私协议》</text>
-              </view>
-              <view class="agreement-line">
-                <text class="agreement-text">和</text>
-                <text class="link-text" @tap="viewUserAgreement">《用户协议》</text>
-              </view>
-            </view>
-          </view>
+
+
         </view>
-        
+
         <!-- 登录按钮 -->
         <button class="login-btn" :class="{ active: canLogin, loading: isLogging }" @tap="handleLogin">
           <view v-if="isLogging" class="loading-icon"></view>
@@ -70,7 +54,7 @@ export default {
   },
   computed: {
     canLogin() {
-      return this.userID.length > 0 && this.agreedProtocol
+      return this.userID.length > 0
     },
     loginUserInfo() {
       return userInfo.value || {};
@@ -81,20 +65,15 @@ export default {
     this.statusBarHeight = systemInfo.statusBarHeight || 0;
   },
   methods: {
-    toggleAgreement() {
-      this.agreedProtocol = !this.agreedProtocol;
-    },
 
     handleLogin() {
       if (!this.canLogin) {
-        if (!this.agreedProtocol) {
-          this.showToast('请先同意用户协议');
-        } else if (!this.userID) {
+        if (!this.userID) {
           this.showToast('请输入 userID');
         }
         return
       }
-      
+
       this.login();
     },
 
@@ -117,13 +96,13 @@ export default {
         duration: 1500,
       });
     },
-    
+
     viewPrivacy() {
       uni.navigateTo({
         url: `/pages/webview/webview?url=${EXTERNAL_URLS.PRIVACY_GUIDELINES}`,
       });
     },
-    
+
     viewUserAgreement() {
       uni.navigateTo({
         url: `/pages/webview/webview?url=${EXTERNAL_URLS.USER_AGREEMENT}`,

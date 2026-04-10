@@ -4,8 +4,7 @@
       <view class="trtc-calling-index-search">
         <view class="search">
           <view class="input-box">
-            <input class="input-search-user" :value="userIDToSearch" maxlength="11" type="text"
-              v-on:input="userIDToSearchInput" placeholder="搜索用户ID" />
+            <input class="input-search-user" :value="userIDToSearch" maxlength="11" type="text" v-on:input="userIDToSearchInput" placeholder="搜索用户ID" />
           </view>
           <view class="btn-search" @click="searchUser">搜索</view>
         </view>
@@ -31,10 +30,9 @@
               <view class="trtc-calling-group-user-item">
                 <view v-if="!item.checked" class="trtc-calling-group-user-switch" @click="addUser" :data-word="item">
                 </view>
-                <image v-else class="trtc-calling-group-user-checkimg" @click="removeUser" :data-word="item"
-                  src="@/static/images/check.png">
+                <image v-else class="trtc-calling-group-user-checkimg" @click="removeUser" :data-word="item" src="@/static/images/check.png">
                 </image>
-                <Avatar :imgSrc="item.avatar" />
+                <Avatar :imgSrc="item.avatarURL" />
                 <view class="trtc-calling-group-user-name">{{
                   item.userID
                 }}</view>
@@ -60,154 +58,261 @@
   </view>
 </template>
 
-<script>
+<script setup>
+  import {
+    ref
+  } from 'vue';
+  import {
+    onLoad,
+    onUnload
+  } from '@dcloudio/uni-app';
   import Avatar from "@/components/Avatar/Avatar.vue";
   import {
-    TUILogin
-  } from '@tencentcloud/tui-core-lite';
+    getCurrentPageFullPath,
+    isNavigating,
+    isCallEnding
+  } from "@/uni_modules/tuikit-atomic-x/server/callService"
+  import {
+    loginUserInfo
+  } from "@/server/loginService";
+  import {
+    useContactState
+  } from '@/uni_modules/tuikit-atomic-x/state/ContactState'
+  import {
+    useCallState
+  } from '@/uni_modules/tuikit-atomic-x/state/CallState';
+  import {
+    useDeviceState
+  } from "@/uni_modules/tuikit-atomic-x/state/DeviceState";
+  import {
+    checkCallPermissionWithDialog
+  } from "@/uni_modules/tuikit-atomic-x/utils/callPermission";
 
-  export default {
-    components: {
-      Avatar,
-    },
-    data() {
-      return {
-        userIDToSearch: "", // 搜索的结果
-        searchList: [], // 搜索后展示的列表
-        callBtn: false, // 控制呼叫按钮的显示隐藏
-        ischeck: true, // 显示是否全选
-        config: {
-          userID: "",
-        },
-        groupID: "",
-        chat: null,
+  const {
+    fetchUserInfo,
+    destroyStore
+  } = useContactState();
+  const {
+    calls,
+    selfInfo,
+    setFramework,
+  } = useCallState()
+  const {
+    openLocalCamera,
+    openLocalMicrophone,
+  } = useDeviceState();
+  const userIDToSearch = ref("");
+  const searchList = ref([]);
+  const callBtn = ref(false);
+  const ischeck = ref(true);
+  // 呼叫防抖锁，防止频繁点击呼叫按钮
+  const isCalling = ref(false);
+  const config = ref({
+    userID: "",
+  });
+  const groupID = ref("");
+
+  onLoad((option) => {
+    uni.$userID = loginUserInfo.value.userId
+    config.value = {
+      userID: loginUserInfo.value.userId,
+      type: Number(option.type),
+    };
+    if (uni.$groupCallLastSearchList && uni.$groupCallLastSearchList.length > 0) {
+      searchList.value = uni.$groupCallLastSearchList;
+      callBtn.value = true;
+    }
+  });
+
+  onUnload(() => {
+    if (uni.$callSource !== 'caller') {
+      uni.$groupCallLastSearchList = null;
+    }
+    destroyStore()
+  });
+
+  const userIDToSearchInput = (e) => {
+    userIDToSearch.value = e.detail.value;
+  };
+
+  const searchUser = async () => {
+    const newSearch = userIDToSearch.value.trim();
+    userIDToSearch.value = newSearch;
+
+    if (userIDToSearch.value === config.value.userID) {
+      uni.showToast({
+        icon: "none",
+        title: "无法向自己发起呼叫",
+      });
+      return;
+    }
+
+    if (searchList.value.length > 7) {
+      return;
+    }
+
+    for (let i = 0; i < searchList.value.length; i++) {
+      if (searchList.value[i].userID === userIDToSearch.value) {
+        uni.showToast({
+          icon: "none",
+          title: "userId已存在,请勿重复添加。",
+        });
+        return;
+      }
+    }
+
+    try {
+      const userList = await fetchUserInfo([userIDToSearch.value]);
+      if (userList.length === 0) {
+        uni.showToast({
+          icon: "none",
+          title: "未查询到此用户",
+        });
+      }
+      const list = {
+        userID: userIDToSearch.value,
+        nick: userList[0].nick,
+        avatar: userList[0].avatarURL,
+        checked: false,
       };
-    },
-    onLoad(option) {
-      const {
-        userID,
-        chat
-      } = TUILogin.getContext();
-      this.chat = chat;
-      this.config = {
-        userID: userID,
-        type: Number(option.type),
-      };
-    },
-    methods: {
-      userIDToSearchInput(e) {
-        this.userIDToSearch = e.detail.value;
-      },
-      searchUser() {
-        const newSearch = this.userIDToSearch.trim();
-        this.userIDToSearch = newSearch;
-        if (this.userIDToSearch === this.config.userID) {
-          uni.showToast({
-            icon: "none",
-            title: "不可以呼叫本人",
-          });
-          return;
+      searchList.value.push(list);
+      callBtn.value = true;
+      userIDToSearch.value = "";
+    } catch (error) {
+      if (error.code === 70107) {
+        uni.showToast({
+          title: "未查询到此用户",
+          icon: "none",
+        });
+      }
+    }
+  };
+
+  const groupCall = async () => {
+    // 防抖：上一次呼叫流程尚未完成时，不允许再次呼叫
+    if (isCalling.value) {
+      console.log('[groupCall] call skipped: isCalling is true');
+      return;
+    }
+    if (isNavigating()) {
+      console.log('[groupCall] call skipped: navigation in progress');
+      return;
+    }
+    if (isCallEnding()) {
+      console.log('[groupCall] call skipped: previous call end still processing');
+      return;
+    }
+
+    const newList = searchList.value.filter((item) => item.checked);
+    const userIDList = newList.map((item) => item.userID);
+
+    if (userIDList.length === 0) {
+      uni.showToast({
+        icon: "none",
+        title: "未选择呼叫用户",
+      });
+      return;
+    }
+    if (selfInfo.value.status === 1 || selfInfo.value.status === 2) {
+      plus.nativeUI.toast('您正在通话中，无法再次发起通话', {
+        align: 'center',
+        verticalAlign: 'center'
+      });
+      return
+    }
+
+    isCalling.value = true;
+
+    if (config.value.type === 1) {
+      openLocalCamera({
+        isFront: true
+      })
+    }
+    openLocalMicrophone({
+      fail: (error) => {
+        if (error === -1104) {
+          setTimeout(() => {
+            openLocalMicrophone();
+          }, 200);
         }
-        if (this.searchList.length > 7) {
-          return;
-        }
-        for (let i = 0; i < this.searchList.length; i++) {
-          if (this.searchList[i].userID === this.userIDToSearch) {
-            uni.showToast({
-              icon: "none",
-              title: "userId已存在,请勿重复添加。",
-            });
-            return;
-          }
-        }
-        this.chat.getUserProfile({
-            userIDList: [this.userIDToSearch],
-          })
-          .then((imResponse) => {
-            if (imResponse.data.length === 0) {
-              uni.showToast({
-                title: "未查询到此用户",
-                icon: "none",
-              });
-              return;
+      }
+    })
+    // 权限检查
+    const hasPermission = await checkCallPermissionWithDialog(config.value.type);
+    if (!hasPermission) {
+      isCalling.value = false;
+      return;
+    }
+
+    uni.$groupCallLastSearchList = searchList.value.map(item => ({
+      ...item
+    }));
+    if (userIDList.length > 8) {
+      uni.showToast({
+        icon: "none",
+        title: "当前通话最多支持 9 人同时在线",
+      });
+      isCalling.value = false;
+      return;
+    }
+    setFramework(14)
+    calls({
+      participantIds: userIDList,
+      mediaType: config.value.type,
+      success: () => {
+        uni.$callSource = 'caller'
+        uni.$lastPage = getCurrentPageFullPath()
+        if (userIDList.length > 1) {
+          uni.navigateTo({
+            url: '/uni_modules/tuikit-atomic-x/pages/call?layoutTemplate=Grid',
+            complete: () => {
+              isCalling.value = false;
             }
-            const list = {
-              userID: this.userIDToSearch,
-              nick: imResponse.data[0].nick,
-              avatar: imResponse.data[0].avatar,
-              checked: false,
-            };
-            this.searchList.push(list);
-            this.searchList = this.searchList;
-            this.callBtn = true;
-            this.userIDToSearch = "";
-          });
-      },
-
-      // 群通话
-      async groupCall() {
-        // 将需要呼叫的用户从搜索列表中过滤出来
-        const newList = this.searchList.filter((item) => item.checked);
-        const userIDList = newList.map((item) => item.userID);
-        // 未选中用户无法发起群通话
-        if (userIDList.length === 0) {
-          uni.showToast({
-            icon: "none",
-            title: "未选择呼叫用户",
-          });
-          return;
-        }
-        // type：通话的媒体类型，比如：语音通话(callMediaType = 1)、视频通话(callMediaType = 2)
-        uni.$TUICallKit.calls({
-            userIDList: userIDList,
-            mediaType: this.config.type,
-          },
-          (res) => {
-            console.log(JSON.stringify(res));
-          }
-        );
-        this.ischeck = true;
-        // searchList: [],
-      },
-
-      addUser(event) {
-        for (let i = 0; i < this.searchList.length; i++) {
-          if (this.searchList[i].userID === event.target.dataset.word.userID) {
-            const newlist = this.searchList;
-            newlist[i].checked = true;
-            this.searchList = newlist;
-          }
+          })
+        } else {
+          uni.navigateTo({
+            url: '/uni_modules/tuikit-atomic-x/pages/call?layoutTemplate=Float',
+            complete: () => {
+              isCalling.value = false;
+            }
+          })
         }
       },
+      fail: () => {
+        isCalling.value = false;
+      }
+    });
+    ischeck.value = true;
+  };
 
-      removeUser(event) {
-        for (let i = 0; i < this.searchList.length; i++) {
-          if (this.searchList[i].userID === event.target.dataset.word.userID) {
-            const newlist = this.searchList;
-            newlist[i].checked = false;
-            this.searchList = newlist;
-          }
-        }
-      },
+  const addUser = (event) => {
+    for (let i = 0; i < searchList.value.length; i++) {
+      if (searchList.value[i].userID === event.target.dataset.word.userID) {
+        searchList.value[i].checked = true;
+      }
+    }
+  };
 
-      allCheck() {
-        const newlist = this.searchList;
-        for (let i = 0; i < newlist.length; i++) {
-          newlist[i].checked = true;
-        }
-        this.searchList = newlist;
-        this.ischeck = false;
-      },
+  const removeUser = (event) => {
+    for (let i = 0; i < searchList.value.length; i++) {
+      if (searchList.value[i].userID === event.target.dataset.word.userID) {
+        searchList.value[i].checked = false;
+      }
+    }
+  };
 
-      allCancel() {
-        const newlist = this.searchList;
-        for (let i = 0; i < newlist.length; i++) {
-          newlist[i].checked = false;
-        }
-        this.searchList = newlist;
-        this.ischeck = true;
-      },
-    },
+  const allCheck = () => {
+    for (let i = 0; i < searchList.value.length; i++) {
+      searchList.value[i].checked = true;
+    }
+    ischeck.value = false;
+  };
+
+  const allCancel = () => {
+    for (let i = 0; i < searchList.value.length; i++) {
+      searchList.value[i].checked = false;
+    }
+    ischeck.value = true;
   };
 </script>
 

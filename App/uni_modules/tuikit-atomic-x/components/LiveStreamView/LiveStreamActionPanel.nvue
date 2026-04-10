@@ -18,21 +18,19 @@
         <view class="drawer-actions">
           <view class="action-btn" @tap.stop="microphoneOperation">
             <view class="action-btn-image-container">
-              <image class="action-btn-image" v-if="targetMicStatus !== 'OFF'" src="/static/images/mute-mic.png"
-                mode="aspectFit" />
+              <image class="action-btn-image" v-if="targetMicStatus !== DeviceStatus.OFF" src="/static/images/mute-mic.png" mode="aspectFit" />
               <image class="action-btn-image" v-else src="/static/images/unmute-mic.png" mode="aspectFit" />
             </view>
-            <text class="action-btn-content" v-if="targetMicStatus !== 'OFF'">{{ micOffText }}</text>
+            <text class="action-btn-content" v-if="targetMicStatus !== DeviceStatus.OFF">{{ micOffText }}</text>
             <text class="action-btn-content" v-else>{{ micOnText }}</text>
           </view>
 
           <view class="action-btn" @tap="cameraOperation">
             <view class="action-btn-image-container">
-              <image class="action-btn-image" v-if="targetCameraStatus !== 'OFF'" src="/static/images/end-camera.png"
-                mode="aspectFit" />
+              <image class="action-btn-image" v-if="targetCameraStatus !== DeviceStatus.OFF" src="/static/images/end-camera.png" mode="aspectFit" />
               <image class="action-btn-image" v-else src="/static/images/start-camera.png" mode="aspectFit" />
             </view>
-            <text class="action-btn-content" v-if="targetCameraStatus !== 'OFF'">{{ cameraOffText }}</text>
+            <text class="action-btn-content" v-if="targetCameraStatus !== DeviceStatus.OFF">{{ cameraOffText }}</text>
             <text class="action-btn-content" v-else>{{ cameraOnText }}</text>
           </view>
 
@@ -62,15 +60,18 @@
     watch
   } from 'vue';
   import {
+    DeviceStatus,
     useDeviceState
   } from "@/uni_modules/tuikit-atomic-x/state/DeviceState";
   import {
     useCoGuestState
   } from "@/uni_modules/tuikit-atomic-x/state/CoGuestState";
   import {
+    CoHostStatusType,
     useCoHostState
   } from "@/uni_modules/tuikit-atomic-x/state/CoHostState";
   import {
+    DeviceControlPolicy,
     useLiveSeatState
   } from "@/uni_modules/tuikit-atomic-x/state/LiveSeatState";
 
@@ -136,14 +137,32 @@
   // 控件显隐与文案
   const showMic = computed(() => props.isSelf || (!props.isSelf && !props.isAnchorMode));
   const showCamera = computed(() => props.isSelf || (!props.isSelf && !props.isAnchorMode));
-  const showFlip = computed(() => props.isSelf && targetCameraStatus.value === 'ON');
+  const showFlip = computed(() => props.isSelf && targetCameraStatus.value === DeviceStatus.ON);
   const showHangup = computed(() => !props.isSelf || (props.isSelf && !props.isAnchorMode));
 
-  const micOffText = computed(() => props.isAnchorMode && props.isSelf ? '静音' : '关闭音频');
-  const micOnText = computed(() => props.isAnchorMode && props.isSelf ? '解除静音' : '打开音频');
-  const cameraOffText = computed(() => props.isAnchorMode && props.isSelf ? '关闭视频' : '关闭视频');
-  const cameraOnText = computed(() => props.isAnchorMode && props.isSelf ? '打开视频' : '打开视频');
-  const hangupText = computed(() => props.isAnchorMode ? '移下麦' : '断开连麦');
+  const micOffText = computed(() => {
+    if (props.isSelf) return '静音';
+    if (props.isAnchorMode && !props.isSelf) return '禁用音频';
+    return '关闭音频';
+  });
+  const micOnText = computed(() => {
+    if (props.isSelf) return '解除静音';
+    if (props.isAnchorMode && !props.isSelf) return '启用音频';
+    return '打开音频';
+  });
+  const cameraOffText = computed(() => {
+    if (props.isAnchorMode && !props.isSelf) return '禁用视频';
+    return '关闭视频';
+  });
+  const cameraOnText = computed(() => {
+    if (props.isAnchorMode && !props.isSelf) return '启用视频';
+    return '打开视频';
+  });
+  const hangupText = computed(() => {
+    if (props.isAnchorMode && !props.isSelf) return '挂断';
+    if (!props.isAnchorMode) return '断开连麦';
+    return '移下麦';
+  });
 
   const targetSeat = computed(() => {
     const list = seatList.value || [];
@@ -153,11 +172,11 @@
   });
 
   const targetMicStatus = computed(() => {
-    return targetSeat.value?.userInfo?.microphoneStatus || 'OFF';
+    return targetSeat.value?.userInfo?.microphoneStatus || DeviceStatus.OFF;
   });
 
   const targetCameraStatus = computed(() => {
-    return targetSeat.value?.userInfo?.cameraStatus || 'OFF';
+    return targetSeat.value?.userInfo?.cameraStatus || DeviceStatus.OFF;
   });
 
   // seatList 变化自动关闭（当目标用户离席）
@@ -178,11 +197,11 @@
   // 操作区
   const microphoneOperation = () => {
     if (!props.isSelf) {
-      if (targetMicStatus.value === 'OFF') {
+      if (targetMicStatus.value === DeviceStatus.OFF) {
         openRemoteMicrophone({
           liveID: uni.$liveID,
           userID: props.userInfo.userID,
-          policy: 'UNLOCK_ONLY'
+          policy: DeviceControlPolicy.UNLOCK_ONLY
         });
         uni.showToast({
           title: `您已将${props.userInfo.userName || props.userInfo.userID} 解除静音`,
@@ -191,7 +210,7 @@
         close();
         return;
       }
-      if (targetMicStatus.value === 'ON') {
+      if (targetMicStatus.value === DeviceStatus.ON) {
         closeRemoteMicrophone({
           liveID: uni.$liveID,
           userID: props.userInfo.userID,
@@ -204,7 +223,7 @@
         return;
       }
     } else {
-      if (targetMicStatus.value === 'OFF') {
+      if (targetMicStatus.value === DeviceStatus.OFF) {
         unmuteMicrophone({
           liveID: uni.$liveID,
           fail: (errorCode) => {
@@ -219,7 +238,7 @@
         close();
         return;
       }
-      if (targetMicStatus.value === 'ON') {
+      if (targetMicStatus.value === DeviceStatus.ON) {
         muteMicrophone({
           liveID: uni.$liveID
         });
@@ -232,11 +251,11 @@
 
   const cameraOperation = () => {
     if (!props.isSelf) {
-      if (targetCameraStatus.value === 'OFF') {
+      if (targetCameraStatus.value === DeviceStatus.OFF) {
         openRemoteCamera({
           liveID: uni.$liveID,
           userID: props.userInfo.userID,
-          policy: 'UNLOCK_ONLY'
+          policy: DeviceControlPolicy.UNLOCK_ONLY
         });
         uni.showToast({
           title: `您已将${props.userInfo.userName || props.userInfo.userID} 解除禁画`,
@@ -245,7 +264,7 @@
         close();
         return;
       }
-      if (targetCameraStatus.value === 'ON') {
+      if (targetCameraStatus.value === DeviceStatus.ON) {
         closeRemoteCamera({
           liveID: uni.$liveID,
           userID: props.userInfo.userID,
@@ -258,7 +277,7 @@
         return;
       }
     } else {
-      if (targetCameraStatus.value === 'OFF') {
+      if (targetCameraStatus.value === DeviceStatus.OFF) {
         openLocalCamera({
           isFront: isFrontCamera.value,
           fail: (errorCode) => {
@@ -273,7 +292,7 @@
         close();
         return;
       }
-      if (targetCameraStatus.value === 'ON') {
+      if (targetCameraStatus.value === DeviceStatus.ON) {
         closeLocalCamera();
         close();
         return;
@@ -283,7 +302,7 @@
   };
 
   const flipCamera = () => {
-    if (cameraStatus.value !== 'ON' || !props.isSelf) return;
+    if (cameraStatus.value !== DeviceStatus.ON || !props.isSelf) return;
     switchCamera({
       isFront: !isFrontCamera.value
     });
@@ -293,7 +312,7 @@
   const handleHangUp = () => {
     if (props.isAnchorMode) {
       // 主播模式：当自己处于主播连线时，提示断开与主播的连线；否则断开与观众的连麦
-      if (coHostStatus.value === 'CONNECTED') {
+      if (coHostStatus.value === CoHostStatusType.CONNECTED) {
         uni.showModal({
           content: '确定要断开与其他主播的连线吗？',
           confirmText: '断开',

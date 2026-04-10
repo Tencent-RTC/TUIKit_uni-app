@@ -7,83 +7,162 @@
  * 业务价值：为直播系统提供稳定的设备基础，确保音视频采集的可靠性和用户体验。
  * 应用场景：设备管理、权限控制、音视频采集、设备故障处理等基础技术场景。
  */
-import { ref } from "vue";
+import { onUnmounted, ref, type Ref } from "vue";
 import {
-  OpenLocalMicrophoneOptions, SetAudioRouteOptions, OpenLocalCameraOptions, SwitchCameraOptions,
-  UpdateVideoQualityOptions, SwitchMirrorOptions, VolumeOptions,
+  callAPI, addListener, removeListener, HybridResponseData
 } from "@/uni_modules/tuikit-atomic-x";
-import { getRTCRoomEngineManager } from "./rtcRoomEngine";
 import permission from "../utils/permission";
-import { callUTSFunction, safeJsonParse } from "../utils/utsUtils";
+import { safeJsonParse } from "../utils/utsUtils";
 
-export const DeviceStatusCode = {
-  OFF: 0,
-  ON: 1,
-} as const;
+declare const uni: any;
 
-export type DeviceStatusCodeType =
-  (typeof DeviceStatusCode)[keyof typeof DeviceStatusCode];
+// 全局状态存储 key
+const DEVICE_STATE_KEY = '__TUIKIT_DEVICE_STATE__';
 
-export const DeviceStatus = {
-  OFF: "OFF",
-  ON: "ON",
-} as const;
+// 初始化全局状态存储
+function getGlobalState() {
+  if (!uni[DEVICE_STATE_KEY]) {
+    uni[DEVICE_STATE_KEY] = {
+      microphoneStatus: ref<DeviceStatus>(DeviceStatus.OFF),
+      microphoneLastError: ref<DeviceError>(DeviceError.NO_ERROR),
+      hasPublishAudioPermission: ref<boolean>(true),
+      captureVolume: ref<number>(0),
+      currentMicVolume: ref<number>(0),
+      outputVolume: ref<number>(0),
+      cameraStatus: ref<DeviceStatus>(DeviceStatus.OFF),
+      cameraLastError: ref<DeviceError>(DeviceError.NO_ERROR),
+      isFrontCamera: ref<boolean>(true),
+      localMirrorType: ref<MirrorType>(MirrorType.AUTO),
+      localVideoQuality: ref<any>(),
+      currentAudioRoute: ref<AudioOutput>(AudioOutput.SPEAKERPHONE),
+      screenStatus: ref<DeviceStatus>(),
+      networkInfo: ref<any>(),
+      bindEventDone: false
+    };
+  }
+  return uni[DEVICE_STATE_KEY];
+}
 
+export enum DeviceStatus {
+  OFF = 0,
+  ON = 1
+}
 
-export type DeviceStatusType = (typeof DeviceStatus)[keyof typeof DeviceStatus];
+export enum DeviceError {
+  NO_ERROR = 0,
+  NO_DEVICE_DETECTED = 1,
+  NO_SYSTEM_PERMISSION = 2,
+  NOT_SUPPORT_CAPTURE = 3,
+  OCCUPIED_ERROR = 4,
+  UNKNOWN_ERROR = 5,
+}
 
-export const DeviceErrorCode = {
-  NO_ERROR: 0,
-  NO_DEVICE_DETECTED: 1,
-  NO_SYSTEM_PERMISSION: 2,
-  NOT_SUPPORT_CAPTURE: 3,
-  OCCUPIED_ERROR: 4,
-  UNKNOWN_ERROR: 5,
-} as const;
+export enum AudioOutput {
+  SPEAKERPHONE = 0,
+  EARPIECE = 1,
+}
 
-export type DeviceErrorCodeType =
-  (typeof DeviceErrorCode)[keyof typeof DeviceErrorCode];
+export enum MirrorType {
+  AUTO = 0,    // 自动模式
+  ENABLE = 1,  // 前后摄像头都镜像
+  DISABLE = 2, // 前后摄像头都不镜像
+}
 
-export const DeviceErrorEnum = {
-  NO_ERROR: "NO_ERROR",
-  NO_DEVICE_DETECTED: "NO_DEVICE_DETECTED",
-  NO_SYSTEM_PERMISSION: "NO_SYSTEM_PERMISSION",
-  NOT_SUPPORT_CAPTURE: "NOT_SUPPORT_CAPTURE",
-  OCCUPIED_ERROR: "OCCUPIED_ERROR",
-  UNKNOWN_ERROR: "UNKNOWN_ERROR",
-} as const;
+/**
+ * 视频质量类型
+ * @remarks
+ * 可用值：
+ * - `QUALITY_360P`: 360P分辨率
+ * - `QUALITY_540P`: 540P分辨率
+ * - `QUALITY_720P`: 720P分辨率
+ * - `QUALITY_1080P`: 1080P分辨率
+ */
+export enum VideoQuality {
+  QUALITY_360P = 1,
+  QUALITY_540P = 2,
+  QUALITY_720P = 3,
+  QUALITY_1080P = 4,
+}
 
-export type DeviceErrorType = (typeof DeviceErrorEnum)[keyof typeof DeviceErrorEnum];
+/**
+ * 开启本地麦克风参数
+ * @interface OpenLocalMicrophoneOptions
+ */
+export type OpenLocalMicrophoneOptions = {
+  success?: () => void;
+  fail?: (errCode: number, errMsg: string) => void;
+}
 
-export const AudioOutput = {
-  SPEAKERPHONE: "SPEAKERPHONE",
-  EARPIECE: "EARPIECE",
-} as const;
+/**
+ * 音量参数
+ * @interface VolumeOptions
+ */
+export type VolumeOptions = {
+  volume: number
+}
 
-export type AudioOutputType = (typeof AudioOutput)[keyof typeof AudioOutput];
+/**
+ * 开启本地摄像头参数
+ * @interface OpenLocalCameraOptions
+ */
+export type OpenLocalCameraOptions = {
+  isFront: boolean;
+  success?: () => void;
+  fail?: (errCode: number, errMsg: string) => void;
+}
 
-const DEVICE_STATUS_MAP: Record<DeviceStatusCodeType, DeviceStatusType> = {
-  [DeviceStatusCode.OFF]: DeviceStatus.OFF,
-  [DeviceStatusCode.ON]: DeviceStatus.ON,
-} as const;
+/**
+ * 切换摄像头参数
+ * @interface SwitchCameraOptions
+ */
+export type SwitchCameraOptions = {
+  isFront: boolean;
+}
 
-const DEVICE_ERROR_MAP: Record<DeviceErrorCodeType, DeviceErrorType> = {
-  [DeviceErrorCode.NO_ERROR]: DeviceErrorEnum.NO_ERROR,
-  [DeviceErrorCode.NO_DEVICE_DETECTED]: DeviceErrorEnum.NO_DEVICE_DETECTED,
-  [DeviceErrorCode.NO_SYSTEM_PERMISSION]: DeviceErrorEnum.NO_SYSTEM_PERMISSION,
-  [DeviceErrorCode.NOT_SUPPORT_CAPTURE]: DeviceErrorEnum.NOT_SUPPORT_CAPTURE,
-  [DeviceErrorCode.OCCUPIED_ERROR]: DeviceErrorEnum.OCCUPIED_ERROR,
-  [DeviceErrorCode.UNKNOWN_ERROR]: DeviceErrorEnum.UNKNOWN_ERROR,
-} as const;
+/**
+ * 更新视频质量参数
+ * @interface UpdateVideoQualityOptions
+ */
+export type UpdateVideoQualityOptions = {
+  quality: VideoQuality;
+}
+
+/**
+ * 开始屏幕分享参数（仅iOS）
+ * @interface StartScreenShareOptions
+ */
+export type StartScreenShareOptions = {
+  appGroup: string;
+}
+
+/**
+ * 设置音频路由参数
+ * @interface SetAudioRouteOptions
+ * @description 设置音频路由配置结构
+ * @param {AudioOutput} route - 音频路由类型（必填）
+ */
+export type SetAudioRouteOptions = {
+  audioRoute: AudioOutput;
+}
+
+/**
+ * 切换镜像参数
+ * @interface SwitchMirrorOptions
+ * @description 切换镜像配置结构
+ * @param {MirrorType} mirrorType - 镜像类型（必填）
+ */
+export type SwitchMirrorOptions = {
+  mirrorType: MirrorType;
+}
 
 /**
  * 麦克风开启状态
- * @type {Ref<DeviceStatusType>}
+ * @type {Ref<DeviceStatus>}
  * @memberof module:DeviceState
  * @example
  * import { useDeviceState } from '@/uni_modules/tuikit-atomic-x/state/DeviceState';
  * const { microphoneStatus } = useDeviceState();
- * 
+ *
  * // 监听麦克风状态变化
  * watch(microphoneStatus, (newStatus) => {
  *   console.log('麦克风状态:', newStatus);
@@ -94,24 +173,24 @@ const DEVICE_ERROR_MAP: Record<DeviceErrorCodeType, DeviceErrorType> = {
  *   }
  * });
  */
-const microphoneStatus = ref<DeviceStatusType>();
+const microphoneStatus: Ref<DeviceStatus> = getGlobalState().microphoneStatus;
 
 /**
  * 麦克风最后一次错误状态
- * @type {Ref<DeviceErrorType>}
+ * @type {Ref<DeviceError>}
  * @memberof module:DeviceState
  * @example
  * import { useDeviceState } from '@/uni_modules/tuikit-atomic-x/state/DeviceState';
  * const { microphoneLastError } = useDeviceState();
- * 
+ *
  * // 监听麦克风错误状态
  * watch(microphoneLastError, (newError) => {
- *   if (newError && newError !== 'NO_ERROR') {
+ *   if (newError !== undefined && newError !== DeviceError.NO_ERROR) {
  *     console.log('麦克风错误:', newError);
  *   }
  * });
  */
-const microphoneLastError = ref<DeviceErrorType>();
+const microphoneLastError: Ref<DeviceError> = getGlobalState().microphoneLastError;
 
 /**
  * 是否有音频发布权限
@@ -120,14 +199,14 @@ const microphoneLastError = ref<DeviceErrorType>();
  * @example
  * import { useDeviceState } from '@/uni_modules/tuikit-atomic-x/state/DeviceState';
  * const { hasPublishAudioPermission } = useDeviceState();
- * 
+ *
  * // 检查是否有音频发布权限
  * const hasPermission = hasPublishAudioPermission.value;
  * if (!hasPermission) {
  *   console.log('没有音频发布权限');
  * }
  */
-const hasPublishAudioPermission = ref<boolean>(true);
+const hasPublishAudioPermission: Ref<boolean> = getGlobalState().hasPublishAudioPermission;
 
 /**
  * 采集音量大小（0-100）
@@ -136,13 +215,13 @@ const hasPublishAudioPermission = ref<boolean>(true);
  * @example
  * import { useDeviceState } from '@/uni_modules/tuikit-atomic-x/state/DeviceState';
  * const { captureVolume } = useDeviceState();
- * 
+ *
  * // 监听采集音量变化
  * watch(captureVolume, (newVolume) => {
  *   console.log('采集音量:', newVolume);
  * });
  */
-const captureVolume = ref<number>(0);
+const captureVolume: Ref<number> = getGlobalState().captureVolume;
 
 /**
  * 当前麦克风音量（0-100）
@@ -151,13 +230,13 @@ const captureVolume = ref<number>(0);
  * @example
  * import { useDeviceState } from '@/uni_modules/tuikit-atomic-x/state/DeviceState';
  * const { currentMicVolume } = useDeviceState();
- * 
+ *
  * // 监听麦克风音量变化
  * watch(currentMicVolume, (newVolume) => {
  *   console.log('当前麦克风音量:', newVolume);
  * });
  */
-const currentMicVolume = ref<number>(0);
+const currentMicVolume: Ref<number> = getGlobalState().currentMicVolume;
 
 /**
  * 输出音量大小（0-100）
@@ -166,22 +245,22 @@ const currentMicVolume = ref<number>(0);
  * @example
  * import { useDeviceState } from '@/uni_modules/tuikit-atomic-x/state/DeviceState';
  * const { outputVolume } = useDeviceState();
- * 
+ *
  * // 监听输出音量变化
  * watch(outputVolume, (newVolume) => {
  *   console.log('输出音量:', newVolume);
  * });
  */
-const outputVolume = ref<number>(0);
+const outputVolume: Ref<number> = getGlobalState().outputVolume;
 
 /**
  * 摄像头开启状态
- * @type {Ref<DeviceStatusType>}
+ * @type {Ref<DeviceStatus>}
  * @memberof module:DeviceState
  * @example
  * import { useDeviceState } from '@/uni_modules/tuikit-atomic-x/state/DeviceState';
  * const { cameraStatus } = useDeviceState();
- * 
+ *
  * // 监听摄像头状态变化
  * watch(cameraStatus, (newStatus) => {
  *   console.log('摄像头状态:', newStatus);
@@ -190,24 +269,24 @@ const outputVolume = ref<number>(0);
  *   }
  * });
  */
-const cameraStatus = ref<DeviceStatusType>();
+const cameraStatus: Ref<DeviceStatus> = getGlobalState().cameraStatus;
 
 /**
  * 摄像头最后一次错误状态
- * @type {Ref<DeviceErrorType>}
+ * @type {Ref<DeviceError>}
  * @memberof module:DeviceState
  * @example
  * import { useDeviceState } from '@/uni_modules/tuikit-atomic-x/state/DeviceState';
  * const { cameraLastError } = useDeviceState();
- * 
+ *
  * // 监听摄像头错误状态
  * watch(cameraLastError, (newError) => {
- *   if (newError && newError !== 'NO_ERROR') {
+ *   if (newError !== undefined && newError !== DeviceError.NO_ERROR) {
  *     console.log('摄像头错误:', newError);
  *   }
  * });
  */
-const cameraLastError = ref<DeviceErrorType>();
+const cameraLastError: Ref<DeviceError> = getGlobalState().cameraLastError;
 
 /**
  * 是否为前置摄像头
@@ -216,28 +295,28 @@ const cameraLastError = ref<DeviceErrorType>();
  * @example
  * import { useDeviceState } from '@/uni_modules/tuikit-atomic-x/state/DeviceState';
  * const { isFrontCamera } = useDeviceState();
- * 
+ *
  * // 检查当前是否为前置摄像头
  * const isFront = isFrontCamera.value;
  * if (isFront) {
  *   console.log('当前使用前置摄像头');
  * }
  */
-const isFrontCamera = ref<boolean>();
+const isFrontCamera: Ref<boolean> = getGlobalState().isFrontCamera;
 
 /**
  * 本地镜像类型
- * @type {Ref<string>}
+ * @type {Ref<MirrorType>}
  * @memberof module:DeviceState
  * @example
  * import { useDeviceState } from '@/uni_modules/tuikit-atomic-x/state/DeviceState';
  * const { localMirrorType } = useDeviceState();
- * 
+ *
  * // 获取本地镜像类型
  * const mirrorType = localMirrorType.value;
  * console.log('本地镜像类型:', mirrorType);
  */
-const localMirrorType = ref<string>('');
+const localMirrorType: Ref<MirrorType> = getGlobalState().localMirrorType;
 
 /**
  * 本地视频质量设置
@@ -246,21 +325,21 @@ const localMirrorType = ref<string>('');
  * @example
  * import { useDeviceState } from '@/uni_modules/tuikit-atomic-x/state/DeviceState';
  * const { localVideoQuality } = useDeviceState();
- * 
+ *
  * // 获取本地视频质量设置
  * const quality = localVideoQuality.value;
  * console.log('本地视频质量:', quality);
  */
-const localVideoQuality = ref<any>();
+const localVideoQuality: Ref<any> = getGlobalState().localVideoQuality;
 
 /**
  * 当前音频输出路由（扬声器/耳机）
- * @type {Ref<AudioOutputType>}
+ * @type {Ref<AudioOutput>}
  * @memberof module:DeviceState
  * @example
  * import { useDeviceState } from '@/uni_modules/tuikit-atomic-x/state/DeviceState';
  * const { currentAudioRoute } = useDeviceState();
- * 
+ *
  * // 监听音频输出路由变化
  * watch(currentAudioRoute, (newRoute) => {
  *   console.log('音频输出路由:', newRoute);
@@ -271,16 +350,16 @@ const localVideoQuality = ref<any>();
  *   }
  * });
  */
-const currentAudioRoute = ref<AudioOutputType>();
+const currentAudioRoute: Ref<AudioOutput> = getGlobalState().currentAudioRoute;
 
 /**
  * 屏幕共享状态
- * @type {Ref<DeviceStatusType>}
+ * @type {Ref<DeviceStatus>}
  * @memberof module:DeviceState
  * @example
  * import { useDeviceState } from '@/uni_modules/tuikit-atomic-x/state/DeviceState';
  * const { screenStatus } = useDeviceState();
- * 
+ *
  * // 监听屏幕共享状态
  * watch(screenStatus, (newStatus) => {
  *   console.log('屏幕共享状态:', newStatus);
@@ -289,7 +368,7 @@ const currentAudioRoute = ref<AudioOutputType>();
  *   }
  * });
  */
-const screenStatus = ref<DeviceStatusType>();
+const screenStatus: Ref<DeviceStatus> = getGlobalState().screenStatus;
 
 /**
  * 网络信息状态
@@ -298,38 +377,12 @@ const screenStatus = ref<DeviceStatusType>();
  * @example
  * import { useDeviceState } from '@/uni_modules/tuikit-atomic-x/state/DeviceState';
  * const { networkInfo } = useDeviceState();
- * 
+ *
  * // 获取网络信息
  * const info = networkInfo.value;
  * console.log('网络信息:', info);
  */
-const networkInfo = ref<any>();
-
-/**
- * @internal
- */
-function mapStatusCodeToDeviceStatus(
-  statusCode: number
-): DeviceStatusType | null {
-  const mappedStatus = DEVICE_STATUS_MAP[statusCode as DeviceStatusCodeType];
-  if (!mappedStatus) {
-    console.warn(`Unknown device status code: ${statusCode}`);
-    return null;
-  }
-  return mappedStatus;
-}
-/**
- * @internal
- */
-function mapErrorCodeToDeviceError(errorCode: number): DeviceErrorType | null {
-  const mappedError = DEVICE_ERROR_MAP[errorCode as DeviceErrorCodeType];
-  if (!mappedError) {
-    console.warn(`Unknown device error code: ${errorCode}`);
-    return null;
-  }
-  return mappedError;
-}
-
+const networkInfo: Ref<any> = getGlobalState().networkInfo;
 /**
  * 打开本地麦克风
  * @param {OpenLocalMicrophoneOptions} [params] - 麦克风参数
@@ -347,7 +400,27 @@ async function openLocalMicrophone(params?: OpenLocalMicrophoneOptions): Promise
       "android.permission.RECORD_AUDIO"
     );
   }
-  callUTSFunction("openLocalMicrophone", params || {});
+  return new Promise((resolve, reject) => {
+    callAPI(JSON.stringify({
+      api: "openLocalMicrophone",
+      params: {},
+    }), (res: string) => {
+      try {
+        const data = safeJsonParse(res, {}) as HybridResponseData;
+        console.log('openLocalMicrophone =====>: ', data)
+        if (data?.code === 0) {
+          params?.success?.();
+          resolve();
+        } else {
+          params?.fail?.(data.code, data.message);
+          reject(new Error(data.message || 'openLocalMicrophone failed'));
+        }
+      } catch (error) {
+        params?.fail?.(-1, error.message);
+        reject(error);
+      }
+    });
+  });
 }
 
 /**
@@ -360,7 +433,10 @@ async function openLocalMicrophone(params?: OpenLocalMicrophoneOptions): Promise
  * closeLocalMicrophone()
  */
 function closeLocalMicrophone(): void {
-  callUTSFunction("closeLocalMicrophone");
+  callAPI(JSON.stringify({
+    api: "closeLocalMicrophone",
+    params: {},
+  }), () => { });
 }
 
 /**
@@ -374,7 +450,10 @@ function closeLocalMicrophone(): void {
  * setCaptureVolume({ volume: 80 })
  */
 function setCaptureVolume(params: VolumeOptions): void {
-  callUTSFunction("setCaptureVolume", params);
+  callAPI(JSON.stringify({
+    api: "setCaptureVolume",
+    params: params,
+  }), () => { });
 }
 
 /**
@@ -388,7 +467,10 @@ function setCaptureVolume(params: VolumeOptions): void {
  * setOutputVolume({ volume: 90 })
  */
 function setOutputVolume(params: VolumeOptions): void {
-  callUTSFunction("setOutputVolume", params);
+  callAPI(JSON.stringify({
+    api: "setOutputVolume",
+    params: params,
+  }), () => { });
 }
 
 /**
@@ -400,10 +482,13 @@ function setOutputVolume(params: VolumeOptions): void {
  * // 设置为扬声器
  * import { useDeviceState } from '@/uni_modules/tuikit-atomic-x/state/DeviceState';
  * const { setAudioRoute } = useDeviceState();
- * setAudioRoute({ route: 'SPEAKERPHONE' })
+ * setAudioRoute({ audioRoute: AudioOutput.SPEAKERPHONE })
  */
 function setAudioRoute(params: SetAudioRouteOptions): void {
-  callUTSFunction("setAudioRoute", params);
+  callAPI(JSON.stringify({
+    api: "setAudioRoute",
+    params: params,
+  }), () => { });
 }
 
 /**
@@ -421,7 +506,27 @@ async function openLocalCamera(params?: OpenLocalCameraOptions): Promise<void> {
   if (uni.getSystemInfoSync().platform === "android") {
     await permission.requestAndroidPermission("android.permission.CAMERA");
   }
-  callUTSFunction("openLocalCamera", params || {});
+  return new Promise((resolve, reject) => {
+    callAPI(JSON.stringify({
+      api: "openLocalCamera",
+      params: params,
+    }), (res: string) => {
+      try {
+        const data = safeJsonParse(res, {}) as any;
+        console.log('openLocalCamera =====>: ', data)
+        if (data?.code === 0) {
+          params?.success?.();
+          resolve();
+        } else {
+          params?.fail?.(data.code, data.message);
+          reject(new Error(data.message || 'openLocalCamera failed'));
+        }
+      } catch (error) {
+        params?.fail?.(-1, error.message);
+        reject(error);
+      }
+    });
+  });
 }
 
 /**
@@ -434,7 +539,10 @@ async function openLocalCamera(params?: OpenLocalCameraOptions): Promise<void> {
  * closeLocalCamera()
  */
 function closeLocalCamera(): void {
-  callUTSFunction("closeLocalCamera");
+  callAPI(JSON.stringify({
+    api: "closeLocalCamera",
+    params: {},
+  }), () => { });
 }
 
 /**
@@ -449,7 +557,10 @@ function closeLocalCamera(): void {
  * switchCamera({ isFront: true })
  */
 function switchCamera(params: SwitchCameraOptions): void {
-  callUTSFunction("switchCamera", params);
+  callAPI(JSON.stringify({
+    api: "switchCamera",
+    params: params,
+  }), () => { });
 }
 
 /**
@@ -464,7 +575,10 @@ function switchCamera(params: SwitchCameraOptions): void {
  * switchMirror({ mirrorType: 'AUTO' })
  */
 function switchMirror(params: SwitchMirrorOptions): void {
-  callUTSFunction("switchMirror", params);
+  callAPI(JSON.stringify({
+    api: "switchMirror",
+    params: params,
+  }), () => { });
 }
 
 /**
@@ -475,10 +589,13 @@ function switchMirror(params: SwitchMirrorOptions): void {
  * @example
  * import { useDeviceState } from '@/uni_modules/tuikit-atomic-x/state/DeviceState';
  * const { updateVideoQuality } = useDeviceState();
- * updateVideoQuality({ quality: 'VIDEOQUALITY_1080P' })
+ * updateVideoQuality({ quality: VideoQuality.QUALITY_1080P })
  */
 function updateVideoQuality(params: UpdateVideoQualityOptions): void {
-  callUTSFunction("updateVideoQuality", params);
+  callAPI(JSON.stringify({
+    api: "updateVideoQuality",
+    params: params,
+  }), () => { });
 }
 
 /**
@@ -491,7 +608,10 @@ function updateVideoQuality(params: UpdateVideoQualityOptions): void {
  * startScreenShare()
  */
 function startScreenShare(): void {
-  callUTSFunction("startScreenShare");
+  callAPI(JSON.stringify({
+    api: "startScreenShare",
+    params: {},
+  }), () => { });
 }
 
 /**
@@ -504,90 +624,140 @@ function startScreenShare(): void {
  * stopScreenShare()
  */
 function stopScreenShare(): void {
-  callUTSFunction("stopScreenShare");
+  callAPI(JSON.stringify({
+    api: "stopScreenShare",
+    params: {},
+  }), () => { });
 }
 
-const onDeviceStoreChanged = (eventName: string, res: string): void => {
-  try {
-    if (eventName === "microphoneStatus") {
-      const statusCode = safeJsonParse<number>(res, -1);
-      const status = mapStatusCodeToDeviceStatus(statusCode);
-      if (status) {
-        microphoneStatus.value = status;
-      } else {
-        console.error(`Invalid microphone status code received: ${statusCode}`);
-      }
-    } else if (eventName === "microphoneLastError") {
-      const errorCode = safeJsonParse<number>(res, -1);
-      const error = mapErrorCodeToDeviceError(errorCode);
-      if (error) {
-        microphoneLastError.value = error;
-      } else {
-        console.error(`Invalid microphone error code received: ${errorCode}`);
-      }
-    } else if (eventName === "captureVolume") {
-      const data = safeJsonParse<number>(res, 0);
-      captureVolume.value = data;
-    } else if (eventName === "currentMicVolume") {
-      const data = safeJsonParse<number>(res, 0);
-      currentMicVolume.value = data;
-    }
-    else if (eventName === "outputVolume") {
-      const data = safeJsonParse<number>(res, 0);
-      outputVolume.value = data;
-    }
+const BINDABLE_DATA_NAMES = [
+  "microphoneStatus",
+  "microphoneLastError",
+  "captureVolume",
+  "currentMicVolume",
+  "outputVolume",
+  "cameraStatus",
+  "cameraLastError",
+  "isFrontCamera",
+  "localMirrorType",
+  "localVideoQuality",
+  "currentAudioRoute",
+  "screenStatus",
+  "networkInfo"
+] as const;
 
-    else if (eventName === "cameraStatus") {
-      const statusCode = safeJsonParse<number>(res, -1);
-      const status = mapStatusCodeToDeviceStatus(statusCode);
-      if (status) {
-        cameraStatus.value = status;
-      } else {
-        console.error(`Invalid camera status code received: ${statusCode}`);
+function bindEvent(): void {
+  const globalState = getGlobalState();
+
+  // 防止重复绑定事件
+  if (globalState.bindEventDone) {
+    return;
+  }
+  globalState.bindEventDone = true;
+
+  BINDABLE_DATA_NAMES.forEach(dataName => {
+    addListener({
+      type: "state",
+      store: "DeviceStore",
+      name: dataName,
+      listenerID: 'DeviceStore',
+      params: {}
+    }, (data: string) => {
+      try {
+        // console.log(`[DeviceState][${dataName}] Data:`, data);
+        const result = safeJsonParse<any>(data, {});
+        onDeviceStoreChanged[dataName]?.(result);
+      } catch (error) {
+        console.error(`[DeviceState][${dataName}] Error:`, error);
       }
-    } else if (eventName === "cameraLastError") {
-      const errorCode = safeJsonParse<number>(res, -1);
-      const error = mapErrorCodeToDeviceError(errorCode);
-      if (error) {
-        cameraLastError.value = error;
-      } else {
-        console.error(`Invalid camera error code received: ${errorCode}`);
-      }
-    } else if (eventName === "isFrontCamera") {
-      const data = safeJsonParse<boolean>(res, true);
-      isFrontCamera.value = data;
-    } else if (eventName === "localMirrorType") {
-      localMirrorType.value = JSON.parse(res);
-    } else if (eventName === "localVideoQuality") {
-      const data = safeJsonParse<boolean>(res, false);
-      localVideoQuality.value = data;
-    }
-    else if (eventName === "currentAudioRoute") {
-      const data = safeJsonParse<AudioOutputType>(res, AudioOutput.SPEAKERPHONE);
-      currentAudioRoute.value = data;
-    } else if (eventName === "screenStatus") {
-      const statusCode = safeJsonParse<number>(res, -1);
-      const status = mapStatusCodeToDeviceStatus(statusCode);
-      if (status) {
-        screenStatus.value = status;
-      } else {
-        console.error(`Invalid screen status code received: ${statusCode}`);
-      }
-    } else if (eventName === "networkInfo") {
-      networkInfo.value = safeJsonParse<any>(res, {});
-    }
-  } catch (error) {
-    console.error("onDeviceStoreChanged error:", error);
+    });
+  });
+}
+
+function unbindEvent(): void {
+  BINDABLE_DATA_NAMES.forEach(dataName => {
+    removeListener({
+      type: "state",
+      store: "DeviceStore",
+      name: dataName,
+      listenerID: 'DeviceStore',
+      params: {}
+    });
+  });
+}
+const onDeviceStoreChanged: Record<string, (result: any) => void> = {
+  microphoneStatus: (res) => {
+    microphoneStatus.value = safeJsonParse<DeviceStatus>(res.microphoneStatus, DeviceStatus.OFF);
+  },
+  microphoneLastError: (res) => {
+    microphoneLastError.value = safeJsonParse<DeviceError>(res.microphoneLastError, DeviceError.NO_ERROR);
+  },
+  captureVolume: (res) => {
+    captureVolume.value = safeJsonParse<number>(res.captureVolume, 0);
+  },
+  currentMicVolume: (res) => {
+    currentMicVolume.value = safeJsonParse<number>(res.currentMicVolume, 0);
+  },
+  outputVolume: (res) => {
+    outputVolume.value = safeJsonParse<number>(res.outputVolume, 0);
+  },
+  cameraStatus: (res) => {
+    cameraStatus.value = safeJsonParse<DeviceStatus>(res.cameraStatus, DeviceStatus.OFF);
+  },
+  cameraLastError: (res) => {
+    cameraLastError.value = safeJsonParse<DeviceError>(res.cameraLastError, DeviceError.NO_ERROR);
+  },
+  isFrontCamera: (res) => {
+    isFrontCamera.value = safeJsonParse<boolean>(res.isFrontCamera, true);
+  },
+  localMirrorType: (res) => {
+    localMirrorType.value = safeJsonParse<MirrorType>(res.localMirrorType, MirrorType.AUTO);
+  },
+  localVideoQuality: (res) => {
+    localVideoQuality.value = safeJsonParse<VideoQuality>(res.localVideoQuality, VideoQuality.QUALITY_360P);
+  },
+  currentAudioRoute: (res) => {
+    currentAudioRoute.value = safeJsonParse<AudioOutput>(res.currentAudioRoute, AudioOutput.SPEAKERPHONE);
+  },
+  screenStatus: (res) => {
+    screenStatus.value = safeJsonParse<DeviceStatus>(res.screenStatus, DeviceStatus.OFF);
+  },
+  networkInfo: (res) => {
+    networkInfo.value = safeJsonParse<any>(res.networkInfo, {});
   }
 };
 
-function bindEvent(): void {
-  getRTCRoomEngineManager().on("deviceStoreChanged", onDeviceStoreChanged, "");
+/**
+ * 清除设备状态数据
+ * @returns {void}
+ * @memberof module:DeviceState
+ */
+function clearDeviceState(): void {
+  // 解除事件绑定
+  unbindEvent();
+
+  const globalState = getGlobalState();
+  // 清除所有状态
+  globalState.microphoneStatus.value = DeviceStatus.OFF;
+  globalState.microphoneLastError.value = DeviceError.NO_ERROR;
+  globalState.hasPublishAudioPermission.value = true;
+  globalState.captureVolume.value = 0;
+  globalState.currentMicVolume.value = 0;
+  globalState.outputVolume.value = 0;
+  globalState.cameraStatus.value = DeviceStatus.OFF;
+  globalState.cameraLastError.value = DeviceError.NO_ERROR;
+  globalState.isFrontCamera.value = true;
+  globalState.localMirrorType.value = MirrorType.AUTO;
+  globalState.localVideoQuality.value = undefined;
+  globalState.currentAudioRoute.value = AudioOutput.SPEAKERPHONE;
+  globalState.screenStatus.value = undefined;
+  globalState.networkInfo.value = undefined;
+  // 重置绑定标志
+  globalState.bindEventDone = false;
 }
 
 export function useDeviceState() {
   bindEvent();
-
   return {
     microphoneStatus,         // 麦克风开启状态
     microphoneLastError,      // 麦克风最后一次错误状态
@@ -619,6 +789,9 @@ export function useDeviceState() {
 
     startScreenShare,         // 开始屏幕共享
     stopScreenShare,          // 停止屏幕共享
+
+    // 内部方法（一般不需要外部调用）
+    clearDeviceState,         // 清除状态（内部使用）
   };
 }
 

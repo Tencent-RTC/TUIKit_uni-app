@@ -56,11 +56,8 @@
     });
   });
 
-
-
   onShow(() => {
     console.warn(`home onShow`);
-    needRefresh.value = true;
   });
 
   const goAnchorPage = () => {
@@ -224,7 +221,6 @@
     justify-content: center;
     padding: 25rpx 60rpx;
   }
-
 
   .btn-text {
     color: #fff;

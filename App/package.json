@@ -16,8 +16,5 @@
     "im"
   ],
   "author": "",
-  "license": "MIT",
-  "dependencies": {
-    "@tencentcloud/tui-core-lite": "^1.0.0"
-  }
+  "license": "MIT"
 }
