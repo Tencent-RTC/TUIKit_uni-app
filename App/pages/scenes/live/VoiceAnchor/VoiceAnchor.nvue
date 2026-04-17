@@ -1,0 +1,1039 @@
+<template>
+  <view class="voice-anchor-container" :style="{ height: systemInfo?.windowHeight + 'px' }">
+    <image class="voice-bg" src="/static/images/index/voice-background.png" mode="aspectFill" :style="{ width: systemInfo?.windowWidth + 'px', height: systemInfo?.windowHeight + 'px' }"></image>
+    <view class="voice-bg-mask" :style="{ width: systemInfo?.windowWidth + 'px', height: systemInfo?.windowHeight + 'px' }"></view>
+
+    <view v-if="!isStartLive" class="pre-live-wrapper">
+      <view class="navigate-back-arrow" @tap="goBack">
+        <image class="navigate-back-arrow-image" src="/static/images/left-arrow.png"></image>
+      </view>
+
+      <view class="live-info-card">
+        <view class="cover-section" @tap="onEditCover">
+          <image class="cover-image" :src="coverURL" mode="aspectFill" @error="handleCoverError" />
+          <view class="cover-label">
+            <text class="cover-label-text">修改封面</text>
+          </view>
+        </view>
+        <view class="info-section">
+          <view class="title-row">
+            <input class="live-title" v-model="liveTitle" @input="onInputTitle" @blur="onInputBlur" :focus="isInputFocused" placeholder="请输入直播标题" placeholder-style="color: rgba(255, 255, 255, 0.5);" />
+            <view class="edit-icon-container" @tap="onEditTitle">
+              <image class="edit-icon" src="/static/images/edit.png" />
+            </view>
+          </view>
+          <view class="underline"></view>
+        </view>
+      </view>
+
+      <view class="seat-grid">
+        <view class="seat-row" v-for="(row, rowIdx) in staticSeatRows" :key="rowIdx">
+          <view class="seat-item" v-for="(seat, colIdx) in row" :key="colIdx">
+            <view class="seat-circle">
+              <image class="seat-icon" src="/static/images/seat-sofa.png" mode="aspectFit"></image>
+            </view>
+          </view>
+        </view>
+      </view>
+
+      <view class="bottom-actions">
+        <view class="start-live-button" @tap="handleStartLive">
+          <text class="start-live-text">开始直播</text>
+        </view>
+      </view>
+    </view>
+
+    <view v-if="isStartLive" class="living-wrapper">
+      <view class="live-header">
+        <view class="header-left">
+          <view class="stream-info">
+            <image class="header-avatar" :src="loginUserInfo?.avatarURL || defaultAvatarURL" mode="aspectFill" />
+            <view class="stream-details">
+              <text class="stream-title" :numberOfLines="1">{{ liveTitle || loginUserInfo?.nickname || '' }}</text>
+            </view>
+          </view>
+        </view>
+        <view class="header-right">
+          <image class="control-icon" @tap="handleEndLive" src="/static/images/live-end.png" />
+        </view>
+      </view>
+
+      <view class="seat-grid seat-grid-live">
+        <view class="seat-row" v-for="(row, rowIdx) in liveSeatRows" :key="rowIdx">
+          <view class="seat-item" v-for="(seat, colIdx) in row" :key="`${rowIdx}-${colIdx}`" @tap="handleOwnerSeatTap(seat)">
+            <view v-if="seat.userInfo && seat.userInfo.userID" class="seat-wrapper">
+              <view class="sound-wave-outer" :class="{ 'sound-wave-active': isSpeaking(seat.userInfo.userID) }">
+                <view class="seat-circle seat-occupied">
+                  <image class="seat-avatar" :src="seat.userInfo.avatarURL || defaultAvatarURL" mode="aspectFill" />
+                </view>
+              </view>
+              <view v-if="seat.userInfo.userID === uni.$userID && !isMicOn" class="seat-mic-off">
+                <image class="seat-mic-off-icon" src="/static/images/unmute-mic.png" mode="aspectFit" />
+              </view>
+            </view>
+            <view v-else class="seat-circle">
+              <image class="seat-icon" src="/static/images/seat-sofa.png" mode="aspectFit"></image>
+            </view>
+            <text class="seat-label" v-if="seat.userInfo && seat.userInfo.userID" :lines="1">
+              {{ seat.userInfo.userName || seat.userInfo.userID }}
+            </text>
+            <text class="seat-label" v-else>{{ rowIdx * 5 + colIdx + 1 }}</text>
+          </view>
+        </view>
+      </view>
+
+      <view class="live-bottom-panel">
+        <view class="live-action-buttons">
+          <view class="live-action-item" @tap="showCoGuestPanel">
+            <view class="action-icon-wrapper">
+              <image class="live-action-icon" src="/static/images/link-guest.png" mode="aspectFit" />
+              <view v-if="applicantCount > 0" class="badge">
+                <text class="badge-text">{{ applicantCount > 99 ? '99+' : applicantCount }}</text>
+              </view>
+            </view>
+            <text class="live-action-text">连麦</text>
+          </view>
+        </view>
+      </view>
+
+      <view class="coguest-drawer-container" v-if="isShowCoGuestPanel">
+        <view class="coguest-drawer-overlay" @tap="closeCoGuestPanel"></view>
+        <view class="coguest-drawer">
+          <view class="coguest-header">
+            <text class="coguest-header-title">连麦管理</text>
+          </view>
+          <scroll-view class="coguest-content" scroll-y>
+            <view v-if="(applicants || []).length > 0" class="coguest-list">
+              <view v-for="audience in applicants || []" :key="audience?.userID" class="coguest-item">
+                <view class="coguest-info">
+                  <image class="coguest-avatar" :src="audience?.avatarURL || defaultAvatarURL" mode="aspectFill" />
+                  <view class="coguest-item-right">
+                    <text class="coguest-name" :lines="1">{{ audience?.userName || audience?.userID }}</text>
+                    <view class="coguest-actions">
+                      <view class="coguest-btn coguest-btn-accept" @tap="handleAcceptApplication(audience)">
+                        <text class="coguest-btn-text">同意</text>
+                      </view>
+                      <view class="coguest-btn coguest-btn-reject" @tap="handleRejectApplication(audience)">
+                        <text class="coguest-btn-text">拒绝</text>
+                      </view>
+                    </view>
+                  </view>
+                </view>
+                <view class="coguest-item-divider"></view>
+              </view>
+            </view>
+          </scroll-view>
+        </view>
+      </view>
+    </view>
+
+    <view class="bottom-drawer-container" v-if="isShowCoverDialog">
+      <view class="drawer-overlay" @tap="closeCoverDialog"></view>
+      <view class="bottom-drawer">
+        <text class="list-title">封面</text>
+        <scroll-view scroll-y class="cover-scroll">
+          <view class="cover-row" v-for="(rowItems, rIdx) in coverRows" :key="rIdx">
+            <view v-for="(url, idx) in rowItems" :key="url" class="cover-dialog-item" @tap="selectAvatar(rIdx * 3 + idx)">
+              <image :src="url" :class="{ selected: (rIdx * 3 + idx) === selectedAvatarIndex }" class="cover-dialog-img" @error="handleAvatarError(rIdx * 3 + idx)" />
+            </view>
+          </view>
+        </scroll-view>
+        <view class="cover-footer">
+          <view class="cover-confirm-btn" @tap="setCover">
+            <text class="btn-text">设为封面</text>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <ActionSheet v-model="isShowEndSheet" :itemList="endSheetItems" @select="onEndSheetSelect" />
+    <ActionSheet v-model="isShowSeatActionSheet" :itemList="seatActionItems" @select="onSeatActionSelect" />
+  </view>
+</template>
+
+<script setup lang="ts">
+  import { ref, onMounted, onUnmounted, computed, watch } from 'vue';
+  import { onBackPress } from '@dcloudio/uni-app';
+  import ActionSheet from '@/components/ActionSheet.nvue';
+  import { useLoginState } from "@/uni_modules/tuikit-atomic-x/state/LoginState";
+  import { useLiveListState, TakeSeatMode } from "@/uni_modules/tuikit-atomic-x/state/LiveListState";
+  import { useDeviceState, DeviceStatus } from "@/uni_modules/tuikit-atomic-x/state/DeviceState";
+  import { useLiveSeatState } from "@/uni_modules/tuikit-atomic-x/state/LiveSeatState";
+  import { useCoGuestState } from "@/uni_modules/tuikit-atomic-x/state/CoGuestState";
+
+  onBackPress((option) => {
+    if (option.from === 'backbutton') return true;
+  });
+
+  const { loginUserInfo } = useLoginState();
+  uni.$liveID = `voice_${uni.$userID}`;
+  const { createLive, endLive } = useLiveListState();
+  const { openLocalMicrophone, closeLocalMicrophone, microphoneStatus } = useDeviceState(uni.$liveID);
+  const { seatList, speakingUsers, muteMicrophone, unmuteMicrophone } = useLiveSeatState(uni.$liveID);
+  const { applicants, acceptApplication, rejectApplication } = useCoGuestState(uni.$liveID);
+
+  const systemInfo = ref<any>({});
+  const safeArea = ref({ left: 0, right: 0, top: 0, bottom: 0, width: 375, height: 750 });
+  const defaultAvatarURL = 'https://web.sdk.qcloud.com/component/TUIKit/assets/avatar_01.png';
+
+  const isStartLive = ref(false);
+
+  const defaultCoverURL = 'https://liteav-test-1252463788.cos.ap-guangzhou.myqcloud.com/voice_room/voice_room_cover1.png';
+  const DEFAULT_COVER_URL = 'https://web.sdk.qcloud.com/trtc/live/web/assets/defaultCoverLive.png';
+  const coverURL = ref(defaultCoverURL);
+  const liveTitle = ref('');
+  const isInputFocused = ref(false);
+  const hasUserInteracted = ref(false);
+  const lastValidTitle = ref('');
+
+  const isShowAudioEffect = ref(false);
+  const isShowCoverDialog = ref(false);
+  const isShowCoGuestPanel = ref(false);
+  const isShowEndSheet = ref(false);
+  const isShowSeatActionSheet = ref(false);
+  const endSheetItems = ref(['关闭直播间']);
+  const selectedAvatarIndex = ref(0);
+
+  const staticSeatRows = ref([
+    [1, 2, 3, 4, 5],
+    [6, 7, 8, 9, 10],
+  ]);
+
+  const liveSeatRows = computed(() => {
+    const seats = seatList.value || [];
+    if (seats.length === 0) {
+      const placeholders = [];
+      for (let i = 0; i < 10; i++) {
+        placeholders.push({ index: i + 1, isLocked: false, userInfo: {}, region: {} });
+      }
+      return [placeholders.slice(0, 5), placeholders.slice(5, 10)];
+    }
+    const rows = [];
+    for (let i = 0; i < seats.length; i += 5) {
+      rows.push(seats.slice(i, i + 5));
+    }
+    return rows;
+  });
+
+  const avatarList = ref([
+    "https://liteav-test-1252463788.cos.ap-guangzhou.myqcloud.com/voice_room/voice_room_cover1.png",
+    "https://liteav-test-1252463788.cos.ap-guangzhou.myqcloud.com/voice_room/voice_room_cover2.png",
+    "https://liteav-test-1252463788.cos.ap-guangzhou.myqcloud.com/voice_room/voice_room_cover3.png",
+    "https://liteav-test-1252463788.cos.ap-guangzhou.myqcloud.com/voice_room/voice_room_cover4.png",
+    "https://liteav-test-1252463788.cos.ap-guangzhou.myqcloud.com/voice_room/voice_room_cover5.png",
+    "https://liteav-test-1252463788.cos.ap-guangzhou.myqcloud.com/voice_room/voice_room_cover6.png",
+    "https://liteav-test-1252463788.cos.ap-guangzhou.myqcloud.com/voice_room/voice_room_cover7.png",
+    "https://liteav-test-1252463788.cos.ap-guangzhou.myqcloud.com/voice_room/voice_room_cover8.png",
+    "https://liteav-test-1252463788.cos.ap-guangzhou.myqcloud.com/voice_room/voice_room_cover9.png",
+    "https://liteav-test-1252463788.cos.ap-guangzhou.myqcloud.com/voice_room/voice_room_cover10.png",
+    "https://liteav-test-1252463788.cos.ap-guangzhou.myqcloud.com/voice_room/voice_room_cover11.png",
+    "https://liteav-test-1252463788.cos.ap-guangzhou.myqcloud.com/voice_room/voice_room_cover12.png",
+  ]);
+
+  const coverRows = computed(() => {
+    const rows = [];
+    const list = avatarList.value;
+    for (let i = 0; i < list.length; i += 3) {
+      rows.push(list.slice(i, i + 3));
+    }
+    return rows;
+  });
+
+  const defaultLiveTitle = computed(() => {
+    return loginUserInfo.value?.nickname || loginUserInfo.value?.userID || '';
+  });
+
+  watch(() => loginUserInfo.value?.nickname, (newUserName) => {
+    if (newUserName && !liveTitle.value && !hasUserInteracted.value) {
+      liveTitle.value = newUserName;
+    }
+  }, { immediate: true, deep: true });
+
+  const getByteLength = (str: string): number => {
+    let len = 0;
+    for (let i = 0; i < str.length; i++) {
+      const charCode = str.charCodeAt(i);
+      if (charCode <= 0x7f) len += 1;
+      else if (charCode <= 0x7ff) len += 2;
+      else if (charCode <= 0xffff) len += 3;
+      else len += 4;
+    }
+    return len;
+  };
+
+  const onInputTitle = (e: any) => {
+    const inputValue = e.detail.value;
+    hasUserInteracted.value = true;
+    const byteLength = getByteLength(inputValue);
+    liveTitle.value = inputValue;
+    if (byteLength <= 100) {
+      lastValidTitle.value = inputValue;
+    } else {
+      setTimeout(() => {
+        liveTitle.value = lastValidTitle.value || loginUserInfo.value?.nickname;
+      }, 0);
+      uni.showToast({ title: '标题最多100字节，已恢复到上次有效内容', icon: 'none', duration: 2000 });
+    }
+  };
+
+  const onEditTitle = () => { isInputFocused.value = true; };
+  const onInputBlur = () => { isInputFocused.value = false; };
+
+  const onEditCover = () => { isShowCoverDialog.value = true; };
+  const closeCoverDialog = () => { isShowCoverDialog.value = false; };
+  const selectAvatar = (idx: number) => { selectedAvatarIndex.value = idx; };
+  const setCover = () => {
+    coverURL.value = avatarList.value[selectedAvatarIndex.value];
+    isShowCoverDialog.value = false;
+  };
+  const handleCoverError = () => { coverURL.value = DEFAULT_COVER_URL; };
+  const handleAvatarError = (idx: number) => { avatarList.value[idx] = DEFAULT_COVER_URL; };
+
+  const goBack = () => {
+    closeLocalMicrophone();
+    uni.navigateBack({
+      fail: () => {
+        uni.redirectTo({ url: '/pages/scenes/live/VoiceList/VoiceList' });
+      }
+    });
+  };
+
+
+
+  const applicantCount = computed(() => (applicants.value || []).length);
+
+  const isMicOn = computed(() => microphoneStatus.value === DeviceStatus.ON);
+
+  const speakingUserIDs = computed(() => {
+    const map = speakingUsers.value;
+    if (!map) return new Set<string>();
+    const ids = new Set<string>();
+    if (map instanceof Map) {
+      map.forEach((volume, userID) => {
+        if (volume > 0) ids.add(userID);
+      });
+    } else if (typeof map === 'object') {
+      Object.keys(map).forEach(userID => {
+        if ((map as any)[userID] > 0) ids.add(userID);
+      });
+    }
+    return ids;
+  });
+
+  const isSpeaking = (userID: string) => speakingUserIDs.value.has(userID);
+
+  const seatActionItems = computed(() => [isMicOn.value ? '关闭麦克风' : '打开麦克风']);
+
+  const handleOwnerSeatTap = (seat: any) => {
+    const ownerID = uni.$userID;
+    if (seat?.userInfo?.userID === ownerID) {
+      isShowSeatActionSheet.value = true;
+    }
+  };
+
+  const onSeatActionSelect = (res: { tapIndex: number }) => {
+    if (res.tapIndex === 0) {
+      if (isMicOn.value) {
+        muteMicrophone({ liveID: uni.$liveID });
+        closeLocalMicrophone();
+      } else {
+        unmuteMicrophone({
+          liveID: uni.$liveID,
+          success: () => {
+            openLocalMicrophone();
+          },
+          fail: (errCode: number, errMsg: string) => {
+            console.error(`unmuteMicrophone fail: ${errCode}, ${errMsg}`);
+          },
+        });
+      }
+    }
+  };
+
+  const showCoGuestPanel = () => {
+    isShowCoGuestPanel.value = true;
+  };
+
+  const closeCoGuestPanel = () => {
+    isShowCoGuestPanel.value = false;
+  };
+
+  const handleAcceptApplication = (audience: any) => {
+    acceptApplication({
+      liveID: uni.$liveID,
+      userID: audience?.userID,
+      success: () => {
+        console.log('acceptApplication success.');
+      },
+      fail: (errCode: number, errMsg: string) => {
+        console.error(`acceptApplication fail errCode: ${errCode}, errMsg: ${errMsg}`);
+      },
+    });
+  };
+
+  const handleRejectApplication = (audience: any) => {
+    rejectApplication({
+      liveID: uni.$liveID,
+      userID: audience?.userID,
+      success: () => {
+        console.log('rejectApplication success.');
+      },
+      fail: (errCode: number, errMsg: string) => {
+        console.error(`rejectApplication fail errCode: ${errCode}, errMsg: ${errMsg}`);
+      },
+    });
+  };
+
+  const handleStartLive = () => {
+    createLive({
+      liveInfo: {
+        liveID: uni.$liveID,
+        liveName: liveTitle.value || defaultLiveTitle.value,
+        coverURL: coverURL.value,
+        keepOwnerOnSeat: true,
+        isSeatEnabled: true,
+        seatLayoutTemplateID: 70,
+        seatMode: TakeSeatMode.APPLY,
+        maxSeatCount: 10,
+      },
+      success: () => {
+        console.log('创建语聊房成功');
+        isStartLive.value = true;
+      },
+      fail: (errCode: any, errMsg: any) => {
+        console.log('创建语聊房失败', errCode, errMsg);
+        uni.showToast({ title: '创建语聊房失败', icon: 'none' });
+      },
+    });
+  };
+
+  const handleEndLive = () => {
+    isShowEndSheet.value = true;
+  };
+
+  const onEndSheetSelect = (res: { tapIndex: number }) => {
+    if (res.tapIndex === 0) {
+      endLive({
+        success: () => {
+          uni.$liveID = ''
+          uni.redirectTo({ url: '/pages/scenes/live/VoiceList/VoiceList' });
+        },
+      });
+    }
+  };
+
+  onMounted(() => {
+    openLocalMicrophone();
+    uni.setKeepScreenOn({ keepScreenOn: true });
+    uni.getSystemInfo({
+      success: (res) => {
+        systemInfo.value = res;
+        safeArea.value = res.safeArea;
+      }
+    });
+  });
+
+  onUnmounted(() => {
+    closeLocalMicrophone();
+  });
+</script>
+
+<style>
+  .voice-anchor-container {
+    width: 750rpx;
+    position: relative;
+    flex-direction: column;
+  }
+
+  .voice-bg {
+    position: absolute;
+    left: 0;
+    top: 0;
+  }
+
+  .voice-bg-mask {
+    position: absolute;
+    left: 0;
+    top: 0;
+    background-color: rgba(0, 0, 0, 0.7);
+  }
+
+  .pre-live-wrapper {
+    flex: 1;
+    flex-direction: column;
+  }
+
+  .living-wrapper {
+    flex: 1;
+    flex-direction: column;
+  }
+
+  .navigate-back-arrow {
+    position: absolute;
+    top: 100rpx;
+    left: 40rpx;
+    z-index: 10;
+    width: 60rpx;
+    height: 60rpx;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .navigate-back-arrow-image {
+    width: 20rpx;
+    height: 35rpx;
+  }
+
+  .live-info-card {
+    position: relative;
+    z-index: 5;
+    flex-direction: row;
+    align-items: flex-start;
+    background-color: rgba(0, 0, 0, 0.25);
+    border-radius: 24rpx;
+    margin-top: 180rpx;
+    margin-left: 32rpx;
+    margin-right: 32rpx;
+    padding: 16rpx;
+  }
+
+  .cover-section {
+    position: relative;
+    border-radius: 24rpx;
+  }
+
+  .cover-image {
+    width: 140rpx;
+    height: 188rpx;
+    border-radius: 24rpx;
+  }
+
+  .cover-label {
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    width: 140rpx;
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    padding-top: 5rpx;
+    padding-bottom: 5rpx;
+    background-color: rgba(0, 0, 0, 0.5);
+    border-bottom-left-radius: 24rpx;
+    border-bottom-right-radius: 24rpx;
+  }
+
+  .cover-label-text {
+    color: #fff;
+    font-size: 22rpx;
+  }
+
+  .info-section {
+    flex: 1;
+    margin-left: 24rpx;
+    padding-top: 20rpx;
+  }
+
+  .title-row {
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .live-title {
+    color: #fff;
+    font-size: 32rpx;
+    font-weight: 500;
+    flex: 1;
+  }
+
+  .edit-icon-container {
+    width: 80rpx;
+    height: 40rpx;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .edit-icon {
+    width: 32rpx;
+    height: 32rpx;
+    margin-left: 8rpx;
+  }
+
+  .underline {
+    height: 2rpx;
+    background-color: rgba(255, 255, 255, 0.2);
+    margin-top: 10rpx;
+  }
+
+  .seat-grid {
+    position: relative;
+    z-index: 5;
+    margin-top: 60rpx;
+    padding-left: 32rpx;
+    padding-right: 32rpx;
+  }
+
+  .seat-grid-live {
+    margin-top: 30rpx;
+  }
+
+  .seat-row {
+    flex-direction: row;
+    justify-content: space-around;
+    margin-bottom: 30rpx;
+  }
+
+  .seat-item {
+    flex-direction: column;
+    align-items: center;
+    width: 120rpx;
+  }
+
+  .seat-circle {
+    width: 100rpx;
+    height: 100rpx;
+    border-radius: 50rpx;
+    background-color: rgba(255, 255, 255, 0.15);
+    justify-content: center;
+    align-items: center;
+  }
+
+  .seat-occupied {
+    background-color: transparent;
+  }
+
+  .seat-wrapper {
+    position: relative;
+    width: 120rpx;
+    height: 120rpx;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .sound-wave-outer {
+    width: 100rpx;
+    height: 100rpx;
+    border-radius: 50rpx;
+    align-items: center;
+    justify-content: center;
+    background-color: transparent;
+  }
+
+  .sound-wave-active {
+    width: 116rpx;
+    height: 116rpx;
+    border-radius: 58rpx;
+    background-color: rgba(30, 203, 119, 0.7);
+  }
+
+  .seat-icon {
+    width: 48rpx;
+    height: 48rpx;
+  }
+
+  .seat-avatar {
+    width: 100rpx;
+    height: 100rpx;
+    border-radius: 50rpx;
+  }
+
+  .seat-label {
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 22rpx;
+    margin-top: 8rpx;
+    width: 120rpx;
+    text-align: center;
+    lines: 1;
+  }
+
+  .seat-mic-off {
+    position: absolute;
+    right: 10rpx;
+    bottom: 10rpx;
+    width: 32rpx;
+    height: 32rpx;
+    border-radius: 16rpx;
+    background-color: rgba(0, 0, 0, 0.6);
+    justify-content: center;
+    align-items: center;
+    z-index: 2;
+  }
+
+  .seat-mic-off-icon {
+    width: 22rpx;
+    height: 22rpx;
+  }
+
+  .bottom-actions {
+    position: absolute;
+    bottom: 60rpx;
+    left: 0;
+    right: 0;
+    padding-left: 60rpx;
+    padding-right: 60rpx;
+    z-index: 5;
+    flex-direction: column;
+  }
+
+  .start-live-button {
+    height: 100rpx;
+    background-color: #2B65FB;
+    border-radius: 200rpx;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .start-live-text {
+    font-size: 32rpx;
+    color: #FFFFFF;
+    font-weight: bold;
+  }
+
+  .live-header {
+    position: relative;
+    z-index: 10;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    padding-left: 32rpx;
+    padding-right: 32rpx;
+    padding-top: 20rpx;
+    padding-bottom: 20rpx;
+    margin-top: 80rpx;
+  }
+
+  .header-left {
+    flex-direction: row;
+    align-items: center;
+    flex: 1;
+  }
+
+  .stream-info {
+    flex-direction: row;
+    align-items: center;
+    background-color: rgba(0, 0, 0, 0.3);
+    padding-top: 6rpx;
+    padding-bottom: 6rpx;
+    padding-left: 6rpx;
+    padding-right: 16rpx;
+    border-radius: 40rpx;
+  }
+
+  .header-avatar {
+    width: 56rpx;
+    height: 56rpx;
+    border-radius: 28rpx;
+    border-width: 2rpx;
+    border-style: solid;
+    border-color: #ffffff;
+    margin-right: 12rpx;
+  }
+
+  .stream-details {
+    flex-direction: column;
+  }
+
+  .stream-title {
+    color: #ffffff;
+    font-size: 26rpx;
+    font-weight: 500;
+    width: 200rpx;
+    lines: 1;
+  }
+
+  .header-right {
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .control-icon {
+    width: 36rpx;
+    height: 36rpx;
+    margin-left: 16rpx;
+  }
+
+  .live-bottom-panel {
+    position: fixed;
+    bottom: 40rpx;
+    right: 60rpx;
+    z-index: 10;
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .live-action-buttons {
+    flex-direction: row;
+    align-items: center;
+    padding-right: 20rpx;
+  }
+
+  .live-action-item {
+    width: 100rpx;
+    height: 100rpx;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .action-icon-wrapper {
+    position: relative;
+    width: 100rpx;
+    height: 70rpx;
+    margin-bottom: 4rpx;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .live-action-icon {
+    width: 56rpx;
+    height: 56rpx;
+  }
+
+  .badge {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 32rpx;
+    height: 32rpx;
+    background-color: #FF3B30;
+    border-radius: 16rpx;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .badge-text {
+    color: #ffffff;
+    font-size: 18rpx;
+    font-weight: 600;
+    text-align: center;
+  }
+
+  .live-action-text {
+    color: #fff;
+    font-size: 20rpx;
+  }
+
+  .bottom-drawer-container {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    top: 0;
+    z-index: 1000;
+  }
+
+  .drawer-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.4);
+  }
+
+  .bottom-drawer {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background-color: rgba(34, 38, 46, 1);
+    border-top-left-radius: 32rpx;
+    border-top-right-radius: 32rpx;
+    flex-direction: column;
+    align-items: center;
+    height: 900rpx;
+  }
+
+  .list-title {
+    color: #fff;
+    font-size: 32rpx;
+    font-weight: 500;
+    padding: 40rpx;
+  }
+
+  .cover-scroll {
+    flex: 1;
+    width: 750rpx;
+    padding-left: 15rpx;
+    padding-right: 15rpx;
+  }
+
+  .cover-row {
+    flex-direction: row;
+    justify-content: flex-start;
+    padding-left: 15rpx;
+    padding-right: 15rpx;
+  }
+
+  .cover-dialog-item {
+    width: 200rpx;
+    height: 230rpx;
+    border-radius: 24rpx;
+    margin-bottom: 32rpx;
+    margin-right: 20rpx;
+    background-color: #23242a;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .cover-dialog-img {
+    width: 200rpx;
+    height: 230rpx;
+    border-radius: 24rpx;
+  }
+
+  .cover-dialog-img.selected {
+    border-width: 6rpx;
+    border-style: solid;
+    border-color: #238CFE;
+  }
+
+  .cover-footer {
+    width: 750rpx;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    padding-top: 30rpx;
+    padding-bottom: 60rpx;
+  }
+
+  .cover-confirm-btn {
+    background-color: #0468FC;
+    border-radius: 50rpx;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    padding-top: 25rpx;
+    padding-bottom: 25rpx;
+    padding-left: 80rpx;
+    padding-right: 80rpx;
+  }
+
+  .btn-text {
+    color: #fff;
+    font-size: 32rpx;
+    font-weight: 700;
+  }
+
+  .coguest-drawer-container {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    top: 0;
+    z-index: 1000;
+  }
+
+  .coguest-drawer-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.4);
+  }
+
+  .coguest-drawer {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background-color: rgba(34, 38, 46, 1);
+    border-top-left-radius: 32rpx;
+    border-top-right-radius: 32rpx;
+    flex-direction: column;
+    height: 1000rpx;
+  }
+
+  .coguest-header {
+    padding-top: 40rpx;
+    padding-bottom: 40rpx;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .coguest-header-title {
+    color: rgba(255, 255, 255, 0.9);
+    font-size: 32rpx;
+    font-weight: 500;
+  }
+
+  .coguest-content {
+    flex: 1;
+    padding-left: 20rpx;
+    padding-right: 20rpx;
+  }
+
+  .coguest-list {
+    flex-direction: column;
+  }
+
+  .coguest-item {
+    padding-top: 24rpx;
+    padding-bottom: 24rpx;
+    position: relative;
+  }
+
+  .coguest-info {
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .coguest-avatar {
+    width: 80rpx;
+    height: 80rpx;
+    border-radius: 40rpx;
+    margin-right: 24rpx;
+  }
+
+  .coguest-item-right {
+    flex: 1;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .coguest-name {
+    font-size: 28rpx;
+    color: #ffffff;
+    flex: 1;
+    margin-right: 16rpx;
+    lines: 1;
+  }
+
+  .coguest-actions {
+    flex-direction: row;
+    padding-right: 40rpx;
+  }
+
+  .coguest-btn {
+    padding-top: 10rpx;
+    padding-bottom: 10rpx;
+    padding-left: 24rpx;
+    padding-right: 24rpx;
+    border-radius: 100rpx;
+    margin-left: 12rpx;
+  }
+
+  .coguest-btn-accept {
+    background-color: rgba(43, 106, 214, 1);
+  }
+
+  .coguest-btn-reject {
+    background-color: rgba(58, 60, 66, 1);
+  }
+
+  .coguest-btn-text {
+    color: #ffffff;
+    font-size: 28rpx;
+  }
+
+  .coguest-item-divider {
+    position: absolute;
+    bottom: 0;
+    right: 0;
+    width: 550rpx;
+    height: 2rpx;
+    background-color: rgba(79, 88, 107, 0.3);
+  }
+</style>

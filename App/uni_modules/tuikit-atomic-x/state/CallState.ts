@@ -49,6 +49,11 @@ export enum NetworkQuality {
   Down = 6
 }
 
+// 通话错误码枚举
+export enum CallErrorCode {
+  PACKAGE_NOT_PURCHASED = 101011
+}
+
 /**
  * 通话信息接口
  */

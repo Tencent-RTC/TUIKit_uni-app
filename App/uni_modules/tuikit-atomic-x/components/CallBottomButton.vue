@@ -146,11 +146,12 @@
   import { useCallState } from '@/uni_modules/tuikit-atomic-x/state/CallState';
   import { AudioOutput, useDeviceState } from "@/uni_modules/tuikit-atomic-x/state/DeviceState";
   import { playRingtone } from '../server/callService';
-
+  import { useLoginState } from '@/uni_modules/tuikit-atomic-x/state/LoginState'
   // ========== 状态 & 依赖 ==========
   const { setAudioRoute } = useDeviceState();
   const { activeCall, selfInfo, startVibrate } = useCallState();
-
+  const { loginUserInfo } = useLoginState()
+  uni.$userID = loginUserInfo.value.userID
   const scenario = ref('');
   const systemInfo = ref({});
   const safeArea = ref();

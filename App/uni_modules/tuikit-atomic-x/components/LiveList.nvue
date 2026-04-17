@@ -94,26 +94,40 @@
   const handleJoinLive = async (live) => {
     try {
       uni.$liveID = live.liveID;
+      const isVoiceRoom = (live.liveID || '').startsWith('voice');
 
       if (live?.liveOwner?.userID === uni.$userID) {
         joinLive(({
           liveID: live.liveID,
           success: () => {
-            openLocalCamera({
-              isFront: isFrontCamera.value
-            })
-            openLocalMicrophone()
-            uni.redirectTo({
-              url: `/pages/scenes/live/anchor/index?isLiving=true`
-            });
+            if (isVoiceRoom) {
+              openLocalMicrophone();
+              uni.redirectTo({
+                url: '/pages/scenes/live/VoiceAnchor/VoiceAnchor?isLiving=true'
+              });
+            } else {
+              openLocalCamera({
+                isFront: isFrontCamera.value
+              });
+              openLocalMicrophone();
+              uni.redirectTo({
+                url: '/pages/scenes/live/anchor/index?isLiving=true'
+              });
+            }
           }
         }))
         return;
       }
 
-      uni.redirectTo({
-        url: `/pages/scenes/live/audience/index?liveID=${live.liveID}`
-      });
+      if (isVoiceRoom) {
+        uni.redirectTo({
+          url: `/pages/scenes/live/VoiceAudience/VoiceAudience?liveID=${live.liveID}`
+        });
+      } else {
+        uni.redirectTo({
+          url: `/pages/scenes/live/audience/index?liveID=${live.liveID}`
+        });
+      }
     } catch (error) {
       console.error('进入直播间失败:', error);
       uni.showToast({

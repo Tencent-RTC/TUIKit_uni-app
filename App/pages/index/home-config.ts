@@ -28,7 +28,7 @@ const homeConfig: HomeConfig = {
       title: '直播',
       icon: '/static/images/index/live-icon.png',
       description: '开播预约·智能美颜·连麦PK',
-      route: '/pages/scenes/live/livelist/index'
+      route: '/pages/scenes/live/index/index'
     },
     {
       id: 'meeting',

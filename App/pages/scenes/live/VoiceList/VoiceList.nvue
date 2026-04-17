@@ -59,7 +59,7 @@
 
   const goAnchorPage = () => {
     uni.redirectTo({
-      url: '/pages/scenes/live/anchor/index'
+      url: '/pages/scenes/live/VoiceAnchor/VoiceAnchor'
     });
   }
 
