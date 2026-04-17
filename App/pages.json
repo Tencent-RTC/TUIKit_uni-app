@@ -254,6 +254,38 @@
           "titleNView": false
         }
       }
+    },
+    {
+      "path": "pages/scenes/live/index/index",
+      "style": {
+        "navigationBarTitleText": "直播"
+      }
+    },
+    {
+      "path": "pages/scenes/live/VoiceAnchor/VoiceAnchor",
+      "disableSwipeBack": true,
+      "style": {
+        "backgroundColor": "#000000",
+        "navigationStyle": "custom",
+        "disableSwipeBack": true,
+        "app-plus": {
+          "titleNView": false
+        }
+      }
+    },
+    {
+      "path": "pages/scenes/live/VoiceAudience/VoiceAudience",
+      "style": {
+        "disableSwipeBack": true,
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/scenes/live/VoiceList/VoiceList",
+      "style": {
+        "disableSwipeBack": true,
+        "navigationStyle": "custom"
+      }
     }
   ],
   "tabBar": {

@@ -58,7 +58,8 @@
     useContactState
   } from '@/uni_modules/tuikit-atomic-x/state/ContactState';
   import {
-    useCallState
+    useCallState,
+    CallErrorCode
   } from '@/uni_modules/tuikit-atomic-x/state/CallState';
   import {
     useDeviceState
@@ -218,6 +219,13 @@
           })
         },
         fail: (error) => {
+          if (error === CallErrorCode.PACKAGE_NOT_PURCHASED) {
+            uni.showToast({
+              icon: 'none',
+              title: '您的应用还未开通音视频通话（TUICallKit）能力，您可以去控制台申请免费体验'
+            })
+            console.error('控制台申请免费体验,https://console.cloud.tencent.com/trtc')
+          }
           console.log('calls fail:', error)
           isCalling.value = false;
         }

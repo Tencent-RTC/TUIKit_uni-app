@@ -1,0 +1,564 @@
+<template>
+  <view class="voice-audience-container" :style="{ height: systemInfo?.windowHeight + 'px' }">
+    <image class="voice-bg" src="/static/images/index/voice-background.png" mode="aspectFill" :style="{ width: systemInfo?.windowWidth + 'px', height: systemInfo?.windowHeight + 'px' }"></image>
+    <view class="voice-bg-mask" :style="{ width: systemInfo?.windowWidth + 'px', height: systemInfo?.windowHeight + 'px' }"></view>
+
+    <view class="live-header">
+      <view class="header-left">
+        <view class="stream-info">
+          <image class="header-avatar" :src="currentLive?.liveOwner?.avatarURL || defaultAvatarURL" mode="aspectFill" />
+          <view class="stream-details">
+            <text class="stream-title" :numberOfLines="1">{{ currentLive?.liveOwner?.userName || currentLive?.liveOwner?.userID || '' }}</text>
+          </view>
+        </view>
+      </view>
+      <view class="header-right">
+        <view class="control-icons" @tap="navigateBack()">
+          <image class="control-icon" src="/static/images/close.png" />
+        </view>
+      </view>
+    </view>
+
+    <view class="seat-grid">
+      <view class="seat-row" v-for="(row, rowIdx) in liveSeatRows" :key="rowIdx">
+        <view class="seat-item" v-for="(seat, colIdx) in row" :key="`${rowIdx}-${colIdx}`" @tap="handleSeatTap(seat)">
+          <view v-if="seat.userInfo && seat.userInfo.userID" class="seat-wrapper">
+            <view class="sound-wave-outer" :class="{ 'sound-wave-active': isSpeaking(seat.userInfo.userID) }">
+              <view class="seat-circle seat-occupied">
+                <image class="seat-avatar" :src="seat.userInfo.avatarURL || defaultAvatarURL" mode="aspectFill" />
+              </view>
+            </view>
+            <view v-if="seat.userInfo.userID === uni.$userID ? !isMicOn : seat.userInfo.microphoneStatus === 0" class="seat-mic-off">
+              <image class="seat-mic-off-icon" src="/static/images/unmute-mic.png" mode="aspectFit" />
+            </view>
+          </view>
+          <view v-else class="seat-circle">
+            <image class="seat-icon" src="/static/images/seat-sofa.png" mode="aspectFit"></image>
+          </view>
+          <text class="seat-label" v-if="seat.userInfo && seat.userInfo.userID" :lines="1">
+            {{ seat.userInfo.userName || seat.userInfo.userID }}
+          </text>
+          <text class="seat-label" v-else>{{ rowIdx * 5 + colIdx + 1 }}</text>
+        </view>
+      </view>
+    </view>
+
+    <view class="action-buttons">
+      <image class="action-btn" v-if="uni.$localGuestStatus === 'IDLE'" @tap="handleCoGuestButtonClick" src="/static/images/link-guest.png" />
+      <image class="action-btn" v-if="uni.$localGuestStatus === 'USER_APPLYING'" @tap="ShowCoGuestRequestPanel()" src="/static/images/live-request.png" />
+      <image class="action-btn" v-if="uni.$localGuestStatus === 'CONNECTED'" @tap="ShowCoGuestRequestPanel()" src="/static/images/live-disconnect.png" />
+    </view>
+
+    <ActionSheet v-model="isShowExitSheet" :title="exitSheetTitle" :itemList="exitSheetItems" @select="onExitSheetSelect" />
+    <ActionSheet v-model="isShowCoGuestSheet" :title="coGuestSheetTitle" :itemList="coGuestSheetItems" @select="onCoGuestSheetSelect" />
+    <ActionSheet v-model="isShowSeatActionSheet" :itemList="seatActionItems" @select="onSeatActionSelect" />
+  </view>
+</template>
+
+<script setup lang="ts">
+  import { onLoad, onBackPress } from '@dcloudio/uni-app';
+  import { ref, onMounted, computed, onUnmounted, watch } from 'vue';
+  import ActionSheet from '@/components/ActionSheet.nvue';
+  import { useLiveListState } from "@/uni_modules/tuikit-atomic-x/state/LiveListState";
+  import { useLiveSeatState } from "@/uni_modules/tuikit-atomic-x/state/LiveSeatState";
+  import { useDeviceState, DeviceStatus } from "@/uni_modules/tuikit-atomic-x/state/DeviceState";
+  import { useCoGuestState, NoResponseReason } from '@/uni_modules/tuikit-atomic-x/state/CoGuestState';
+  import { useLoginState } from "@/uni_modules/tuikit-atomic-x/state/LoginState";
+
+  uni.$localGuestStatus = 'IDLE';
+
+  onBackPress((option) => {
+    if (option.from === 'backbutton') return true;
+  });
+
+  const { loginUserInfo } = useLoginState();
+  const { joinLive, leaveLive, currentLive, addLiveListListener, removeLiveListListener } = useLiveListState();
+  const { seatList, speakingUsers, muteMicrophone, unmuteMicrophone, addLiveSeatEventListener, removeLiveSeatEventListener } = useLiveSeatState(uni?.$liveID);
+  const { openLocalMicrophone, closeLocalMicrophone, microphoneStatus } = useDeviceState(uni?.$liveID);
+  const { applyForSeat, disconnect, cancelApplication, connected, addCoGuestGuestListener, removeCoGuestGuestListener } = useCoGuestState(uni?.$liveID);
+
+  const systemInfo = ref<any>({});
+  const defaultAvatarURL = 'https://web.sdk.qcloud.com/component/TUIKit/assets/avatar_01.png';
+
+  const liveID = ref('');
+
+  const isShowSeatActionSheet = ref(false);
+
+  const isMicOn = computed(() => microphoneStatus.value === DeviceStatus.ON);
+
+  const speakingUserIDs = computed(() => {
+    const map = speakingUsers.value;
+    if (!map) return new Set<string>();
+    const ids = new Set<string>();
+    if (map instanceof Map) {
+      map.forEach((volume, userID) => {
+        if (volume > 0) ids.add(userID);
+      });
+    } else if (typeof map === 'object') {
+      Object.keys(map).forEach(userID => {
+        if ((map as any)[userID] > 0) ids.add(userID);
+      });
+    }
+    return ids;
+  });
+
+  const isSpeaking = (userID: string) => speakingUserIDs.value.has(userID);
+
+  const seatActionItems = computed(() => [isMicOn.value ? '关闭麦克风' : '打开麦克风']);
+
+  const isShowExitSheet = ref(false);
+  const isShowCoGuestSheet = ref(false);
+  const exitSheetTitle = ref('');
+  const exitSheetItems = ref(['退出直播间']);
+  const coGuestSheetItems = ref(['取消连麦申请']);
+  const coGuestSheetTitle = ref('');
+
+  const liveSeatRows = computed(() => {
+    const seats = seatList.value || [];
+    if (seats.length === 0) {
+      const placeholders = [];
+      for (let i = 0; i < 10; i++) {
+        placeholders.push({ index: i + 1, isLocked: false, userInfo: {}, region: {} });
+      }
+      return [placeholders.slice(0, 5), placeholders.slice(5, 10)];
+    }
+    const rows = [];
+    for (let i = 0; i < seats.length; i += 5) {
+      rows.push(seats.slice(i, i + 5));
+    }
+    return rows;
+  });
+
+  watch(connected, (newList) => {
+    const list = Array.isArray(newList) ? newList : [];
+    const hasSelfInConnected = list.some(item => item?.userID === uni.$userID);
+    if (!hasSelfInConnected) {
+      uni.$localGuestStatus = 'IDLE';
+    }
+  }, { deep: true, immediate: true });
+
+  onLoad((options: any) => {
+    console.warn('VoiceAudience onLoad = ', options);
+    liveID.value = uni.$liveID;
+
+    if (liveID.value) {
+      joinLive({
+        liveID: liveID.value,
+        success: () => {
+          console.log('VoiceAudience joinLive success');
+        },
+        fail: () => {
+          uni.showToast({ icon: 'none', title: '直播已结束' });
+          setTimeout(() => uni.redirectTo({ url: '/pages/scenes/live/VoiceList/VoiceList' }), 500);
+        },
+      });
+      return;
+    }
+    uni.showToast({ title: 'liveID 为空', icon: 'none' });
+  });
+
+  onMounted(() => {
+    uni.setKeepScreenOn({ keepScreenOn: true });
+    uni.getSystemInfo({
+      success: (res: any) => {
+        systemInfo.value = res;
+      }
+    });
+    addLiveListListener('onLiveEnded', handleLiveEnded);
+    addLiveListListener('onKickedOutOfLive', handleKickedOutOfLive);
+    addLiveSeatEventListener(uni?.$liveID, 'onLocalMicrophoneOpenedByAdmin', handleLocalMicrophoneOpenedByAdmin);
+    addLiveSeatEventListener(uni?.$liveID, 'onLocalMicrophoneClosedByAdmin', handleLocalMicrophoneClosedByAdmin);
+    addCoGuestGuestListener(uni?.$liveID, 'onGuestApplicationResponded', handleGuestApplicationResponded);
+    addCoGuestGuestListener(uni?.$liveID, 'onGuestApplicationNoResponse', handleGuestApplicationNoResponse);
+  });
+
+  onUnmounted(() => {
+    removeLiveListListener('onLiveEnded', handleLiveEnded);
+    removeLiveListListener('onKickedOutOfLive', handleKickedOutOfLive);
+    removeLiveSeatEventListener(uni?.$liveID, 'onLocalMicrophoneOpenedByAdmin', handleLocalMicrophoneOpenedByAdmin);
+    removeLiveSeatEventListener(uni?.$liveID, 'onLocalMicrophoneClosedByAdmin', handleLocalMicrophoneClosedByAdmin);
+    removeCoGuestGuestListener(uni?.$liveID, 'onGuestApplicationResponded', handleGuestApplicationResponded);
+    removeCoGuestGuestListener(uni?.$liveID, 'onGuestApplicationNoResponse', handleGuestApplicationNoResponse);
+  });
+
+  const handleLocalMicrophoneOpenedByAdmin = () => {
+    uni.showToast({ title: '您已被解除静音', icon: 'none' });
+  };
+
+  const handleLocalMicrophoneClosedByAdmin = () => {
+    uni.showToast({ title: '您已被静音', icon: 'none' });
+  };
+
+  const handleLiveEnded = () => {
+    removeLiveListListener('onLiveEnded', handleLiveEnded);
+    removeLiveListListener('onKickedOutOfLive', handleKickedOutOfLive);
+    removeLiveSeatEventListener(uni?.$liveID, 'onLocalMicrophoneOpenedByAdmin', handleLocalMicrophoneOpenedByAdmin);
+    removeLiveSeatEventListener(uni?.$liveID, 'onLocalMicrophoneClosedByAdmin', handleLocalMicrophoneClosedByAdmin);
+    uni.showToast({ icon: 'none', title: '直播已结束' });
+    uni.$liveID = '';
+    uni.redirectTo({ url: '/pages/scenes/live/VoiceList/VoiceList' });
+  };
+
+  const handleKickedOutOfLive = () => {
+    removeLiveListListener('onLiveEnded', handleLiveEnded);
+    removeLiveListListener('onKickedOutOfLive', handleKickedOutOfLive);
+    removeLiveSeatEventListener(uni?.$liveID, 'onLocalMicrophoneOpenedByAdmin', handleLocalMicrophoneOpenedByAdmin);
+    removeLiveSeatEventListener(uni?.$liveID, 'onLocalMicrophoneClosedByAdmin', handleLocalMicrophoneClosedByAdmin);
+    uni.showToast({ icon: 'none', title: '被踢出直播间' });
+    uni.$liveID = '';
+    uni.redirectTo({ url: '/pages/scenes/live/VoiceList/VoiceList' });
+  };
+
+  const navigateBack = () => {
+    if (uni.$localGuestStatus === 'CONNECTED') {
+      exitSheetItems.value = ['断开连麦', '退出直播间'];
+      exitSheetTitle.value = '当前处于连麦状态，是否需要「断开连麦」或「退出直播间」';
+    } else {
+      exitSheetItems.value = ['退出直播间'];
+      exitSheetTitle.value = '';
+    }
+    isShowExitSheet.value = true;
+  };
+
+  const onExitSheetSelect = (res: { tapIndex: number }) => {
+    const index = res.tapIndex;
+    if (uni.$localGuestStatus === 'CONNECTED' && index === 0) {
+      disconnect({ liveID: uni?.$liveID });
+      uni.$localGuestStatus = 'IDLE';
+      return;
+    }
+    if ((uni.$localGuestStatus === 'CONNECTED' && index === 1) || (uni.$localGuestStatus !== 'CONNECTED' && index === 0)) {
+      if (uni.$localGuestStatus === 'CONNECTED') {
+        disconnect({
+          liveID: uni?.$liveID,
+          success: () => {
+            leaveLive({
+              success: () => {
+                uni.$liveID = '';
+                uni.redirectTo({ url: '/pages/scenes/live/VoiceList/VoiceList' });
+              }
+            });
+            console.log('disconnect success.');
+          },
+        });
+        uni.$localGuestStatus = 'IDLE';
+        return
+      }
+      leaveLive({
+        success: () => {
+          uni.$liveID = '';
+          uni.redirectTo({ url: '/pages/scenes/live/VoiceList/VoiceList' });
+        }
+      });
+    }
+  };
+
+  const handleCoGuestButtonClick = () => {
+    if (uni.$localGuestStatus === 'IDLE') {
+      uni.showToast({ title: '你提交了连麦申请\n请等待主播同意', icon: 'none', duration: 2000 });
+      applyForSeat({
+        liveID: uni.$liveID,
+        seatIndex: -1,
+        timeout: 30,
+        success: () => {
+          console.log('applyForSeat success.');
+        },
+        fail: (errorCode: number) => {
+          if (errorCode === 100006) {
+            uni.showToast({ icon: 'none', title: '您当前无法执行此操作（可能是无权限，或受场景限制等原因）' });
+          }
+          uni.$localGuestStatus = 'IDLE';
+        },
+      });
+      uni.$localGuestStatus = 'USER_APPLYING';
+    }
+  };
+
+  const ShowCoGuestRequestPanel = () => {
+    if (uni.$localGuestStatus === 'USER_APPLYING') {
+      coGuestSheetItems.value = ['取消连麦申请'];
+      isShowCoGuestSheet.value = true;
+    } else if (uni.$localGuestStatus === 'CONNECTED') {
+      coGuestSheetItems.value = ['断开连麦'];
+      isShowCoGuestSheet.value = true;
+    }
+  };
+
+  const handleGuestApplicationResponded = (event: any) => {
+    const res = JSON.parse(event);
+    if (res.isAccept) {
+      uni.$localGuestStatus = 'CONNECTED';
+      openLocalMicrophone({
+        success: () => {
+          console.log('openLocalMicrophone success.');
+        },
+        fail: (errCode: number, errMsg: string) => {
+          console.error(`openLocalMicrophone fail errCode: ${errCode}, errMsg: ${errMsg}`);
+        },
+      });
+    } else {
+      uni.$localGuestStatus = 'IDLE';
+      uni.showToast({ title: '上麦申请被拒绝', icon: 'none', duration: 2000 });
+    }
+  };
+
+  const handleGuestApplicationNoResponse = (event: any) => {
+    const res = JSON.parse(event);
+    if (res.reason === NoResponseReason.TIMEOUT) {
+      uni.$localGuestStatus = 'IDLE';
+      uni.showToast({ title: '上麦申请超时', icon: 'none', duration: 2000 });
+    }
+  };
+
+  const handleSeatTap = (seat: any) => {
+    if (seat?.userInfo?.userID === uni.$userID) {
+      isShowSeatActionSheet.value = true;
+    }
+  };
+
+  const onSeatActionSelect = (res: { tapIndex: number }) => {
+    if (res.tapIndex === 0) {
+      if (isMicOn.value) {
+        muteMicrophone({ liveID: uni.$liveID });
+        closeLocalMicrophone();
+      } else {
+        unmuteMicrophone({
+          liveID: uni.$liveID,
+          success: () => {
+            openLocalMicrophone();
+          },
+          fail: (errCode: number, errMsg: string) => {
+            console.error(`unmuteMicrophone fail: ${errCode}, ${errMsg}`);
+          },
+        });
+      }
+    }
+  };
+
+  const onCoGuestSheetSelect = (res: { tapIndex: number }) => {
+    if (uni.$localGuestStatus === 'CONNECTED' && res.tapIndex === 0) {
+      disconnect({ liveID: uni?.$liveID });
+      uni.$localGuestStatus = 'IDLE';
+    } else if (uni.$localGuestStatus === 'USER_APPLYING' && res.tapIndex === 0) {
+      cancelApplication({ liveID: uni?.$liveID });
+      uni.$localGuestStatus = 'IDLE';
+    }
+  };
+</script>
+
+<style>
+  .voice-audience-container {
+    width: 750rpx;
+    position: relative;
+    flex-direction: column;
+  }
+
+  .voice-bg {
+    position: absolute;
+    left: 0;
+    top: 0;
+  }
+
+  .voice-bg-mask {
+    position: absolute;
+    left: 0;
+    top: 0;
+    background-color: rgba(0, 0, 0, 0.7);
+  }
+
+  .live-header {
+    position: relative;
+    z-index: 10;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    padding-left: 32rpx;
+    padding-right: 32rpx;
+    padding-top: 20rpx;
+    padding-bottom: 20rpx;
+    margin-top: 80rpx;
+  }
+
+  .header-left {
+    flex-direction: row;
+    align-items: center;
+    flex: 1;
+  }
+
+  .stream-info {
+    flex-direction: row;
+    align-items: center;
+    background-color: rgba(0, 0, 0, 0.3);
+    padding-top: 6rpx;
+    padding-bottom: 6rpx;
+    padding-left: 10rpx;
+    padding-right: 10rpx;
+    border-radius: 40rpx;
+  }
+
+  .header-avatar {
+    width: 56rpx;
+    height: 56rpx;
+    border-radius: 28rpx;
+    border-width: 2rpx;
+    border-style: solid;
+    border-color: #ffffff;
+    margin-right: 12rpx;
+  }
+
+  .stream-details {
+    flex-direction: column;
+  }
+
+  .stream-title {
+    color: #ffffff;
+    font-size: 26rpx;
+    font-weight: 500;
+    width: 120rpx;
+    lines: 1;
+  }
+
+  .header-right {
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-end;
+  }
+
+  .control-icons {
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .control-icon {
+    width: 48rpx;
+    height: 48rpx;
+    margin-left: 16rpx;
+  }
+
+  .seat-grid {
+    position: relative;
+    z-index: 5;
+    margin-top: 40rpx;
+    padding-left: 32rpx;
+    padding-right: 32rpx;
+  }
+
+  .seat-row {
+    flex-direction: row;
+    justify-content: space-around;
+    margin-bottom: 30rpx;
+  }
+
+  .seat-item {
+    flex-direction: column;
+    align-items: center;
+    width: 120rpx;
+  }
+
+  .seat-circle {
+    width: 100rpx;
+    height: 100rpx;
+    border-radius: 50rpx;
+    background-color: rgba(255, 255, 255, 0.15);
+    justify-content: center;
+    align-items: center;
+  }
+
+  .seat-occupied {
+    background-color: transparent;
+  }
+
+  .seat-wrapper {
+    position: relative;
+    width: 120rpx;
+    height: 120rpx;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .sound-wave-outer {
+    width: 100rpx;
+    height: 100rpx;
+    border-radius: 50rpx;
+    align-items: center;
+    justify-content: center;
+    background-color: transparent;
+  }
+
+  .sound-wave-active {
+    width: 116rpx;
+    height: 116rpx;
+    border-radius: 58rpx;
+    background-color: rgba(30, 203, 119, 0.7);
+  }
+
+  .seat-icon {
+    width: 48rpx;
+    height: 48rpx;
+  }
+
+  .seat-avatar {
+    width: 100rpx;
+    height: 100rpx;
+    border-radius: 50rpx;
+  }
+
+  .seat-label {
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 22rpx;
+    margin-top: 8rpx;
+    width: 120rpx;
+    text-align: center;
+    lines: 1;
+  }
+
+  .seat-mic-badge {
+    position: absolute;
+    right: -4rpx;
+    bottom: -4rpx;
+    width: 36rpx;
+    height: 36rpx;
+    border-radius: 18rpx;
+    background-color: #338aff;
+    justify-content: center;
+    align-items: center;
+    z-index: 2;
+  }
+
+  .seat-mic-badge-icon {
+    width: 22rpx;
+    height: 22rpx;
+  }
+
+  .seat-mic-off {
+    position: absolute;
+    right: 10rpx;
+    bottom: 10rpx;
+    width: 32rpx;
+    height: 32rpx;
+    border-radius: 16rpx;
+    background-color: rgba(0, 0, 0, 0.6);
+    justify-content: center;
+    align-items: center;
+    z-index: 2;
+  }
+
+  .seat-mic-off-icon {
+    width: 22rpx;
+    height: 22rpx;
+  }
+
+  .action-buttons {
+    position: fixed;
+    right: 40rpx;
+    bottom: 80rpx;
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .action-btn {
+    width: 64rpx;
+    height: 64rpx;
+    margin-left: 16rpx;
+  }
+</style>
