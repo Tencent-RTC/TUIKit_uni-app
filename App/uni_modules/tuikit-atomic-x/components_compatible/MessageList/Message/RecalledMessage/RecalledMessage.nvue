@@ -1,0 +1,36 @@
+<template>
+  <view class="recalled-message">
+    <text class="recalled-text">{{ recalledText }}</text>
+    <view v-if="canReEdit" class="re-edit-button" @tap="handleReEdit"><text class="re-edit-text">重新编辑</text></view>
+  </view>
+</template>
+
+<script>
+import { MessageType } from '../../../../types/message'
+
+export default {
+  name: 'RecalledMessage',
+  props: { message: { type: Object, required: true } },
+  computed: {
+    recalledText() {
+      var sender = this.message.sender
+      var name = sender.nameCard || sender.friendRemark || sender.nickname || sender.userID
+      return this.message.isSelf ? '你撤回了一条消息' : name + ' 撤回了一条消息'
+    },
+    canReEdit() { return this.message.isSelf && this.message.messageType === MessageType.TEXT }
+  },
+  methods: {
+    handleReEdit() {
+      var text = ''; try { text = (this.message.messageBody && this.message.messageBody.text) || '' } catch (e) {}
+      this.$emit('reEdit', { message: this.message, text: text })
+    }
+  }
+}
+</script>
+
+<style>
+.recalled-message { flex-direction: row; align-items: center; justify-content: center; padding: 16rpx 0; }
+.recalled-text { font-size: 24rpx; line-height: 34rpx; font-weight: 400; color: rgba(0, 0, 0, 0.4); margin-left: 8rpx; }
+.re-edit-button { align-items: center; justify-content: center; }
+.re-edit-text { font-size: 24rpx; line-height: 34rpx; font-weight: 400; margin-left: 8rpx; color: #1C66E5; }
+</style>

@@ -1,0 +1,283 @@
+<template>
+  <view class="group-chat-setting">
+    <CustomNavbar title="群设置" :showBack="true" @back="handleBack" />
+    <view v-if="isGroupNotExist"><text class="group-not-exist">群聊已不存在</text></view>
+    <scroll-view v-else class="content" scroll-y="true">
+      <view class="group-name-section">
+        <text class="group-name-section__label">群名称</text>
+        <view class="group-name-section__row" @tap="handleEditGroupName">
+          <text class="group-name-section__value">{{ groupName || '未设置' }}</text>
+          <image v-if="canEditGroupName" class="group-name-section__edit" :src="editIcon" />
+        </view>
+      </view>
+      <view class="group-id-section">
+        <text class="group-id-section__label">群ID</text>
+        <view class="group-id-section__row" @tap="handleCopyGroupID">
+          <text class="group-id-section__value">{{ groupID }}</text>
+          <image class="group-name-section__edit" :src="copyIcon" />
+        </view>
+      </view>
+      <view class="section-gap"></view>
+      <view class="member-section">
+        <view class="member-section__header">
+          <text class="member-section__label">群成员</text>
+          <view class="member-section__right" @tap="handleMemberListClick">
+            <text class="member-section__count">{{ memberCount }}人</text>
+            <image class="member-section__arrow" :src="arrowRightIcon" />
+          </view>
+        </view>
+        <MemberAvatarList :members="displayMembers" :maxDisplay="4" :showAddButton="canInviteMember" :showRemoveButton="canRemoveMember" :showName="true" @add="handleAddMember" @remove="handleRemoveMember" @member-click="handleMemberClick" />
+      </view>
+      <view class="section-gap"></view>
+      <view class="notice-section">
+        <text class="notice-section__label">群公告</text>
+        <view class="notice-section__content" @tap="handleNoticeClick">
+          <text class="notice-section__value">{{ notice || '暂无公告' }}</text>
+          <image v-if="canEditGroupNotice" class="notice-section__arrow" :src="editIcon" />
+        </view>
+      </view>
+      <SettingRowNavigate v-if="showGroupManagementEntry" label="群管理" :value="''" @tap="handleGroupManagementClick" />
+      <SettingRowNavigate label="群类型" :value="groupTypeText" :disabled="true" />
+      <SettingRowNavigate label="主动加群审批模式" :value="joinOptionText" :disabled="!canEditGroupProfile" @tap="handleJoinGroupApprovalTypeClick" />
+      <SettingRowNavigate label="邀请入群审批模式" :value="inviteOptionText" :disabled="!canEditGroupProfile" @tap="handleInviteGroupApprovalTypeClick" />
+      <view class="section-gap"></view>
+      <view class="nickname-row">
+        <text class="nickname-row__label">我的群昵称</text>
+        <view class="nickname-row__right" @tap="handleEditNickname">
+          <text class="nickname-row__value">{{ selfNameCard || '未设置' }}</text>
+          <image class="nickname-row__edit" :src="editIcon" />
+        </view>
+      </view>
+      <view class="section-gap"></view>
+      <SettingRowToggle label="消息免打扰" :modelValue="isNotDisturb" @change="handleNotDisturbChange" />
+      <SettingRowToggle label="置顶聊天" :modelValue="isPinned" @change="handlePinnedChange" />
+      <view class="section-gap"></view>
+      <SettingRowButton v-if="canTransferOwnership" label="转让群主" color="#0066FF" @press="handleTransferOwnership" />
+      <SettingRowButton v-if="canDismissGroup" label="解散群聊" color="#FF3B30" @press="handleDismissClick" />
+      <SettingRowButton v-if="canQuitGroup" label="退出群聊" color="#FF3B30" @press="handleQuitClick" />
+      <SettingRowButton label="清除聊天记录" color="#FF3B30" @press="handleClearMessageClick" />
+      <view class="safe-area-bottom"></view>
+    </scroll-view>
+    <TextInputPopup :visible="showGroupNamePopup" @update:visible="showGroupNamePopup = $event" title="修改群名称" :value="groupName" placeholder="请输入群名称" :maxLength="20" :maxByteLength="100" @confirm="handleGroupNameConfirm" />
+    <TextInputPopup :visible="showNoticePopup" @update:visible="showNoticePopup = $event" title="修改群公告" :value="notice" placeholder="请输入群公告" :maxLength="100" :maxByteLength="400" @confirm="handleNoticeConfirm" />
+    <TextInputPopup :visible="showNicknamePopup" @update:visible="showNicknamePopup = $event" title="修改我的群昵称" :value="selfNameCard || ''" placeholder="请输入群昵称" :maxLength="15" :maxByteLength="50" @confirm="handleNicknameConfirm" />
+    <ActionSheet :visible="showJoinOptionSheet" @update:visible="showJoinOptionSheet = $event" :options="joinOptions" @select="handleJoinOptionSelect" />
+    <ActionSheet :visible="showInviteOptionSheet" @update:visible="showInviteOptionSheet = $event" :options="inviteOptions" @select="handleInviteOptionSelect" />
+    <ConfirmDialog :visible="showQuitConfirm" @update:visible="showQuitConfirm = $event" title="确定退出该群聊？" description="退出后将不再接收该群聊的消息" confirmText="确定退出" @confirm="handleQuitConfirm" @cancel="handleQuitCancel" />
+    <ConfirmDialog :visible="showDismissConfirm" @update:visible="showDismissConfirm = $event" title="确定解散该群聊？" description="解散后所有群成员将被移出群聊，且无法恢复" confirmText="确定解散" @confirm="handleDismissConfirm" @cancel="handleDismissCancel" />
+    <ConfirmDialog :visible="showClearMessageConfirm" @update:visible="showClearMessageConfirm = $event" title="确定清除聊天记录？" description="清除后将无法恢复" confirmText="确定清除" @confirm="handleClearMessageConfirm" @cancel="handleClearMessageCancel" />
+  </view>
+</template>
+
+<script>
+import SettingRowToggle from './components/SettingRowToggle.nvue';
+import SettingRowNavigate from './components/SettingRowNavigate.nvue';
+import SettingRowButton from './components/SettingRowButton.nvue';
+import TextInputPopup from './components/TextInputPopup.nvue';
+import ActionSheet from './components/ActionSheet.nvue';
+import ConfirmDialog from './components/ConfirmDialog.nvue';
+import MemberAvatarList from './components/MemberAvatarList.nvue';
+import CustomNavbar from '../CustomNavbar/CustomNavbar.nvue';
+import { useGroupMemberState } from '../../state/GroupMemberState';
+import { useGroupState } from '../../state/GroupState';
+import { useLoginState } from '../../state/LoginState';
+import { GroupType, GroupJoinOption, ReceiveMessageOpt, GroupMemberRole } from '../../types/group';
+import { useConversationListState } from '../../state/ConversationListState';
+import { hasPermission, showGroupManagement, GroupPermission } from './utils/groupPermission';
+import { UserPickerType } from '../../types/userpicker';
+import { throttle } from '../../utils/lodash';
+import { setClipboardText } from '../../utils/clipboard';
+
+var editIcon = '/uni_modules/tuikit-atomic-x/static/assets/chat-setting/nvue_edit.png'
+var arrowRightIcon = '/uni_modules/tuikit-atomic-x/static/assets/chat-setting/nvue_arrow-right.png'
+var copyIcon = '/uni_modules/tuikit-atomic-x/static/assets/chat-setting/nvue_file-copy.png'
+
+export default {
+  components: { SettingRowToggle, SettingRowNavigate, SettingRowButton, TextInputPopup, ActionSheet, ConfirmDialog, MemberAvatarList, CustomNavbar },
+  props: {
+    conversationID: { type: String, default: '' },
+  },
+  data() {
+    var groupID = this.conversationID.startsWith('group_') ? this.conversationID.replace('group_', '') : ''
+    var convState = useConversationListState('groupSetting')
+    var groupState = useGroupState()
+    var memberState = useGroupMemberState({ groupID: groupID })
+    var loginState = useLoginState()
+    return {
+      groupID: groupID,
+      convState: convState,
+      groupState: groupState,
+      memberState: memberState,
+      loginState: loginState,
+      isGroupNotExist: false,
+      selfNameCard: '',
+      showGroupNamePopup: false,
+      showNicknamePopup: false,
+      showJoinOptionSheet: false,
+      showInviteOptionSheet: false,
+      showQuitConfirm: false,
+      showDismissConfirm: false,
+      showNoticePopup: false,
+      showClearMessageConfirm: false,
+      editIcon: editIcon,
+      arrowRightIcon: arrowRightIcon,
+      copyIcon: copyIcon,
+      joinOptions: [{ label: '自由加入', value: 2 }, { label: '需要审批', value: 1 }, { label: '禁止加入', value: 0 }],
+      inviteOptions: [{ label: '自由加入', value: 2 }, { label: '需要审批', value: 1 }, { label: '禁止加入', value: 0 }],
+    }
+  },
+  computed: {
+    groupInfo() { return this.groupState.joinedGroupList.value.find(function(g) { return g.groupID === this.groupID }.bind(this)) || null },
+    groupName() { return ((this.groupInfo && this.groupInfo.groupName) != null ? (this.groupInfo && this.groupInfo.groupName) : '') },
+    memberCount() { return ((this.groupInfo && this.groupInfo.memberCount) != null ? (this.groupInfo && this.groupInfo.memberCount) : 0) },
+    notice() { return ((this.groupInfo && this.groupInfo.notice) != null ? (this.groupInfo && this.groupInfo.notice) : '') },
+    selfRole() { return ((this.groupInfo && this.groupInfo.selfRole) != null ? (this.groupInfo && this.groupInfo.selfRole) : GroupMemberRole.Member) },
+    groupType() { return ((this.groupInfo && this.groupInfo.groupType) != null ? (this.groupInfo && this.groupInfo.groupType) : GroupType.Work) },
+    joinGroupApprovalType() { return ((this.groupInfo && this.groupInfo.joinOption) != null ? (this.groupInfo && this.groupInfo.joinOption) : GroupJoinOption.Unknown) },
+    inviteToGroupApprovalType() { return ((this.groupInfo && this.groupInfo.inviteOption) != null ? (this.groupInfo && this.groupInfo.inviteOption) : GroupJoinOption.Unknown) },
+    isNotDisturb() { return (this.groupInfo && this.groupInfo.receiveMessageOpt) !== ReceiveMessageOpt.Receive },
+    isPinned() {
+      var list = (this.convState && this.convState.state) ? (this.convState.state.conversationList || []) : []
+      var cid = this.conversationID
+      var conv = list.find(function(c) { return c.conversationID === cid })
+      return ((conv && conv.isPinned) != null ? (conv && conv.isPinned) : false)
+    },
+    displayMembers() { return this.memberState.groupMemberList.value || [] },
+    canEditGroupName() { return hasPermission(this.groupType, this.selfRole, GroupPermission.EDIT_GROUP_PROFILE_NAME) },
+    canEditGroupNotice() { return hasPermission(this.groupType, this.selfRole, GroupPermission.EDIT_GROUP_PROFILE_NOTIFICATION) },
+    canEditGroupProfile() { return hasPermission(this.groupType, this.selfRole, GroupPermission.EDIT_GROUP_PROFILE_ELSE) },
+    canRemoveMember() { return hasPermission(this.groupType, this.selfRole, GroupPermission.REMOVE_MEMBER) },
+    canInviteMember() { return this.inviteToGroupApprovalType !== GroupJoinOption.Forbid },
+    showGroupManagementEntry() { return showGroupManagement(this.groupType, this.selfRole) },
+    canTransferOwnership() { return hasPermission(this.groupType, this.selfRole, GroupPermission.TRANSFER_OWNERSHIP) },
+    canDismissGroup() { return hasPermission(this.groupType, this.selfRole, GroupPermission.DISMISS_GROUP) },
+    canQuitGroup() { return hasPermission(this.groupType, this.selfRole, GroupPermission.QUIT_GROUP) },
+    groupTypeText() {
+      var m = {}; m[GroupType.Work] = '工作群'; m[GroupType.Public] = '公开群'; m[GroupType.Meeting] = '会议群'; m[GroupType.AVChatRoom] = '直播群'; m[GroupType.Community] = '社群'
+      return m[this.groupType] || '暂无'
+    },
+    joinOptionText() {
+      var m = {}; m[GroupJoinOption.Any] = '自由加入'; m[GroupJoinOption.Auth] = '需要审批'; m[GroupJoinOption.Forbid] = '禁止加入'; m[GroupJoinOption.Unknown] = '暂无'
+      return m[this.joinGroupApprovalType] || '暂无'
+    },
+    inviteOptionText() {
+      var m = {}; m[GroupJoinOption.Any] = '自由加入'; m[GroupJoinOption.Auth] = '需要审批'; m[GroupJoinOption.Forbid] = '禁止加入'; m[GroupJoinOption.Unknown] = '暂无'
+      return m[this.inviteToGroupApprovalType] || '暂无'
+    },
+  },
+  beforeMount() {
+    if (!this.groupID) return
+    var self = this
+    this.groupState.fetchJoinedGroupList().then(function() {
+      return self.convState.fetchConversationInfo(self.conversationID)
+    }).then(function() {
+      return self.fetchSelfNameCard()
+    })
+  },
+  beforeDestroy() { this.memberState.destroyStore() },
+  beforeUnmount() { this.memberState.destroyStore() },
+  methods: {
+    fetchSelfNameCard() {
+      if (!this.groupID) return
+      var self = this
+      try {
+        var loginUserInfo = this.loginState.state && this.loginState.state.loginUserInfo
+        var userID = loginUserInfo && loginUserInfo.userID
+        if (userID) {
+          this.memberState.fetchGroupMembersInfo([userID]).then(function(list) {
+            if (list && list[0]) self.selfNameCard = list[0].nameCard
+          }).catch(function(err) {
+            if (err.errCode === 10010) { self.isGroupNotExist = true; return }
+            console.error('[GroupChatSetting] Failed:', err)
+          })
+        }
+      } catch(e) { console.error('[GroupChatSetting] fetchSelfNameCard error:', e) }
+    },
+    handleBack() { uni.navigateBack() },
+    handleEditGroupName() { if (this.canEditGroupName) this.showGroupNamePopup = true },
+    handleCopyGroupID() {
+      try { setClipboardText(this.groupID); plus.nativeUI.toast('已复制', { verticalAlign: 'top' }) }
+      catch(e) { plus.nativeUI.toast('复制失败', { verticalAlign: 'top' }) }
+    },
+    handleGroupNameConfirm(newName) {
+      var n = newName.trim()
+      if (n === '') { uni.showToast({ title: '群名称不能为空', icon: 'none' }); return }
+      if (n !== this.groupName) this.groupState.updateGroupProfile({ groupID: this.groupID, groupName: n })
+    },
+    handleMemberListClick() { uni.navigateTo({ url: '/pages/scenes/chat/groupMemberList/index?conversationID=' + this.conversationID }) },
+    handleAddMember() { uni.navigateTo({ url: '/pages/scenes/chat/userPicker/userPicker?businessType=' + UserPickerType.INVITE_GROUP_MEMBER + '&conversationID=' + this.conversationID }) },
+    handleRemoveMember() { uni.navigateTo({ url: '/pages/scenes/chat/userPicker/userPicker?businessType=' + UserPickerType.REMOVE_GROUP_MEMBER + '&conversationID=' + this.conversationID }) },
+    handleMemberClick(member) {},
+    handleNoticeClick() { if (this.canEditGroupNotice) this.showNoticePopup = true },
+    handleNoticeConfirm(newNotice) {
+      var n = newNotice.trim()
+      if (n !== this.notice) this.groupState.updateGroupProfile({ groupID: this.groupID, notice: n })
+    },
+    handleGroupManagementClick() { uni.navigateTo({ url: '/pages/scenes/chat/groupManagement/index?conversationID=' + this.conversationID }) },
+    handleJoinGroupApprovalTypeClick() { if (this.canEditGroupProfile) this.showJoinOptionSheet = true },
+    handleJoinOptionSelect(option) { this.groupState.setGroupJoinOption(this.groupID, option.value) },
+    handleInviteGroupApprovalTypeClick() { if (this.canEditGroupProfile) this.showInviteOptionSheet = true },
+    handleInviteOptionSelect(option) { this.groupState.setGroupInviteOption(this.groupID, option.value) },
+    handleEditNickname() { this.showNicknamePopup = true },
+    handleNicknameConfirm(newNickname) {
+      var n = newNickname.trim()
+      if (n !== this.selfNameCard) {
+        var self = this
+        this.memberState.setSelfGroupNameCard(n).then(function() { self.fetchSelfNameCard() })
+      }
+    },
+    handleNotDisturbChange: throttle(function(value) {
+      this.groupState.setReceiveMessageOpt(this.groupID, value ? ReceiveMessageOpt.NotNotify : ReceiveMessageOpt.Receive)
+    }, 1000, { leading: true, trailing: true }),
+    handlePinnedChange(value) { this.convState.pinConversation(this.conversationID, value) },
+    handleTransferOwnership() { uni.navigateTo({ url: '/pages/scenes/chat/userPicker/userPicker?businessType=' + UserPickerType.TRANSFER_GROUP_OWNER + '&conversationID=' + this.conversationID }) },
+    handleQuitClick() { this.showQuitConfirm = true },
+    handleQuitCancel() {},
+    handleQuitConfirm() { this.groupState.quitGroup(this.groupID).then(function() { uni.navigateBack({ delta: 2 }) }) },
+    handleDismissClick() { this.showDismissConfirm = true },
+    handleDismissCancel() {},
+    handleDismissConfirm() { this.groupState.dismissGroup(this.groupID).then(function() { uni.navigateBack({ delta: 2 }) }) },
+    handleClearMessageClick() { this.showClearMessageConfirm = true },
+    handleClearMessageCancel() {},
+    handleClearMessageConfirm() {
+      var self = this
+      this.convState.clearConversationMessages(this.conversationID).then(function() {
+        plus.nativeUI.toast('已清除', { verticalAlign: 'top' })
+      }).catch(function() { plus.nativeUI.toast('清除失败', { verticalAlign: 'top' }) })
+    },
+  },
+}
+</script>
+
+<style scoped>
+.group-chat-setting { flex: 1; background-color: #F0F2F7; }
+.group-not-exist { text-align: center; color: rgba(0, 0, 0, 0.55); font-size: 32rpx; padding: 40rpx; }
+.content { flex: 1; }
+.section-gap { height: 20rpx; background-color: #F0F2F7; }
+.group-name-section { background-color: #FFFFFF; padding: 24rpx 32rpx; flex-direction: row; align-items: center; justify-content: space-between; }
+.group-name-section__label { font-size: 32rpx; color: rgba(0, 0, 0, 0.55); }
+.group-name-section__row { flex-direction: row; align-items: center; }
+.group-name-section__value { font-size: 32rpx; color: rgba(0, 0, 0, 0.9); lines: 1; text-overflow: ellipsis; max-width: 400rpx; }
+.group-name-section__edit { width: 28rpx; height: 28rpx; margin-left: 12rpx; }
+.group-id-section { background-color: #FFFFFF; padding: 24rpx 32rpx; flex-direction: row; align-items: center; justify-content: space-between; border-top-width: 1rpx; border-top-style: solid; border-top-color: #F0F2F7; }
+.group-id-section__label { font-size: 32rpx; color: rgba(0, 0, 0, 0.55); }
+.group-id-section__row { flex-direction: row; align-items: center; }
+.group-id-section__value { font-size: 32rpx; color: rgba(0, 0, 0, 0.9); lines: 1; text-overflow: ellipsis; max-width: 360rpx; }
+.member-section { background-color: #FFFFFF; }
+.member-section__header { flex-direction: row; align-items: center; justify-content: space-between; padding: 24rpx 32rpx 0; }
+.member-section__label { font-size: 32rpx; color: rgba(0, 0, 0, 0.55); }
+.member-section__right { flex-direction: row; align-items: center; }
+.member-section__count { font-size: 32rpx; color: rgba(0, 0, 0, 0.9); }
+.member-section__arrow { width: 28rpx; height: 28rpx; }
+.notice-section { background-color: #FFFFFF; padding: 24rpx 32rpx; border-bottom-width: 1rpx; border-bottom-style: solid; border-bottom-color: #E5E5E5; flex-direction: row; align-items: center; justify-content: space-between; }
+.notice-section__label { font-size: 32rpx; color: rgba(0, 0, 0, 0.55); }
+.notice-section__content { flex-direction: row; align-items: center; justify-content: space-between; }
+.notice-section__value { font-size: 32rpx; color: rgba(0, 0, 0, 0.9); flex: 1; lines: 1; text-overflow: ellipsis; max-width: 450rpx; }
+.notice-section__arrow { margin-left: 12rpx; width: 28rpx; height: 28rpx; }
+.nickname-row { flex-direction: row; align-items: center; justify-content: space-between; padding: 24rpx 32rpx; background-color: #FFFFFF; border-bottom-width: 1rpx; border-bottom-style: solid; border-bottom-color: #E5E5E5; }
+.nickname-row__label { flex: 0 1 auto; font-size: 32rpx; color: rgba(0, 0, 0, 0.55); }
+.nickname-row__right { flex-direction: row; align-items: center; }
+.nickname-row__value { font-size: 32rpx; color: rgba(0, 0, 0, 0.9); margin-right: 8rpx; lines: 1; text-overflow: ellipsis; max-width: 400rpx; }
+.nickname-row__edit { width: 28rpx; height: 28rpx; }
+.safe-area-bottom { height: 68rpx; }
+</style>

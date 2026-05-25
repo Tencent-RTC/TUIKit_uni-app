@@ -1,0 +1,14 @@
+<template>
+  <GroupManagement :conversationID="conversationID" />
+</template>
+
+<script>
+import GroupManagement from '@/uni_modules/tuikit-atomic-x/components/ChatSetting/GroupManagement.nvue';
+export default {
+  components: { GroupManagement },
+  data() { return { conversationID: '' } },
+  onLoad(options) { if (options.conversationID) this.conversationID = options.conversationID },
+}
+</script>
+
+<style scoped></style>

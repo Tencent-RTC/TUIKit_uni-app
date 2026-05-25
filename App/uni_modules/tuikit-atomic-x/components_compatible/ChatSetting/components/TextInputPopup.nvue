@@ -1,0 +1,112 @@
+<template>
+  <Popup
+    ref="popupRef"
+    :visible="visible"
+    :closeOnMaskTap="true"
+    @update:visible="handleVisibleChange"
+    @close="handleClose"
+  >
+    <view class="popup-container">
+      <view class="popup-content">
+        <text class="popup-title">{{ title }}</text>
+        <input 
+          :class="['popup-input', isOverLimit ? 'popup-input--error' : '']"
+          :value="inputValue"
+          :placeholder="placeholder"
+          :focus="isFocused"
+          :maxlength="maxLength"
+          @input="handleInput"
+          @confirm="handleConfirm"
+        />
+      </view>
+      <view class="popup-buttons">
+        <view class="popup-btn popup-btn--cancel" @tap="handleCancel">
+          <text class="popup-btn__text popup-btn__text--cancel">取消</text>
+        </view>
+        <view class="popup-btn popup-btn--confirm" @tap="handleConfirm">
+          <text class="popup-btn__text popup-btn__text--confirm">确认</text>
+        </view>
+      </view>
+    </view>
+  </Popup>
+</template>
+
+<script>
+import Popup from './Popup.nvue';
+export default {
+  components: { Popup },
+  model: { prop: 'visible', event: 'update:visible' },
+  props: {
+    visible: { type: Boolean, default: false },
+    title: { type: String, default: '编辑' },
+    value: { type: String, default: '' },
+    placeholder: { type: String, default: '请输入' },
+    maxLength: { type: Number, default: -1 },
+    maxByteLength: { type: Number, default: -1 },
+  },
+  data() {
+    return {
+      inputValue: this.value,
+      isFocused: false,
+    }
+  },
+  computed: {
+    isOverLimit() {
+      if (this.maxByteLength <= 0) return false
+      return this.getByteLength(this.inputValue) > this.maxByteLength
+    },
+  },
+  watch: {
+    value(newVal) { this.inputValue = newVal },
+    visible(newVal) {
+      if (newVal) {
+        this.inputValue = this.value
+        var self = this
+        this.$nextTick(function() { setTimeout(function() { self.isFocused = true }, 300) })
+      } else { this.isFocused = false }
+    },
+  },
+  methods: {
+    getByteLength(str) {
+      var len = 0
+      for (var i = 0; i < str.length; i++) {
+        var code = str.charCodeAt(i)
+        if (code <= 0x7f) len += 1
+        else if (code <= 0x7ff) len += 2
+        else len += 3
+      }
+      return len
+    },
+    handleInput(e) { this.inputValue = e.detail.value },
+    handleConfirm() {
+      var value = this.inputValue
+      this.$emit('confirm', value)
+      this.$emit('update:visible', false)
+      uni.hideKeyboard()
+    },
+    handleCancel() {
+      this.$emit('cancel')
+      this.$emit('update:visible', false)
+      uni.hideKeyboard()
+    },
+    handleVisibleChange(val) { this.$emit('update:visible', val) },
+    handleClose() { this.$emit('cancel'); uni.hideKeyboard() },
+  },
+}
+</script>
+
+<style scoped>
+.popup-container { border-radius: 24rpx; overflow: hidden; width: 654rpx; }
+.popup-content { padding: 64rpx 48rpx 40rpx; }
+.popup-title { font-size: 36rpx; font-weight: 500; color: rgba(0, 0, 0, 0.9); text-align: center; margin-bottom: 32rpx; }
+.popup-input { height: 80rpx; border-width: 1rpx; border-style: solid; border-color: #E5E5E5; border-radius: 8rpx; padding: 0 20rpx; font-size: 28rpx; color: #333333; background-color: #F5F5F5; }
+.popup-input--error { border-color: #FF3B30; }
+.popup-buttons { flex-direction: row; border-top-width: 1rpx; border-top-style: solid; border-top-color: #E5E5E5; }
+.popup-btn { flex: 1; padding: 32rpx 0; justify-content: center; align-items: center; background-color: #FFFFFF; }
+.popup-btn:active { background-color: #F5F5F5; }
+.popup-btn--cancel { border-right-width: 1rpx; border-right-style: solid; border-right-color: #E5E5E5; border-bottom-left-radius: 24rpx; }
+.popup-btn--confirm { border-bottom-right-radius: 24rpx; }
+.popup-btn__text { font-size: 32rpx; font-weight: 500; }
+.popup-btn__text--cancel { color: rgba(0, 0, 0, 0.9); }
+.popup-btn__text--confirm { color: #0066FF; }
+</style>

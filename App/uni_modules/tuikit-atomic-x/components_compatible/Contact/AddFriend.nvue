@@ -1,0 +1,106 @@
+<template>
+  <view class="add-friend" @touchstart="handleTouchStart">
+    <view class="add-friend__search">
+      <view v-if="!isInputActive" class="add-friend__search-wrapper" @tap="handleActivateInput">
+        <image class="add-friend__search-icon" src="/uni_modules/tuikit-atomic-x/static/icon/search.png" mode="aspectFit" />
+        <text class="add-friend__search-placeholder-text">搜索用户ID</text>
+      </view>
+      <view v-if="isInputActive" class="add-friend__search-wrapper" @touchstart="handleInputAreaTouchStart" @touchend="handleInputAreaTouchEnd">
+        <image class="add-friend__search-icon" src="/uni_modules/tuikit-atomic-x/static/icon/search.png" mode="aspectFit" />
+        <input ref="inputRef" class="add-friend__search-input" type="text" :value="searchValue" :focus="shouldFocus" placeholder="搜索用户ID" placeholder-class="add-friend__search-placeholder" confirm-type="search" @input="handleInput" @confirm="handleSearch" @focus="handleFocus" @blur="handleBlur" />
+        <view v-if="searchValue" class="add-friend__search-clear" @tap="handleClear"><image class="add-friend__search-clear-icon" src="/uni_modules/tuikit-atomic-x/static/icon/close.png" mode="aspectFit" /></view>
+      </view>
+    </view>
+    <view v-if="!hasSearched && myUserID" class="add-friend__my-id"><text class="add-friend__my-id-text">我的用户ID：{{ myUserID }}</text></view>
+    <view v-if="hasSearched" class="add-friend__result">
+      <view v-if="isSearching" class="add-friend__loading"><text class="add-friend__loading-text">搜索中...</text></view>
+      <view v-else-if="searchResultList.length === 0" class="add-friend__empty"><text class="add-friend__empty-text">该用户不存在</text></view>
+      <list v-else class="add-friend__list">
+        <cell v-for="user in searchResultList" :key="user.userID">
+          <view class="add-friend__user" @tap="handleUserClick(user)">
+            <component :is="Avatar" :src="user.avatarURL || ''" :name="user.nickname || user.userID" :size="80" shape="square" defaultAvatarType="user" pureMode />
+            <view class="add-friend__user-info">
+              <text class="add-friend__user-name">{{ user.nickname || user.userID }}</text>
+              <view class="add-friend__user-id-wrapper">
+                <text class="add-friend__user-text add-friend__user-label">ID: </text>
+                <text class="add-friend__user-text add-friend__user-id">{{ user.userID }}</text>
+              </view>
+            </view>
+          </view>
+        </cell>
+      </list>
+    </view>
+  </view>
+</template>
+<script>
+import AvatarComponent from '../Avatar'
+import { useContactState } from '../../state/ContactState'
+import { useLoginState } from '../../state/LoginState'
+import { showToast } from '../../utils/toast'
+export default {
+  props: { Avatar: { type: [Object, Function], default: function() { return AvatarComponent } } },
+  data() {
+    var contactState = useContactState()
+    var loginState = useLoginState()
+    return { searchValue: '', hasSearched: false, isSearching: false, searchResultList: [], isInputActive: false, isFocused: false, isTouchingInput: false, shouldFocus: false, contactState: contactState, loginState: loginState, debounceTimer: null }
+  },
+  computed: { myUserID() { return (this.loginState.state && this.loginState.state.loginUserInfo && this.loginState.state.loginUserInfo.userID) || '' } },
+  onShow() {
+    if (this.searchValue.trim() && this.hasSearched) {
+      if (this.debounceTimer) clearTimeout(this.debounceTimer)
+      var self = this; this.debounceTimer = setTimeout(function() { self.silentRefreshSearch() }, 300)
+    }
+  },
+  beforeDestroy() { if (this.debounceTimer) { clearTimeout(this.debounceTimer); this.debounceTimer = null } },
+  beforeUnmount() { if (this.debounceTimer) { clearTimeout(this.debounceTimer); this.debounceTimer = null } },
+  methods: {
+    handleActivateInput() { this.isInputActive = true; var self = this; this.$nextTick(function() { self.shouldFocus = true }) },
+    handleFocus() { this.isFocused = true },
+    handleBlur() { this.isFocused = false; if (!this.searchValue && !this.hasSearched) this.isInputActive = false },
+    handleTouchStart() { if (!this.isFocused || this.isTouchingInput) return; uni.hideKeyboard() },
+    handleInputAreaTouchStart() { this.isTouchingInput = true },
+    handleInputAreaTouchEnd() { var self = this; setTimeout(function() { self.isTouchingInput = false }, 100) },
+    handleInput(e) { this.searchValue = e.detail.value || '' },
+    handleClear() { this.searchValue = ''; this.hasSearched = false; this.searchResultList = [] },
+    handleSearch() {
+      var userID = this.searchValue.trim()
+      if (!userID) { showToast('请输入用户ID'); return }
+      uni.hideKeyboard(); this.hasSearched = true; this.isSearching = true; this.searchResultList = []
+      this.$emit('search', userID)
+      var self = this
+      this.contactState.fetchUserInfo([userID]).then(function(list) { if (list && list.length > 0) self.searchResultList = list }).catch(function(e) { console.error('搜索用户失败:', e) }).finally(function() { self.isSearching = false })
+    },
+    handleUserClick(user) { uni.hideKeyboard(); this.$emit('userSelect', user) },
+    silentRefreshSearch() {
+      var userID = this.searchValue.trim(); if (!userID) return
+      var self = this
+      this.contactState.fetchUserInfo([userID]).then(function(list) { if (list && list.length > 0) self.searchResultList = list }).catch(function(e) { console.error('[AddFriend] silentRefreshSearch failed:', e) })
+    },
+  },
+}
+</script>
+<style>
+.add-friend { flex: 1; background-color: #F2F3F5; }
+.add-friend__search { flex-direction: row; align-items: center; padding: 16rpx 32rpx 32rpx; background-color: #FFFFFF; }
+.add-friend__search-placeholder-text { font-size: 28rpx; line-height: 46rpx; font-weight: 400; color: rgba(0, 0, 0, 0.4); }
+.add-friend__search-wrapper { flex: 1; flex-direction: row; align-items: center; justify-content: center; background-color: #F0F2F7; border-radius: 8rpx; padding: 20rpx 24rpx; }
+.add-friend__search-icon { width: 32rpx; height: 32rpx; margin-right: 12rpx; }
+.add-friend__search-input { flex: 1; font-size: 28rpx; font-weight: 400; color: rgba(0, 0, 0, 0.9); }
+.add-friend__search-clear { padding: 8rpx; margin-left: 8rpx; }
+.add-friend__search-clear-icon { width: 28rpx; height: 28rpx; }
+.add-friend__my-id { margin-top: 150rpx; align-items: center; }
+.add-friend__my-id-text { font-size: 28rpx; line-height: 40rpx; font-weight: 400; color: rgba(0, 0, 0, 0.4); }
+.add-friend__result { flex: 1; }
+.add-friend__list { flex: 1; }
+.add-friend__loading { margin-top: 120rpx; align-items: center; }
+.add-friend__loading-text { font-size: 28rpx; color: #999999; }
+.add-friend__empty { margin-top: 120rpx; align-items: center; }
+.add-friend__empty-text { font-size: 28rpx; line-height: 40rpx; font-weight: 400; color: rgba(0, 0, 0, 0.4); }
+.add-friend__user { flex-direction: row; align-items: center; padding: 24rpx 32rpx; background-color: #FFFFFF; }
+.add-friend__user-info { flex: 1; margin-left: 24rpx; }
+.add-friend__user-name { font-size: 36rpx; line-height: 48rpx; color: #111111; font-weight: 400; lines: 1; text-overflow: ellipsis; }
+.add-friend__user-text { font-size: 24rpx; line-height: 36rpx; font-weight: 400; }
+.add-friend__user-id-wrapper { flex-direction: row; align-items: center; margin-top: 4rpx; }
+.add-friend__user-label { color: #999999; }
+.add-friend__user-id { color: #147AFF; }
+</style>

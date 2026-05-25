@@ -2,6 +2,7 @@
   <view 
     class="video-message"
     :style="videoContainerStyle"
+    @touchstart="handleTouchStart"
   >
     <view class="video-highlight">
       <view class="video-cover">
@@ -15,10 +16,19 @@
         
         <view class="play-button" @tap="handlePlayTap">
           <image
+            v-if="!isDownloadingVideo"
             src="../../../../static/icon/play.png"
             class="icon-image"
             mode="aspectFill"
           />
+          <text v-else class="download-percent">{{ downloadProgress }}%</text>
+        </view>
+        
+        <!-- 下载进度条 -->
+        <view v-if="isDownloadingVideo" class="progress-bar">
+          <view class="progress-bar__track">
+            <view class="progress-bar__fill" :style="{ width: downloadProgress + '%' }"></view>
+          </view>
         </view>
       </view>
     </view>
@@ -30,6 +40,7 @@ import { ref, computed, watch } from 'vue'
 import type { MessageInfo } from '../../../../types/message'
 import { MessageMediaFileType } from '../../../../types/message'
 import { useMessageListState } from '../../../../state/MessageListState'
+import { stopGlobalAudioPlayer, RECORDING_PSEUDO_ID } from '../../../../hooks/useAudioPlayer'
 
 interface Props {
   message: MessageInfo
@@ -42,6 +53,10 @@ const actualSize = ref({ width: 0, height: 0 })
 const coverError = ref(false)
 const isDownloadingSnapshot = ref(false)
 const isDownloadingVideo = ref(false)
+
+// 长按判定阈值，与 Message.nvue 中保持一致
+const LONG_PRESS_THRESHOLD = 350
+const touchStartTime = ref(0)
 
 // 获取消息列表状态，用于下载资源
 const { downloadMessageResource } = useMessageListState({
@@ -65,16 +80,17 @@ const videoUrl = computed(() => {
   return url;
 })
 
-const videoDuration = computed(() => {
-  return props.message.messageBody?.videoDuration || 0
-})
-
 const videoSnapshotWidth = computed(() => {
   return props.message.messageBody?.videoSnapshotWidth || 0
 })
 
 const videoSnapshotHeight = computed(() => {
   return props.message.messageBody?.videoSnapshotHeight || 0
+})
+
+// 下载进度
+const downloadProgress = computed(() => {
+  return props.message?.progress ?? 0
 })
 
 const MAX_WIDTH = 400
@@ -122,20 +138,6 @@ const videoContainerStyle = computed(() => {
   }
 })
 
-const formatDuration = (duration: number) => {
-  if (!duration) return '00:00'
-  
-  const seconds = Math.floor(duration % 60)
-  const minutes = Math.floor(duration / 60 % 60)
-  const hours = Math.floor(duration / 3600)
-  
-  if (hours > 0) {
-    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
-  }
-  
-  return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
-}
-
 const handleSizeLoad = (e: any) => {
   if (e.detail) {
     actualSize.value = {
@@ -149,26 +151,41 @@ const handleCoverError = () => {
   coverError.value = true
 }
 
+const handleTouchStart = (e: any) => {
+  touchStartTime.value = Date.now()
+}
+
 const handlePlayTap = async () => {
-  const url = videoUrl.value
-  const poster = videoSnapshotUrl.value
-  
-  if (!url) {
-    uni.showToast({ title: '视频地址无效', icon: 'none' });
-    return;
+  // 长按判定：触摸持续时间超过阈值视为长按，交由父级 Message.nvue 处理消息操作菜单
+  // 注意：判定后必须复位 touchStartTime，否则下一次"未收到 touchstart 直接 tap"
+  // （nvue 部分场景事件丢失）会用旧时间戳算出极大 duration，导致正常点击被误判为长按
+  const startTime = touchStartTime.value
+  touchStartTime.value = 0
+  if (startTime > 0 && Date.now() - startTime >= LONG_PRESS_THRESHOLD) {
+    return
   }
 
-  try {
-    await checkAndDownloadVideo();
-    // 使用 encodeURIComponent 编码参数，避免特殊字符问题
-    const params = [
-      `url=${encodeURIComponent(url)}`,
-    ].join('&');
-    
+  const url = videoUrl.value
+  
+  // 如果视频已下载，直接播放
+  if (url) {
+    // 播放视频前先停掉所有正在播放的语音消息：
+    // 1. 销毁全局 innerAudioContext 实例（语音不再发声）
+    // 2. 广播 audioPlayerStart 让 AudioMessage 组件认为"有新音源开始"，主动重置 UI 与停止波形动画
+    //    （AudioMessage 监听 audioPlayerStart，与录音/其他语音播放打断逻辑一致）
+    stopGlobalAudioPlayer()
+    uni.$emit('audioPlayerStart', { messageId: RECORDING_PSEUDO_ID })
+
     uni.navigateTo({
-      url: `/pages/scenes/chat/videoPlayer/videoPlayer?${params}`
+      url: `/pages/scenes/chat/videoPlayer/videoPlayer?url=${encodeURIComponent(url)}`
     });
-  } catch {}
+    return;
+  }
+  
+  // 视频未下载，触发下载
+  if (!url && !isDownloadingVideo.value) {
+    await checkAndDownloadVideo();
+  }
 }
 
 // 检查并下载视频封面资源
@@ -189,8 +206,7 @@ const checkAndDownloadSnapshot = async () => {
 
 // 检查并下载视频资源
 const checkAndDownloadVideo = async () => {
-  // 确保 message 有数据且 videoUrl 为空时才下载
-  if (!props.message?.msgID || !videoUrl.value) {
+  if (!props.message?.msgID) {
     uni.showToast({ title: '视频地址无效', icon: 'none' });
     return;
   }
@@ -207,15 +223,17 @@ const checkAndDownloadVideo = async () => {
   } finally {
     isDownloadingVideo.value = false;
   }
-  return;
 }
 
-// 监听 message 变化，当有数据且 videoSnapshotUrl 为空时下载资源
+// 监听 message 变化，当有数据且资源为空时下载
 watch(
   () => props.message?.msgID,
   (newMsgID) => {
     if (newMsgID && !videoSnapshotUrl.value) {
       checkAndDownloadSnapshot()
+    }
+    if (newMsgID && !videoUrl.value) {
+      checkAndDownloadVideo()
     }
   },
   { immediate: true }
@@ -268,5 +286,30 @@ watch(
 .icon-image {
   width: 80rpx;
   height: 80rpx;
+}
+
+.download-percent {
+  font-size: 32rpx;
+  color: #FFFFFF;
+  font-weight: 600;
+}
+
+.progress-bar {
+  position: absolute;
+  left: 20rpx;
+  right: 20rpx;
+  bottom: 20rpx;
+}
+
+.progress-bar__track {
+  height: 6rpx;
+  border-radius: 3rpx;
+  background-color: rgba(255, 255, 255, 0.3);
+}
+
+.progress-bar__fill {
+  height: 6rpx;
+  border-radius: 3rpx;
+  background-color: #FFFFFF;
 }
 </style>

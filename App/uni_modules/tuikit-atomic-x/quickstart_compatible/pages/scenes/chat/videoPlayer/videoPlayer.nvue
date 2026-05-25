@@ -1,0 +1,44 @@
+<template>
+  <view class="player-container">
+    <video class="video-player" :style="{ width: screenWidth + 'px', height: screenHeight + 'px' }" :src="videoUrl" :autoplay="true" @error="handleError" @ended="handleEnded" />
+    <view class="close-btn" @tap="handleClose"><text class="close-btn-text">×</text></view>
+    <view v-if="loadError" class="error-overlay">
+      <text class="error-text">视频加载失败</text>
+      <view class="retry-btn" @tap="handleRetry"><text class="retry-btn-text">重试</text></view>
+    </view>
+  </view>
+</template>
+
+<script>
+export default {
+  data() {
+    var si = uni.getSystemInfoSync()
+    return { videoUrl: '', loadError: false, screenWidth: si.screenWidth || 375, screenHeight: si.screenHeight || 812 }
+  },
+  onLoad(options) {
+    if (options && options.url) this.videoUrl = decodeURIComponent(options.url)
+    if (!this.videoUrl) this.loadError = true
+  },
+  methods: {
+    handleClose() { uni.navigateBack() },
+    handleError(e) { console.error('[VideoPlayer] error:', e); this.loadError = true },
+    handleEnded() {},
+    handleRetry() {
+      this.loadError = false
+      var tempUrl = this.videoUrl; this.videoUrl = ''
+      var self = this; setTimeout(function() { self.videoUrl = tempUrl }, 100)
+    },
+  },
+}
+</script>
+
+<style>
+.player-container { flex: 1; background-color: #000000; position: relative; justify-content: center; align-items: center; }
+.video-player { position: absolute; top: 0; left: 0; }
+.close-btn { position: absolute; top: 88rpx; left: 32rpx; width: 64rpx; height: 64rpx; background-color: rgba(0, 0, 0, 0.5); border-radius: 32rpx; justify-content: center; align-items: center; }
+.close-btn-text { font-size: 48rpx; color: #ffffff; font-weight: 300; line-height: 56rpx; }
+.error-overlay { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(0, 0, 0, 0.8); justify-content: center; align-items: center; }
+.error-text { font-size: 32rpx; color: #ffffff; margin-bottom: 32rpx; }
+.retry-btn { padding: 16rpx 48rpx; background-color: #007AFF; border-radius: 8rpx; }
+.retry-btn-text { font-size: 28rpx; color: #ffffff; }
+</style>

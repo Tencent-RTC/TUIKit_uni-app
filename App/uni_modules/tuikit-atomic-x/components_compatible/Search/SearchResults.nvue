@@ -1,0 +1,258 @@
+<template>
+  <view class="search-results">
+    <!-- 预搜索状态 -->
+    <view v-if="showPresearch && !isConversationSearch" class="search-results__content">
+      <SearchPresearch
+        :searchHistory="searchHistory"
+        :keyword="keyword"
+        :showCloudSearch="showCloudSearch"
+        @historyClick="handleHistoryClick"
+        @clearHistory="handleClearHistory"
+        @cloudSearchClick="handleCloudSearchClick"
+      />
+    </view>
+    <!-- 加载状态 -->
+    <view v-else-if="isLoading" class="search-results__content">
+      <SearchLoading />
+    </view>
+    <!-- 空状态 -->
+    <view v-else-if="isEmpty" class="search-results__content">
+      <SearchEmpty :keyword="keyword" />
+    </view>
+    <!-- 结果列表 -->
+    <list v-else class="search-results__list">
+      <!-- 用户 -->
+      <cell v-if="!isConversationSearch && friendList && friendList.length > 0" class="search-results__section-header-cell">
+        <view class="search-results__section-header">
+          <text class="search-results__section-title">用户</text>
+        </view>
+      </cell>
+      <cell
+        v-if="!isConversationSearch"
+        class="search-results__section-item-cell"
+        v-for="friend in displayFriendList" 
+        :key="'friend-' + friend.userID"
+      >
+        <view class="search-results__item-wrapper">
+          <SearchResultItem
+            type="friend"
+            :data="friend"
+            :keyword="keyword"
+            :Avatar="AvatarComp"
+            @click="handleItemClick"
+          />
+        </view>
+      </cell>
+      <cell v-if="!isConversationSearch && showMoreFriend" class="search-results__section-more-cell">
+        <view class="search-results__section-more" @tap="handleViewMore('friend')">
+          <text class="search-results__section-more-text">查看更多用户</text>
+        </view>
+      </cell>
+      <cell v-if="!isConversationSearch && friendList && friendList.length > 0" class="search-results__section-gap"></cell>
+
+      <!-- 群聊 -->
+      <cell v-if="!isConversationSearch && groupList && groupList.length > 0" class="search-results__section-header-cell">
+        <view class="search-results__section-header">
+          <text class="search-results__section-title">群聊</text>
+        </view>
+      </cell>
+      <cell
+        v-if="!isConversationSearch"
+        class="search-results__section-item-cell"
+        v-for="group in displayGroupList" 
+        :key="'group-' + group.groupID"
+      >
+        <view class="search-results__item-wrapper">
+          <SearchResultItem
+            type="group"
+            :data="group"
+            :keyword="keyword"
+            :Avatar="AvatarComp"
+            @click="handleItemClick"
+          />
+        </view>
+      </cell>
+      <cell v-if="!isConversationSearch && showMoreGroup" class="search-results__section-more-cell">
+        <view class="search-results__section-more" @tap="handleViewMore('group')">
+          <text class="search-results__section-more-text">查看更多群聊</text>
+        </view>
+      </cell>
+      <cell v-if="!isConversationSearch && groupList && groupList.length > 0" class="search-results__section-gap"></cell>
+
+      <!-- 聊天记录标题 -->
+      <cell v-if="messageResults && messageResults.length > 0" class="search-results__section-header-cell">
+        <view class="search-results__section-header">
+          <text class="search-results__section-title">聊天记录</text>
+        </view>
+      </cell>
+
+      <!-- 会话内搜索: 展平每条消息 -->
+      <cell
+        v-if="isConversationSearch"
+        class="search-results__section-item-cell"
+        v-for="item in flatMessageList"
+        :key="'message-' + item.messageID"
+      >
+        <view class="search-results__item-wrapper">
+          <SearchResultItem
+            type="message"
+            :data="item"
+            :keyword="keyword"
+            :Avatar="AvatarComp"
+            @click="handleItemClick"
+          />
+        </view>
+      </cell>
+
+      <!-- 全局搜索: 按会话聚合 -->
+      <cell
+        v-if="!isConversationSearch"
+        class="search-results__section-item-cell"
+        v-for="messageResult in displayMessageResults" 
+        :key="'conv-' + messageResult.conversationID"
+      >
+        <view class="search-results__item-wrapper">
+          <SearchResultItem
+            type="conversation"
+            :data="messageResult"
+            :keyword="keyword"
+            :Avatar="AvatarComp"
+            @click="handleItemClick"
+          />
+        </view>
+      </cell>
+
+      <cell v-if="showMoreMessage" class="search-results__section-more-cell">
+        <view class="search-results__section-more" @tap="handleViewMore('message')">
+          <text class="search-results__section-more-text">查看更多聊天记录</text>
+        </view>
+      </cell>
+    </list>
+  </view>
+</template>
+
+<script>
+import AvatarComponent from '../Avatar'
+import SearchResultItem from './SearchResultItem/index.nvue'
+import SearchPresearch from './placeholders/SearchResultsPresearch.nvue'
+import SearchLoading from './placeholders/SearchResultsLoading.nvue'
+import SearchEmpty from './placeholders/SearchResultsEmpty.nvue'
+import { SearchTabValue } from '../../types/search'
+export default {
+  components: { SearchResultItem, SearchPresearch, SearchLoading, SearchEmpty },
+  props: {
+    keyword: { type: String, default: '' }, conversationID: { type: String, default: '' }, currentTab: { type: String, default: 'all' },
+    isLoading: { type: Boolean, default: false }, showPresearch: { type: Boolean, default: true },
+    friendList: { type: Array, default: function() { return [] } }, groupList: { type: Array, default: function() { return [] } },
+    groupMemberList: { type: Object, default: function() { return {} } }, messageResults: { type: Array, default: function() { return [] } },
+    hasMoreFriend: { type: Boolean, default: false }, hasMoreGroup: { type: Boolean, default: false },
+    hasMoreGroupMember: { type: Boolean, default: false }, hasMoreMessage: { type: Boolean, default: false },
+    searchHistory: { type: Array, default: function() { return [] } }, showCloudSearch: { type: Boolean, default: false },
+    Avatar: { type: [Object, Function], default: undefined },
+  },
+  computed: {
+    isAllTab() { return this.currentTab === SearchTabValue.All },
+    isConversationSearch() { return !!this.conversationID },
+    AvatarComp() { return this.Avatar || AvatarComponent },
+    isEmpty() {
+      if (this.isConversationSearch) return !this.messageResults || this.messageResults.length === 0
+      return (!this.friendList || this.friendList.length === 0) && (!this.groupList || this.groupList.length === 0) && (!this.messageResults || this.messageResults.length === 0)
+    },
+    displayFriendList() { return this.isAllTab ? ((this.friendList && this.friendList.slice(0, 3)) || []) : (this.friendList || []) },
+    displayGroupList() { return this.isAllTab ? ((this.groupList && this.groupList.slice(0, 3)) || []) : (this.groupList || []) },
+    displayMessageResults() { return this.isAllTab ? ((this.messageResults && this.messageResults.slice(0, 3)) || []) : (this.messageResults || []) },
+    flatMessageList() {
+      if (!this.isConversationSearch) return []
+      var result = []
+      var list = this.displayMessageResults
+      for (var i = 0; i < list.length; i++) {
+        var msgs = list[i] && list[i].messageList
+        if (msgs) {
+          for (var j = 0; j < msgs.length; j++) {
+            result.push(msgs[j])
+          }
+        }
+      }
+      return result
+    },
+    showMoreFriend() { if (this.isConversationSearch) return false; if (this.isAllTab) return this.hasMoreFriend || (this.friendList && this.friendList.length > 3); return this.hasMoreFriend },
+    showMoreGroup() { if (this.isConversationSearch) return false; if (this.isAllTab) return this.hasMoreGroup || (this.groupList && this.groupList.length > 3); return this.hasMoreGroup },
+    showMoreMessage() { if (this.isAllTab && !this.isConversationSearch) return this.hasMoreMessage || (this.messageResults && this.messageResults.length > 3); return this.hasMoreMessage },
+  },
+  methods: {
+    handleItemClick(type, data) { this.$emit('resultItemClick', type, data) },
+    handleViewMore(type) { this.$emit('viewMore', type) },
+    handleHistoryClick(kw) { this.$emit('historyClick', kw) },
+    handleClearHistory() { this.$emit('clearHistory') },
+    handleCloudSearchClick() { this.$emit('cloudSearchClick') },
+  },
+}
+</script>
+
+<style>
+.search-results {
+  flex: 1;
+  border-top: 3rpx solid #E6E9F0;
+  background-color: #ffffff;
+}
+
+.search-results__content {
+  flex: 1;
+}
+
+.search-results__list {
+  flex: 1;
+}
+
+.search-results__section-header-cell {
+  background-color: #ffffff;
+}
+
+.search-results__section-header {
+  flex-direction: row;
+  align-items: center;
+  padding: 20rpx 40rpx 3rpx;
+}
+
+.search-results__section-title {
+  font-size: 28rpx;
+  line-height: 48rpx;
+  font-weight: 500;
+  color: #333333;
+}
+
+.search-results__section-more-cell {
+  background-color: #ffffff;
+}
+
+.search-results__section-more {
+  justify-content: center;
+  padding: 26rpx 40rpx 11rpx;
+  background-color: #ffffff;
+}
+
+.search-results__section-more-text {
+  font-size: 28rpx;
+  font-weight: 400;
+  line-height: 40rpx;
+  color: #1C66E5;
+}
+
+.search-results__section-gap {
+  height: 2rpx;
+  background-color: #F5F6F7;
+}
+
+.search-results__section-item-cell{
+  padding: 0 30rpx;
+}
+
+.search-results__item-wrapper {
+  flex: 1;
+  padding: 12rpx 0;
+  border-bottom: 1rpx solid #E6E9F0;
+}
+.search-results__item-wrapper:last-child {
+  border-bottom: none;
+}
+</style>

@@ -1,0 +1,81 @@
+<template>
+  <view class="group-member-list">
+    <CustomNavbar title="群成员列表" :showBack="true" @back="handleBack" />
+    <list class="content" @loadmore="handleLoadMore" :loadmoreoffset="100">
+      <cell v-if="owner" key="owner-header"><view class="section"><text class="section__title">群主</text></view></cell>
+      <cell v-if="owner" :key="'owner-' + owner.userID">
+        <view class="member-item" @tap="handleMemberClick(owner)">
+          <Avatar :src="owner.avatarURL" :name="getMemberName(owner)" :size="80" :shape="'square'" :defaultAvatarType="'user'" pureMode />
+          <view class="member-item__info"><text class="member-item__name">{{ getMemberName(owner) }}</text></view>
+        </view>
+      </cell>
+      <cell v-if="admins.length > 0" key="admins-header"><view class="section"><text class="section__title">管理员({{ admins.length }})</text></view></cell>
+      <cell v-for="member in admins" :key="'admin-' + member.userID">
+        <view class="member-item" @tap="handleMemberClick(member)">
+          <Avatar :src="member.avatarURL" :name="getMemberName(member)" :size="80" :shape="member.avatarURL ? 'square' : 'circle'" :defaultAvatarType="'none'" pureMode />
+          <view class="member-item__info"><text class="member-item__name">{{ getMemberName(member) }}</text></view>
+        </view>
+      </cell>
+      <cell v-if="!hideMember && members.length > 0" key="members-header"><view class="section"><text class="section__title">群成员({{ members.length }})</text></view></cell>
+      <cell v-if="!hideMember" v-for="member in members" :key="'member-' + member.userID">
+        <view class="member-item" @tap="handleMemberClick(member)">
+          <Avatar :src="member.avatarURL" :name="getMemberName(member)" :size="80" :shape="'square'" :defaultAvatarType="'user'" pureMode />
+          <view class="member-item__info"><text class="member-item__name">{{ getMemberName(member) }}</text></view>
+        </view>
+      </cell>
+      <cell v-if="hasMore && !hideMember" key="load-more"><view class="load-more"><text class="load-more__text">{{ isLoading ? '加载中...' : '上拉加载更多' }}</text></view></cell>
+      <cell key="safe-area"><view class="safe-area-bottom"></view></cell>
+    </list>
+  </view>
+</template>
+
+<script>
+import CustomNavbar from '../CustomNavbar/CustomNavbar.nvue';
+import { Avatar } from '../Avatar';
+import { useGroupMemberState } from '../../state/GroupMemberState';
+import { GroupMemberRole } from '../../types/group';
+
+export default {
+  components: { CustomNavbar, Avatar },
+  props: {
+    conversationID: { type: String, default: '' },
+    hideMember: { type: Boolean, default: false },
+  },
+  data() {
+    var groupID = this.conversationID.startsWith('group_') ? this.conversationID.replace('group_', '') : ''
+    var memberState = useGroupMemberState({ groupID: groupID })
+    return { groupID: groupID, memberState: memberState, isLoading: false }
+  },
+  computed: {
+    allMembers() { return this.memberState.groupMemberList.value || [] },
+    owner() { return this.allMembers.find(function(m) { return m.role === GroupMemberRole.Owner }) || null },
+    admins() { return this.allMembers.filter(function(m) { return m.role === GroupMemberRole.Admin }) },
+    members() { return this.allMembers.filter(function(m) { return m.role === GroupMemberRole.Member }) },
+    hasMore() { return this.memberState.hasMoreGroupMembers.value },
+  },
+  methods: {
+    getMemberName(member) { return member.nameCard || member.nickname || member.userID || '' },
+    handleBack() { uni.navigateBack() },
+    handleMemberClick(member) { this.$emit('member-click', member) },
+    handleLoadMore() {
+      if (this.isLoading || !this.hasMore) return
+      this.isLoading = true
+      var self = this
+      this.memberState.fetchMoreGroupMemberList().finally(function() { self.isLoading = false })
+    },
+  },
+}
+</script>
+
+<style scoped>
+.group-member-list { flex: 1; background-color: #F5F5F5; }
+.content { flex: 1; }
+.section { margin-top: 20rpx; background-color: #FFFFFF; padding-top: 24rpx; padding-bottom: 12rpx; padding-left: 32rpx; padding-right: 32rpx; }
+.section__title { font-size: 24rpx; color: #999999; }
+.member-item { flex-direction: row; align-items: center; padding-top: 24rpx; padding-bottom: 24rpx; padding-left: 32rpx; padding-right: 32rpx; background-color: #FFFFFF; border-bottom-width: 1rpx; border-bottom-style: solid; border-bottom-color: #F0F0F0; }
+.member-item__info { flex: 1; margin-left: 24rpx; }
+.member-item__name { font-size: 30rpx; color: #333333; font-weight: 500; }
+.load-more { padding-top: 32rpx; padding-bottom: 32rpx; align-items: center; background-color: #F5F5F5; }
+.load-more__text { font-size: 26rpx; color: #999999; }
+.safe-area-bottom { height: 68rpx; background-color: #F5F5F5; }
+</style>

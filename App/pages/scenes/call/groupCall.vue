@@ -96,7 +96,7 @@
   const {
     calls,
     selfInfo,
-    setFramework,
+    setCallFramework,
   } = useCallState()
   const {
     openLocalCamera,
@@ -256,7 +256,7 @@
       isCalling.value = false;
       return;
     }
-    setFramework(14)
+    setCallFramework(14)
     calls({
       participantIds: userIDList,
       mediaType: config.value.type,

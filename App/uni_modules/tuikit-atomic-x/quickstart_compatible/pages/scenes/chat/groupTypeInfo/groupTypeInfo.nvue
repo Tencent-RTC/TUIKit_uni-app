@@ -1,0 +1,23 @@
+<template>
+  <view>
+    <GroupTypeInfo @selectType="handleSelectType" :showDocumentationLink="true"/>
+  </view>
+</template>
+
+<script>
+import { getGroupTypeById } from '@/uni_modules/tuikit-atomic-x/constants/groupTypes'
+import GroupTypeInfo from '@/uni_modules/tuikit-atomic-x/components/GroupTypeInfo/GroupTypeInfo.nvue'
+
+export default {
+  components: { GroupTypeInfo },
+  methods: {
+    handleSelectType(groupTypeId) {
+      var groupType = getGroupTypeById(groupTypeId)
+      if (groupType) {
+        uni.$emit('groupTypeSelected', groupType)
+        uni.navigateBack()
+      }
+    }
+  }
+}
+</script>

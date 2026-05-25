@@ -1,0 +1,180 @@
+<template>
+  <view class="avatar-container" :class="{ 'pure-mode': pureMode }">
+    <!-- 头像图片 -->
+    <image 
+      v-if="avatarSrc || defaultAvatarUrl"
+      :src="avatarSrc || defaultAvatarUrl"
+      :style="avatarStyle"
+      class="avatar-image"
+      mode="aspectFill"
+      @error="handleImageError"
+    />
+    
+    <!-- 默认头像（显示首字符） -->
+    <view v-else class="avatar-default" :style="avatarStyle">
+      <text class="avatar-text" :style="textStyle">{{ firstChar }}</text>
+    </view>
+
+    <!-- 在线状态指示器 -->
+    <view v-if="showOnline" class="online-indicator"></view>
+    
+    <!-- 未读消息数量徽章 -->
+    <view v-if="badgeCount > 0" class="badge" :class="{ 'badge-dot': showBadgeDot }">
+      <text v-if="!showBadgeDot" class="badge-text">{{ badgeCount > 99 ? '99+' : badgeCount }}</text>
+    </view>
+  </view>
+</template>
+
+<script>
+var DEFAULT_AVATAR_URLS = {
+  user: 'https://web.sdk.qcloud.com/im/assets/all-in-one/user.png',
+  work: 'https://web.sdk.qcloud.com/im/assets/all-in-one/work.png',
+  public: 'https://web.sdk.qcloud.com/im/assets/all-in-one/public.png',
+  meeting: 'https://web.sdk.qcloud.com/im/assets/all-in-one/meeting.png',
+  avchatroom: 'https://web.sdk.qcloud.com/im/assets/all-in-one/avchatroom.png'
+}
+
+export default {
+  name: 'Avatar',
+  props: {
+    src: {
+      type: String,
+      default: ''
+    },
+    name: {
+      type: String,
+      default: ''
+    },
+    size: {
+      type: Number,
+      default: 96
+    },
+    showOnline: {
+      type: Boolean,
+      default: false
+    },
+    badgeCount: {
+      type: Number,
+      default: 0
+    },
+    showBadgeDot: {
+      type: Boolean,
+      default: false
+    },
+    shape: {
+      type: String,
+      default: 'square'
+    },
+    defaultAvatarType: {
+      type: String,
+      default: 'none'
+    },
+    pureMode: {
+      type: Boolean,
+      default: false
+    }
+  },
+  data() {
+    return {
+      avatarSrc: this.src
+    }
+  },
+  watch: {
+    src(newVal) {
+      this.avatarSrc = newVal
+    }
+  },
+  computed: {
+    avatarStyle() {
+      return {
+        width: this.size + 'rpx',
+        height: this.size + 'rpx',
+        borderRadius: this.shape === 'circle' ? (this.size / 2) + 'rpx' : '10rpx'
+      }
+    },
+    textStyle() {
+      return {
+        fontSize: Math.floor(this.size * 0.4) + 'rpx',
+        color: 'rgba(0, 0, 0, 0.9)'
+      }
+    },
+    defaultAvatarUrl() {
+      return DEFAULT_AVATAR_URLS[this.defaultAvatarType] || ''
+    },
+    firstChar() {
+      if (!this.name) return '?'
+      var match = this.name.match(/[\u4e00-\u9fa5]|[a-zA-Z]|[0-9]/)
+      return match ? match[0].toUpperCase() : '?'
+    }
+  },
+  methods: {
+    handleImageError() {
+      this.avatarSrc = ''
+    }
+  }
+}
+</script>
+
+<style>
+.avatar-container {
+  position: relative;
+  padding: 10rpx;
+}
+
+.pure-mode {
+  padding: 0rpx;
+}
+
+.avatar-image {
+  background-color: #f5f5f5;
+}
+
+.avatar-default {
+  background-color: #EBF3FF;
+  justify-content: center;
+  align-items: center;
+}
+
+.avatar-text {
+  font-weight: 500;
+  text-align: center;
+}
+
+.online-indicator {
+  position: absolute;
+  bottom: 0rpx;
+  right: 0rpx;
+  width: 20rpx;
+  height: 20rpx;
+  border-radius: 10rpx;
+  background-color: #4CAF50;
+  border-width: 2rpx;
+  border-color: #ffffff;
+}
+
+.badge {
+  position: absolute;
+  top: 0rpx;
+  right: 0rpx;
+  background-color: #ff4444;
+  min-width: 36rpx;
+  height: 36rpx;
+  border-radius: 36rpx;
+  justify-content: center;
+  align-items: center;
+}
+
+.badge-dot {
+  width: 20rpx;
+  height: 20rpx;
+  border-radius: 10rpx;
+}
+
+.badge-text {
+  font-weight: 500;
+  font-size: 24rpx;
+  line-height: 24rpx;
+  text-align: center;
+  color: #ffffff;
+}
+</style>

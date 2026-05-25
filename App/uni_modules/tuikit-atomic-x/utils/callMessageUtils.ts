@@ -43,8 +43,8 @@ export interface CallMessageData {
  * 判断消息是否为通话消息
  */
 export function isCallMessage(message: MessageInfo): boolean {
-  const customMessage = message.messageBody?.customMessage
-  if (!customMessage?.data) {
+  const customMessage = (message.messageBody && message.messageBody.customMessage)
+  if (!(customMessage && customMessage.data)) {
     return false
   }
 
@@ -68,8 +68,8 @@ export function isGroupCallMessage(message: MessageInfo, conversationID: string)
  * 解析通话消息内容
  */
 export function parseCallMessageData(message: MessageInfo): CallMessageData | null {
-  const customMessage = message.messageBody?.customMessage
-  if (!customMessage?.data) {
+  const customMessage = (message.messageBody && message.messageBody.customMessage)
+  if (!(customMessage && customMessage.data)) {
     return null
   }
 
@@ -100,11 +100,11 @@ export function parseCallMessageData(message: MessageInfo): CallMessageData | nu
       room_id: callInfo.room_id,
       version: callInfo.version,
       data: {
-        cmd: callInfo.data?.cmd,
-        inviter: callInfo.data?.inviter,
-        message: callInfo.data?.message,
-        room_id: callInfo.data?.room_id,
-        str_room_id: callInfo.data?.str_room_id
+        cmd: (callInfo.data && callInfo.data.cmd),
+        inviter: (callInfo.data && callInfo.data.inviter),
+        message: (callInfo.data && callInfo.data.message),
+        room_id: (callInfo.data && callInfo.data.room_id),
+        str_room_id: (callInfo.data && callInfo.data.str_room_id)
       }
     }
   }
@@ -122,7 +122,7 @@ export function isVideoCall(data: CallMessageData | null): boolean {
   }
 
   // 通过 cmd 判断
-  const cmd = data.callInfo.data?.cmd
+  const cmd = (data.callInfo.data && data.callInfo.data.cmd)
   if (cmd === 'videoCall' || cmd === 'switchToVideo') {
     return true
   }
@@ -187,7 +187,7 @@ export function getCallMessageText(message: MessageInfo, showSenderName = true):
   switch (actionType) {
     case 1: {
       // 发起/挂断
-      const cmd = objectData.data?.cmd
+      const cmd = (objectData.data && objectData.data.cmd)
       if (cmd === 'audioCall' || cmd === 'videoCall') {
         if (groupID && senderName) {
           return `${senderName} 发起通话`
@@ -222,10 +222,10 @@ export function getCallMessageText(message: MessageInfo, showSenderName = true):
 
     case 3:
       // 接听
-      if (objectData.data?.cmd === 'switchToAudio') {
+      if ((objectData.data && objectData.data.cmd) === 'switchToAudio') {
         return '切换为语音通话'
       }
-      if (objectData.data?.cmd === 'switchToVideo') {
+      if ((objectData.data && objectData.data.cmd) === 'switchToVideo') {
         return '切换为视频通话'
       }
       if (groupID && senderName) {
@@ -239,7 +239,7 @@ export function getCallMessageText(message: MessageInfo, showSenderName = true):
         return `${senderName} 已拒绝`
       }
       // 检查忙线状态
-      if (objectData.line_busy === 'line_busy' || objectData.data?.message === 'lineBusy') {
+      if (objectData.line_busy === 'line_busy' || (objectData.data && objectData.data.message) === 'lineBusy') {
         if (isSelfInviter) {
           return '对方忙线'
         }
@@ -252,10 +252,10 @@ export function getCallMessageText(message: MessageInfo, showSenderName = true):
 
     case 5:
       // 超时无应答
-      if (objectData.data?.cmd === 'switchToAudio') {
+      if ((objectData.data && objectData.data.cmd) === 'switchToAudio') {
         return '切换为语音通话'
       }
-      if (objectData.data?.cmd === 'switchToVideo') {
+      if ((objectData.data && objectData.data.cmd) === 'switchToVideo') {
         return '切换为视频通话'
       }
       if (groupID && senderName) {

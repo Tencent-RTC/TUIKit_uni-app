@@ -7,9 +7,6 @@
 
     <!-- 表单 -->
     <view class="form">
-      <text class="label">SDKAppID</text>
-      <input class="input" type="number" placeholder="请输入 SDKAppID" v-model="sdkAppId" />
-
       <text class="label">UserID</text>
       <input class="input" type="text" placeholder="请输入 UserID" v-model="userId" />
 
@@ -28,24 +25,30 @@
 import { ref, computed } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { useLoginState } from '@/uni_modules/tuikit-atomic-x/state/LoginState'
+import { genTestUserSig  } from '@/uni_modules/tuikit-atomic-x/debug/GenerateTestUserSig';
 
 const statusBarHeight = ref(0)
-const sdkAppId = ref('')
-const userId = ref('')
+const sdkAppId = 0; // SDKAppID
+const userId = ref(''); // userID
+const secretKey = ''; // SecretKey
 const isLoading = ref(false)
 
-const { login, loginUserInfo, setSelfInfo } = useLoginState()
+const { login } = useLoginState()
 
-const canLogin = computed(() => sdkAppId.value.trim() && userId.value.trim() && !isLoading.value)
+const canLogin = computed(() => sdkAppId !== 0 && userId.value.trim() && !isLoading.value)
 
 const handleLogin = () => {
   if (!canLogin.value) return
   isLoading.value = true
 
   login({
-    sdkAppID: Number(sdkAppId.value),
+    sdkAppID: sdkAppId,
     userID: userId.value,
-    userSig: '',
+    userSig: genTestUserSig({
+	  SDKAppID: sdkAppId,
+	  userID: userId.value,
+	  secretKey: secretKey,
+	}).userSig,
     success: () => {
       uni.reLaunch({ url: '/pages/index/index' })
     },

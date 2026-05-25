@@ -13,6 +13,7 @@ import { VideoForegroundService } from 'com.trtc.tuikit.common.foregroundservice
 import { HybridBridge } from 'io.trtc.tuikit.atomicxcore.hybridapi.bridge';
 import { DataReport, InteractionMetrics, AtomicMetrics } from 'io.trtc.tuikit.atomicxcore.impl.common';
 DataReport.reportUIPlatform(52);
+DataReport.setFramework(11)
 
 const context: Context = UTSAndroid.getAppContext() as Context;
 
@@ -142,6 +143,13 @@ export function reportUIPlatform() {
 export function reportScene(scene: string) {
   UTSAndroid.getDispatcher("main").async(function (_) {
     DataReport.reportInteractionMetrics(SceneMap[scene] as InteractionMetrics);
+  }, null)
+}
+
+export function setCallFramework(component: number = 17) {
+  UTSAndroid.getDispatcher("main").async(function (_) {
+    const data = { "api": "setFramework", "params": { "framework": 11, "component": component } }
+    TUICallEngine.createInstance(context).callExperimentalAPI(JSON.stringify(data))
   }, null)
 }
 

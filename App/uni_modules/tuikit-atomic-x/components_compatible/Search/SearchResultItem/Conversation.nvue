@@ -1,0 +1,27 @@
+<template>
+  <ResultItem :avatarURL="messageResult.conversationAvatarURL" :title="messageResult.conversationShowName" :subtitle="subtitleText" :keyword="keyword" :Avatar="Avatar" :defaultAvatarType="defaultAvatarType" />
+</template>
+<script>
+import AvatarComponent from '../../Avatar'
+import ResultItem from './ResultItem.nvue'
+import { getMessageAbstract } from '../../ConversationList/utils'
+export default {
+  components: { ResultItem },
+  props: {
+    messageResult: { type: Object, default: function() { return {} } },
+    keyword: { type: String, default: '' },
+    Avatar: { type: [Object, Function], default: function() { return AvatarComponent } },
+  },
+  computed: {
+    previewText() {
+      var messages = this.messageResult.messageList
+      if (!messages || messages.length === 0) return ''
+      var first = messages[0]
+      if ((first.messageBody && first.messageBody.text)) return first.messageBody.text
+      return getMessageAbstract(first)
+    },
+    subtitleText() { var count = this.messageResult.messageCount; if (count === 1) return this.previewText; return count + '条相关聊天记录' },
+    defaultAvatarType() { return (this.messageResult.conversationID && this.messageResult.conversationID.startsWith('group_')) ? 'public' : 'user' },
+  },
+}
+</script>

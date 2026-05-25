@@ -1,0 +1,53 @@
+<template>
+  <view class="search-page" :style="{ paddingTop: statusBarHeight + 'px' }">
+    <Search
+      ref="searchRef"
+      :placeholder="'搜索联系人、群聊、聊天记录'"
+      :showAdvanced="true"
+      :showCancel="true"
+      :debounceTime="300"
+      @search="handleSearch"
+      @cancel="handleCancel"
+      @resultItemClick="handleResultItemClick"
+    />
+  </view>
+</template>
+
+<script>
+import Search from '@/uni_modules/tuikit-atomic-x/components/Search/Search.nvue'
+export default {
+  components: { Search },
+  data() {
+    return { statusBarHeight: uni.getSystemInfoSync().statusBarHeight || 0 }
+  },
+  methods: {
+    handleSearch(keyword, option) {},
+    handleCancel() { uni.navigateBack() },
+    handleResultItemClick(type, data) {
+      console.log('data:', type, data)
+      if (type === 'friend') {
+        uni.$contactInfoData = { friendInfo: data }
+        uni.navigateTo({ url: '/pages/scenes/chat/contacts/contactInfo/index?type=friend' })
+      } else if (type === 'group') {
+        uni.navigateTo({ url: '/pages/scenes/chat/chat/index?conversationID=group_' + data.groupID })
+      } else if (type === 'conversation') {
+        var conversationID = data.conversationID
+        if (data.messageCount === 1 && data.messageList && data.messageList.length > 0) {
+          uni.$locateMessage = data.messageList[0]
+          uni.navigateTo({ url: '/pages/scenes/chat/chat/index?conversationID=' + conversationID })
+        } else {
+          uni.navigateTo({ url: '/pages/scenes/chat/search/searchInConversation?conversationID=' + conversationID + '&keyword=' + encodeURIComponent(this.$refs.searchRef && this.$refs.searchRef.keyword || '') })
+        }
+      } else if (type === 'message') {
+        uni.$locateMessage = data
+        var cid = data.conversationID || ''
+        uni.navigateTo({ url: '/pages/scenes/chat/chat/index?conversationID=' + cid })
+      }
+    },
+  },
+}
+</script>
+
+<style>
+.search-page { flex: 1; background-color: #ffffff; }
+</style>

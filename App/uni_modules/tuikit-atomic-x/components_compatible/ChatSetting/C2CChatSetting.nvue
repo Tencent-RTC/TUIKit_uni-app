@@ -1,0 +1,143 @@
+<template>
+  <view class="c2c-chat-setting">
+    <CustomNavbar :title="navTitle" :showBack="true" @back="handleNavBack" />
+    <scroll-view class="content" scroll-y="true">
+      <view class="user-info">
+        <view class="user-info__avatar-wrapper">
+          <Avatar :src="avatarURL" :name="remark || nickname || userID || ''" :size="96" :shape="'square'" :defaultAvatarType="'user'" pureMode />
+        </view>
+        <view class="user-info__detail">
+          <text class="user-info__nickname">{{ nickname || userID }}</text>
+          <text class="user-info__id">ID：{{ userID || '-' }}</text>
+          <view><text class="user-info__signature">用户签名：{{ signature || '暂无签名' }}</text></view>
+        </view>
+      </view>
+      <view class="section-gap"></view>
+      <SettingRowNavigate v-if="isFriend" label="备注名" :value="remark || ''" @tap="handleRemarkClick" />
+      <view class="section-gap"></view>
+      <SettingRowToggle label="消息免打扰" :modelValue="isNotDisturb || false" @change="handleNotDisturbChange" />
+      <SettingRowToggle label="置顶聊天" :modelValue="isPinned || false" @change="handlePinnedChange" />
+      <view class="section-gap"></view>
+      <SettingRowToggle label="加入黑名单" :modelValue="isInBlacklist || false" @change="handleBlacklistChange" />
+      <view class="section-gap"></view>
+      <SettingRowButton label="发送消息" color="#0066FF" @press="handleSendMessage" />
+      <SettingRowButton v-if="isFriend" label="删除好友" color="#FF3B30" @press="handleDeleteFriendClick" />
+    </scroll-view>
+    <TextInputPopup :visible="showRemarkPopup" @update:visible="showRemarkPopup = $event" title="修改备注" :value="remark || ''" placeholder="请输入备注名" :maxLength="15" :maxByteLength="50" @confirm="handleRemarkConfirm" />
+    <ConfirmDialog :visible="showDeleteConfirm" @update:visible="showDeleteConfirm = $event" title="确定删除该好友？" confirmText="删除" @confirm="handleDeleteConfirm" @cancel="handleDeleteCancel" />
+  </view>
+</template>
+
+<script>
+import SettingRowToggle from './components/SettingRowToggle.nvue';
+import SettingRowNavigate from './components/SettingRowNavigate.nvue';
+import SettingRowButton from './components/SettingRowButton.nvue';
+import TextInputPopup from './components/TextInputPopup.nvue';
+import ConfirmDialog from './components/ConfirmDialog.nvue';
+import CustomNavbar from '../CustomNavbar/CustomNavbar.nvue';
+import { Avatar } from '../Avatar';
+import { useContactState } from '../../state/ContactState';
+import { useConversationListState } from '../../state/ConversationListState';
+import { ReceiveMessageOpt } from '../../types/group';
+import { throttle } from '../../utils/lodash';
+
+export default {
+  components: { SettingRowToggle, SettingRowNavigate, SettingRowButton, TextInputPopup, ConfirmDialog, CustomNavbar, Avatar },
+  props: {
+    conversationID: { type: String, default: '' },
+    showType: { type: Number, default: 0 },
+  },
+  data() {
+    return {
+      contactState: null,
+      convState: null,
+      userInfo: null,
+      statusBarHeight: 44,
+      showRemarkPopup: false,
+      showDeleteConfirm: false,
+    }
+  },
+  computed: {
+    userID() { return this.conversationID.startsWith('c2c_') ? this.conversationID.replace('c2c_', '') : '' },
+    nickname() { return (this.userInfo && this.userInfo.nickname) || '' },
+    avatarURL() { return (this.userInfo && this.userInfo.avatarURL) || '' },
+    signature() { return (this.userInfo && this.userInfo.signature) || '' },
+    remark() { return (this.userInfo && this.userInfo.remark) || '' },
+    isFriend() { return ((this.userInfo && this.userInfo.isFriend) != null ? (this.userInfo && this.userInfo.isFriend) : false) },
+    isInBlacklist() { return ((this.userInfo && this.userInfo.isInBlacklist) != null ? (this.userInfo && this.userInfo.isInBlacklist) : false) },
+    isNotDisturb() {
+      if (!this.userInfo) return false
+      return this.userInfo.receiveMessageOpt !== undefined && this.userInfo.receiveMessageOpt !== ReceiveMessageOpt.Receive
+    },
+    isPinned() {
+      if (!this.convState || !this.convState.state) return false
+      var list = this.convState.state.conversationList || []
+      var cid = this.conversationID
+      var conv = list.find(function(c) { return c.conversationID === cid })
+      return ((conv && conv.isPinned) != null ? (conv && conv.isPinned) : false)
+    },
+    navTitle() { return this.showType === 0 ? '个人设置' : '设置' },
+  },
+  beforeMount() {
+    this.contactState = useContactState('c2cSetting')
+    this.convState = useConversationListState('c2cSetting')
+    var systemInfo = uni.getSystemInfoSync()
+    this.statusBarHeight = systemInfo.statusBarHeight || 44
+    this.fetchPeerUserInfo()
+    this.convState.fetchConversationInfo(this.conversationID)
+  },
+  methods: {
+    fetchPeerUserInfo() {
+      if (!this.userID) return
+      var self = this
+      this.contactState.fetchUserInfo([this.userID]).then(function(list) {
+        if (list && list.length > 0) self.userInfo = list[0]
+      }).catch(function(err) { console.error('[C2CChatSetting] fetchPeerUserInfo failed:', err) })
+    },
+    handleRemarkClick() { this.showRemarkPopup = true },
+    handleRemarkConfirm(newRemark) {
+      if (!this.userID) return
+      var self = this
+      this.contactState.setUserRemark(this.userID, newRemark).then(function() {
+        if (self.userInfo) self.userInfo.remark = newRemark
+      }).catch(function(err) { console.error('[C2CChatSetting] setUserRemark failed:', err) })
+    },
+    handleNotDisturbChange: throttle(function(value) {
+      if (!this.userID) return
+      var opt = value ? ReceiveMessageOpt.NotNotify : ReceiveMessageOpt.Receive
+      var self = this
+      this.contactState.setReceiveMessageOpt(this.userID, opt).then(function() {
+        if (self.userInfo) self.userInfo.receiveMessageOpt = value ? ReceiveMessageOpt.NotNotify : ReceiveMessageOpt.Receive
+      }).catch(function(err) { console.error('[C2CChatSetting] setReceiveMessageOpt failed:', err) })
+    }, 1000, { leading: true, trailing: true }),
+    handlePinnedChange(value) { this.convState.pinConversation(this.conversationID, value) },
+    handleBlacklistChange(value) {
+      if (!this.userID) return
+      var self = this
+      var p = value ? this.contactState.addToBlacklist(this.userID) : this.contactState.removeFromBlacklist(this.userID)
+      p.then(function() { self.fetchPeerUserInfo() }).catch(function(err) { console.error('[C2CChatSetting] blacklist failed:', err) })
+    },
+    handleSendMessage() { if (this.showType === 0) uni.navigateBack() },
+    handleDeleteFriendClick() { this.showDeleteConfirm = true },
+    handleDeleteCancel() { this.showDeleteConfirm = false },
+    handleDeleteConfirm() {
+      this.showDeleteConfirm = false
+      if (!this.userID) return
+      this.contactState.deleteFriend(this.userID).then(function() { uni.navigateBack() }).catch(function(err) { console.error('[C2CChatSetting] deleteFriend failed:', err) })
+    },
+    handleNavBack() { uni.navigateBack() },
+  },
+}
+</script>
+
+<style scoped>
+.c2c-chat-setting { flex: 1; background-color: #F5F5F5; }
+.content { flex: 1; }
+.user-info { flex-direction: row; padding-top: 24rpx; padding-bottom: 24rpx; padding-left: 32rpx; padding-right: 32rpx; background-color: #FFFFFF; }
+.user-info__avatar-wrapper { margin-right: 30rpx; }
+.user-info__detail { flex: 1; justify-content: center; }
+.user-info__nickname { font-size: 36rpx; font-weight: 500; color: rgba(0, 0, 0, 0.9); margin-bottom: 8rpx; line-height: 48rpx; lines: 1; text-overflow: ellipsis; max-width: 400rpx; }
+.user-info__id { font-size: 26rpx; color: rgba(0, 0, 0, 0.5); margin-bottom: 4rpx; line-height: 40rpx; }
+.user-info__signature { font-size: 26rpx; color: rgba(0, 0, 0, 0.5); max-width: 550rpx; }
+.section-gap { height: 20rpx; background-color: #F0F2F7; }
+</style>

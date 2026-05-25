@@ -1,0 +1,87 @@
+<template>
+  <view class="image-message" :style="imageContainerStyle" @touchstart="handleTouchStart">
+    <view class="image-highlight">
+      <image class="image-content" :class="{ 'image-hidden': loadingState !== 'loaded' }" :src="imageUrl" mode="aspectFill" @load="handleImageLoad" @error="handleImageError" @tap="handleImageTap" />
+      <view v-if="loadingState === 'loading'" class="image-loading"><text class="loading-text">加载中...</text></view>
+      <view v-if="loadingState === 'error'" class="image-error"><text class="error-text">图片加载失败</text></view>
+    </view>
+  </view>
+</template>
+
+<script>
+import { MessageMediaFileType } from '../../../../types/message'
+import { useMessageListState } from '../../../../state/MessageListState'
+
+// 长按判定阈值，与 Message.nvue 中保持一致
+var LONG_PRESS_THRESHOLD = 350
+
+export default {
+  name: 'ImageMessage',
+  props: {
+    message: { type: Object, required: true },
+    conversationID: { type: String, default: '' }
+  },
+  data() {
+    var msgState = useMessageListState({ conversationID: this.conversationID })
+    return { loadingState: 'loading', actualSize: { width: 0, height: 0 }, touchStartTime: 0, msgState: msgState }
+  },
+  computed: {
+    imageUrl() {
+      var body = this.message.messageBody
+      var url = (body && (body.originalImagePath || body.largeImagePath || body.thumbImagePath)) || ''
+      if (url && url.startsWith('/') && !url.startsWith('file://')) url = 'file://' + url
+      return url
+    },
+    imageWidth() { return (this.message.messageBody && this.message.messageBody.originalImageWidth) || 0 },
+    imageHeight() { return (this.message.messageBody && this.message.messageBody.originalImageHeight) || 0 },
+    imageContainerStyle() {
+      var w = this.actualSize.width || this.imageWidth || 200
+      var h = this.actualSize.height || this.imageHeight || 200
+      if (w === 200 && h === 200) return { width: '120rpx', height: '120rpx', borderRadius: '20rpx' }
+      if (w > 400) { h = (h * 400) / w; w = 400 }
+      if (h > 600) { w = (w * 600) / h; h = 600 }
+      if (w < 120) { h = (h * 120) / w; w = 120 }
+      if (h < 120) { w = (w * 120) / h; h = 120 }
+      return { width: w + 'rpx', height: h + 'rpx', borderRadius: '20rpx' }
+    }
+  },
+  watch: {
+    imageUrl: function(newUrl, oldUrl) {
+      if (newUrl && !oldUrl && this.loadingState === 'error') this.loadingState = 'loading'
+    },
+    'message.msgID': { handler: function(id) { if (id && !this.imageUrl) this.checkAndDownloadResource() }, immediate: true }
+  },
+  methods: {
+    handleTouchStart(e) { this.touchStartTime = Date.now() },
+    handleImageLoad(e) { this.loadingState = 'loaded'; if (e.detail) this.actualSize = { width: e.detail.width, height: e.detail.height } },
+    handleImageError() { this.loadingState = 'error' },
+    handleImageTap() {
+      // 长按判定：触摸持续时间超过阈值视为长按，交由父级 Message.nvue 处理消息操作菜单
+      // 注意：判定后必须复位 touchStartTime，否则下一次"未收到 touchstart 直接 tap"
+      // （nvue 部分场景事件丢失）会用旧时间戳算出极大 duration，导致正常点击被误判为长按
+      var startTime = this.touchStartTime
+      this.touchStartTime = 0
+      if (startTime > 0 && Date.now() - startTime >= LONG_PRESS_THRESHOLD) return
+      if (this.loadingState === 'loaded') uni.previewImage({ urls: [this.imageUrl] })
+    },
+    async checkAndDownloadResource() {
+      if (this.message && this.message.msgID && !this.imageUrl) {
+        this.loadingState = 'loading'
+        try { await this.msgState.downloadMessageResource(this.message, MessageMediaFileType.ORIGINAL_IMAGE) }
+        catch (e) { this.loadingState = 'error' }
+      }
+    }
+  }
+}
+</script>
+
+<style>
+.image-message { position: relative; border-radius: 20rpx; overflow: hidden; }
+.image-highlight { flex: 1; position: relative; }
+.image-content { flex: 1; border-radius: 20rpx; }
+.image-hidden { opacity: 0; }
+.image-loading { position: absolute; top: 0; left: 0; right: 0; bottom: 0; align-items: center; justify-content: center; background-color: #f5f5f5; z-index: 10; }
+.loading-text { font-size: 24rpx; color: #999; }
+.image-error { position: absolute; top: 0; left: 0; right: 0; bottom: 0; align-items: center; justify-content: center; background-color: #f5f5f5; z-index: 10; }
+.error-text { font-size: 24rpx; color: #ccc; margin-top: 10rpx; }
+</style>

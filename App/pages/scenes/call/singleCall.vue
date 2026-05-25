@@ -75,7 +75,7 @@
   const {
     calls,
     selfInfo,
-    setFramework
+    setCallFramework
   } = useCallState()
   const {
     openLocalCamera,
@@ -201,7 +201,7 @@
 
       // 在调用 calls 之前先记录来源页路径
       const callerPagePath = getCurrentPageFullPath();
-      setFramework(14)
+      setCallFramework(14)
 
       calls({
         participantIds: [invitee.value.userID],

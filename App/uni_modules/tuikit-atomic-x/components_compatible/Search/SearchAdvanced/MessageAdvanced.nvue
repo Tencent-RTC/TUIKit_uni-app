@@ -1,0 +1,65 @@
+<template>
+  <view class="message-advanced">
+    <view class="options-row">
+      <text class="label">选择时间:</text>
+      <view v-for="item in rangeOptions" :key="item.value" class="option-cell" @tap="handleOptionClick(item)">
+        <text class="option" :class="{ active: selectedRange === item.value }">{{ item.value === 'all' ? displayDateRange : item.label }}</text>
+        <text v-if="item.value === 'all'" class="arrow">▼</text>
+      </view>
+    </view>
+    <DateRangePicker :visible="showDatePicker" :startDate="localStartDate" :endDate="localEndDate" @update:visible="function(v) { showDatePicker = v }" @update:startDate="function(v) { localStartDate = v }" @update:endDate="function(v) { localEndDate = v }" @change="handleDateChange" />
+  </view>
+</template>
+<script>
+import DateRangePicker from '../../DateRangePicker/DateRangePicker.nvue'
+export default {
+  components: { DateRangePicker },
+  props: { startDate: { type: String, default: '' }, endDate: { type: String, default: '' } },
+  data() {
+    return {
+      selectedRange: 'all', showDatePicker: false, localStartDate: this.startDate, localEndDate: this.endDate,
+      rangeOptions: [{ value: 'all', label: '全部' }, { value: 'today', label: '今天' }, { value: 'three_days', label: '近三天' }, { value: 'seven_days', label: '近7天' }],
+    }
+  },
+  computed: {
+    displayDateRange() {
+      if (this.localStartDate && this.localEndDate) {
+        var fs = function(d) { var p = d.split('-'); return p[1] + '/' + p[2] }
+        return fs(this.localStartDate) + '-' + fs(this.localEndDate)
+      }
+      return '全部'
+    },
+  },
+  watch: {
+    startDate(v) { this.localStartDate = v },
+    endDate(v) { this.localEndDate = v },
+  },
+  methods: {
+    formatDate(date) { return date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0') + '-' + String(date.getDate()).padStart(2, '0') },
+    handleOptionClick(item) { if (item.value === 'all') { this.selectedRange = 'all'; this.showDatePicker = true } else { this.handleSelect(item.value) } },
+    handleSelect(range) {
+      this.showDatePicker = false
+      if (this.selectedRange === range) { this.selectedRange = 'all'; this.localStartDate = ''; this.localEndDate = ''; this.$emit('update:startDate', ''); this.$emit('update:endDate', ''); this.$emit('change', '', ''); return }
+      this.selectedRange = range
+      var today = new Date(); var endDate = this.formatDate(today); var startDate = ''
+      if (range === 'today') startDate = this.formatDate(today)
+      else if (range === 'three_days') { var d = new Date(today); d.setDate(today.getDate() - 2); startDate = this.formatDate(d) }
+      else if (range === 'seven_days') { var d2 = new Date(today); d2.setDate(today.getDate() - 6); startDate = this.formatDate(d2) }
+      this.localStartDate = startDate; this.localEndDate = endDate
+      this.$emit('update:startDate', startDate); this.$emit('update:endDate', endDate); this.$emit('change', startDate, endDate)
+    },
+    handleDateChange(startDate, endDate) {
+      this.$emit('update:startDate', this.localStartDate); this.$emit('update:endDate', this.localEndDate); this.$emit('change', this.localStartDate, this.localEndDate)
+    },
+  },
+}
+</script>
+<style>
+.message-advanced { background-color: #ffffff; }
+.options-row { flex-direction: row; align-items: center; padding: 20rpx 40rpx 0; }
+.label { font-size: 28rpx; color: rgba(0, 0, 0, 0.55); margin-right: 16rpx; }
+.option-cell { flex-direction: row; align-items: center; margin-right: 20rpx; }
+.option { font-size: 28rpx; color: rgba(0, 0, 0, 0.55); padding: 12rpx; }
+.option.active { color: #1C66E5; }
+.arrow { font-size: 20rpx; color: rgba(0, 0, 0, 0.4); }
+</style>

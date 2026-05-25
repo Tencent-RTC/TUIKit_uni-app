@@ -3,8 +3,13 @@
  * 基于 plus.nativeUI.toast 实现自定义样式的 Toast 提示
  */
 
-import successIcon from '../static/icon/success-icon.png';
-import errorIcon from '../static/icon/error-icon.png';
+const ICON_BASE = '/uni_modules/tuikit-atomic-x/static/icon/';
+
+// 内置图标
+const ICONS: Record<string, string> = {
+  success: ICON_BASE + 'success-icon.png',
+  error: ICON_BASE + 'error-icon.png'
+};
 
 declare const plus: any;
 
@@ -22,12 +27,6 @@ export interface ToastOptions {
   /** 垂直位置：top | center | bottom，默认 center */
   verticalAlign?: 'top' | 'center' | 'bottom';
 }
-
-// 内置图标（base64）
-const ICONS = {
-  success: successIcon,
-  error: errorIcon
-};
 
 /**
  * 显示 Toast 提示

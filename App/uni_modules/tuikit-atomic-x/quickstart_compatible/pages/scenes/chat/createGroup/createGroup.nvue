@@ -1,0 +1,12 @@
+<template>
+  <view class="create-group-page"><CreateGroup /></view>
+</template>
+
+<script>
+import CreateGroup from '@/uni_modules/tuikit-atomic-x/components/CreateGroup/CreateGroup.nvue'
+export default { components: { CreateGroup } }
+</script>
+
+<style>
+.create-group-page { flex: 1; height: 100vh; background-color: #f5f5f5; }
+</style>

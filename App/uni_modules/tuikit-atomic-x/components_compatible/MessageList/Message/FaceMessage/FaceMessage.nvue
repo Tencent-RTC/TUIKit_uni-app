@@ -1,0 +1,29 @@
+<template>
+  <view class="face-message"><view class="face-highlight"><image class="face-image" :src="faceImageUrl" :style="faceImageStyle" mode="aspectFit" /></view></view>
+</template>
+
+<script>
+export default {
+  name: 'FaceMessage',
+  props: { message: { type: Object, required: true } },
+  computed: {
+    faceIndex() { return (this.message.messageBody && this.message.messageBody.faceIndex) || 0 },
+    faceName() { return (this.message.messageBody && this.message.messageBody.faceName) || '' },
+    faceImageUrl() { return this.getFaceUrlByIndex(this.faceIndex, this.faceName) },
+    faceImageStyle() { return { width: '120rpx', height: '120rpx' } }
+  },
+  methods: {
+    getFaceUrlByIndex(index, name) {
+      var faceMap = { 0:'/static/emoji/smile.png',1:'/static/emoji/laugh.png',2:'/static/emoji/cry.png',3:'/static/emoji/angry.png',4:'/static/emoji/surprise.png',5:'/static/emoji/love.png',6:'/static/emoji/sad.png',7:'/static/emoji/cool.png',8:'/static/emoji/wink.png',9:'/static/emoji/kiss.png' }
+      if (name) { var nameMap = { smile:'/static/emoji/smile.png',laugh:'/static/emoji/laugh.png',cry:'/static/emoji/cry.png',angry:'/static/emoji/angry.png',surprise:'/static/emoji/surprise.png',love:'/static/emoji/love.png',sad:'/static/emoji/sad.png',cool:'/static/emoji/cool.png',wink:'/static/emoji/wink.png',kiss:'/static/emoji/kiss.png' }; if (nameMap[name]) return nameMap[name] }
+      return faceMap[index] || faceMap[0]
+    }
+  }
+}
+</script>
+
+<style>
+.face-message { align-items: center; justify-content: center; }
+.face-highlight { align-items: center; justify-content: center; }
+.face-image { border-radius: 8rpx; }
+</style>

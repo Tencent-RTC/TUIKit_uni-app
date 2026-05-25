@@ -1,0 +1,324 @@
+<template>
+  <view class="result-item">
+    <component
+      :is="Avatar"
+      :src="avatarURL"
+      :name="title"
+      :size="72"
+      :defaultAvatarType="defaultAvatarType"
+    />
+    <view class="result-item__info">
+      <view class="result-item__title-row">
+        <text
+          v-for="(segment, index) in titleSegments"
+          :key="index"
+          :class="segment.highlight ? 'result-item__title--highlight' : 'result-item__title'"
+        >{{ segment.text }}</text>
+        <text
+          v-for="(segment, index) in titleSuffixSegments"
+          :key="'suffix-' + index"
+          :class="[
+            segment.highlight ? 'result-item__title-suffix--highlight' : 'result-item__title-suffix',
+            index === 0 ? 'result-item__title-suffix--first' : ''
+          ]"
+        >{{ segment.text }}</text>
+      </view>
+      <view v-if="subtitle || mediaType" class="result-item__subtitle-row">
+        <image
+          v-if="mediaType === 'image' && mediaSrc"
+          :src="mediaSrc"
+          class="result-item__image-thumb"
+          mode="aspectFill"
+        />
+        <view v-else-if="mediaType === 'video' && mediaSrc" class="result-item__video-thumb">
+          <image
+            :src="mediaSrc"
+            class="result-item__video-cover"
+            mode="aspectFill"
+          />
+          <view class="result-item__video-play">
+            <image
+              src="/uni_modules/tuikit-atomic-x/static/icon/play.png"
+              class="result-item__video-play-icon"
+              mode="aspectFill"
+            />
+          </view>
+        </view>
+        <view v-else-if="mediaType === 'sound'" class="result-item__audio">
+          <image
+            src="/uni_modules/tuikit-atomic-x/static/icon/audio.png"
+            class="result-item__audio-icon"
+            mode="aspectFill"
+          />
+          <text class="result-item__audio-duration">{{ formatSoundDuration((mediaInfo && mediaInfo.duration)) }}</text>
+        </view>
+        <view v-else-if="mediaType === 'file'" class="result-item__file">
+          <view class="result-item__file-icon">
+            <text class="result-item__file-icon-text">{{ fileIconText }}</text>
+          </view>
+          <view class="result-item__file-info">
+            <text class="result-item__file-name" :lines="1">{{ (mediaInfo && mediaInfo.fileName) || '未知文件' }}</text>
+            <text class="result-item__file-size">{{ formatFileSize((mediaInfo && mediaInfo.fileSize)) }}</text>
+          </view>
+        </view>
+        <image
+          v-else-if="mediaType === 'face'"
+          :src="faceImageUrl"
+          class="result-item__face"
+          mode="aspectFit"
+        />
+        <text
+          v-for="(segment, index) in subtitleTextSegments"
+          :key="'st-' + index"
+          :class="segment.highlight ? 'result-item__subtitle--highlight' : 'result-item__subtitle'"
+        >{{ segment.text }}</text>
+        <image
+          v-for="(segment, index) in subtitleEmojiSegments"
+          :key="'se-' + index"
+          :src="segment.src"
+          class="result-item__emoji"
+        />
+      </view>
+    </view>
+  </view>
+</template>
+
+<script>
+import AvatarComponent from '../../Avatar'
+import { emojiUrlMap, emojiBaseUrl } from '../../../constants/emoji'
+export default {
+  props: {
+    avatarURL: { type: String, default: '' }, title: { type: String, default: '' }, titleSuffix: { type: String, default: '' },
+    RightContent: { type: [Object, Function], default: undefined }, subtitle: { type: String, default: '' }, keyword: { type: String, default: '' },
+    Avatar: { type: [Object, Function], default: function() { return AvatarComponent } },
+    mediaType: { type: String, default: '' }, mediaSrc: { type: String, default: '' },
+    mediaInfo: { type: Object, default: function() { return {} } }, defaultAvatarType: { type: String, default: 'none' },
+  },
+  computed: {
+    titleSegments() { return this.splitByKeyword(this.title, this.keyword) },
+    titleSuffixSegments() { return this.splitByKeyword(this.titleSuffix, this.keyword) },
+    subtitleSegments() { return this.buildSubtitleSegments(this.subtitle, this.keyword) },
+    subtitleTextSegments() { return this.subtitleSegments.filter(function(s) { return s.type === 'text' }) },
+    subtitleEmojiSegments() { return this.subtitleSegments.filter(function(s) { return s.type === 'emoji' }) },
+    fileIconText() { var n = (this.mediaInfo && this.mediaInfo.fileName) || ''; var ext = n.split('.').pop(); ext = ext ? ext.toLowerCase() : ''; if (!ext || ext === 'unknown') return 'F'; return ext.charAt(0).toUpperCase() },
+    faceImageUrl() { var idx = (this.mediaInfo && this.mediaInfo.faceIndex) || 0; var faceMap = { 0: '/static/emoji/smile.png' }; return faceMap[idx] || faceMap[0] },
+  },
+  methods: {
+    formatSoundDuration(d) { if (!d) return "0''"; return Math.floor(d) + "''" },
+    formatFileSize(size) { if (!size) return '0 B'; var units = ['B','KB','MB','GB','TB']; var s = size; var u = 0; while (s >= 1024 && u < units.length - 1) { s /= 1024; u++ }; return (u === 0 ? s.toFixed(0) : s.toFixed(1)) + ' ' + units[u] },
+    splitByKeyword(text, keyword) {
+      if (!text) return []; if (!keyword) return [{ type: 'text', text: text, highlight: false }]
+      var segs = []; var lt = text.toLowerCase(); var lk = keyword.toLowerCase(); var last = 0; var idx = lt.indexOf(lk)
+      while (idx !== -1) { if (idx > last) segs.push({ type: 'text', text: text.slice(last, idx), highlight: false }); segs.push({ type: 'text', text: text.slice(idx, idx + keyword.length), highlight: true }); last = idx + keyword.length; idx = lt.indexOf(lk, last) }
+      if (last < text.length) segs.push({ type: 'text', text: text.slice(last), highlight: false }); return segs.length > 0 ? segs : [{ type: 'text', text: text, highlight: false }]
+    },
+    parseTextWithEmoji(text, highlight) {
+      var segs = []; var re = /\[TUIEmoji_[^\]]+\]/g; var last = 0; var match
+      while ((match = re.exec(text)) !== null) { if (match.index > last) segs.push({ type: 'text', text: text.substring(last, match.index), highlight: highlight }); var ek = match[0]; var ef = emojiUrlMap[ek]; if (ef) segs.push({ type: 'emoji', src: emojiBaseUrl + ef }); else segs.push({ type: 'text', text: ek, highlight: highlight }); last = re.lastIndex }
+      if (last < text.length) segs.push({ type: 'text', text: text.substring(last), highlight: highlight }); return segs
+    },
+    buildSubtitleSegments(text, keyword) {
+      if (!text) return []; var t = text.length > 30 ? text.slice(0, 30) + '...' : text
+      if (!keyword) return this.parseTextWithEmoji(t, false)
+      var segs = []; var lt = t.toLowerCase(); var lk = keyword.toLowerCase(); var last = 0; var idx = lt.indexOf(lk)
+      while (idx !== -1) { if (idx > last) segs.push.apply(segs, this.parseTextWithEmoji(t.slice(last, idx), false)); segs.push({ type: 'text', text: t.slice(idx, idx + keyword.length), highlight: true }); last = idx + keyword.length; idx = lt.indexOf(lk, last) }
+      if (last < t.length) segs.push.apply(segs, this.parseTextWithEmoji(t.slice(last), false)); return segs.length > 0 ? segs : this.parseTextWithEmoji(t, false)
+    },
+  },
+}
+</script>
+
+<style>
+.result-item {
+  flex-direction: row;
+  align-items: center;
+}
+
+.result-item__info {
+  flex: 1;
+  margin-left: 16rpx;
+}
+
+.result-item__title-row {
+  flex-direction: row;
+  align-items: center;
+}
+
+.result-item__title {
+  font-size: 32rpx;
+  line-height: 45rpx;
+  font-weight: 400;
+  color: rgba(0, 0, 0, 0.9);
+  lines: 1;
+  text-overflow: ellipsis;
+}
+
+.result-item__title--highlight {
+  font-size: 32rpx;
+  line-height: 45rpx;
+  font-weight: 400;
+  color: #007AFF;
+}
+
+.result-item__title-suffix {
+  font-size: 32rpx;
+  line-height: 44rpx;
+  font-weight: 400;
+  color: rgba(0, 0, 0, 0.9);
+}
+
+.result-item__title-suffix--highlight {
+  font-size: 32rpx;
+  line-height: 44rpx;
+  font-weight: 400;
+  color: #007AFF;
+}
+
+.result-item__title-suffix--first {
+  margin-left: 8rpx;
+}
+
+.result-item__right {
+  margin-left: 16rpx;
+}
+
+.result-item__subtitle-row {
+  flex-direction: row;
+  align-items: center;
+  margin-top: 8rpx;
+  overflow: hidden;
+}
+
+.result-item__subtitle {
+  font-size: 28rpx;
+  line-height: 40rpx;
+  font-weight: 400;
+  color: rgba(0, 0, 0, 0.4);
+  lines: 1;
+  text-overflow: ellipsis;
+}
+
+.result-item__subtitle--highlight {
+  font-size: 28rpx;
+  line-height: 40rpx;
+  font-weight: 400;
+  color: #007AFF;
+  lines: 1;
+  text-overflow: ellipsis;
+}
+
+.result-item__emoji {
+  width: 28rpx;
+  height: 28rpx;
+  margin: 0 4rpx;
+}
+
+.result-item__image-thumb {
+  width: 80rpx;
+  height: 80rpx;
+  border-radius: 8rpx;
+}
+
+.result-item__video-thumb {
+  position: relative;
+  width: 80rpx;
+  height: 80rpx;
+}
+
+.result-item__video-cover {
+  width: 80rpx;
+  height: 80rpx;
+  border-radius: 8rpx;
+}
+
+.result-item__video-play {
+  position: absolute;
+  left: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  align-items: center;
+  justify-content: center;
+  background-color: rgba(0, 0, 0, 0.3);
+  border-radius: 8rpx;
+}
+
+.result-item__video-play-icon {
+  width: 32rpx;
+  height: 32rpx;
+}
+
+.result-item__audio {
+  flex-direction: row;
+  align-items: center;
+  padding: 12rpx 20rpx;
+  background-color: #F0F2F7;
+  border-radius: 12rpx;
+}
+
+.result-item__audio-icon {
+  width: 32rpx;
+  height: 32rpx;
+  transform: rotate(180deg);
+}
+
+.result-item__audio-duration {
+  margin-left: 8rpx;
+  font-size: 24rpx;
+  line-height: 34rpx;
+  font-weight: 500;
+  color: rgba(0, 0, 0, 0.9);
+}
+
+.result-item__file {
+  flex-direction: row;
+  align-items: center;
+  padding: 12rpx 16rpx;
+  background-color: #FFFFFF;
+  border-radius: 12rpx;
+  border-width: 1rpx;
+  border-color: #E6E9F0;
+  max-width: 400rpx;
+}
+
+.result-item__file-icon {
+  width: 48rpx;
+  height: 48rpx;
+  justify-content: center;
+  align-items: center;
+  background-color: #E54545;
+  border-radius: 8rpx;
+  margin-right: 12rpx;
+}
+
+.result-item__file-icon-text {
+  font-size: 24rpx;
+  color: #FFFFFF;
+}
+
+.result-item__file-info {
+  flex: 1;
+}
+
+.result-item__file-name {
+  font-size: 26rpx;
+  line-height: 36rpx;
+  font-weight: 400;
+  color: rgba(0, 0, 0, 0.9);
+  lines: 1;
+  text-overflow: ellipsis;
+}
+
+.result-item__file-size {
+  font-size: 22rpx;
+  line-height: 30rpx;
+  font-weight: 400;
+  color: rgba(0, 0, 0, 0.4);
+}
+
+.result-item__face {
+  width: 64rpx;
+  height: 64rpx;
+  border-radius: 8rpx;
+}
+</style>

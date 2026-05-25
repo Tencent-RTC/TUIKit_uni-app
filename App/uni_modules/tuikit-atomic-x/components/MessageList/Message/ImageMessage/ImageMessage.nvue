@@ -2,6 +2,7 @@
   <view 
     class="image-message"
     :style="imageContainerStyle"
+    @touchstart="handleTouchStart"
   >
     <view class="image-highlight">
       <image
@@ -40,6 +41,10 @@ const props = defineProps<Props>()
 
 const loadingState = ref<'loading' | 'loaded' | 'error'>('loading')
 const actualSize = ref({ width: 0, height: 0 })
+
+// 长按判定阈值，与 Message.nvue 中保持一致
+const LONG_PRESS_THRESHOLD = 350
+const touchStartTime = ref(0)
 
 // 获取消息列表状态，用于下载资源
 const { downloadMessageResource } = useMessageListState({
@@ -132,7 +137,20 @@ const handleImageError = () => {
   loadingState.value = 'error'
 }
 
+const handleTouchStart = (e: any) => {
+  touchStartTime.value = Date.now()
+}
+
 const handleImageTap = () => {
+  // 长按判定：触摸持续时间超过阈值视为长按，交由父级 Message.nvue 处理消息操作菜单
+  // 注意：判定后必须复位 touchStartTime，否则下一次"未收到 touchstart 直接 tap"
+  // （nvue 部分场景事件丢失）会用旧时间戳算出极大 duration，导致正常点击被误判为长按
+  const startTime = touchStartTime.value
+  touchStartTime.value = 0
+  if (startTime > 0 && Date.now() - startTime >= LONG_PRESS_THRESHOLD) {
+    return
+  }
+
   if (loadingState.value === 'loaded') {
     uni.previewImage({
 			urls: [imageUrl.value],

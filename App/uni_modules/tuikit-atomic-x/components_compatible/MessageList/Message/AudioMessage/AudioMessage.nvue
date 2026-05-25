@@ -1,0 +1,340 @@
+<template>
+  <view 
+    class="audio-message" 
+    :class="'content-'+ (message.isSelf ? 'out' : 'in')" 
+    :style="{ width: audioWidth + 'rpx' }"
+    @touchstart="handleTouchStart"
+    @tap="handlePlayTap"
+  >
+    <view class="audio-highlight">
+      <view class="audio-wave-container" :class="'wave-'+ (message.isSelf ? 'out' : 'in')">
+        <view class="audio-wave-clip" :style="{ width: '12rpx', opacity: waveOpacity0 }">
+          <image src="/uni_modules/tuikit-atomic-x/static/icon/audio.png" class="audio-wave-icon" mode="aspectFit" />
+        </view>
+        <view class="audio-wave-clip" :style="{ width: '26rpx', opacity: waveOpacity1 }">
+          <image src="/uni_modules/tuikit-atomic-x/static/icon/audio.png" class="audio-wave-icon" mode="aspectFit" />
+        </view>
+        <view class="audio-wave-clip" :style="{ width: '40rpx', opacity: waveOpacity2 }">
+          <image src="/uni_modules/tuikit-atomic-x/static/icon/audio.png" class="audio-wave-icon" mode="aspectFit" />
+        </view>
+      </view>
+      <view class="audio-duration">
+        <text class="duration-text">{{ formatDuration(soundDuration) }}</text>
+      </view>
+    </view>
+  </view>
+</template>
+
+<script>
+import { MessageMediaFileType } from '../../../../types/message'
+import { useMessageListState } from '../../../../state/MessageListState'
+import { useAudioPlayer, stopGlobalAudioPlayer } from '../../../../hooks/useAudioPlayer'
+import { useCallState } from '../../../../state/CallState'
+
+// 长按判定阈值，与 Message.nvue 中保持一致
+var LONG_PRESS_THRESHOLD = 350
+
+/**
+ * Vue2 兼容版 AudioMessage（Options API）
+ *
+ * 关键设计：
+ * 1. player 对象不放入 data()，避免 Vue2 深度 observe 破坏 makeRef 内部的响应式引用
+ *    → 挂在 this._audioPlayer（_ 前缀实例属性不受 data 限制）
+ * 2. 通过 useAudioPlayer 的 onPlayingChange 回调显式桥接 isPlaying → this.playingFlag
+ *    → 避免轮询开销，响应即时
+ * 3. 切后台暂停改用 plus.globalEvent 'pause' 事件（uni.onAppHide 在 nvue 中不可靠）
+ */
+
+export default {
+  name: 'AudioMessage',
+  props: {
+    message: { type: Object, required: true },
+    conversationID: { type: String, default: '' }
+  },
+  data: function() {
+    return {
+      isDownloading: false,
+      pendingPlay: false,
+      waveStep: 0,
+      waveTimer: null,
+      playingFlag: false,
+      touchStartTime: 0,
+      msgState: useMessageListState({ conversationID: this.conversationID })
+    }
+  },
+  created: function() {
+    var self = this
+    // 本次播放是否已尝试过远端 URL 回退（避免死循环重试）
+    // 挂在 this._hasTriedRemoteFallback，不进 data() 避免不必要的响应式
+    this._hasTriedRemoteFallback = false
+    // player 挂在实例属性上，不进 data()，不被 Vue2 深度 observe
+    this._audioPlayer = useAudioPlayer({
+      messageId: this.message.msgID,
+      onPlayingChange: function(playing) {
+        // hook 内 isPlaying 变化时同步到 data，触发 watch(isPlaying) 启停波形动画
+        self.playingFlag = playing
+      },
+      onComplete: function() { self._onPlayerComplete() },
+      onError: function(error) { self._onPlayerError(error) }
+    })
+  },
+  computed: {
+    isPlaying: function() {
+      return this.playingFlag
+    },
+    soundUrl: function() {
+      return (this.message.messageBody && this.message.messageBody.soundPath) || ''
+    },
+    soundDuration: function() {
+      return (this.message.messageBody && this.message.messageBody.soundDuration) || 0
+    },
+    audioWidth: function() {
+      var d = this.soundDuration
+      if (d <= 20) return 220
+      if (d >= 60) return 474
+      return 220 + (474 - 220) * ((d - 20) / (60 - 20))
+    },
+    waveOpacity0: function() {
+      if (!this.isPlaying) return 0
+      return this.waveStep === 0 ? 1 : 0
+    },
+    waveOpacity1: function() {
+      if (!this.isPlaying) return 0
+      return this.waveStep === 1 ? 1 : 0
+    },
+    waveOpacity2: function() {
+      if (!this.isPlaying) return 1
+      return this.waveStep === 2 ? 1 : 0
+    }
+  },
+  watch: {
+    isPlaying: function(playing) {
+      if (playing) this._startWaveAnimation()
+      else this._stopWaveAnimation()
+    }
+  },
+  mounted: function() {
+    this._audioPlayer.setup()
+    uni.$on('audioPlayerStart', this._handleGlobalAudioStart)
+    // 切后台暂停：使用 plus.globalEvent 代替不可靠的 uni.onAppHide
+    var self = this
+    if (typeof plus !== 'undefined' && plus.globalEvent) {
+      this._pauseHandler = function() { self._handleAppHide() }
+      plus.globalEvent.addEventListener('pause', this._pauseHandler)
+    }
+    if (!this.soundUrl) this._preDownloadSound()
+  },
+  beforeDestroy: function() { this._cleanup() },
+  beforeUnmount: function() { this._cleanup() },
+  methods: {
+    _cleanup: function() {
+      this._stopWaveAnimation()
+      if (this._audioPlayer) this._audioPlayer.destroy()
+      uni.$off('audioPlayerStart', this._handleGlobalAudioStart)
+      if (typeof plus !== 'undefined' && plus.globalEvent && this._pauseHandler) {
+        plus.globalEvent.removeEventListener('pause', this._pauseHandler)
+      }
+    },
+    _onPlayerComplete: function() {
+      this._hasTriedRemoteFallback = false
+      // playingFlag 会由 hook 的 onPlayingChange 回调自动置为 false
+      this._stopWaveAnimation()
+    },
+    _onPlayerError: function(error) {
+      // 本地播放失败时，尝试远端 URL 回退（仅回退一次）
+      if (!this._hasTriedRemoteFallback) {
+        var remoteUrl = this._getRemoteSoundUrl()
+        if (remoteUrl) {
+          this._hasTriedRemoteFallback = true
+          // 不 toast、不停止动画，直接用远端 URL 重新播放
+          // playingFlag 由 hook 的 onPlayingChange 回调维护
+          this._audioPlayer.play(remoteUrl)
+          return
+        }
+      }
+      // 远端也无可用 URL 或远端也失败 → 最终报错
+      this._hasTriedRemoteFallback = false
+      this._stopWaveAnimation()
+      var errCode = error && error.errCode
+      var tip = errCode === -99 ? '音频格式暂不支持' : '播放失败'
+      uni.showToast({ title: tip, icon: 'none' })
+    },
+    /**
+     * 获取远端语音下载 URL
+     * 路径: rawMessage.message.messageBaseElements[0].soundDownloadUrl
+     * 任一层级缺失时返回空串
+     */
+    _getRemoteSoundUrl: function() {
+      try {
+        var rawMsg = this.message && this.message.rawMessage
+        var elements = rawMsg && rawMsg.message && rawMsg.message.messageBaseElements
+        if (elements && elements.length > 0) {
+          return (elements[0] && elements[0].soundDownloadUrl) || ''
+        }
+      } catch (e) {
+        console.error('[AudioMessage] _getRemoteSoundUrl error:', e)
+      }
+      return ''
+    },
+    formatDuration: function(d) {
+      if (!d) return "0''"
+      return Math.floor(d) + "''"
+    },
+    _startWaveAnimation: function() {
+      this._stopWaveAnimation()
+      this.waveStep = 0
+      var self = this
+      this.waveTimer = setInterval(function() {
+        self.waveStep = (self.waveStep + 1) % 3
+      }, 300)
+    },
+    _stopWaveAnimation: function() {
+      if (this.waveTimer) {
+        clearInterval(this.waveTimer)
+        this.waveTimer = null
+      }
+      this.waveStep = 0
+    },
+    _handleGlobalAudioStart: function(data) {
+      if (data && data.messageId && data.messageId !== this.message.msgID && this.playingFlag) {
+        this._stopWaveAnimation()
+        // stop() 内部会调 setPlaying(false) → onPlayingChange → this.playingFlag = false
+        this._audioPlayer.stop()
+      }
+    },
+    _handleAppHide: function() {
+      if (this.playingFlag) {
+        this._stopWaveAnimation()
+        this._audioPlayer.stop()
+      }
+    },
+    handleTouchStart: function() {
+      this.touchStartTime = Date.now()
+    },
+    handlePlayTap: function() {
+      // 长按判定：触摸持续时间超过阈值视为长按，交由父级 Message.nvue 处理消息操作菜单
+      // 注意：判定后必须复位 touchStartTime，否则下一次"未收到 touchstart 直接 tap"
+      // （nvue 部分场景事件丢失）会用旧时间戳算出极大 duration，导致正常点击被误判为长按
+      var startTime = this.touchStartTime
+      this.touchStartTime = 0
+      if (startTime > 0 && Date.now() - startTime >= LONG_PRESS_THRESHOLD) return
+      // 通话中（呼叫中 / 通话中）禁止播放语音消息，避免抢占通话音频焦点
+      if (this._isInCallNow()) {
+        uni.showToast({ title: '您正在通话中，无法播放语音消息', icon: 'none', duration: 2000 })
+        return
+      }
+      if (this.playingFlag) {
+        this._audioPlayer.stop()
+      } else {
+        if (!this.soundUrl) {
+          // 标记等待播放，并触发预下载（预下载内部会在失败时自动 fallback 远端）
+          this.pendingPlay = true
+          if (!this.isDownloading) {
+            this._preDownloadSound()
+          }
+        } else {
+          this._handlePlay()
+        }
+      }
+    },
+    /**
+     * 判断当前是否处于音视频通话中
+     * selfInfo.status === 1（呼叫中/待接听）或 2（通话中）
+     */
+    _isInCallNow: function() {
+      var callStore = useCallState()
+      var status = callStore && callStore.state && callStore.state.selfInfo && callStore.state.selfInfo.status
+      return status === 1 || status === 2
+    },
+    _preDownloadSound: function() {
+      var self = this
+      if (!this.message || !this.message.msgID) return
+      if (this.soundUrl) {
+        if (this.pendingPlay) {
+          this.pendingPlay = false
+          this._handlePlay()
+        }
+        return
+      }
+      if (this.isDownloading) return
+      this.isDownloading = true
+      this.msgState.downloadMessageResource(this.message, MessageMediaFileType.SOUND).then(function() {
+        if (self.pendingPlay && self.soundUrl) {
+          self.pendingPlay = false
+          self._handlePlay()
+        }
+      }).catch(function(err) {
+        console.error('[AudioMessage] preDownloadSound failed:', err)
+        // 下载失败，尝试用远端 URL 直接播放作为兜底
+        if (self.pendingPlay) {
+          self.pendingPlay = false
+          var remoteUrl = self._getRemoteSoundUrl()
+          if (remoteUrl) {
+            // 标记为已尝试远端回退，避免 onError 再次重试
+            self._hasTriedRemoteFallback = true
+            stopGlobalAudioPlayer()
+            // playingFlag 由 hook 的 onPlayingChange 回调维护
+            self._audioPlayer.play(remoteUrl)
+          } else {
+            uni.showToast({ title: '语音下载失败', icon: 'none' })
+          }
+        }
+      }).finally(function() {
+        self.isDownloading = false
+      })
+    },
+    /**
+     * 开始播放（三级兜底）
+     * 1. 优先本地路径
+     * 2. 无本地路径但有远端 URL → 直接用远端
+     * 3. 都没有 → toast 报错
+     * 本地播放失败时 _onPlayerError 内会自动回退到远端
+     */
+    _handlePlay: function() {
+      // 通话中（呼叫中 / 通话中）禁止播放——拦截所有路径（用户主动 tap、下载完成自动播）
+      // 静默 return：tap 入口已弹过 toast，下载完成的自动播放属内部流程，无需再扰民
+      if (this._isInCallNow()) {
+        this.pendingPlay = false
+        return
+      }
+      // 进入新一轮播放，重置远端回退标志
+      this._hasTriedRemoteFallback = false
+      
+      var localUrl = this.soundUrl
+      var remoteUrl = this._getRemoteSoundUrl()
+      
+      if (!localUrl && !remoteUrl) {
+        uni.showToast({ title: '语音资源不可用', icon: 'none' })
+        return
+      }
+      
+      stopGlobalAudioPlayer()
+      
+      // 没本地路径，直接走远端（标记为已尝试过回退，避免 onError 再次回退）
+      if (!localUrl && remoteUrl) {
+        this._hasTriedRemoteFallback = true
+        this._audioPlayer.play(remoteUrl)
+        return
+      }
+      
+      // 播放本地资源（失败时 _onPlayerError 内会自动回退到远端）
+      // playingFlag 由 hook 的 onPlayingChange 回调维护
+      this._audioPlayer.play(localUrl)
+    }
+  }
+}
+</script>
+
+<style>
+.audio-message { min-width: 200rpx; }
+.content-in { background-color: #F0F2F7; border-radius: 4rpx 20rpx 20rpx 20rpx; }
+.content-out { background-color: #CCE2FF; border-radius: 20rpx 4rpx 20rpx 20rpx; }
+.audio-highlight { flex: 1; flex-direction: row; align-items: center; padding: 20rpx; background-color: transparent; }
+.content-out .audio-highlight { flex-direction: row-reverse; }
+.audio-wave-container { position: relative; width: 40rpx; height: 40rpx; }
+.wave-in { transform: scaleX(-1); }
+.audio-wave-clip { position: absolute; right: 0; top: 0; height: 40rpx; overflow: hidden; }
+.audio-wave-icon { position: absolute; right: 0; top: 0; width: 40rpx; height: 40rpx; }
+.audio-duration { margin-left: 8rpx; margin-right: 8rpx; }
+.duration-text { padding: 0 4rpx; font-size: 28rpx; line-height: 32rpx; font-weight: 500; color: rgba(0, 0, 0, 0.9); }
+</style>

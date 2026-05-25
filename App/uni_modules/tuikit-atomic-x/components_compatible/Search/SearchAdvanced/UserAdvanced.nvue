@@ -1,0 +1,63 @@
+<template>
+  <view class="user-advanced">
+    <view class="options-row" @tap="handleClick">
+      <text class="label">性别:</text>
+      <text class="value active">{{ currentGenderLabel }}</text>
+      <text class="arrow">▼</text>
+      <text class="label" style="margin-left: 32rpx;">年龄:</text>
+      <text class="value">{{ ageRangeText }}</text>
+    </view>
+  </view>
+</template>
+<script>
+import { Gender } from '../../../types/userProfile'
+export default {
+  props: {
+    minBirthday: { type: Number, default: undefined },
+    maxBirthday: { type: Number, default: undefined },
+    gender: { type: Number, default: 0 },
+  },
+  data() {
+    return {
+      selectedMinAge: this.birthdayToAge(this.maxBirthday) || 0,
+      selectedMaxAge: this.birthdayToAge(this.minBirthday) || 99,
+      selectedGender: this.gender,
+      genderOptions: [{ label: '不限', value: Gender.UNKNOWN }, { label: '男', value: Gender.MALE }, { label: '女', value: Gender.FEMALE }],
+    }
+  },
+  computed: {
+    currentGenderLabel() { var o = this.genderOptions.find(function(o) { return o.value === this.selectedGender }.bind(this)); return o ? o.label : '不限' },
+    ageRangeText() { return this.selectedMinAge + '-' + this.selectedMaxAge },
+  },
+  watch: {
+    minBirthday(v) { this.selectedMaxAge = this.birthdayToAge(v) || 99 },
+    maxBirthday(v) { this.selectedMinAge = this.birthdayToAge(v) || 0 },
+    gender(v) { this.selectedGender = v },
+  },
+  methods: {
+    birthdayToAge(birthday) {
+      if (birthday === undefined) return undefined
+      var s = String(birthday); var y = parseInt(s.substring(0, 4)); var m = parseInt(s.substring(4, 6)); var d = parseInt(s.substring(6, 8))
+      var today = new Date(); var age = today.getFullYear() - y
+      if (today.getMonth() + 1 - m < 0 || (today.getMonth() + 1 - m === 0 && today.getDate() < d)) age--
+      return age
+    },
+    ageToBirthday(age) { var t = new Date(); return parseInt('' + (t.getFullYear() - age) + String(t.getMonth() + 1).padStart(2, '0') + String(t.getDate()).padStart(2, '0')) },
+    handleClick() { this.$emit('click') },
+    updateFilter(minAge, maxAge, gender) {
+      this.selectedMinAge = minAge; this.selectedMaxAge = maxAge; this.selectedGender = gender
+      var minB = maxAge !== 99 ? this.ageToBirthday(maxAge) : undefined
+      var maxB = minAge !== 0 ? this.ageToBirthday(minAge) : undefined
+      this.$emit('update:minBirthday', minB); this.$emit('update:maxBirthday', maxB); this.$emit('update:gender', gender); this.$emit('change', minB, maxB, gender)
+    },
+  },
+}
+</script>
+<style>
+.user-advanced { background-color: #ffffff; }
+.options-row { flex-direction: row; align-items: center; padding: 20rpx 40rpx; }
+.label { font-size: 28rpx; color: rgba(0, 0, 0, 0.55); margin-right: 8rpx; }
+.value { font-size: 28rpx; color: rgba(0, 0, 0, 0.55); padding: 12rpx; }
+.value.active { color: #1C66E5; }
+.arrow { font-size: 20rpx; color: rgba(0, 0, 0, 0.4); }
+</style>

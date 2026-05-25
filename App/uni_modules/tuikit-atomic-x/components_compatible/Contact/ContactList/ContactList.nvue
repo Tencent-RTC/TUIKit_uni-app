@@ -1,0 +1,334 @@
+<template>
+  <view class="contact-list">
+    <list 
+      ref="listRef"
+      class="contact-list__scroll" 
+      :show-scrollbar="false"
+    >
+      <cell 
+        v-for="(entry, index) in visibleEntryList" 
+        :key="entry.type"
+      >
+        <view 
+          class="contact-list__entry"
+          :class="{ 'contact-list__entry--last': index === visibleEntryList.length - 1 }"
+          @tap="handleEntryClick(entry.type)"
+        >
+          <image class="contact-list__entry-icon" :src="entry.icon" mode="aspectFit" />
+          <view class="contact-list__entry-content">
+            <text class="contact-list__entry-text">{{ entry.label }}</text>
+            <view class="contact-list__entry-right">
+              <view v-if="entry.badge" class="contact-list__entry-badge">
+                  <text class="contact-list__entry-badge-text">{{ entry.badge > 99 ? '99+' : entry.badge }}</text>
+              </view>
+              <image class="contact-list__entry-arrow" src="/uni_modules/tuikit-atomic-x/static/icon/arrow-right.png" mode="aspectFit" />
+            </view>
+          </view>
+        </view>
+      </cell>
+
+      <cell v-if="isLoading" key="loading">
+        <view class="contact-list__placeholder">
+          <component v-if="PlaceholderLoading" :is="PlaceholderLoading" />
+        </view>
+      </cell>
+
+      <cell v-else-if="friendList.length === 0" key="empty">
+        <view class="contact-list__placeholder">
+          <component v-if="PlaceholderEmptyList" :is="PlaceholderEmptyList" text="暂无好友" />
+        </view>
+      </cell>
+
+      <cell 
+        v-for="item in showFlatList"
+        :key="item.cellKey"
+        :ref="item.refKey || ''"
+        @appear="item.type === 'letter' ? handleLetterAppear(item.letter) : undefined"
+        @disappear="item.type === 'letter' ? handleLetterDisappear(item.letter) : undefined"
+      >
+        <view v-if="item.type === 'letter'" class="contact-list__index">
+          <text class="contact-list__index-text">{{ item.letter }}</text>
+          <text class="contact-list__index-text">（{{item.count}}）</text>
+        </view>
+        <view 
+          v-if="item.type === 'friend'"
+          class="contact-list__friend"
+          :class="{ 'contact-list__friend--selected': selectedContactID === item.friend.userID }"
+          @tap="handleContactClick(item.friend)"
+        >
+          <component 
+            :is="Avatar"
+            :src="item.friend.avatarURL || ''"
+            :name="(item.friend && item.friend.remark) || item.friend.nickname || item.friend.userID"
+            :size="80"
+            shape="square"
+            defaultAvatarType="user"
+            pureMode
+          />
+          <view class="contact-list__friend-info">
+            <text class="contact-list__friend-name" :numberOfLines="1">{{ (item.friend && item.friend.remark) || item.friend.nickname || item.friend.userID }}</text>
+          </view>
+        </view>
+      </cell>
+
+      <cell key="footer">
+        <view class="contact-list__footer">
+          <text class="contact-list__footer-text">{{ friendList.length }}位联系人</text>
+        </view>
+      </cell>
+    </list>
+
+    <view v-if="indexLetters.length > 0" class="contact-list__sidebar-wrapper">
+      <view class="contact-list__sidebar">
+        <text
+          v-for="letter in indexLetters"
+          :key="'sb-' + letter"
+          class="contact-list__sidebar-letter"
+          :class="{ 'contact-list__sidebar-letter--active': activeLetter === letter }"
+          @tap="handleLetterClick(letter)"
+        >{{ letter }}</text>
+      </view>
+    </view>
+  </view>
+</template>
+
+<script>
+import AvatarComponent from '../../Avatar'
+import DefaultEmptyList from '../placeholders/EmptyList.nvue'
+import DefaultLoading from '../placeholders/Loading.nvue'
+import { useContactState } from '../../../state/ContactState'
+import { useGroupState } from '../../../state/GroupState'
+import { sortByFirstChar } from '../../../utils/sortByFirstChar'
+var iconNewContacts = '/uni_modules/tuikit-atomic-x/static/icon/new-contacts.png'
+var iconGroupNotifications = '/uni_modules/tuikit-atomic-x/static/icon/group-notifications.png'
+var iconGroups = '/uni_modules/tuikit-atomic-x/static/icon/groups.png'
+var iconBlacklist = '/uni_modules/tuikit-atomic-x/static/icon/blacklist.png'
+export default {
+  props: {
+    Avatar: { type: [Object, Function], default: function() { return AvatarComponent } },
+    PlaceholderEmptyList: { type: [Object, Function], default: function() { return DefaultEmptyList } },
+    PlaceholderLoading: { type: [Object, Function], default: function() { return DefaultLoading } },
+    showNewContact: { type: Boolean, default: true },
+    showGroupNotification: { type: Boolean, default: true },
+    showMyGroups: { type: Boolean, default: true },
+    showBlacklist: { type: Boolean, default: true },
+  },
+  data() {
+    var cs = useContactState(); var gs = useGroupState()
+    return { contactState: cs, groupState: gs, isLoading: false, selectedContactID: '', activeLetter: '', dom: uni.requireNativePlugin('dom'), visibleLetters: {} }
+  },
+  computed: {
+    friendList() { return this.contactState.friendList.value || [] },
+    entryList() {
+      return [
+        { type: 'newContact', label: '新的联系人', icon: iconNewContacts, visible: this.showNewContact, badge: this.contactState.friendApplicationUnreadCount.value },
+        { type: 'groupNotification', label: '群聊通知', icon: iconGroupNotifications, visible: this.showGroupNotification, badge: this.groupState.groupApplicationUnreadCount.value },
+        { type: 'myGroups', label: '我的群聊', icon: iconGroups, visible: this.showMyGroups },
+        { type: 'blacklist', label: '黑名单', icon: iconBlacklist, visible: this.showBlacklist },
+      ]
+    },
+    visibleEntryList() { return this.entryList.filter(function(i) { return i.visible }) },
+    sidebarTopPx() { var c = this.visibleEntryList.length; return c * (96 / 750) * uni.getSystemInfoSync().screenWidth },
+    groupedFriendList() {
+      var r = sortByFirstChar(this.friendList, function(item) { return item.remark || item.nickname || item.userID || '' })
+      var letters = Object.keys(r.groupedList).sort(function(a, b) { if (a === '#') return 1; if (b === '#') return -1; return a.localeCompare(b) })
+      return letters.map(function(l) { return { letter: l, friends: r.groupedList[l] } })
+    },
+    showFlatList() {
+      if (this.isLoading || this.friendList.length === 0) return []
+      var result = []
+      this.groupedFriendList.forEach(function(g) {
+        result.push({ type: 'letter', letter: g.letter, count: g.friends.length, cellKey: 'idx-' + g.letter, refKey: 'letter_' + g.letter })
+        g.friends.forEach(function(f) {
+          result.push({ type: 'friend', friend: f, cellKey: 'f-' + f.userID, refKey: '' })
+        })
+      })
+      return result
+    },
+    indexLetters() { return this.groupedFriendList.map(function(g) { return g.letter }) },
+  },
+  watch: { indexLetters: { handler: function(l) { if (l.length > 0 && !this.activeLetter) this.activeLetter = l[0] }, immediate: true } },
+  mounted() { this.groupState.fetchGroupApplicationList() },
+  beforeDestroy() { this.contactState.destroyStore() },
+  beforeUnmount() { this.contactState.destroyStore() },
+  methods: {
+    handleLetterClick(letter) { this.activeLetter = letter; var ref = this.$refs['letter_' + letter]; var el = Array.isArray(ref) ? ref[0] : ref; if (el) this.dom.scrollToElement(el, { offset: 0, animated: false }) },
+    handleLetterAppear(letter) { this.visibleLetters[letter] = true; this.updateActiveLetter() },
+    handleLetterDisappear(letter) { delete this.visibleLetters[letter]; this.updateActiveLetter() },
+    updateActiveLetter() { for (var i = 0; i < this.indexLetters.length; i++) { if (this.visibleLetters[this.indexLetters[i]]) { if (this.activeLetter !== this.indexLetters[i]) this.activeLetter = this.indexLetters[i]; break } } },
+    handleEntryClick(type) { this.$emit('entryClick', type) },
+    handleContactClick(contact) { this.selectedContactID = contact.contactID; this.$emit('contactSelect', contact) },
+  },
+}
+</script>
+
+<style>
+.contact-list {
+  flex: 1;
+  background-color: #FFFFFF;
+  position: relative;
+}
+
+.contact-list__scroll {
+  flex: 1;
+}
+
+/* 入口项 */
+.contact-list__entry {
+  flex: 1;
+  flex-direction: row;
+  align-items: center;
+  padding: 0 32rpx;
+  background-color: #FFFFFF;
+}
+
+.contact-list__entry--last {
+  border-bottom-width: 0;
+}
+
+.contact-list__entry-icon {
+  width: 80rpx;
+  height: 80rpx;
+  border-radius: 10rpx;
+  margin-right: 24rpx;
+}
+
+.contact-list__entry-content {
+  flex: 1;
+  padding: 36rpx 0;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1rpx solid #DBDBDB;
+}
+
+.contact-list__entry-text {
+  flex: 1;
+  font-size: 36rpx;
+  line-height: 48rpx;
+  color: #111111;
+}
+
+.contact-list__entry-right {
+  flex-direction: row;
+  align-items: center;
+}
+
+.contact-list__entry-badge {
+  min-width: 36rpx;
+  height: 36rpx;
+  background-color: #FF584C;
+  border-radius: 18rpx;
+  justify-content: center;
+  align-items: center;
+  padding-left: 10rpx;
+  padding-right: 10rpx;
+  margin-right: 16rpx;
+}
+
+.contact-list__entry-badge-text {
+  font-size: 24rpx;
+  color: #FFFFFF;
+}
+
+.contact-list__entry-arrow {
+  width: 14rpx;
+  height: 24rpx;
+}
+
+/* 占位区域 */
+.contact-list__placeholder {
+  padding-top: 100rpx;
+  padding-bottom: 100rpx;
+  justify-content: center;
+  align-items: center;
+}
+
+/* 字母索引 */
+.contact-list__index {
+  flex-direction: row;
+  align-items: center;
+  padding: 12rpx 32rpx;
+  background-color: #F2F3F5;
+}
+
+.contact-list__index-text {
+  font-size: 28rpx;
+  color: #888888;
+  font-weight: 400;
+}
+
+/* 好友项 */
+.contact-list__friend {
+  flex-direction: row;
+  align-items: center;
+  padding: 0 32rpx;
+  background-color: #FFFFFF;
+}
+
+.contact-list__friend--selected {
+  background-color: #F0F2F7;
+}
+
+.contact-list__friend-info {
+  flex: 1;
+  margin-left: 24rpx;
+  padding: 36rpx 0;
+  border-bottom: 1rpx solid #DBDBDB;
+}
+
+.contact-list__friend-name {
+  flex: 1;
+  font-size: 36rpx;
+  line-height: 48rpx;
+  color: #111111;
+  lines: 1;
+  text-overflow: ellipsis;
+}
+
+/* 右侧字母索引栏包装器 */
+.contact-list__sidebar-wrapper {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  justify-content: center;
+  align-items: center;
+}
+
+/* 右侧字母索引栏 */
+.contact-list__sidebar {
+  padding: 0 25rpx;
+  align-items: center;
+  justify-content: center;
+  background-color: transparent;
+}
+
+.contact-list__sidebar-letter {
+  margin-bottom: 4rpx;
+  font-size: 24rpx;
+  color: #888888;
+  font-weight: 600;
+  line-height: 28rpx;
+  text-align: center;
+}
+
+.contact-list__sidebar-letter--active {
+  color: #1C66E5;
+  font-weight: bold;
+}
+
+/* 底部好友统计 */
+.contact-list__footer {
+  padding: 24rpx 0;
+  background-color: #F2F3F5;
+  align-items: center;
+  justify-content: center;
+}
+
+.contact-list__footer-text {
+  font-size: 24rpx;
+  line-height: 34rpx;
+  color: #B2B2B2;
+}
+</style>

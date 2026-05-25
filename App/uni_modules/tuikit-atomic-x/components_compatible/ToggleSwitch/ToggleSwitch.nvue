@@ -1,0 +1,47 @@
+<template>
+  <view 
+    class="toggle-switch" 
+    :class="{ 'toggle-switch--animated': hasInteracted }"
+    :style="{ backgroundColor: checked ? activeColor : '#E5E5E5' }"
+    @tap.stop="handleTap"
+  >
+    <view 
+      class="toggle-switch__thumb"
+      :class="{ 'toggle-switch__thumb--animated': hasInteracted }"
+      :style="{ transform: checked ? 'translateX(' + thumbOffset + 'px)' : 'translateX(0)' }"
+    />
+  </view>
+</template>
+
+<script>
+import { throttle } from '../../utils/lodash';
+export default {
+  name: 'ToggleSwitch',
+  props: {
+    checked: { type: Boolean, default: false },
+    activeColor: { type: String, default: '#0066FF' },
+    disabled: { type: Boolean, default: false },
+  },
+  data() {
+    var sw = uni.getSystemInfoSync().screenWidth || 375
+    return { hasInteracted: false, thumbOffset: Math.round(40 / 750 * sw) }
+  },
+  methods: {
+    handleTap: throttle(function() {
+      if (this.disabled) {
+        uni.showToast({ title: '当前状态不可修改', icon: 'none' })
+        return
+      }
+      this.hasInteracted = true
+      this.$emit('change', { detail: { value: !this.checked } })
+    }, 700, { leading: true, trailing: false })
+  }
+}
+</script>
+
+<style scoped>
+.toggle-switch { width: 100rpx; height: 60rpx; border-radius: 30rpx; background-color: #E5E5E5; padding-top: 4rpx; padding-bottom: 4rpx; padding-left: 4rpx; padding-right: 4rpx; }
+.toggle-switch--animated { transition-property: background-color; transition-duration: 200ms; transition-timing-function: ease-out; }
+.toggle-switch__thumb { width: 52rpx; height: 52rpx; border-radius: 26rpx; background-color: #FFFFFF; }
+.toggle-switch__thumb--animated { transition-property: transform; transition-duration: 200ms; transition-timing-function: ease-out; }
+</style>

@@ -76,7 +76,7 @@ const customText = computed(() => {
 /* 居中消息样式（如群组通话消息） */
 .custom-message--center {
   background-color: transparent;
-  max-width: 100%;
+  max-width: 750rpx;
   min-width: auto;
 }
 
