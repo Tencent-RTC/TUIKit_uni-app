@@ -1,0 +1,36 @@
+<template>
+  <view class="search-page" :style="{ paddingTop: statusBarHeight + 'px' }">
+    <Search ref="searchRef" :conversationID="conversationID" :initialKeyword="initialKeyword" :initialOption="initialOption"
+      :placeholder="'搜索聊天记录'" :showCancel="true" :debounceTime="300"
+      @search="handleSearch" @cancel="handleCancel" @resultItemClick="handleResultItemClick" />
+  </view>
+</template>
+
+<script>
+import Search from '@/uni_modules/tuikit-atomic-x/components/Search/Search.nvue'
+export default {
+  components: { Search },
+  data() {
+    return { conversationID: '', initialKeyword: '', initialOption: {}, statusBarHeight: uni.getSystemInfoSync().statusBarHeight || 0 }
+  },
+  onLoad(options) {
+    if (options.conversationID) this.conversationID = options.conversationID
+    if (options.keyword) this.initialKeyword = decodeURIComponent(options.keyword)
+    if (options.option) { try { this.initialOption = JSON.parse(decodeURIComponent(options.option)) } catch(e) {} }
+  },
+  methods: {
+    handleSearch(keyword, option) {},
+    handleCancel() { uni.navigateBack() },
+    handleResultItemClick(type, data) {
+      if (type === 'message') {
+        uni.$locateMessage = data
+        uni.navigateTo({ url: '/pages/scenes/chat/chat/index?conversationID=' + this.conversationID })
+      }
+    },
+  },
+}
+</script>
+
+<style>
+.search-page { flex: 1; background-color: #ffffff; }
+</style>

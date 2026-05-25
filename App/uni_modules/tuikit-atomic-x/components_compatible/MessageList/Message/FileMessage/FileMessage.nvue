@@ -1,0 +1,192 @@
+<template>
+  <view
+    class="file-message"
+    :class="['content-'+ (message.isSelf ? 'out' : 'in')]"
+    @touchstart="handleTouchStart"
+    @touchend="handleTouchEnd"
+    @tap="handleFileTap"
+  >
+    <view class="file-highlight">
+      <image :src="fileIconSrc" class="file-icon" mode="aspectFit" />
+      <view class="file-info">
+        <view class="file-name"><text class="file-name-text" :lines="2">{{ fileName }}</text></view>
+        <view class="file-footer">
+          <text class="file-size-text">{{ formatFileSize(fileSize) }}</text>
+          <view class="file-download" v-if="!isDownloaded">
+            <text v-if="isDownloading" class="download-percent">{{ downloadProgress }}%</text>
+            <image v-else src="/uni_modules/tuikit-atomic-x/static/icon/download.png" class="icon-image" mode="aspectFill" />
+          </view>
+        </view>
+      </view>
+    </view>
+    <view v-if="isDownloading" class="downloading" :class="['content-'+ (message.isSelf ? 'out' : 'in')]"></view>
+  </view>
+</template>
+
+<script>
+import { MessageMediaFileType } from '../../../../types/message'
+import { useMessageListState } from '../../../../state/MessageListState'
+
+import wordIcon from '../../../../static/icon/file-types/word_icon.png'
+import excelIcon from '../../../../static/icon/file-types/excel_icon.png'
+import pptIcon from '../../../../static/icon/file-types/ppt_icon.png'
+import pdfIcon from '../../../../static/icon/file-types/pdf_icon.png'
+import txtIcon from '../../../../static/icon/file-types/txt_icon.png'
+import imageIcon from '../../../../static/icon/file-types/image_icon.png'
+import compressIcon from '../../../../static/icon/file-types/compress_icon.png'
+import unknownIcon from '../../../../static/icon/file-types/unknown_icon.png'
+
+// 长按判定阈值，与 Message.nvue 中保持一致
+var LONG_PRESS_THRESHOLD = 350
+// uni.openDocument 官方支持的文档类型
+var DOCUMENT_TYPES = ['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'pdf']
+// 文件类型 → 图标资源映射
+var FILE_TYPE_ICON_MAP = {
+  doc: wordIcon, docx: wordIcon,
+  xls: excelIcon, xlsx: excelIcon, csv: excelIcon,
+  ppt: pptIcon, pptx: pptIcon,
+  pdf: pdfIcon,
+  txt: txtIcon, log: txtIcon, json: txtIcon, xml: txtIcon, md: txtIcon,
+  jpg: imageIcon, jpeg: imageIcon, png: imageIcon, gif: imageIcon,
+  bmp: imageIcon, webp: imageIcon, svg: imageIcon,
+  zip: compressIcon, rar: compressIcon, '7z': compressIcon,
+  tar: compressIcon, gz: compressIcon, bz2: compressIcon
+}
+
+export default {
+  name: 'FileMessage',
+  props: {
+    message: { type: Object, required: true },
+    conversationID: { type: String, default: '' }
+  },
+  data() {
+    return {
+      isDownloading: false,
+      touchStartTime: 0,
+      msgState: useMessageListState({ conversationID: this.conversationID })
+    }
+  },
+  computed: {
+    fileName() { return (this.message.messageBody && this.message.messageBody.fileName) || '未知文件' },
+    fileSize() { return (this.message.messageBody && this.message.messageBody.fileSize) || 0 },
+    filePath() { return (this.message.messageBody && this.message.messageBody.filePath) || '' },
+    isDownloaded() { return !!this.filePath },
+    // 下载进度（0-100），与 VideoMessage 一致：SDK 下载时通过 message.progress 推送
+    downloadProgress() { return (this.message && this.message.progress) != null ? this.message.progress : 0 },
+    fileExtension() { var ext = this.fileName.split('.').pop(); return (ext && ext.toLowerCase()) || '' },
+    fileIconSrc() { return FILE_TYPE_ICON_MAP[this.fileExtension] || unknownIcon }
+  },
+  methods: {
+    formatFileSize(size) {
+      if (!size) return '0 B'; var units = ['B', 'KB', 'MB', 'GB', 'TB']; var s = size; var i = 0
+      while (s >= 1024 && i < units.length - 1) { s /= 1024; i++ }
+      return (i === 0 ? s.toFixed(0) : s.toFixed(1)) + ' ' + units[i]
+    },
+    /**
+     * 调起系统应用打开文件
+     * - Office/PDF 文档 → uni.openDocument（跨平台一致体验）
+     * - 其他类型 → Android plus.runtime.openFile / iOS uni.openDocument
+     */
+    _openFile(path) {
+      if (!path) return
+      // #ifdef APP-PLUS
+      var ext = this.fileExtension
+      var isDocument = DOCUMENT_TYPES.indexOf(ext) >= 0
+      var platform = uni.getSystemInfoSync().platform
+      var localPath = path.indexOf('file://') === 0 ? path.substring(7) : path
+      var self = this
+
+      if (isDocument) {
+        uni.openDocument({
+          filePath: localPath,
+          fileType: ext,
+          showMenu: true,
+          fail: function(err) {
+            console.error('[FileMessage] openDocument failed:', err)
+            if (platform === 'android') {
+              self._tryOpenWithSystemApp(localPath)
+            } else {
+              uni.showToast({ title: '无法打开此文件', icon: 'none' })
+            }
+          }
+        })
+        return
+      }
+
+      if (platform === 'android') {
+        this._tryOpenWithSystemApp(localPath)
+      } else {
+        uni.openDocument({
+          filePath: localPath,
+          showMenu: true,
+          fail: function(err) {
+            console.error('[FileMessage] iOS openDocument failed:', err)
+            uni.showToast({ title: '无法打开此文件', icon: 'none' })
+          }
+        })
+      }
+      // #endif
+    },
+    _tryOpenWithSystemApp(localPath) {
+      try {
+        plus.runtime.openFile(localPath, {}, function(err) {
+          console.error('[FileMessage] plus.runtime.openFile failed:', err)
+          uni.showToast({ title: '无法打开此文件，请确认已安装相应应用', icon: 'none' })
+        })
+      } catch (e) {
+        console.error('[FileMessage] plus.runtime.openFile exception:', e)
+        uni.showToast({ title: '无法打开此文件', icon: 'none' })
+      }
+    },
+    handleTouchStart(e) {
+      this.touchStartTime = Date.now()
+    },
+    handleTouchEnd(e) {
+    },
+    handleFileTap() {
+      // 长按判定：触摸持续时间超过阈值视为长按，交由父级 Message.nvue 处理消息操作菜单
+      // 注意：判定后必须复位 touchStartTime，否则下一次"未收到 touchstart 直接 tap"
+      // （nvue 部分场景事件丢失）会用旧时间戳算出极大 duration，导致正常点击被误判为长按
+      var startTime = this.touchStartTime
+      this.touchStartTime = 0
+      if (startTime > 0 && Date.now() - startTime >= LONG_PRESS_THRESHOLD) {
+        return
+      }
+
+      if (this.isDownloading) return
+      var self = this
+
+      if (this.isDownloaded) {
+        this._openFile(this.filePath)
+        return
+      }
+
+      if (!this.msgState) return
+      this.isDownloading = true
+      this.msgState.downloadMessageResource(this.message, MessageMediaFileType.FILE).then(function() {
+      }).catch(function(err) {
+        console.error('[FileMessage] download failed:', err)
+        uni.showToast({ title: '下载失败', icon: 'none' })
+      }).finally(function() {
+        self.isDownloading = false
+      })
+    }
+  }
+}
+</script>
+
+<style>
+.file-message { position: relative; background-color: #FFFFFF; border: 2rpx solid #E6E9F0; min-width: 300rpx; max-width: 500rpx; }
+.content-in { border-radius: 4rpx 20rpx 20rpx 20rpx; }
+.content-out { border-radius: 20rpx 4rpx 20rpx 20rpx; }
+.file-highlight { flex: 1; flex-direction: row; align-items: center; padding: 24rpx; background-color: transparent; }
+.file-icon { margin-right: 20rpx; width: 64rpx; height: 64rpx; }
+.file-info, .file-name, .file-footer { flex: 1; }
+.file-name-text { flex: 1; font-weight: 400; font-size: 32rpx; line-height: 42rpx; color: rgba(0, 0, 0, 0.9); margin-bottom: 4rpx; lines: 2; text-overflow: ellipsis; }
+.file-size-text { font-weight: 400; font-size: 28rpx; line-height: 39rpx; color: rgba(0, 0, 0, 0.4); }
+.file-footer { flex-direction: row; align-items: center; justify-content: space-between; }
+.file-download { justify-content: flex-end; }
+.icon-image { width: 28rpx; height: 28rpx; }
+.download-percent { font-size: 24rpx; line-height: 28rpx; color: rgba(0, 0, 0, 0.55); font-weight: 500; }
+.downloading { position: absolute; top: 0; left: 0; right: 0; bottom: 0; z-index: 0; background-color: rgba(204, 226, 255, 0.5); border-radius: 20rpx; }
+</style>

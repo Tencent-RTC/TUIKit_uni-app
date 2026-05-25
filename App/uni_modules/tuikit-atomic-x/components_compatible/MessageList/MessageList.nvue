@@ -1,0 +1,438 @@
+<template>
+  <view class="msg-list" ref="messageListContainerViewRef" :style="{ 'padding-top': navbarHeightPx + 'px' }">
+    <list
+      fixFreezing="true"
+      ref="messageListRef"
+      class="msg-list__scroll"
+      :class="{ 'msg-list__scroll--hidden': isFirstLoad }"
+      :show-scrollbar="false"
+      :loadmoreoffset="200"
+      @scroll="handleScroll"
+      @loadmore="onLoadMore"
+      @tap="handleMsgListTouchStart"
+    >
+      <refresh 
+        class="msg-list__refresh"
+        @refresh="onRefresh"
+        @pullingdown="onPullingDown"
+        :display="refreshing ? 'show' : 'hide'"
+      >
+        <text class="msg-list__refresh-text">{{ refreshText }}</text>
+        <loading-indicator v-if="refreshing" class="msg-list__refresh-indicator"></loading-indicator>
+      </refresh>
+      
+      <cell 
+        v-for="(item, index) in messageItems"
+        :key="item.key"
+        :ref="'cell_' + index"
+      >
+        <view>
+          <MessageTimeDivider 
+            v-if="item.type === 'divider'"
+            :timestamp="item.timestamp"
+          />
+          
+          <Message
+            v-else-if="item.type === 'message'"
+            :message="item.message"
+            :conversationID="conversationID"
+            :showAvatar="item.showAvatar"
+            :showNickname="item.showNickname"
+            :highlight="item.message && item.message.msgID === currentHighlightID"
+            :customCenterChecker="customCenterChecker"
+            @reEdit="handleReEdit"
+            @onMessageListTap="handleMessageListTap"
+            @onMessageTap="handleMessageTap"
+          />
+        </view>
+      </cell>
+    </list>
+    
+    <view 
+      v-if="showScrollToBottom" 
+      class="msg-list__scroll-btn"
+      @tap="scrollToBottom"
+    >
+      <image
+        src="/uni_modules/tuikit-atomic-x/static/icon/down.png"
+        class="msg-list__scroll-btn-icon"
+        mode="aspectFill"
+      />
+      <text class="msg-list__scroll-btn-text">新消息</text>
+    </view>
+  </view>
+</template>
+
+<script>
+import Message from './Message/Message.nvue'
+import MessageTimeDivider from './MessageTimeDivider/MessageTimeDivider.nvue'
+import { useMessageListState } from '../../state/MessageListState'
+import { useConversationListState } from '../../state/ConversationListState'
+import { MessageStatus, MessageType, MessageListType, MessageFetchDirection } from '../../types/message'
+import { rpxToPx } from '../../utils/unitUtils'
+
+export default {
+  name: 'MessageList',
+  components: {
+    Message,
+    MessageTimeDivider
+  },
+  props: {
+    conversationID: { type: String, default: '' },
+    messageListType: { type: Number, default: 0 },
+    alignment: { type: String, default: 'two-sided' },
+    messageAggregationTime: { type: Number, default: 300 },
+    enableReadReceipt: { type: Boolean, default: false },
+    messageActionList: { type: Array, default: function() { return [] } },
+    filter: { type: Function, default: null },
+    locateMessage: { type: Object, default: null },
+    inputToolbarHeight: { type: Number, default: 0 },
+    inputPanelHeight: { type: Number, default: 0 },
+    customCenterChecker: { type: Function, default: null }
+  },
+  data() {
+    var msgState = useMessageListState({
+      conversationID: this.conversationID,
+      messageListType: this.messageListType
+    })
+    var convState = useConversationListState()
+    return {
+      msgState: msgState,
+      convState: convState,
+      navbarHeightPx: 0,
+      showScrollToBottom: false,
+      refreshing: false,
+      refreshText: '下拉加载历史消息',
+      lastScrollTop: 0,
+      isFirstLoad: true,
+      currentHighlightID: '',
+      pendingScrollMessage: null,
+      pendingTimers: [],
+      isCleaned: false,
+      isLocating: false
+    }
+  },
+  computed: {
+    messageItems() {
+      var list = this.msgState.messageList.value
+      if (!list || list.length === 0) return []
+      var filteredMessages = this.filter
+        ? list.filter(this.filter)
+        : list.filter(function(message) { return message.status !== MessageStatus.DELETED })
+      var items = []
+      var aggregationTime = this.messageAggregationTime * 1000
+      var convID = this.conversationID
+      for (var i = 0; i < filteredMessages.length; i++) {
+        var message = filteredMessages[i]
+        var prevMessage = i > 0 ? filteredMessages[i - 1] : null
+        var isCenterMessage = message.status === MessageStatus.RECALLED || message.messageType === MessageType.SYSTEM
+        var showTimeDivider = i === 0 || (prevMessage && message.timestamp && prevMessage.timestamp && (message.timestamp - prevMessage.timestamp) > aggregationTime)
+        if (showTimeDivider) {
+          items.push({ key: 'divider-' + message.msgID, type: 'divider', timestamp: message.timestamp })
+        }
+        if (isCenterMessage) {
+          items.push({ key: 'message-' + message.msgID, type: 'message', message: message, showAvatar: false, showNickname: false })
+          continue
+        }
+        items.push({
+          key: 'message-' + message.msgID,
+          type: 'message',
+          message: message,
+          showAvatar: true,
+          showNickname: convID.startsWith('group_') && !message.isSelf
+        })
+      }
+      return items
+    }
+  },
+  watch: {
+    'msgState.messageList.value': {
+      handler: function(newMessages, oldMessages) {
+        if (!newMessages || newMessages.length === 0) return
+        var self = this
+        if (this.isFirstLoad && newMessages.length > 0) {
+          this.$nextTick(function() {
+            var t1 = setTimeout(function() {
+              var locateMsg = self.locateMessage
+              if (locateMsg && locateMsg.msgID) {
+                self.isLocating = true
+                self.scrollToMessage(locateMsg, false)
+              } else {
+                self.scrollToBottom(false)
+              }
+              var t2 = setTimeout(function() { self.isFirstLoad = false }, 50)
+              self.pendingTimers.push(t2)
+            }, 100)
+            self.pendingTimers.push(t1)
+          })
+          return
+        }
+        if (this.pendingScrollMessage) {
+          var targetMessage = this.pendingScrollMessage
+          this.pendingScrollMessage = null
+          this.$nextTick(function() {
+            var t = setTimeout(function() { self.doScrollToMessage(targetMessage.msgID, false, false) }, 600)
+            self.pendingTimers.push(t)
+          })
+          return
+        }
+        var hasNewMessage = !oldMessages || oldMessages.length === 0 || newMessages.length > oldMessages.length
+        if (hasNewMessage) {
+          var lastMessage = newMessages[newMessages.length - 1]
+          var isMyMessage = lastMessage.isSelf
+          if (!isMyMessage) {
+            this.convState.clearConversationUnreadCount(this.conversationID)
+          }
+          if (self.isLocating) return
+          if (isMyMessage || !this.showScrollToBottom) {
+            this.$nextTick(function() {
+              var t = setTimeout(function() { self.scrollToBottom() }, 100)
+              self.pendingTimers.push(t)
+            })
+          }
+        }
+      },
+      immediate: false
+    },
+    locateMessage: function(newMessage) {
+      if (newMessage && newMessage.msgID && !this.isFirstLoad) {
+        var self = this
+        this.$nextTick(function() { self.scrollToMessage(newMessage, true) })
+      }
+    },
+    inputPanelHeight: function(newHeight, oldHeight) {
+      if (newHeight > 0) {
+        var self = this
+        this.$nextTick(function() {
+          var t = setTimeout(function() { self.scrollToBottom(false) }, 100)
+          self.pendingTimers.push(t)
+        })
+      }
+    }
+  },
+  beforeMount() {
+    try {
+      var systemInfo = uni.getSystemInfoSync()
+      this.navbarHeightPx = (systemInfo.navbarHeight || 44) + rpxToPx(88)
+    } catch (e) {
+      this.navbarHeightPx = 44 + rpxToPx(88)
+    }
+  },
+  mounted() {
+    var self = this
+    if (this.msgState.messageList.value && this.msgState.messageList.value.length > 0) {
+      this.$nextTick(function() {
+        var t1 = setTimeout(function() {
+          var locateMsg = self.locateMessage
+          if (locateMsg && locateMsg.msgID) {
+            self.isLocating = true
+            self.scrollToMessage(locateMsg, false)
+          } else {
+            self.scrollToBottom(false)
+          }
+          var t2 = setTimeout(function() { self.isFirstLoad = false }, 50)
+          self.pendingTimers.push(t2)
+        }, 100)
+        self.pendingTimers.push(t1)
+      })
+    }
+  },
+  beforeDestroy() { this._cleanup() },
+  beforeUnmount() { this._cleanup() },
+  methods: {
+    _cleanup() {
+      if (this.isCleaned) return
+      this.isCleaned = true
+      for (var i = 0; i < this.pendingTimers.length; i++) clearTimeout(this.pendingTimers[i])
+      this.pendingTimers = []
+      this.convState.clearConversationUnreadCount(this.conversationID)
+      this.msgState.destroyStore()
+    },
+    getCellRef(index) {
+      var ref = this.$refs['cell_' + index]
+      if (!ref) return null
+      return Array.isArray(ref) ? ref[0] : ref
+    },
+    scrollToBottom(animated) {
+      if (animated === undefined) animated = true
+      if (this.messageItems.length === 0) return
+      var lastIndex = this.messageItems.length - 1
+      var lastCell = this.getCellRef(lastIndex)
+      if (lastCell) {
+        var dom = uni.requireNativePlugin('dom')
+        dom.scrollToElement(lastCell, { offset: 0, animated: animated })
+      }
+      this.showScrollToBottom = false
+    },
+    doScrollToMessage(messageID, animated, highlight) {
+      if (animated === undefined) animated = true
+      if (highlight === undefined) highlight = true
+      if (this.messageItems.length === 0) { this.isLocating = false; return }
+      var targetIndex = -1
+      for (var i = 0; i < this.messageItems.length; i++) {
+        if (this.messageItems[i].type === 'message' && this.messageItems[i].message && this.messageItems[i].message.msgID === messageID) {
+          targetIndex = i; break
+        }
+      }
+      if (targetIndex === -1) { this.isLocating = false; return }
+      var targetCell = this.getCellRef(targetIndex)
+      if (targetCell) {
+        var dom = uni.requireNativePlugin('dom')
+        dom.scrollToElement(targetCell, { offset: -100, animated: animated })
+        if (highlight) {
+          var self = this
+          this.currentHighlightID = messageID
+          var t = setTimeout(function() { self.currentHighlightID = '' }, 3000)
+          this.pendingTimers.push(t)
+        }
+      }
+      this.isLocating = false
+    },
+    async scrollToMessage(message, animated) {
+      if (animated === undefined) animated = true
+      var messageID = message && message.msgID
+      if (!messageID) return
+      var found = false
+      var list = this.msgState.messageList.value
+      if (list) {
+        for (var i = 0; i < list.length; i++) {
+          if (list[i].msgID === messageID) { found = true; break }
+        }
+      }
+      if (!found) {
+        try {
+          await this.msgState.fetchMessageList({ message: message, direction: MessageFetchDirection.BOTH, pageCount: 20 })
+        } catch (error) {
+          console.error('[MessageList] locateToMessage failed:', error)
+        }
+        var self = this
+        this.$nextTick(function() {
+          var t = setTimeout(function() { self.doScrollToMessage(messageID, animated) }, 100)
+          self.pendingTimers.push(t)
+        })
+        return
+      }
+      this.doScrollToMessage(messageID, animated)
+    },
+    onPullingDown(e) {
+      if (this.refreshing) return
+      if (e.pullingDistance < e.viewHeight) {
+        this.refreshText = '下拉加载历史消息'
+        this.$emit('onMessageListTap')
+      } else {
+        this.refreshText = '释放加载历史消息'
+      }
+    },
+    async onRefresh(e) {
+      if (this.refreshing) return
+      this.refreshing = true
+      if (!this.msgState.hasMoreOlderMessage.value) {
+        this.refreshText = '没有更多历史消息'
+        var self = this
+        var t = setTimeout(function() { self.refreshing = false }, 500)
+        this.pendingTimers.push(t)
+        return
+      }
+      this.refreshText = '加载中...'
+      var firstMessage = this.msgState.messageList.value && this.msgState.messageList.value.length > 0
+        ? this.msgState.messageList.value[0] : null
+      if (firstMessage) this.pendingScrollMessage = firstMessage
+      try {
+        await this.msgState.fetchMoreMessageList(MessageFetchDirection.OLDER)
+        this.refreshText = '加载完成'
+      } catch (error) {
+        this.refreshText = '加载失败'
+        this.pendingScrollMessage = null
+      } finally {
+        var self2 = this
+        var t2 = setTimeout(function() { self2.refreshing = false }, 500)
+        this.pendingTimers.push(t2)
+      }
+    },
+    async onLoadMore() {
+      if (!this.msgState.hasMoreNewerMessage.value) return
+      try {
+        await this.msgState.fetchMoreMessageList(MessageFetchDirection.NEWER)
+      } catch (error) {
+        console.error('[MessageList] loadMoreNewerMessage failed:', error)
+      }
+    },
+    handleScroll(e) {
+      if (!e || !e.contentOffset) return
+      this.lastScrollTop = e.contentOffset.y
+      if (e.contentSize && e.layoutSize) {
+        var distanceToBottom = e.contentSize.height - e.contentOffset.y - e.layoutSize.height
+        this.showScrollToBottom = distanceToBottom > 200
+      }
+      if (e.isDragging) this.$emit('onMessageListTap')
+    },
+    handleMsgListTouchStart() {
+      this.$emit('onMessageListTap')
+    },
+    handleReEdit(data) { this.$emit('reEdit', data) },
+    handleMessageListTap() { this.$emit('onMessageListTap') },
+    handleMessageTap(message) { this.$emit('onMessageTap', message) }
+  }
+}
+</script>
+
+<style>
+.msg-list {
+  flex: 1;
+  position: relative;
+}
+
+.msg-list__scroll {
+  flex: 1;
+  background-color: #F9FAFC;
+}
+
+.msg-list__scroll--hidden {
+  opacity: 0;
+}
+
+.msg-list__refresh {
+  width: 750rpx;
+  align-items: center;
+  justify-content: center;
+  flex-direction: row;
+}
+
+.msg-list__refresh-text {
+  font-size: 28rpx;
+  color: #999999;
+  text-align: center;
+}
+
+.msg-list__refresh-indicator {
+  width: 36rpx;
+  height: 36rpx;
+  margin-left: 12rpx;
+  color: #999999;
+}
+
+.msg-list__scroll-btn {
+  position: absolute;
+  bottom: 30rpx;
+  right: 30rpx;
+  width: 120rpx;
+  height: 80rpx;
+  background-color: #ffffff;
+  border-radius: 40rpx;
+  box-shadow: 0 2rpx 10rpx rgba(0, 0, 0, 0.1);
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+}
+
+.msg-list__scroll-btn-icon {
+  width: 40rpx;
+  height: 40rpx;
+  margin-bottom: 4rpx;
+}
+
+.msg-list__scroll-btn-text {
+  font-size: 20rpx;
+  color: #666;
+}
+</style>

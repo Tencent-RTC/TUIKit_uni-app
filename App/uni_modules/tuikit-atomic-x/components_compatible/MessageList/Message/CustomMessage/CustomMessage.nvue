@@ -1,0 +1,39 @@
+<template>
+  <view class="custom-message" :class="{ 'custom-message--center': isCustomCenter }">
+    <CallMessage v-if="isCallMsg" :message="message" :isGroupCall="isCustomCenter" />
+    <view v-else class="custom-highlight"><view class="default-custom"><text class="custom-text">{{ customText }}</text></view></view>
+  </view>
+</template>
+
+<script>
+import { safeJsonParse } from '../../../../utils/utsUtils'
+import { isGroupCallMessage } from '../../../../utils/callMessageUtils'
+import CallMessage from './CallMessage.nvue'
+
+export default {
+  name: 'CustomMessage',
+  components: { CallMessage },
+  props: {
+    message: { type: Object, required: true },
+    conversationID: { type: String, default: '' }
+  },
+  computed: {
+    customMessage() { return this.message.messageBody && this.message.messageBody.customMessage },
+    isCallMsg() {
+      var data = this.customMessage && this.customMessage.data; if (!data) return false
+      try { var dc = safeJsonParse(data, null); if (dc && dc.businessID === 1 && dc.data) { var ci = safeJsonParse(dc.data, null); if (ci && (ci.businessID === 'av_call' || ci.businessID === 'rtc_call')) return true } } catch (e) {}
+      return false
+    },
+    isCustomCenter() { return isGroupCallMessage(this.message, this.conversationID) },
+    customText() { return (this.customMessage && this.customMessage.description) || '自定义消息' }
+  }
+}
+</script>
+
+<style>
+.custom-message { background-color: rgba(255, 255, 255, 0.8); border-radius: 12rpx; min-width: 160rpx; max-width: 480rpx; }
+.custom-message--center { background-color: transparent; max-width: 750rpx; min-width: auto; }
+.custom-highlight { flex: 1; padding: 20rpx; background-color: transparent; border-radius: 12rpx; }
+.default-custom { flex-direction: row; align-items: flex-start; }
+.custom-text { font-size: 28rpx; color: #333; flex: 1; lines: 0; word-wrap: break-word; white-space: pre-wrap; }
+</style>

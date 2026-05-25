@@ -1,0 +1,34 @@
+<template>
+  <view class="search-result-item" @tap="handleClick">
+    <UserItem v-if="type === 'user' || type === 'friend' || type === 'groupMember'" :type="type" :user="data" :keyword="keyword" :Avatar="AvatarComp" />
+    <GroupItem v-else-if="type === 'group'" :group="data" :keyword="keyword" :Avatar="AvatarComp" />
+    <MessageItem v-else-if="type === 'message'" :message="data" :keyword="keyword" :Avatar="AvatarComp" />
+    <ConversationItem v-else-if="type === 'conversation'" :messageResult="data" :keyword="keyword" :Avatar="AvatarComp" />
+    <UserItem v-else :type="type" :user="data" :keyword="keyword" :Avatar="AvatarComp" />
+  </view>
+</template>
+<script>
+import AvatarComponent from '../../Avatar'
+import UserItem from './User.nvue'
+import GroupItem from './Group.nvue'
+import MessageItem from './Message.nvue'
+import ConversationItem from './Conversation.nvue'
+export default {
+  components: { UserItem, GroupItem, MessageItem, ConversationItem },
+  props: {
+    type: { type: String, default: '' },
+    data: { type: Object, default: null },
+    keyword: { type: String, default: '' },
+    Avatar: { type: [Object, Function], default: undefined },
+  },
+  computed: {
+    AvatarComp() { return this.Avatar || AvatarComponent },
+  },
+  methods: {
+    handleClick() { this.$emit('click', this.type, this.data) },
+  },
+}
+</script>
+<style>
+.search-result-item { flex: 1; }
+</style>

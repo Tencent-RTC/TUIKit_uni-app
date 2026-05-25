@@ -1,0 +1,664 @@
+<template>
+  <view id="message-input" ref="messageInputRef" class="message-input" @tap="">
+    <view v-if="isRecording" class="message-input__recording-overlay" @tap.stop="onOverlayNoop" @touchstart.stop="onOverlayNoop" @touchmove.stop="onOverlayNoop" @touchend.stop="onOverlayNoop">
+      <image
+        class="message-input__recording-bottom-bg"
+        src="/uni_modules/tuikit-atomic-x/static/assets/message-input/recording_bg.png"
+        mode="aspectFill"
+      />
+      <view class="message-input__recording-content">
+        <view class="message-input__recording-indicator-wrapper">
+          <view :class="['message-input__recording-indicator', isCancelArea && 'message-input__recording-indicator--cancel']">
+            <text v-if="showCountdown" class="message-input__recording-countdown-text">
+              {{ countdownSeconds }}秒后停止录音
+            </text>
+            <view v-else class="message-input__waveform-group">
+              <view
+                v-for="(bar, index) in waveBarConfigs"
+                :key="index"
+                :ref="'waveBar_' + index"
+                :class="['message-input__wave-bar', 'message-input__wave-bar--' + bar.size]"
+              />
+            </view>
+          </view>
+          <view :class="['message-input__recording-arrow', isCancelArea && 'message-input__recording-arrow--cancel']" />
+        </view>
+        <text class="message-input__recording-text">
+          {{ isCancelArea ? '松开取消' : '松开发送' }}
+        </text>
+        <view :class="['message-input__recording-cancel-btn', isCancelArea && 'message-input__recording-cancel-btn--active']">
+          <image
+            class="message-input__recording-cancel-icon"
+            src="/uni_modules/tuikit-atomic-x/static/icon/close.png"
+            mode="aspectFit"
+          />
+        </view>
+        <view :class="['message-input__recording-bottom', isCancelArea && 'message-input__recording-cancel-btn--active']">
+          <image
+            class="message-input__recording-icon"
+            src="/uni_modules/tuikit-atomic-x/static/icon/audio.png"
+            mode="aspectFill"
+          />
+        </view>
+      </view>
+    </view>
+    
+    <view id="message-input-toolbar" class="message-input__toolbar" :style="{ paddingBottom: safeAreaBottomRpx + 'rpx' }">
+      <view v-if="enableVoice" class="message-input__btn message-input__btn--first" @tap="handleMicTap">
+        <image
+          v-if="inputState !== 'VOICE'"
+          key="mic-icon"
+          class="message-input__icon"
+          src="/uni_modules/tuikit-atomic-x/static/assets/message-input/nvue_mic.png"
+          mode="aspectFill"
+          :style="{ transform: 'rotate(0deg)' }"
+        />
+        <image
+          v-else
+          key="close-icon"
+          class="message-input__icon"
+          src="/uni_modules/tuikit-atomic-x/static/assets/message-input/nvue_more.png"
+          mode="aspectFill"
+          :style="{ transform: 'rotate(45deg)' }"
+        />
+      </view>
+      
+      <view class="message-input__box">
+        <textarea
+          v-if="inputState !== 'VOICE'"
+          ref="textareaRef"
+          class="message-input__field"
+          v-model="inputText"
+          :confirm-type="confirmType"
+          :show-confirm-bar="false"
+          :auto-height="true"
+          :adjust-position="false"
+          :auto-focus="false"
+          :focus="focusTrigger"
+          :placeholder="''"
+          placeholder-class="message-input__placeholder"
+          :selection-start="cursorPosition"
+          :selection-end="cursorPosition"
+          :fixed="true"
+          @input="handleInput"
+          @blur="handleBlur"
+          @focus="handleFocus"
+          @touchstart="onTextareaTouchstart"
+          @linechange="onLinechange"
+        />
+        <view
+          v-else
+          :class="['message-input__record-trigger', isRecording && 'message-input__record-trigger--active']"
+          @touchstart="handleVoiceTouchStart"
+          @touchmove="handleVoiceTouchMove"
+          @touchend="handleVoiceTouchEnd"
+          @touchcancel="handleVoiceTouchEnd"
+        >
+          <text class="message-input__record-trigger-text">按住说话</text>
+        </view>
+      </view>
+      
+      <view v-if="enableEmoji" class="message-input__btn" @tap="handleFaceTap">
+        <image class="message-input__icon" src="/uni_modules/tuikit-atomic-x/static/assets/message-input/nvue_face.png" mode="aspectFill" />
+      </view>
+      <view class="message-input__btn" @tap="handleSend">
+        <view v-if="hasContent" class="message-input__send-btn">
+          <text class="message-input__send-btn-text">发送</text>
+        </view>
+        <image v-else class="message-input__icon" src="/uni_modules/tuikit-atomic-x/static/assets/message-input/nvue_more.png" mode="aspectFill" @tap.stop="handleMoreTap" />
+      </view>
+    </view>
+    <view class="message-input__mask">
+      <view class="message-input__panel" ref="messageInputPanelRef" :style="{ height: inputPanelDisplayHeightPx + 'px' }">
+        <view class="message-input__panel-wrapper">
+          <ToolsPanel v-if="showToolsPanel" ref="toolsPanelRef" :style="{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, opacity: toolsPanelOpacity }" :conversationID="conversationID" :toolList="toolList" />
+          <EmojiPanel v-if="showEmojiPanel" ref="emojiPanelRef" :style="{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, opacity: emojiPanelOpacity }" :conversationID="conversationID" @select="handleEmojiSelect" @delete="handleEmojiDelete" />
+        </view>
+      </view>
+    </view>
+  </view>
+</template>
+
+<script>
+import { DEFAULT_TOOLS } from './types';
+export { DEFAULT_TOOLS } from './types';
+
+import { throttle } from '../../utils/lodash';
+import { useMessageInputState } from '../../state/MessageInputState';
+import { resolveSendError } from './utils/resolveSendError';
+import { MessageType } from '../../types/message';
+import permission from '../../utils/permission';
+import { requestCallPermissions, showPermissionDialog } from '../../utils/callPermission';
+import { stopGlobalAudioPlayer, RECORDING_PSEUDO_ID } from '../../hooks/useAudioPlayer';
+import { prewarmFilePicker } from '../../hooks/useFilePicker';
+import { useCallState } from '../../state/CallState';
+import EmojiPanel from './EmojiPanel.nvue';
+import ToolsPanel from './ToolsPanel.nvue';
+
+var ANIMATION_DURATION = 220;
+var DEFAULT_CACHED_KEYBOARD_HEIGHT = 280;
+var _isJsCloseKeyboard = false;
+
+var MAX_RECORD_DURATION = 60000; // 最大录音时长 60s
+var MIN_RECORD_DURATION = 1000;  // 最小录音时长 1s
+var CANCEL_THRESHOLD = 80;       // 上滑取消阈值 (px)
+
+var COUNTDOWN_START_AT = 50; // 进入倒计时的秒数
+
+// 波形条配置：非对称 xs lg md xl sm lg 重复两组
+var WAVE_BAR_CONFIGS = [
+  { size: 'xs', baseHeight: 0.2 },
+  { size: 'lg', baseHeight: 0.75 },
+  { size: 'md', baseHeight: 0.5 },
+  { size: 'xl', baseHeight: 1.0 },
+  { size: 'sm', baseHeight: 0.35 },
+  { size: 'lg', baseHeight: 0.75 },
+  { size: 'xs', baseHeight: 0.2 },
+  { size: 'lg', baseHeight: 0.75 },
+  { size: 'md', baseHeight: 0.5 },
+  { size: 'xl', baseHeight: 1.0 },
+  { size: 'sm', baseHeight: 0.35 },
+  { size: 'lg', baseHeight: 0.75 }
+];
+// 波形条相位偏移
+var WAVE_PHASE_OFFSETS = [0, 0.5, 1.0, 1.5, 2.0, 2.5, 0, 0.5, 1.0, 1.5, 2.0, 2.5];
+
+/**
+ * 将 UniApp 临时文件路径转为 SDK 可读绝对路径
+ * - 移除 file:// 前缀
+ * - 将相对路径（如 _doc/）通过 plus.io.convertLocalFileSystemURL 转为绝对路径
+ */
+function convertToAbsolutePath(path) {
+  if (!path) return path;
+  var result = path;
+  if (result.indexOf('file:///') === 0) result = result.substring(7);
+  else if (result.indexOf('file://') === 0) result = result.substring(7);
+  // #ifdef APP-PLUS
+  if (result.indexOf('_') === 0) {
+    try {
+      result = plus.io.convertLocalFileSystemURL(path);
+      if (result.indexOf('file:///') === 0) result = result.substring(7);
+      else if (result.indexOf('file://') === 0) result = result.substring(7);
+    } catch (e) {
+      console.error('[MessageInput] convertLocalFileSystemURL error:', e);
+    }
+  }
+  // #endif
+  return result;
+}
+
+export default {
+  name: 'MessageInput',
+  components: { EmojiPanel, ToolsPanel },
+  props: {
+    conversationID: { type: String, default: '' },
+    enableVoice: { type: Boolean, default: true },
+    enableEmoji: { type: Boolean, default: true },
+    enableTools: { type: Boolean, default: true },
+    toolList: { type: Array, default: undefined },
+  },
+  data() {
+    return {
+      inputState: 'NONE', prevInputState: 'NONE', inputText: '',
+      lastCursorPosition: 0, cursorPosition: -1, inputToolbarHeightPx: 0,
+      lastInputPopupHeightPx: 0, currentKeyboardHeightPx: 0, cachedKeyboardHeight: -1,
+      safeAreaBottomRpx: 0, isFocused: false, focusTrigger: false,
+      showEmojiPanel: false, showToolsPanel: false, emojiPanelOpacity: 0, toolsPanelOpacity: 0,
+      isPanelSwitching: false, messageInputStateInst: null, animationPlugin: null,
+      lastOpTime: 0, OP_THRESHOLD: 300, isCleaned: false,
+      // 录音相关
+      isRecording: false, isCancelArea: false, recordStartY: 0,
+      recordingDuration: 0, recordingTimer: null, recordStartTime: 0,
+      recorderManager: null, voiceTempFilePath: '',
+      waveAnimationTimer: null, waveAnimationPhase: 0,
+      isAutoStopByMaxDuration: false,
+      waveBarConfigs: WAVE_BAR_CONFIGS
+    }
+  },
+  computed: {
+    hasContent() { return this.inputText.trim().length > 0 },
+    inputPanelDisplayHeightPx() {
+      if (this.lastInputPopupHeightPx <= 0) return (this.cachedKeyboardHeight > 0 ? this.cachedKeyboardHeight : DEFAULT_CACHED_KEYBOARD_HEIGHT)
+      return this.lastInputPopupHeightPx
+    },
+    showCountdown() { return this.recordingDuration >= COUNTDOWN_START_AT },
+    countdownSeconds() {
+      var remain = 60 - this.recordingDuration
+      return remain > 0 ? remain : 1
+    }
+  },
+  beforeMount() {
+    var si = uni.getSystemInfoSync()
+    this.safeAreaBottomRpx = Math.max(this._pxToRpx((si.safeAreaInsets && si.safeAreaInsets.bottom) || 0), 16)
+    this.messageInputStateInst = useMessageInputState({ conversationID: this.conversationID })
+    this.animationPlugin = uni.requireNativePlugin('animation')
+    var self = this
+    this.$nextTick(function() {
+      var q = uni.createSelectorQuery().in(self)
+      q.select('#message-input-toolbar').boundingClientRect(function(data) {
+        self.inputToolbarHeightPx = Math.round((data && data.height) || 45); self._updateSpacer()
+      }).exec()
+    })
+  },
+  mounted() {
+    uni.onKeyboardHeightChange(this._onKeyboardChange)
+    // 预热文件选择器的 Android 桥接类（同步跨桥约 500-1000ms）
+    // 延后 500ms 错开 MessageList 首屏关键路径，用户首次点"文件"时类已就绪
+    setTimeout(function() { prewarmFilePicker() }, 500)
+  },
+  beforeDestroy() { this._cleanup() },
+  beforeUnmount() { this._cleanup() },
+  methods: {
+    _cleanup() {
+      if (this.isCleaned) return; this.isCleaned = true
+      uni.offKeyboardHeightChange(this._onKeyboardChange)
+      this._stopWaveAnimation()
+      if (this.recordingTimer) { clearInterval(this.recordingTimer); this.recordingTimer = null }
+      this.messageInputStateInst && this.messageInputStateInst.destroyStore()
+    },
+    _pxToRpx(px) { return Math.round((px / (uni.getSystemInfoSync().screenWidth || 375)) * 750) },
+    collapse() { if (this.inputState === 'VOICE') return; this._switchMode('NONE') },
+    focus() { this._switchMode('TEXT') },
+    blur() { (this.$refs.textareaRef && this.$refs.textareaRef.blur()) },
+    getState() { return this.inputState },
+    _onKeyboardChange(res) {
+      var h = res.height, dur = res.duration > 0 ? res.duration : ANIMATION_DURATION, cs = this.inputState
+      this.currentKeyboardHeightPx = h
+      if (h > 0 && this.cachedKeyboardHeight === -1) { this.cachedKeyboardHeight = h; uni.setStorage({ key: 'cachedKeyboardHeight', data: h }) }
+      if (h > 0) { this.lastInputPopupHeightPx = h; if (cs === 'TEXT' || cs === 'NONE') this._animateInputY(-h, dur) }
+      else {
+        if (_isJsCloseKeyboard) { _isJsCloseKeyboard = false; return }
+        if (cs === 'TEXT') { this._animateInputY(0, dur); this._switchMode('NONE') }
+        if (cs === 'EMOJI' || cs === 'TOOLS') this._switchMode('NONE')
+        if (cs === 'NONE') this._animateInputY(0, dur)
+      }
+      this._updateSpacer()
+    },
+    _animateInputY(y, dur, cb) { if (!this.$refs.messageInputRef) return; this.animationPlugin.transition(this.$refs.messageInputRef, { styles: { transform: 'translateY(' + y + 'px)' }, duration: dur, timingFunction: 'ease-out' }, function() { if (cb) cb() }) },
+    _crossFadeTo(target) {
+      if (this.isPanelSwitching) return; this.isPanelSwitching = true
+      var isToEmoji = target === 'EMOJI'; var oldRef = isToEmoji ? this.$refs.toolsPanelRef : this.$refs.emojiPanelRef; var self = this
+      if (oldRef) {
+        this.animationPlugin.transition(oldRef, { styles: { opacity: 0 }, duration: 200, timingFunction: 'ease-out' }, function() {
+          if (isToEmoji) { self.showToolsPanel = false; self.toolsPanelOpacity = 0; self.showEmojiPanel = true; self.emojiPanelOpacity = 0 }
+          else { self.showEmojiPanel = false; self.emojiPanelOpacity = 0; self.showToolsPanel = true; self.toolsPanelOpacity = 0 }
+          setTimeout(function() {
+            var newRef = isToEmoji ? self.$refs.emojiPanelRef : self.$refs.toolsPanelRef
+            if (newRef) { self.animationPlugin.transition(newRef, { styles: { opacity: 1 }, duration: 200, timingFunction: 'ease-out' }, function() { if (isToEmoji) self.emojiPanelOpacity = 1; else self.toolsPanelOpacity = 1; self.isPanelSwitching = false }) }
+            else self.isPanelSwitching = false
+          }, 16)
+        })
+      } else self.isPanelSwitching = false
+    },
+    _hideAllPanels(cb) {
+      var c = 0, t = (this.showEmojiPanel ? 1 : 0) + (this.showToolsPanel ? 1 : 0); if (t === 0) { (cb && cb()); return }
+      var done = function() { c++; if (c >= t) (cb && cb()) }; var self = this
+      if (this.showEmojiPanel) { if (this.$refs.emojiPanelRef) this.animationPlugin.transition(this.$refs.emojiPanelRef, { styles: { opacity: 0 }, duration: 200, timingFunction: 'ease-out' }, function() { self.showEmojiPanel = false; self.emojiPanelOpacity = 0; done() }); else { this.showEmojiPanel = false; this.emojiPanelOpacity = 0; done() } }
+      if (this.showToolsPanel) { if (this.$refs.toolsPanelRef) this.animationPlugin.transition(this.$refs.toolsPanelRef, { styles: { opacity: 0 }, duration: 200, timingFunction: 'ease-out' }, function() { self.showToolsPanel = false; self.toolsPanelOpacity = 0; done() }); else { this.showToolsPanel = false; this.toolsPanelOpacity = 0; done() } }
+    },
+    _updateSpacer() {
+      var h = 0; if (this.inputState === 'TEXT' || this.inputState === 'EMOJI' || this.inputState === 'TOOLS') h = this.inputPanelDisplayHeightPx
+      this.$emit('heightChange', { inputToolbarHeight: Math.round(this.inputToolbarHeightPx), inputPanelHeight: Math.round(h) })
+    },
+    _switchMode(target) {
+      var cur = this.inputState; if (cur === target) return; this.prevInputState = cur; this.inputState = target; this.$emit('stateChange', target); var self = this
+      if (target === 'TEXT') {
+        if (cur === 'EMOJI' || cur === 'TOOLS') {
+          if (this.currentKeyboardHeightPx > 0) { setTimeout(function() { self._hideAllPanels() }, ANIMATION_DURATION) }
+          else { if (uni.getSystemInfoSync().platform === 'ios') { if (!this.isFocused) (this.$refs.textareaRef && this.$refs.textareaRef.focus()) } else { (this.$refs.textareaRef && this.$refs.textareaRef.blur()); (this.$refs.textareaRef && this.$refs.textareaRef.focus()) }; setTimeout(function() { self._hideAllPanels() }, ANIMATION_DURATION) }
+        }
+        if (cur === 'VOICE') {
+          // VOICE → TEXT: textarea 由 v-if 重新挂载，iOS nvue 方法式 focus() 不会唤起软键盘，
+          // 必须让 :focus 属性发生 false → true 变化
+          // Android nvue 下原生节点挂载是异步的，nextTick 可能早于原生 DOM 就位，
+          // 所以：先置 false → 等待原生节点挂载（nextTick + setTimeout 双层） → 置 true + 方法式 focus 双保险
+          this.focusTrigger = false
+          this.$nextTick(function() {
+            // setTimeout 让出一轮事件循环，确保 nvue 原生 textarea 节点已挂载完毕
+            // 否则 Android 上会间歇性 focus 失败：节点未挂载时设置 :focus=true，被当作初始 prop 忽略
+            setTimeout(function() {
+              self.focusTrigger = true
+              // 兼容 Android：方法式 focus 在 Android nvue 上可靠
+              self.$refs.textareaRef && self.$refs.textareaRef.focus()
+            }, 50)
+          })
+        }
+        return
+      }
+      if (target === 'EMOJI') {
+        if (cur === 'NONE') { this.showEmojiPanel = true; this.emojiPanelOpacity = 1; this._animateInputY(-280, ANIMATION_DURATION); this.lastInputPopupHeightPx = 280 }
+        if (cur === 'TOOLS') { this._crossFadeTo('EMOJI'); return }
+        if (cur === 'TEXT') { this.showEmojiPanel = true; this.emojiPanelOpacity = 1; _isJsCloseKeyboard = true; uni.hideKeyboard() }
+        if (cur === 'VOICE') { this.showEmojiPanel = true; this.emojiPanelOpacity = 1; this._animateInputY(-280, ANIMATION_DURATION); this.lastInputPopupHeightPx = 280 }
+        this._updateSpacer(); return
+      }
+      if (target === 'TOOLS') {
+        if (cur === 'NONE') { this.showToolsPanel = true; this.toolsPanelOpacity = 1; this._animateInputY(-280, ANIMATION_DURATION); this.lastInputPopupHeightPx = 280 }
+        if (cur === 'EMOJI') { this._crossFadeTo('TOOLS'); return }
+        if (cur === 'TEXT') { this.showToolsPanel = true; this.toolsPanelOpacity = 1; _isJsCloseKeyboard = true; (this.$refs.textareaRef && this.$refs.textareaRef.blur()) }
+        if (cur === 'VOICE') { this.showToolsPanel = true; this.toolsPanelOpacity = 1; this._animateInputY(-280, ANIMATION_DURATION); this.lastInputPopupHeightPx = 280 }
+        this._updateSpacer(); return
+      }
+      if (target === 'VOICE') {
+        // 重置占位高度：VOICE 模式不占用 Area B，避免切回其他模式时沿用旧值
+        this.lastInputPopupHeightPx = 0
+        // 复位响应式 focus 开关：textarea 将被 v-if 卸载，@blur 可能不触发 handleBlur
+        this.focusTrigger = false
+        if (cur === 'TEXT') {
+          _isJsCloseKeyboard = true;
+          (this.$refs.textareaRef && this.$refs.textareaRef.blur());
+          uni.hideKeyboard();
+          this._animateInputY(0, ANIMATION_DURATION)
+        }
+        else if (cur === 'EMOJI' || cur === 'TOOLS') { this._hideAllPanels(); this._animateInputY(0, ANIMATION_DURATION) }
+        this._updateSpacer(); return
+      }
+      if (target === 'NONE') {
+        if (cur === 'EMOJI' || cur === 'TOOLS') { this._hideAllPanels(); this._animateInputY(0, ANIMATION_DURATION) }
+        (this.$refs.textareaRef && this.$refs.textareaRef.blur()); this._updateSpacer(); return
+      }
+    },
+    onLinechange() { var self = this; uni.createSelectorQuery().in(self).select('#message-input-toolbar').boundingClientRect(function(d) { self.inputToolbarHeightPx = Math.round((d && d.height) || 0); self._updateSpacer() }).exec() },
+    onTextareaTouchstart: throttle(function(e) { if (Date.now() - this.lastOpTime < this.OP_THRESHOLD) return; this.lastOpTime = Date.now(); this.isFocused = true; this._switchMode('TEXT') }, 250, { leading: true, trailing: false }),
+    handleFocus(e) { this.isFocused = true; if (this.inputState !== 'TEXT') this._switchMode('TEXT') },
+    handleBlur(event) { this.isFocused = false; this.focusTrigger = false; this.lastCursorPosition = event.detail.cursor },
+    handleInput() {},
+    handleSend() {
+      var text = this.inputText.trim(); if (!text) return; var self = this
+      if (this.messageInputStateInst) {
+        this.messageInputStateInst.sendTextMessage({ text: text }).catch(function(err) { uni.showToast({ title: resolveSendError(err), icon: 'none' }) })
+      }
+      this.$emit('send', text); this.inputText = ''
+    },
+    handleFaceTap: throttle(function() {
+      if (this.inputState === 'TEXT' && Date.now() - this.lastOpTime < this.OP_THRESHOLD + 200) return
+      if (Date.now() - this.lastOpTime < this.OP_THRESHOLD) return
+      this.lastOpTime = Date.now(); this.isFocused = false
+      this._switchMode(this.inputState === 'EMOJI' ? 'TEXT' : 'EMOJI')
+    }, 300, { leading: true, trailing: false }),
+    handleMoreTap: throttle(function() {
+      if (this.inputState === 'TEXT' && Date.now() - this.lastOpTime < this.OP_THRESHOLD + 200) return
+      if (Date.now() - this.lastOpTime < this.OP_THRESHOLD) return
+      this.lastOpTime = Date.now(); this.isFocused = false
+      if (this.hasContent) return
+      this._switchMode(this.inputState === 'TOOLS' ? 'TEXT' : 'TOOLS')
+    }, 250, { leading: true, trailing: false }),
+    handleEmojiSelect(emoji) {
+      var emojiStr = (typeof emoji === 'string') ? emoji : ((emoji && emoji.key) ? emoji.key : '')
+      if (!emojiStr) return
+      this.inputText = this.inputText + emojiStr
+    },
+    handleEmojiDelete() { if (this.inputText.length > 0) this.inputText = this.inputText.slice(0, -1) },
+    
+    // ==================== 语音/录音 ====================
+    
+    /** 录音浮层事件吞噬（noop），阻止事件穿透到下层元素 */
+    onOverlayNoop() {},
+    
+    /**
+     * 检查并申请麦克风权限
+     * - iOS: Undetermined → 系统弹窗；Denied → 去设置引导
+     * - Android: 调 permission.requestAndroidPermission 触发系统弹窗
+     */
+    _ensureMicPermission() {
+      var platform = uni.getSystemInfoSync().platform
+      if (platform === 'android') {
+        return permission.requestAndroidPermission('android.permission.RECORD_AUDIO').then(function(result) {
+          if (result !== 1) {
+            return showPermissionDialog(['麦克风']).then(function() { return false })
+          }
+          return true
+        })
+      } else if (platform === 'ios') {
+        return requestCallPermissions(0).then(function(granted) {
+          if (!granted) {
+            return showPermissionDialog(['麦克风']).then(function() { return false })
+          }
+          return true
+        })
+      }
+      // 其他平台直接放行
+      return Promise.resolve(true)
+    },
+    
+    // 语音/键盘切换按钮点击
+    handleMicTap() {
+      var self = this
+      this.isFocused = false
+      if (this.inputState === 'VOICE') {
+        this._switchMode('TEXT')
+      } else {
+        this._ensureMicPermission().then(function(granted) {
+          if (granted) self._switchMode('VOICE')
+        })
+      }
+    },
+    
+    _initRecorderManager() {
+      if (this.recorderManager) return
+      var self = this
+      this.recorderManager = uni.getRecorderManager()
+      this.recorderManager.onStart(function() {
+        self.recordStartTime = Date.now()
+        self.recordingDuration = 0
+        self.recordingTimer = setInterval(function() {
+          self.recordingDuration++
+          // 进入倒计时阶段：停止波形动画 + 重置 cancel 态
+          if (self.recordingDuration === COUNTDOWN_START_AT) {
+            self._stopWaveAnimation()
+            if (self.isCancelArea) self.isCancelArea = false
+          }
+          // 达到最大时长自动停止
+          if (self.recordingDuration >= 60) {
+            self.isAutoStopByMaxDuration = true
+            self.isCancelArea = false
+            self.handleVoiceTouchEnd()
+          }
+        }, 1000)
+        self.$nextTick(function() { self._startWaveAnimation() })
+      })
+      this.recorderManager.onStop(function(res) {
+        self.voiceTempFilePath = (res && res.tempFilePath) || ''
+        if (self.recordingTimer) { clearInterval(self.recordingTimer); self.recordingTimer = null }
+        var recordDuration = Date.now() - self.recordStartTime
+        
+        // 达到最大时长自动停止：强制发送
+        if (self.isAutoStopByMaxDuration) {
+          if (self.voiceTempFilePath && self.messageInputStateInst) {
+            self._sendVoiceMessage(self.voiceTempFilePath, Math.floor(MAX_RECORD_DURATION / 1000))
+          }
+          self._resetRecordingState(); return
+        }
+        
+        if (self.isCancelArea) {
+          self._resetRecordingState(); return
+        }
+        if (recordDuration < MIN_RECORD_DURATION) {
+          uni.showToast({ title: '录音时间太短', icon: 'none' })
+          self._resetRecordingState(); return
+        }
+        if (self.voiceTempFilePath && self.messageInputStateInst) {
+          // clamp 到 [1, 60]
+          var maxSec = Math.floor(MAX_RECORD_DURATION / 1000)
+          var durationInSeconds = Math.round(recordDuration / 1000)
+          if (durationInSeconds < 1) durationInSeconds = 1
+          if (durationInSeconds > maxSec) durationInSeconds = maxSec
+          self._sendVoiceMessage(self.voiceTempFilePath, durationInSeconds)
+        }
+        self._resetRecordingState()
+      })
+      this.recorderManager.onError(function(err) {
+        console.error('[MessageInput] Recording error:', err)
+        var errMsg = (err && err.errMsg) || ''
+        var isPermissionError = /permission|denied|auth/i.test(errMsg)
+        if (isPermissionError) showPermissionDialog(['麦克风'])
+        else uni.showToast({ title: '录音失败', icon: 'none' })
+        self._resetRecordingState()
+      })
+    },
+    
+    _resetRecordingState() {
+      this.isRecording = false
+      this.isCancelArea = false
+      this.recordingDuration = 0
+      this.voiceTempFilePath = ''
+      this.isAutoStopByMaxDuration = false
+      if (this.recordingTimer) { clearInterval(this.recordingTimer); this.recordingTimer = null }
+      this._stopWaveAnimation()
+    },
+    
+    _sendVoiceMessage(filePath, duration) {
+      if (!this.messageInputStateInst) return
+      var absolutePath = convertToAbsolutePath(filePath)
+      var message = JSON.stringify({
+        messageType: MessageType.SOUND,
+        messageBody: { soundPath: absolutePath, soundDuration: duration }
+      })
+      var self = this
+      this.messageInputStateInst.sendMessage(message).then(function() {
+        self.$emit('sendVoice', filePath)
+      }).catch(function(error) {
+        console.error('[MessageInput] Voice message send failed:', error)
+        uni.showToast({ title: resolveSendError(error), icon: 'none' })
+      })
+    },
+    
+    // 语音录制 - 开始
+    handleVoiceTouchStart(e) {
+      var self = this
+      // 通话中（呼叫中 / 通话中）禁止录制语音消息，与 ToolsPanel.startCall 判定一致
+      var callStore = useCallState()
+      var status = callStore && callStore.state && callStore.state.selfInfo && callStore.state.selfInfo.status
+      if (status === 1 || status === 2) {
+        uni.showToast({ title: '您正在通话中，无法录制语音消息', icon: 'none', duration: 2000 })
+        return
+      }
+      // 兜底权限检查
+      this._ensureMicPermission().then(function(granted) {
+        if (!granted) return
+        // 录音前停止所有正在播放的音频（避免边播边录）
+        stopGlobalAudioPlayer()
+        uni.$emit('audioPlayerStart', { messageId: RECORDING_PSEUDO_ID })
+        
+        self._initRecorderManager()
+        self.isRecording = true
+        self.isCancelArea = false
+        self.isAutoStopByMaxDuration = false
+        self.recordStartY = (e.touches && e.touches[0] && e.touches[0].pageY) || 0
+        self.voiceTempFilePath = ''
+        
+        self.recorderManager.start({
+          duration: MAX_RECORD_DURATION,
+          sampleRate: 16000,
+          numberOfChannels: 1,
+          encodeBitRate: 48000,
+          format: 'mp3'
+        })
+      })
+    },
+    
+    handleVoiceTouchMove(e) {
+      if (!this.isRecording) return
+      // 进入倒计时阶段后禁止取消
+      if (this.recordingDuration >= COUNTDOWN_START_AT) {
+        this.isCancelArea = false
+        return
+      }
+      var currentY = (e.touches && e.touches[0] && e.touches[0].pageY) || 0
+      var deltaY = this.recordStartY - currentY
+      this.isCancelArea = deltaY > CANCEL_THRESHOLD
+    },
+    
+    handleVoiceTouchEnd() {
+      if (!this.isRecording) return
+      this.recorderManager && this.recorderManager.stop()
+    },
+    
+    // ==================== 波形动画 ====================
+    _startWaveAnimation() {
+      if (this.waveAnimationTimer) return
+      var self = this
+      // 初始缩放，避免闪烁
+      for (var i = 0; i < WAVE_BAR_CONFIGS.length; i++) {
+        var barRef = this._getWaveBarRef(i)
+        if (barRef) {
+          var initialScale = WAVE_BAR_CONFIGS[i].baseHeight * 0.5
+          this.animationPlugin.transition(barRef, { styles: { transform: 'scaleY(' + initialScale + ')' }, duration: 0, timingFunction: 'linear' })
+        }
+      }
+      this.waveAnimationPhase = 0
+      this.waveAnimationTimer = setInterval(function() {
+        self.waveAnimationPhase += 0.25
+        for (var j = 0; j < WAVE_BAR_CONFIGS.length; j++) {
+          var ref = self._getWaveBarRef(j)
+          if (ref) {
+            var amp = 0.15 + 0.85 * Math.abs(Math.sin(self.waveAnimationPhase + WAVE_PHASE_OFFSETS[j]))
+            var scale = WAVE_BAR_CONFIGS[j].baseHeight * amp
+            self.animationPlugin.transition(ref, { styles: { transform: 'scaleY(' + scale + ')' }, duration: 100, timingFunction: 'ease-in-out' })
+          }
+        }
+      }, 100)
+    },
+    _stopWaveAnimation() {
+      if (this.waveAnimationTimer) { clearInterval(this.waveAnimationTimer); this.waveAnimationTimer = null }
+      for (var i = 0; i < WAVE_BAR_CONFIGS.length; i++) {
+        var barRef = this._getWaveBarRef(i)
+        if (barRef) this.animationPlugin.transition(barRef, { styles: { transform: 'scaleY(1)' }, duration: 100, timingFunction: 'ease-out' })
+      }
+    },
+    _getWaveBarRef(index) {
+      // Vue2 的 v-for ref 命名方式：this.$refs['waveBar_'+index]，可能是数组
+      var ref = this.$refs['waveBar_' + index]
+      if (!ref) return null
+      if (Object.prototype.toString.call(ref) === '[object Array]') return ref[0]
+      return ref
+    }
+  }
+}
+</script>
+
+<style scoped>
+.message-input { position: fixed; bottom: -700rpx; left: 0; right: 0; background-color: #ffffff; }
+
+/* 录音状态浮层 */
+.message-input__recording-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background-color: transparent; justify-content: flex-end; align-items: center; z-index: 9999; background-image: linear-gradient(to bottom, transparent, #F9FAFC); }
+.message-input__recording-content { position: relative; align-items: center; }
+.message-input__recording-bottom { align-items: center; padding: 164rpx 0 94rpx; opacity: 0.5; }
+.message-input__recording-bottom-bg { position: absolute; width: 750rpx; height: 360rpx; }
+.message-input__recording-icon { width: 48rpx; height: 60rpx; transform: rotate(180deg); }
+.message-input__recording-indicator-wrapper { align-items: center; padding-bottom: 7rpx; margin-bottom: 32rpx; }
+.message-input__recording-indicator { width: 320rpx; height: 136rpx; background-color: #147AFF; border-radius: 20rpx; flex-direction: row; justify-content: center; align-items: center; }
+.message-input__recording-indicator--cancel { background-color: #FA5151; }
+.message-input__recording-arrow { width: 24rpx; height: 24rpx; background-color: #147AFF; transform: rotate(45deg); margin-top: -17rpx; }
+.message-input__recording-arrow--cancel { background-color: #FA5151; }
+.message-input__waveform-group { flex-direction: row; align-items: center; height: 60rpx; }
+.message-input__recording-countdown-text { font-size: 32rpx; color: #FFFFFF; font-weight: 500; text-align: center; line-height: 60rpx; height: 60rpx; }
+.message-input__wave-bar { width: 4rpx; background-color: #FFFFFF; border-radius: 2rpx; margin-left: 4rpx; margin-right: 4rpx; transform-origin: center center; }
+.message-input__wave-bar--xs { height: 56rpx; transform: scaleY(0.1); }
+.message-input__wave-bar--sm { height: 56rpx; transform: scaleY(0.175); }
+.message-input__wave-bar--md { height: 56rpx; transform: scaleY(0.25); }
+.message-input__wave-bar--lg { height: 56rpx; transform: scaleY(0.375); }
+.message-input__wave-bar--xl { height: 56rpx; transform: scaleY(0.5); }
+.message-input__recording-text { font-size: 28rpx; color: #000000; margin-bottom: 48rpx; }
+.message-input__recording-cancel-btn { justify-content: center; align-items: center; opacity: 0.5; }
+.message-input__recording-cancel-btn--active { opacity: 1; }
+.message-input__recording-cancel-icon { width: 80rpx; height: 80rpx; }
+
+/* 工具栏 */
+.message-input__toolbar { flex-direction: row; background-color: #ffffff; padding: 16rpx 32rpx; border-top-width: 1rpx; border-top-style: solid; border-top-color: #F0F2F7; align-items: center; }
+.message-input__mask { border-top-width: 1rpx; border-top-style: solid; border-top-color: #F0F2F7; background-color: #fff; height: 700rpx; position: relative; }
+.message-input__btn { margin-left: 20rpx; height: 56rpx; justify-content: center; align-items: center; border-radius: 50%; }
+.message-input__btn:active { background-color: #F0F2F7; }
+.message-input__btn--first { margin-left: 0; margin-right: 20rpx; }
+.message-input__icon { width: 56rpx; height: 56rpx; }
+.message-input__box { flex: 1; background-color: #F0F2F7; border-radius: 8rpx; }
+.message-input__field { min-height: 68rpx; line-height: 45rpx; padding-top: 12rpx; padding-bottom: 11rpx; font-size: 32rpx; background-color: #F0F2F7; max-height: 340rpx; padding-left: 32rpx; padding-right: 32rpx; color: #000; border-radius: 8rpx; }
+.message-input__placeholder { color: #999999; }
+.message-input__record-trigger { justify-content: center; align-items: center; min-height: 68rpx; padding-top: 12rpx; padding-bottom: 11rpx; background-color: #F0F2F7; border-radius: 8rpx; }
+.message-input__record-trigger-text { font-size: 32rpx; color: #000000; }
+.message-input__send-btn { flex: 1; background-color: #07c160; border-radius: 8rpx; padding: 8rpx 24rpx; justify-content: center; align-items: center; height: 56rpx; }
+.message-input__send-btn-text { color: #ffffff; font-size: 28rpx; font-weight: 500; }
+.message-input__panel { background-color: #fff; overflow: hidden; }
+.message-input__panel-wrapper { position: relative; flex: 1; }
+.message-input__safe-area { background-color: #ffffff; }
+</style>

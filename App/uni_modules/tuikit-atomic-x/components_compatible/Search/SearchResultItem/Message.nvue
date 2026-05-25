@@ -1,0 +1,62 @@
+<template>
+  <ResultItem :avatarURL="avatarURL" :title="title" :subtitle="subtitleText" :keyword="keyword" :Avatar="Avatar" :mediaType="mediaType" :mediaSrc="mediaSrc" :mediaInfo="mediaInfo" defaultAvatarType="user" />
+</template>
+<script>
+import AvatarComponent from '../../Avatar'
+import ResultItem from './ResultItem.nvue'
+export default {
+  components: { ResultItem },
+  props: {
+    messageResult: { type: Object, default: undefined },
+    message: { type: Object, default: undefined },
+    keyword: { type: String, default: '' },
+    Avatar: { type: [Object, Function], default: function() { return AvatarComponent } },
+  },
+  computed: {
+    isMessageMode() { return !!this.message },
+    currentMessage() {
+      if (this.isMessageMode) return this.message
+      var msgs = (this.messageResult && this.messageResult.messageList)
+      return (msgs && msgs.length > 0) ? msgs[0] : undefined
+    },
+    avatarURL() { return this.isMessageMode ? ((this.message && this.message.sender) ? this.message.sender.avatarURL : '') || '' : ((this.messageResult && this.messageResult.conversationAvatarURL) || '') },
+    title() {
+      if (this.isMessageMode) return (this.message && this.message.sender && this.message.sender.friendRemark) || (this.message && this.message.sender && this.message.sender.nameCard) || (this.message && this.message.sender && this.message.sender.nickname) || (this.message && this.message.sender && this.message.sender.userID) || ''
+      return (this.messageResult && this.messageResult.conversationShowName) || ''
+    },
+    mediaType() {
+      var msg = this.currentMessage; if (!msg) return ''
+      if (!this.isMessageMode && ((this.messageResult && this.messageResult.messageCount) || 0) > 1) return ''
+      switch (msg.messageType) { case 2: return 'image'; case 3: return 'video'; case 4: return 'sound'; case 5: return 'file'; case 6: return 'face'; default: return '' }
+    },
+    mediaSrc() {
+      var msg = this.currentMessage; if (!msg) return ''
+      var body = msg.messageBody
+      switch (msg.messageType) { case 2: return (body && body.thumbImagePath) || (body && body.originalImagePath) || ''; case 3: return (body && body.videoSnapshotPath) || ''; default: return '' }
+    },
+    mediaInfo() {
+      var msg = this.currentMessage; if (!msg) return {}
+      var body = msg.messageBody
+      switch (msg.messageType) {
+        case 3: return { duration: (body && body.videoDuration) || 0 }
+        case 4: return { duration: (body && body.soundDuration) || 0 }
+        case 5: return { fileName: (body && body.fileName) || '', fileSize: (body && body.fileSize) || 0 }
+        case 6: return { faceIndex: (body && body.faceIndex) || 0, faceName: (body && body.faceName) || '' }
+        default: return {}
+      }
+    },
+    subtitleText() {
+      if (this.isMessageMode) return this.getMessageDisplayText(this.message)
+      var count = (this.messageResult && this.messageResult.messageCount) || 0
+      if (count === 1) { var msgs = (this.messageResult && this.messageResult.messageList); if (msgs && msgs.length > 0) return this.getMessageDisplayText(msgs[0]) }
+      return count + '条相关聊天记录'
+    },
+  },
+  methods: {
+    getMessageDisplayText(message) {
+      if (!message) return ''
+      switch (message.messageType) { case 1: return (message.messageBody && message.messageBody.text) || ''; case 2: case 3: case 4: case 5: case 6: return ''; case 7: return '[系统消息]'; case 8: return '[自定义消息]'; case 9: return '[聊天记录]'; default: return '[未知消息]' }
+    },
+  },
+}
+</script>

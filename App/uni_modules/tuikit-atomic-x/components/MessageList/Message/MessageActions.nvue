@@ -1,8 +1,9 @@
 <template>
   <view class="msg-actions" @tap="handleMaskTap">
     <view 
+      ref="panelRef"
       class="msg-actions__panel"
-      :style="containerStyle"
+      :style="panelStyle"
       @tap.stop
     >
       <view 
@@ -14,7 +15,6 @@
         <text class="msg-actions__text">复制</text>
       </view>
       
-      <!-- 删除 -->
       <view 
         class="msg-actions__item"
         @tap="handleDelete"
@@ -23,7 +23,6 @@
         <text class="msg-actions__text">删除</text>
       </view>
       
-      <!-- 撤回 -->
       <view 
         v-if="canRecall"
         class="msg-actions__item"
@@ -34,18 +33,25 @@
       </view>
     </view>
     
-    <view class="msg-actions__arrow" :style="arrowWrapperStyle"></view>
+    <view class="msg-actions__arrow" :style="arrowStyle"></view>
   </view>
 </template>
 
 <script setup>
-import { computed, ref, onMounted, onUnmounted } from 'vue'
+import { computed, ref, onMounted, onUnmounted, nextTick } from 'vue'
 import { MessageStatus, MessageType } from '../../../types/message'
 import { useMessageActionState } from '../../../state/MessageActionState'
 
 import copyIcon from '../assets/msg_copy.png'
 import deleteIcon from '../assets/msg_delete.png'
 import recallIcon from '../assets/msg_recall.png'
+
+// 箭头几何参数（rpx，与 .msg-actions__arrow width/height 保持一致）
+const ARROW_SIZE = 24
+// 面板与气泡的间距（rpx）
+const GAP = 20
+// 箭头距离面板左右边缘的最小内边距，避免视觉脱离
+const ARROW_INSET = 16
 
 let deleteMessage;
 let recallMessage;
@@ -64,9 +70,15 @@ const props = defineProps({
 
 const emit = defineEmits(['close', 'action'])
 
-const triggerPosition = ref({ x: 0, y: 0, })
-const arrowWrapperStyle = ref({ x: 0, y: 0 })
-const isPositioned = ref(false)
+const panelRef = ref(null)
+const triggerPosition = ref({ x: 0, y: 0 })
+// phase: 'measure' 先渲染到屏幕外测量真实尺寸；'ready' 测量完成后定位显示
+const phase = ref('measure')
+// 面板是否显示在气泡下方（顶部空间不够时）
+const showBelow = ref(false)
+// 测量得到的真实面板尺寸（rpx）
+const panelWidthRpx = ref(0)
+const panelHeightRpx = ref(0)
 
 onMounted(() => {
   const obj = useMessageActionState({ message: props.message })
@@ -76,13 +88,12 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
-  destroyStore()
+  destroyStore && destroyStore()
 })
 
 // 通用的关闭处理函数，针对 iOS 14 进行特殊处理
 const safeClose = () => {
   // #ifdef APP-IOS
-  // iOS 14 上延迟关闭，确保异步操作完全完成
   setTimeout(() => {
     emit('close')
   }, 300)
@@ -118,54 +129,74 @@ const canRecall = computed(() => {
   return false
 })
 
-const containerStyle = computed(() => {
-  if (!triggerPosition.value.x || !triggerPosition.value.y) {
-    return { visibility: 'hidden' } // 初始隐藏 
+/**
+ * 面板样式
+ * - phase='measure'：渲染到屏幕外（top: -9999rpx, opacity: 0）以便测量真实尺寸
+ * - phase='ready'：根据 showBelow 定位到气泡上方或下方
+ */
+const panelStyle = computed(() => {
+  const tp = triggerPosition.value
+  if (phase.value === 'measure') {
+    return { top: '-9999rpx', left: '0rpx', opacity: 0 }
   }
-  
-  const systemInfo = uni.getSystemInfoSync()
-  const screenWidthRpx = systemInfo.screenHeight || 750
-  const avatarTotalWidth = 104 * 2 // 头像宽度
-  const menuWidth = screenWidthRpx - avatarTotalWidth - 64 // 消息编辑弹窗的宽度
-  const messageActionsHeiht = 64 // 消息操作弹窗高度
-  const messageActionsHeihtRpx = messageActionsHeiht / systemInfo.windowWidth * screenWidthRpx
-  const marginValue = 20
-  // 不同平台的导航栏计算
-  let navigationBarHeight = 44 // 默认
-  if (systemInfo.platform === 'android') {
-    navigationBarHeight = 48
-  }
-  const totalNavHeight = (systemInfo?.safeArea?.top + navigationBarHeight) / systemInfo.windowWidth * screenWidthRpx
-  
-  const position = {
-    top: triggerPosition.value.y - messageActionsHeihtRpx - marginValue,
-    // width: `${menuWidth}rpx`,
-    visibility: isPositioned.value ? 'visible' : 'hidden',  // 根据状态控制可见性
-  }
-  
-  // 根据消息是否为自己发送的来设置弹窗位置
-  if (triggerPosition.value.isSelf) {
-    position.right = `${triggerPosition.value.x}rpx`
+  if (!tp.x || !tp.y) return { visibility: 'hidden' }
+  const pos = {}
+  if (showBelow.value) {
+    pos.top = `${tp.y + tp.messageHeight + GAP}rpx`
   } else {
-    position.left = `${triggerPosition.value.x}rpx`
+    pos.top = `${tp.y - panelHeightRpx.value - GAP}rpx`
   }
-  // 根据 message 的宽度，设置箭头的位置, 箭头指向消息的中间位置
-  arrowWrapperStyle.value = {
-    left: `${(triggerPosition.value.messageX + triggerPosition.value.messageWidth / 2) * 750 / systemInfo.windowWidth}rpx`,
-    top: `${position.top + messageActionsHeihtRpx - (14 / systemInfo.windowWidth * screenWidthRpx)}rpx`,
+  if (tp.isSelf) {
+    pos.right = `${tp.x}rpx`
+  } else {
+    pos.left = `${tp.x}rpx`
   }
-  // 顶部空间不够, "消息操作" 弹窗在消息下面展示
-  if ((triggerPosition.value.y - totalNavHeight) < messageActionsHeihtRpx) {
-    position.top = triggerPosition.value.y + triggerPosition.value.messageHeight + marginValue
-    
-    arrowWrapperStyle.value = {
-      left: arrowWrapperStyle.value.left,
-      top: `${position.top - (5 / systemInfo.windowWidth * screenWidthRpx)}rpx`
+  return pos
+})
+
+/**
+ * 箭头样式
+ * - 未 ready 时隐藏，避免未 clamp 的位置先闪现
+ * - left：默认指向气泡中心，用真实 panelWidth 做边界 clamp（防脱离面板）
+ * - top：让箭头跨在面板边缘上（-ARROW_SIZE/2），露出一半形成视觉三角
+ */
+const arrowStyle = computed(() => {
+  if (phase.value !== 'ready') return { visibility: 'hidden' }
+  const tp = triggerPosition.value
+  if (!tp.x || !tp.y) return { visibility: 'hidden' }
+
+  const si = uni.getSystemInfoSync()
+  const sw = si.windowWidth || 375
+
+  // 气泡中心 rpx 坐标（px → rpx），减去箭头一半宽度让箭头视觉居中
+  let arrowLeft = (tp.messageX + tp.messageWidth / 2) / sw * 750 - ARROW_SIZE / 2
+
+  // 用真实测量的 panelWidth 做 clamp（屏幕宽统一为 750rpx，不用 screenHeight）
+  const pw = panelWidthRpx.value
+  if (pw > 0) {
+    let panelFinalLeft
+    if (tp.isSelf) {
+      // 面板用 right 定位：panelFinalLeft = 750 - right - panelWidth
+      panelFinalLeft = 750 - tp.x - pw
+    } else {
+      panelFinalLeft = tp.x
     }
+    const panelFinalRight = panelFinalLeft + pw
+    const minLeft = panelFinalLeft + ARROW_INSET
+    const maxLeft = panelFinalRight - ARROW_SIZE - ARROW_INSET
+    if (arrowLeft < minLeft) arrowLeft = minLeft
+    if (arrowLeft > maxLeft) arrowLeft = maxLeft
   }
-  position.top = `${position.top}rpx`
-  
-  return position
+
+  const style = { left: `${arrowLeft}rpx`, visibility: 'visible' }
+  if (showBelow.value) {
+    // 面板在气泡下方：箭头位于面板顶边，跨在上边缘
+    style.top = `${tp.y + tp.messageHeight + GAP - ARROW_SIZE / 2}rpx`
+  } else {
+    // 面板在气泡上方：箭头位于面板底边，跨在下边缘
+    style.top = `${tp.y - GAP - ARROW_SIZE / 2}rpx`
+  }
+  return style
 })
 
 const handleMaskTap = () => {
@@ -188,11 +219,11 @@ const handleCopy = () => {
   safeClose()
 }
 
-const handleDelete = async() => {
+const handleDelete = async () => {
   try {
     await deleteMessage()
     safeClose()
-  } catch(error ) {
+  } catch (error) {
     uni.showToast({
       title: '删除失败',
       icon: 'none',
@@ -202,11 +233,11 @@ const handleDelete = async() => {
   }
 }
 
-const handleRecall = async() => {
+const handleRecall = async () => {
   try {
     await recallMessage()
     safeClose()
-  } catch(error ) {
+  } catch (error) {
     console.warn('recallMessage failed: ', error)
     uni.showToast({
       title: '撤回失败',
@@ -215,6 +246,45 @@ const handleRecall = async() => {
     })
     safeClose()
   }
+}
+
+/**
+ * 测量真实 panel 尺寸 + 判定上下方向
+ * 用 nvue 的 dom.getComponentRect 获取面板渲染后的实际宽高
+ */
+const measureAndPosition = () => {
+  const panelEl = panelRef.value
+  if (!panelEl) {
+    phase.value = 'ready'
+    return
+  }
+  // #ifdef APP-PLUS
+  try {
+    const dom = uni.requireNativePlugin('dom')
+    dom.getComponentRect(panelEl, (result) => {
+      if (result && result.size) {
+        const si = uni.getSystemInfoSync()
+        const sw = si.windowWidth || 375
+        panelWidthRpx.value = Math.round(result.size.width / sw * 750)
+        panelHeightRpx.value = Math.round(result.size.height / sw * 750)
+      }
+      // 判定面板显示方向：顶部剩余空间不够就下方展示
+      const tp = triggerPosition.value
+      const si2 = uni.getSystemInfoSync()
+      const sw2 = si2.windowWidth || 375
+      const navH = si2.platform === 'android' ? 48 : 44
+      const safeTop = si2.safeArea?.top || 0
+      const totalNavRpx = (safeTop + navH) / sw2 * 750
+      showBelow.value = (tp.y - totalNavRpx) < (panelHeightRpx.value + GAP)
+      phase.value = 'ready'
+    })
+    return
+  } catch (e) {
+    console.error('[MessageActions] measureAndPosition failed:', e)
+  }
+  // #endif
+  // 兜底：直接显示
+  phase.value = 'ready'
 }
 
 const setTriggerPosition = (position) => {
@@ -226,10 +296,13 @@ const setTriggerPosition = (position) => {
     messageHeight: position.messageHeight,
     isSelf: position.isSelf,
   }
-  // 位置设置完成后，延迟一帧显示，确保样式已计算完成
-  setTimeout(() => {
-    isPositioned.value = true
-  }, 50)  // 50ms 延迟，确保位置计算完成
+  // phase 1: 渲染到屏幕外测量真实尺寸
+  phase.value = 'measure'
+  nextTick(() => {
+    setTimeout(() => {
+      measureAndPosition()
+    }, 30)
+  })
 }
 
 defineExpose({
@@ -282,7 +355,6 @@ defineExpose({
   opacity: 0.6;
 }
 
-/* Element: icon */
 .msg-actions__icon {
   width: 36rpx;
   height: 36rpx;
@@ -301,5 +373,6 @@ defineExpose({
   height: 24rpx;
   background-color: #FFFFFF;
   transform: rotate(45deg);
+  z-index: 1001;
 }
 </style>

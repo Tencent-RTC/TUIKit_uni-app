@@ -1,0 +1,42 @@
+<template>
+  <view class="setting-row-navigate">
+    <text class="setting-row-navigate__label">{{ label }}</text>
+    <view class="setting-row-navigate__right" @tap="handleTap">
+      <text class="setting-row-navigate__value">{{ value }}</text>
+      <view :style="{ minWidth: value === '' ? '56rpx' : '0' }"></view>
+      <image
+        v-if="!disabled"
+        class="setting-row-navigate__arrow"
+        :src="arrowRightIcon"
+      />
+    </view>
+  </view>
+</template>
+
+<script>
+var arrowRightIcon = '/uni_modules/tuikit-atomic-x/static/assets/chat-setting/nvue_arrow-right.png'
+export default {
+  props: {
+    label: { type: String, default: '' },
+    value: { type: String, default: '' },
+    disabled: { type: Boolean, default: false },
+  },
+  data() {
+    return { arrowRightIcon: arrowRightIcon }
+  },
+  methods: {
+    handleTap() {
+      if (this.disabled) return
+      this.$emit('click')
+    },
+  },
+}
+</script>
+
+<style scoped>
+.setting-row-navigate { flex-direction: row; align-items: center; justify-content: space-between; padding: 24rpx 32rpx; background-color: #FFFFFF; border-bottom-width: 1rpx; border-bottom-style: solid; border-bottom-color: #E5E5E5; }
+.setting-row-navigate__label { font-size: 32rpx; color: rgba(0, 0, 0, 0.55); }
+.setting-row-navigate__right { flex-direction: row; align-items: center; }
+.setting-row-navigate__value { font-size: 32rpx; color: rgba(0, 0, 0, 0.9); }
+.setting-row-navigate__arrow { width: 28rpx; height: 28rpx; }
+</style>

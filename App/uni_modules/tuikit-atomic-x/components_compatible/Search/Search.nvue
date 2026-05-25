@@ -1,0 +1,164 @@
+<template>
+  <view class="search" @tap="handleContainerClick">
+    <SearchBar
+      ref="searchBarRef"
+      v-model="keyword"
+      :placeholder="placeholder"
+      :showCancel="showCancel"
+      :debounceTime="debounceTime"
+      :autoFocus="autoFocus"
+      @search="handleSearch"
+      @cancel="handleCancel"
+      @focus="handleFocus"
+      @clear="handleClear"
+    />
+    <SearchTab
+      v-if="showTab"
+      v-model="currentTab"
+      :tabs="tabList"
+      @change="handleTabChange"
+    />
+    <SearchResults
+      :keyword="keyword"
+      :conversationID="conversationID"
+      :currentTab="currentTab"
+      :isLoading="isLoading"
+      :showPresearch="showPresearch"
+      :userList="filteredUserList"
+      :friendList="filteredFriendList"
+      :groupList="filteredGroupList"
+      :groupMemberList="groupMemberList"
+      :messageResults="filteredMessageResults"
+      :hasMoreUser="hasMoreUserList"
+      :hasMoreFriend="hasMoreFriendList"
+      :hasMoreGroup="hasMoreGroupList"
+      :hasMoreGroupMember="hasMoreGroupMemberList"
+      :hasMoreMessage="hasMoreMessageResults"
+      :searchHistory="searchHistory"
+      :Avatar="Avatar"
+      @resultItemClick="handleResultItemClick"
+      @viewMore="handleViewMore"
+      @historyClick="handleHistoryClick"
+      @clearHistory="handleClearHistory"
+      @cloudSearchClick="handleCloudSearchClick"
+    />
+  </view>
+</template>
+
+<script>
+import { useSearchState } from '../../state/SearchState'
+import { SearchType, KeywordListMatchType, SearchTabValue } from '../../types/search'
+import AvatarComponent from '../Avatar'
+import DefaultSearchBar from './SearchBar.nvue'
+import DefaultSearchResults from './SearchResults.nvue'
+import DefaultSearchTab from './SearchTab.nvue'
+import DefaultPresearch from './placeholders/SearchResultsPresearch.nvue'
+import DefaultLoading from './placeholders/SearchResultsLoading.nvue'
+import DefaultEmpty from './placeholders/SearchResultsEmpty.nvue'
+import { SearchResultTypeMap } from '../../types/search'
+var SEARCH_HISTORY_KEY = 'tuikit_search_history'
+var MAX_HISTORY_COUNT = 20
+export default {
+  components: { SearchBar: DefaultSearchBar, SearchResults: DefaultSearchResults, SearchTab: DefaultSearchTab },
+  props: {
+    conversationID: { type: String, default: '' }, initialKeyword: { type: String, default: '' }, initialOption: { type: Object, default: function() { return {} } },
+    placeholder: { type: String, default: '搜索' }, isCloud: { type: Boolean, default: false }, autoFocus: { type: Boolean, default: true },
+    showAdvanced: { type: Boolean, default: false }, showCancel: { type: Boolean, default: true }, debounceTime: { type: Number, default: 300 },
+    Avatar: { type: [Object, Function], default: function() { return AvatarComponent } },
+  },
+  data() {
+    return { searchState: null, keyword: '', isLoading: false, showPresearch: true, currentTab: SearchTabValue.All, isCloudSearch: this.isCloud, userFilter: {}, messageFilter: {}, searchHistory: [] }
+  },
+  computed: {
+    isConversationSearch() { return !!this.conversationID },
+    showTab() { return !this.isConversationSearch && this.keyword.trim() && !this.showPresearch },
+    tabList() { return [{ label: '全部', value: SearchTabValue.All }, { label: '用户', value: SearchTabValue.Friend }, { label: '群聊', value: SearchTabValue.Group }, { label: '消息', value: SearchTabValue.Message }] },
+    filteredUserList() { if (this.isConversationSearch || !this.searchState) return []; return (this.currentTab === SearchTabValue.All || this.currentTab === SearchTabValue.Friend) ? this.searchState.userList.value : [] },
+    filteredFriendList() { if (this.isConversationSearch || !this.searchState) return []; return (this.currentTab === SearchTabValue.All || this.currentTab === SearchTabValue.Friend) ? this.searchState.friendList.value : [] },
+    filteredGroupList() { if (this.isConversationSearch || !this.searchState) return []; return (this.currentTab === SearchTabValue.All || this.currentTab === SearchTabValue.Group) ? this.searchState.groupList.value : [] },
+    filteredMessageResults() { if (!this.searchState) return []; return (this.currentTab === SearchTabValue.All || this.currentTab === SearchTabValue.Message) ? this.searchState.messageResults.value : [] },
+    hasMoreUserList() { return this.searchState ? this.searchState.hasMoreUserList.value : false }, hasMoreFriendList() { return this.searchState ? this.searchState.hasMoreFriendList.value : false },
+    hasMoreGroupList() { return this.searchState ? this.searchState.hasMoreGroupList.value : false }, hasMoreGroupMemberList() { return this.searchState ? this.searchState.hasMoreGroupMemberList.value : false },
+    hasMoreMessageResults() { return this.searchState ? this.searchState.hasMoreMessageResults.value : false },
+    groupMemberList() { return this.searchState ? this.searchState.groupMemberList.value : {} },
+  },
+  watch: {
+    conversationID: {
+      handler: function(v) {
+        var storeID = v || 'default_search_store'
+        if (this.searchState) {
+          this.searchState.destroyStore()
+        }
+        this.searchState = useSearchState(storeID)
+        // conversationID 变化后，如果已有 keyword 则自动搜索
+        if (this.keyword) {
+          var self = this
+          this.$nextTick(function() { self.doSearch(self.keyword) })
+        }
+      },
+      immediate: true
+    },
+    initialKeyword: {
+      handler: function(v) {
+        if (v && !this.keyword) {
+          this.keyword = v
+          if (this.searchState) {
+            this.doSearch(v)
+          }
+        }
+      },
+      immediate: true
+    },
+  },
+  mounted() {
+    this.loadSearchHistory()
+    if (this.initialOption) { if (this.initialOption.userFilter) this.userFilter = this.initialOption.userFilter; if (this.initialOption.messageFilter) this.messageFilter = this.initialOption.messageFilter }
+    if (this.initialKeyword && !this.keyword) { this.keyword = this.initialKeyword; this.doSearch(this.initialKeyword) }
+  },
+  beforeDestroy() { if (this.searchState) this.searchState.destroyStore() },
+  beforeUnmount() { if (this.searchState) this.searchState.destroyStore() },
+  methods: {
+    loadSearchHistory() { try { var h = uni.getStorageSync(SEARCH_HISTORY_KEY); if (h) this.searchHistory = JSON.parse(h) } catch(e) {} },
+    saveSearchHistory(kw) { if (!kw.trim()) return; var idx = this.searchHistory.indexOf(kw); if (idx > -1) this.searchHistory.splice(idx, 1); this.searchHistory.unshift(kw); if (this.searchHistory.length > MAX_HISTORY_COUNT) this.searchHistory = this.searchHistory.slice(0, MAX_HISTORY_COUNT); try { uni.setStorageSync(SEARCH_HISTORY_KEY, JSON.stringify(this.searchHistory)) } catch(e) {} },
+    doSearch(searchKeyword) {
+      if (!this.searchState) return
+      if (!searchKeyword.trim()) { this.showPresearch = true; this.searchState.clearSearchResults(); return }
+      this.showPresearch = false; this.isLoading = true
+      var searchType = SearchType.Friend.or(SearchType.Group).or(SearchType.Message)
+      if (this.isCloudSearch) searchType = SearchType.User.or(SearchType.Group).or(SearchType.Message)
+      if (this.isConversationSearch) searchType = SearchType.Message
+      else if (this.currentTab === SearchTabValue.Message) searchType = SearchType.Message
+      else if (this.currentTab === SearchTabValue.Friend) searchType = this.isCloudSearch ? SearchType.User : SearchType.Friend
+      else if (this.currentTab === SearchTabValue.Group) searchType = SearchType.Group
+      var option = { keywordListMatchType: KeywordListMatchType.OR, isCloudSearch: this.isCloudSearch, searchType: searchType, searchCount: 20, userFilter: this.userFilter, messageFilter: this.messageFilter }
+      if (this.isConversationSearch) option.messageFilter = Object.assign({}, option.messageFilter, { conversationID: this.conversationID })
+      this.$emit('search', searchKeyword, option)
+      var self = this
+      this.searchState.search([searchKeyword], option).then(function() { self.saveSearchHistory(searchKeyword) }).catch(function(err) { uni.showToast({ title: err.message, icon: 'none', duration: 2000 }) }).finally(function() { self.isLoading = false })
+    },
+    handleSearch(kw) { this.doSearch(kw) },
+    handleCancel() { this.keyword = ''; this.showPresearch = true; this.currentTab = SearchTabValue.All; if (this.searchState) this.searchState.clearSearchResults(); this.$emit('cancel') },
+    handleFocus() { if (!this.keyword) this.showPresearch = true },
+    handleClear() { this.showPresearch = true; this.currentTab = SearchTabValue.All; if (this.searchState) this.searchState.clearSearchResults() },
+    handleContainerClick() { var _fn = this.$refs.searchBarRef && this.$refs.searchBarRef.blur; if (_fn) _fn() },
+    handleTabChange(tab) { this.currentTab = tab; if (tab === SearchTabValue.All && !this.conversationID) { if (Object.keys(this.messageFilter).length > 0 || Object.keys(this.userFilter).length > 0) { this.messageFilter = {}; this.userFilter = {}; if (this.keyword.trim()) this.doSearch(this.keyword) } } },
+    handleMessageFilterChange(filter) { this.messageFilter = filter; if (this.keyword.trim()) this.doSearch(this.keyword) },
+    handleUserFilterChange(filter) { this.userFilter = filter; if (this.keyword.trim()) this.doSearch(this.keyword) },
+    handleResultItemClick(type, data) { this.$emit('resultItemClick', type, data) },
+    handleViewMore(type) {
+      if (this.currentTab === SearchTabValue.All) { if (type) this.currentTab = type }
+      else { var sv = SearchResultTypeMap[type]; if (sv && this.searchState) this.searchState.searchMore(sv).catch(function(err) { uni.showToast({ title: err.message, icon: 'none', duration: 2000 }) }) }
+    },
+    handleHistoryClick(kw) { this.keyword = kw; this.doSearch(kw) },
+    handleClearHistory() { this.searchHistory = []; try { uni.removeStorageSync(SEARCH_HISTORY_KEY) } catch(e) {} },
+    handleCloudSearchClick() { this.isCloudSearch = true; if (this.keyword.trim()) this.doSearch(this.keyword) },
+  },
+}
+</script>
+
+<style>
+.search {
+  flex: 1;
+  background-color: #ffffff;
+}
+</style>

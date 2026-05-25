@@ -1,0 +1,29 @@
+<template>
+	<view class="add-group-page">
+		<CustomNavbar title="添加群聊" :showBack="true" @back="handleBack" />
+		<view class="page-content"><AddGroup @groupSelect="handleGroupSelect" /></view>
+	</view>
+</template>
+
+<script>
+import AddGroup from '@/uni_modules/tuikit-atomic-x/components/Contact/AddGroup.nvue'
+import CustomNavbar from '@/uni_modules/tuikit-atomic-x/components/CustomNavbar/CustomNavbar.nvue'
+import { GroupMemberRole } from '@/uni_modules/tuikit-atomic-x/types/group'
+export default {
+  components: { AddGroup, CustomNavbar },
+  methods: {
+    handleBack() { uni.navigateBack({ delta: 1 }) },
+    handleGroupSelect(group) {
+      if (group.selfRole === GroupMemberRole.UNDEFINED) {
+        uni.$verifyData = { type: 'group', groupInfo: group }
+        uni.navigateTo({ url: '/pages/scenes/chat/contacts/applicationVerify/index?type=group' })
+      } else { uni.showToast({ title: '已加入该群组' }) }
+    },
+  },
+}
+</script>
+
+<style>
+.add-group-page { flex: 1; background-color: #f5f5f5; }
+.page-content { flex: 1; }
+</style>

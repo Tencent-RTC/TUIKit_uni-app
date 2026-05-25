@@ -1,0 +1,26 @@
+<template>
+  <ResultItem :avatarURL="group.groupAvatarURL" :title="displayName" :titleSuffix="'(' + group.groupID + ')'" :subtitle="group.memberCount + '人'" :keyword="keyword" :Avatar="Avatar" :defaultAvatarType="defaultAvatarType" />
+</template>
+<script>
+import AvatarComponent from '../../Avatar'
+import ResultItem from './ResultItem.nvue'
+import { GroupType } from '../../../types/group'
+var GROUP_TYPE_TO_AVATAR = {}
+GROUP_TYPE_TO_AVATAR[GroupType.Work] = 'work'
+GROUP_TYPE_TO_AVATAR[GroupType.Public] = 'public'
+GROUP_TYPE_TO_AVATAR[GroupType.Meeting] = 'meeting'
+GROUP_TYPE_TO_AVATAR[GroupType.AVChatRoom] = 'avchatroom'
+GROUP_TYPE_TO_AVATAR[GroupType.Community] = 'public'
+export default {
+  components: { ResultItem },
+  props: {
+    group: { type: Object, default: function() { return {} } },
+    keyword: { type: String, default: '' },
+    Avatar: { type: [Object, Function], default: function() { return AvatarComponent } },
+  },
+  computed: {
+    displayName() { return this.group.groupName || this.group.groupID || '未知群组' },
+    defaultAvatarType() { return this.group.groupType ? (GROUP_TYPE_TO_AVATAR[this.group.groupType] || 'public') : 'public' },
+  },
+}
+</script>

@@ -1,0 +1,42 @@
+<template>
+  <view class="contact-info">
+    <AddFriendInfo v-if="type === 'addFriend'" :userInfo="userInfo" :canAddFriend="canAddFriend" :Avatar="Avatar" @addFriend="handleAddFriend" />
+    <NewContactInfo v-else-if="type === 'newContact'" :application="friendApplication" :Avatar="Avatar" @accept="handleAcceptFriend" @reject="handleRejectFriend" />
+    <FriendInfo v-else-if="type === 'friend'" :friendInfo="friendInfo" :actions="friendInfoActions" @sendMessage="handleSendMessage" @remarkEdit="handleRemarkEdit" @muteChange="handleMuteChange" @pinChange="handlePinChange" @blacklistChange="handleBlacklistChange" @deleteFriend="handleDeleteFriend" />
+    <view v-else class="contact-info__empty"><text class="contact-info__empty-text">请选择联系人</text></view>
+  </view>
+</template>
+<script>
+import AvatarComponent from '../../Avatar'
+import AddFriendInfo from './AddFriendInfo.nvue'
+import NewContactInfo from './NewContactInfo.nvue'
+import FriendInfo from './FriendInfo.nvue'
+export default {
+  components: { AddFriendInfo, NewContactInfo, FriendInfo },
+  props: {
+    type: { type: String, default: undefined },
+    userInfo: { type: Object, default: null },
+    friendInfo: { type: Object, default: null },
+    friendApplication: { type: Object, default: null },
+    canAddFriend: { type: Boolean, default: true },
+    Avatar: { type: [Object, Function], default: function() { return AvatarComponent } },
+    friendInfoActions: { type: Array, default: function() { return [] } },
+  },
+  methods: {
+    handleAddFriend(userInfo) { this.$emit('addFriend', userInfo) },
+    handleAcceptFriend(app) { this.$emit('acceptFriend', app) },
+    handleRejectFriend(app) { this.$emit('rejectFriend', app) },
+    handleSendMessage(userID) { this.$emit('sendMessage', userID) },
+    handleRemarkEdit(friendInfo) { this.$emit('remarkEdit', friendInfo) },
+    handleDeleteFriend(userID) { this.$emit('deleteFriend', userID) },
+    handleMuteChange(value) { this.$emit('muteChange', value) },
+    handlePinChange(value) { this.$emit('pinChange', value) },
+    handleBlacklistChange(value) { this.$emit('blacklistChange', value) },
+  },
+}
+</script>
+<style>
+.contact-info { flex: 1; background-color: #F5F5F5; }
+.contact-info__empty { flex: 1; justify-content: center; align-items: center; }
+.contact-info__empty-text { font-size: 28rpx; color: #999999; }
+</style>

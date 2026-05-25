@@ -9,7 +9,7 @@
  */
 import { ref } from "vue";
 import {
-  CallExperimentalAPIOptions, setFramework,
+  CallExperimentalAPIOptions,
   callAPI, addListener, removeListener, HybridResponseData, hybirdCallExperimentalAPI, startForegroundService, stopForegroundService
 } from "@/uni_modules/tuikit-atomic-x";
 import { safeJsonParse } from "../utils/utsUtils";
@@ -248,7 +248,6 @@ function fetchLiveList(params: FetchLiveListOptions): void {
  * createLive({ liveID: 'xxx', coverUrl: 'https://example.com/cover.jpg'});
  */
 function createLive(params: CreateLiveOptions): void {
-  setFramework(21)
   callAPI(JSON.stringify({
     api: 'createLive',
     params: params,
@@ -278,7 +277,6 @@ function createLive(params: CreateLiveOptions): void {
  * joinLive({ liveID: 'host_live_id' });
  */
 function joinLive(params: JoinLiveOptions): void {
-  setFramework(21)
   callAPI(JSON.stringify({
     api: "joinLive",
     params: params,

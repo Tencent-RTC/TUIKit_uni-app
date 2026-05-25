@@ -12,7 +12,7 @@ import { safeJsonParse } from "../utils/utsUtils";
 import {
   addListener, callAPI, removeListener, setVirtualBackground,
   startFloatView, stopFloatView, addFloatViewListener, removeFloatViewListener, startVibrating, stopVibrating, enableMultiDeviceAbility, startForegroundService,
-  stopForegroundService, setFramework
+  stopForegroundService, setCallFramework
 } from "@/uni_modules/tuikit-atomic-x";
 
 declare const uni: any;
@@ -363,7 +363,6 @@ const createStoreParams = JSON.stringify({
  * });
  */
 function calls(params: CallsOptions): void {
-  setFramework(17)
   const { success, fail, ...callParams } = params;
   callAPI(JSON.stringify({
     api: "calls",
@@ -717,30 +716,6 @@ function removeCallListener(eventName: string, listenerID?: string): void {
 
 
 /**
- * 清除通话状态数据
- * @returns {void}
- * @memberof module:CallState
- * @internal
- */
-function clearCallState(): void {
-  // 解除事件绑定
-  unbindEvent();
-
-  const globalState = getGlobalState();
-  // 清除所有状态
-  globalState.activeCall.value = null;
-  globalState.recentCalls.value = [];
-  globalState.cursor.value = '';
-  globalState.selfInfo.value = null;
-  globalState.allParticipants.value = [];
-  globalState.speakerVolumes.value = [];
-  globalState.networkQualities.value = {};
-  // 清除事件监听器
-  // 重置绑定标志
-  globalState.bindEventDone = false;
-}
-
-/**
  * 解除事件监听
  * @returns {void}
  * @memberof module:CallState
@@ -1023,6 +998,7 @@ function enableCallMultiDeviceAbility(enable: boolean) {
  */
 export function useCallState() {
   bindEvent();
+  setCallFramework(17)
   return {
     // 状态
     activeCall,           // 当前活跃通话
@@ -1049,8 +1025,6 @@ export function useCallState() {
     addCallListener,      // 添加事件监听
     removeCallListener,   // 移除事件监听
 
-    // 内部方法（一般不需要外部调用）
-    clearCallState,       // 清除状态（内部使用）
 
     startFloatWindow,        // 开启悬浮窗
     stopFloatWindow,         // 关闭悬浮窗
@@ -1061,7 +1035,7 @@ export function useCallState() {
     enableCallMultiDeviceAbility, // 开启多端登录
     startForegroundService,
     stopForegroundService,
-    setFramework
+    setCallFramework
   };
 }
 

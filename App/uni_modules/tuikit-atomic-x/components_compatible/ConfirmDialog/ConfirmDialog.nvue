@@ -1,0 +1,151 @@
+<template>
+  <view v-if="visible" class="confirm-dialog">
+    <view class="confirm-dialog__mask" @tap="handleMaskClick"></view>
+    
+    <view class="confirm-dialog__content">
+      <view class="confirm-dialog__header">
+        <text class="confirm-dialog__title">{{ title }}</text>
+        <text v-if="message" class="confirm-dialog__message">{{ message }}</text>
+      </view>
+
+      <view class="confirm-dialog__buttons">
+        <view class="confirm-dialog__button" @tap="handleCancel">
+          <text class="confirm-dialog__button-text confirm-dialog__button-text--cancel">{{ cancelText }}</text>
+        </view>
+        <view class="confirm-dialog__button" @tap="handleConfirm">
+          <text class="confirm-dialog__button-text confirm-dialog__button-text--confirm">{{ confirmText }}</text>
+        </view>
+      </view>
+    </view>
+  </view>
+</template>
+
+<script>
+export default {
+  model: { prop: 'modelValue', event: 'update:modelValue' },
+  props: {
+    modelValue: { type: Boolean, default: false },
+    title: { type: String, default: '提示' },
+    message: { type: String, default: '' },
+    cancelText: { type: String, default: '取消' },
+    confirmText: { type: String, default: '确定' },
+    closeOnClickMask: { type: Boolean, default: true },
+  },
+  data() {
+    return {
+      visible: this.modelValue,
+    }
+  },
+  watch: {
+    modelValue(newVal) {
+      this.visible = newVal
+    },
+  },
+  methods: {
+    close() {
+      this.visible = false
+      this.$emit('update:modelValue', false)
+    },
+    open() {
+      this.visible = true
+      this.$emit('update:modelValue', true)
+    },
+    handleMaskClick() {
+      if (this.closeOnClickMask) {
+        this.close()
+        this.$emit('cancel')
+      }
+    },
+    handleCancel() {
+      this.close()
+      this.$emit('cancel')
+    },
+    handleConfirm() {
+      this.close()
+      this.$emit('confirm')
+    },
+  },
+}
+</script>
+
+<style>
+.confirm-dialog {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  justify-content: center;
+  align-items: center;
+}
+
+.confirm-dialog__mask {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+}
+
+.confirm-dialog__content {
+  width: 654rpx;
+  background-color: #FFFFFF;
+  border-radius: 24rpx;
+  align-items: center;
+  overflow: hidden;
+}
+
+.confirm-dialog__header {
+  padding: 40rpx 48rpx;
+}
+
+.confirm-dialog__title {
+  font-size: 36rpx;
+  font-weight: 600;
+  color: rgba(0, 0, 0, 0.9);
+  line-height: 52rpx;
+  margin: 24rpx 0 16rpx;
+  text-align: center;
+}
+
+.confirm-dialog__message {
+  font-size: 32rpx;
+  color: rgba(0, 0, 0, 0.9);
+  line-height: 48rpx;
+  text-align: center;
+}
+
+.confirm-dialog__buttons {
+  flex: 1;
+  width: 654rpx;
+  flex-direction: row;
+  border-top: 1rpx solid #E6E9F0;
+}
+
+.confirm-dialog__button {
+  flex: 1;
+  justify-content: center;
+  align-items: center;
+  padding: 32rpx;
+  border-right: 1rpx solid #E6E9F0;
+}
+
+.confirm-dialog__button:last-child {
+  border-right: none;
+}
+
+.confirm-dialog__button-text {
+  font-size: 32rpx;
+  line-height: 48rpx;
+  font-weight: 500;
+}
+
+.confirm-dialog__button-text--cancel {
+  color: rgba(0, 0, 0, 0.9);
+}
+
+.confirm-dialog__button-text--confirm {
+  color: #E54545;
+}
+</style>

@@ -100,7 +100,7 @@
     muteConversation,
     pinConversation,
   } = useConversationListState('FriendInfo')
-  const { calls, selfInfo, setFramework } = useCallState()
+  const { calls, selfInfo, setCallFramework } = useCallState()
 
   const {
     openLocalCamera,
@@ -336,7 +336,7 @@
       return;
     }
     reportScene('CHAT_INVOKE_CALL');
-    setFramework(15)
+    setCallFramework(15)
     calls({
       participantIds: [currentFriendInfo.value?.userID],
       mediaType,

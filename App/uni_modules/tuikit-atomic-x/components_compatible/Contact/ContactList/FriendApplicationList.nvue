@@ -1,0 +1,84 @@
+<template>
+  <view class="new-contact-list">
+    <list class="list-scroll" :show-scrollbar="false">
+      <cell v-if="isLoading" key="loading"><view class="placeholder"><component v-if="PlaceholderLoading" :is="PlaceholderLoading" /></view></cell>
+      <cell v-else-if="friendApplicationList.length === 0" key="empty"><view class="placeholder"><component v-if="PlaceholderEmptyList" :is="PlaceholderEmptyList" text="暂无新的好友申请" /></view></cell>
+      <template v-else>
+        <cell v-for="item in friendApplicationList" :key="item.applicationID">
+          <view class="application-item" @tap="handleItemClick(item)">
+            <component :is="Avatar" :src="item.avatarURL || ''" :name="item.title || item.applicationID" :size="80" shape="square" defaultAvatarType="user" pureMode />
+            <view class="item-content">
+              <view class="item-info">
+                <text class="item-name" :numberOfLines="1">{{ item.title || item.applicationID }}</text>
+                <text v-if="item.addWording" class="item-wording" :numberOfLines="1">{{ item.addWording }}</text>
+              </view>
+              <view class="item-actions" v-if="item.type === 1">
+                <view class="action-btn action-btn--accept" @tap.stop="handleAccept(item)"><text class="action-btn-text action-btn-text--accept">同意</text></view>
+                <view class="action-btn action-btn--reject" @tap.stop="handleReject(item)"><text class="action-btn-text action-btn-text--reject">拒绝</text></view>
+              </view>
+              <view v-else class="item-status"><text class="item-status-text">{{ getStatusText(item) }}</text></view>
+            </view>
+          </view>
+        </cell>
+      </template>
+    </list>
+  </view>
+</template>
+<script>
+import AvatarComponent from '../../Avatar'
+import DefaultEmptyList from '../placeholders/EmptyList.nvue'
+import DefaultLoading from '../placeholders/Loading.nvue'
+import { useContactState } from '../../../state/ContactState'
+import { showToast } from '../../../utils/toast'
+export default {
+  props: {
+    Avatar: { type: [Object, Function], default: function() { return AvatarComponent } },
+    PlaceholderEmptyList: { type: [Object, Function], default: function() { return DefaultEmptyList } },
+    PlaceholderLoading: { type: [Object, Function], default: function() { return DefaultLoading } },
+  },
+  data() { var cs = useContactState(); return { contactState: cs, isLoading: false, processingIds: {} } },
+  computed: { friendApplicationList() { return this.contactState.friendApplicationList.value || [] } },
+  mounted() { this.handleClearUnreadCount() },
+  beforeDestroy() { this.handleClearUnreadCount() },
+  beforeUnmount() { this.handleClearUnreadCount() },
+  methods: {
+    getStatusText(item) { return item.type === 2 ? '等待验证' : '' },
+    handleItemClick(item) {
+      if (this.processingIds[item.applicationID]) return
+      this.$emit('itemClick', item)
+    },
+    handleAccept(item) {
+      if (this.processingIds[item.applicationID]) return
+      this.processingIds[item.applicationID] = true
+      var self = this
+      this.contactState.acceptFriendApplication(item).then(function() { showToast({ message: '已同意', type: 'success' }); self.$emit('accept', item) }).catch(function(err) { showToast({ message: err.message || '操作失败', type: 'error' }) }).then(function() { delete self.processingIds[item.applicationID] })
+    },
+    handleReject(item) {
+      if (this.processingIds[item.applicationID]) return
+      this.processingIds[item.applicationID] = true
+      var self = this
+      this.contactState.refuseFriendApplication(item).then(function() { showToast({ message: '已拒绝', type: 'success' }); self.$emit('reject', item) }).catch(function(err) { showToast({ message: err.message || '操作失败', type: 'error' }) }).then(function() { delete self.processingIds[item.applicationID] })
+    },
+    handleClearUnreadCount() { if (this.contactState.friendApplicationUnreadCount.value > 0) this.contactState.clearFriendApplicationUnreadCount() },
+  },
+}
+</script>
+<style>
+.new-contact-list { flex: 1; background-color: #F2F3F5; }
+.list-scroll { flex: 1; }
+.placeholder { padding-top: 100rpx; padding-bottom: 100rpx; justify-content: center; align-items: center; }
+.application-item { flex-direction: row; align-items: center; padding: 24rpx 32rpx; background-color: #FFFFFF; margin-bottom: 2rpx; }
+.item-content { flex: 1; flex-direction: row; align-items: center; justify-content: space-between; margin-left: 24rpx; }
+.item-info { flex: 1; flex-direction: column; }
+.item-name { font-size: 36rpx; font-weight: 400; line-height: 48rpx; color: #111111; lines: 1; text-overflow: ellipsis; }
+.item-wording { font-size: 24rpx; font-weight: 400; line-height: 36rpx; color: #888888; margin-top: 4rpx; lines: 1; text-overflow: ellipsis; }
+.item-actions { flex-direction: row; align-items: center; }
+.action-btn { padding: 12rpx 24rpx; border-radius: 32rpx; margin-left: 16rpx; }
+.action-btn--accept { background-color: #1C66E5; }
+.action-btn--reject { background-color: #FFFFFF; border-width: 1rpx; border-style: solid; border-color: #DDDDDD; }
+.action-btn-text { font-size: 26rpx; font-weight: 400; line-height: 32rpx; }
+.action-btn-text--accept { color: #FFFFFF; }
+.action-btn-text--reject { color: #000000; }
+.item-status { flex-direction: row; align-items: center; }
+.item-status-text { font-size: 28rpx; line-height: 40rpx; color: #888888; }
+</style>

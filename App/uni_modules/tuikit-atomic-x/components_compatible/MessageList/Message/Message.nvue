@@ -1,0 +1,460 @@
+<template>
+  <view v-if="isCenterMessage" class="msg msg--center" @tap.stop="handleMessageContentTap">
+    <RecalledMessage v-if="message.status === MessageStatus.RECALLED" :message="message" @reEdit="handleReEdit" />
+    <GroupTipMessage v-else-if="isSystemMessage || isGroupCreateMessage" :message="message" />
+    <CustomMessage v-else-if="isCustomCenterMessage" :message="message" :conversationID="conversationID" />
+  </view>
+  <view v-else class="msg msg--no-select" :class="messageClasses" :data-message-id="message.msgID" @touchstart="handleTouchStart" @touchend="handleTouchEnd" @tap.stop="handleTap" @touchmove.stop.prevent="handleTouchMove">
+    <Avatar v-if="showAvatar" :src="message.sender.avatarURL" :name="displayName" :size="80" defaultAvatarType="user" class="msg__avatar" />
+    <view class="msg__main msg__main--no-select" :class="'msg__main--'+ (message.isSelf ? 'out' : 'in')">
+      <view v-if="showNickname" class="msg__nickname">
+        <text class="msg__nickname-text msg__text--no-select">{{ displayName }}</text>
+      </view>
+
+      <view class="msg__bubble msg__bubble--no-select" :class="'msg__bubble--'+ (message.isSelf ? 'out' : 'in')" @longpress="handleLongPress" @tap.stop="handleMessageContentTap" @touchstart.stop="handleBubbleTouchStart" @touchmove.stop="">
+        <component ref="messageContentRef" :is="currentMessageComponent" :message="message" :conversationID="conversationID" :id="message.msgID" />
+
+        <view v-if="showStatus" :class="['msg__status', 'msg__status--'+ (message.isSelf ? 'out' : 'in')]">
+          <image v-if="message.status === MessageStatus.SENDING" ref="loadingIconRef" src="/uni_modules/tuikit-atomic-x/static/icon/loading.png" class="msg__status-icon" mode="aspectFill" />
+          <image v-else-if="message.status === MessageStatus.SEND_FAIL" src="/uni_modules/tuikit-atomic-x/static/icon/error.png" class="msg__status-icon" mode="aspectFill" @tap="handleResend" />
+        </view>
+        <view v-if="showReadStatus" class="msg__read-status">
+          <text class="msg__read-text msg__text--no-select">{{ readStatusText }}</text>
+        </view>
+      </view>
+      <view v-if="showTime" class="msg__time" @tap.stop="handleMessageContentTap" style="background-color: black;">
+        <text class="msg__time-text msg__text--no-select">{{ formatMessageTime(message.timestamp) }}</text>
+      </view>
+    </view>
+    <MessageActions v-if="showActions" ref="messageActionsRef" :message="message" :actions="messageActionList" @close="handleActionsClose" />
+  </view>
+</template>
+
+<script>
+import Avatar from '../../Avatar/Avatar.nvue'
+import RecalledMessage from './RecalledMessage/RecalledMessage.nvue'
+import GroupTipMessage from './GroupTipMessage/GroupTipMessage.nvue'
+import TextMessage from './TextMessage/TextMessage.nvue'
+import ImageMessage from './ImageMessage/ImageMessage.nvue'
+import VideoMessage from './VideoMessage/VideoMessage.nvue'
+import AudioMessage from './AudioMessage/AudioMessage.nvue'
+import FileMessage from './FileMessage/FileMessage.nvue'
+import FaceMessage from './FaceMessage/FaceMessage.nvue'
+import CustomMessage from './CustomMessage/CustomMessage.nvue'
+import MergerMessage from './MergerMessage/MergerMessage.nvue'
+import MessageActions from './MessageActions.nvue'
+import { MessageType, MessageStatus } from '../../../types/message'
+import { formatTime } from '../../../utils/timeUtils'
+import { isGroupCallMessage, isCallMessage, isVideoCall, parseCallMessageData, CallType } from '../../../utils/callMessageUtils'
+import { useCallState, CallErrorCode } from '../../../state_compatible/CallState'
+import { useDeviceState } from '../../../state_compatible/DeviceState'
+import { getCurrentPageFullPath, isNavigating, isCallEnding } from '../../../server_compatible/callService'
+import { checkCallPermissionWithDialog } from '../../../utils/callPermission'
+
+export default {
+  name: 'Message',
+  components: {
+    Avatar,
+    RecalledMessage,
+    GroupTipMessage,
+    TextMessage,
+    ImageMessage,
+    VideoMessage,
+    AudioMessage,
+    FileMessage,
+    FaceMessage,
+    CustomMessage,
+    MergerMessage,
+    MessageActions
+  },
+  props: {
+    message: { type: Object, required: true },
+    conversationID: { type: String, default: '' },
+    showAvatar: { type: Boolean, default: true },
+    showNickname: { type: Boolean, default: true },
+    showTime: { type: Boolean, default: false },
+    messageActionList: { type: Array, default: function() { return [] } },
+    highlight: { type: Boolean, default: false },
+    customCenterChecker: { type: Function, default: null }
+  },
+  data: function() {
+    var callStateInstance = useCallState();
+    var deviceStateInstance = useDeviceState();
+    return {
+      MessageStatus: MessageStatus,
+      showActions: false,
+      longPressPosition: { x: 0, y: 0 },
+      lastTouchPosition: { x: 0, y: 0 },
+      isLongPressing: false,
+      longPressTimer: null,
+      touchStartTime: 0,
+      loadingAnimationTimer: null,
+      loadingStartTimer: null,
+      isCalling: false,
+      animation: uni.requireNativePlugin('animation'),
+      callStateInstance: callStateInstance,
+      deviceStateInstance: deviceStateInstance,
+    }
+  },
+  computed: {
+    isSystemMessage() {
+      return this.message.messageType === MessageType.SYSTEM
+    },
+    isGroupCreateMessage() {
+      if (this.message.messageType === MessageType.CUSTOM) {
+        try {
+          var data = JSON.parse((this.message.messageBody.customMessage && this.message.messageBody.customMessage.data) || '{}')
+          if (data.businessID === 'group_create') return true
+        } catch (e) {}
+      }
+      return false
+    },
+    isCustomCenterMessage() {
+      if (this.customCenterChecker) {
+        return this.customCenterChecker(this.message, this.conversationID)
+      }
+      return isGroupCallMessage(this.message, this.conversationID)
+    },
+    isCenterMessage() {
+      return this.message.status === MessageStatus.RECALLED
+        || this.isSystemMessage
+        || this.isGroupCreateMessage
+        || this.isCustomCenterMessage
+    },
+    messageClasses() {
+      return [
+        'msg--' + (this.message.isSelf ? 'out' : 'in'),
+        'msg--type-' + this.message.messageType
+      ]
+    },
+    showStatus() {
+      return this.message.isSelf &&
+        (this.message.status === MessageStatus.SENDING ||
+          this.message.status === MessageStatus.SEND_FAIL)
+    },
+    showReadStatus() {
+      return this.message.isSelf &&
+        this.message.status === MessageStatus.SEND_SUCCESS &&
+        this.message.needReadReceipt
+    },
+    readStatusText() {
+      if (!this.message.receipt) return '未读'
+      var readCount = this.message.receipt.readCount || 0
+      var unreadCount = this.message.receipt.unreadCount || 0
+      if (unreadCount === 0) return '已读'
+      return readCount + '人已读'
+    },
+    displayName() {
+      var sender = this.message.sender
+      return sender.nameCard || sender.friendRemark || sender.nickname || sender.userID
+    },
+    currentMessageComponent() {
+      var map = {}
+      map[MessageType.TEXT] = TextMessage
+      map[MessageType.IMAGE] = ImageMessage
+      map[MessageType.VIDEO] = VideoMessage
+      map[MessageType.SOUND] = AudioMessage
+      map[MessageType.FILE] = FileMessage
+      map[MessageType.FACE] = FaceMessage
+      map[MessageType.CUSTOM] = CustomMessage
+      map[MessageType.MERGED] = MergerMessage
+      return map[this.message.messageType] || TextMessage
+    }
+  },
+  watch: {
+    highlight: function(newVal) {
+      if (newVal) {
+        var self = this
+        this.$nextTick(function() { self.playHighlightAnimation() })
+      }
+    },
+    'message.status': {
+      handler: function(newStatus) {
+        if (newStatus === MessageStatus.SENDING) {
+          var self = this
+          this.$nextTick(function() { self.startLoadingAnimation() })
+        } else {
+          this.stopLoadingAnimation()
+        }
+      },
+      immediate: true
+    }
+  },
+  mounted() {
+    if (this.message.status === MessageStatus.SENDING) {
+      var self = this
+      this.$nextTick(function() { self.startLoadingAnimation() })
+    }
+  },
+  beforeDestroy() { this.stopLoadingAnimation() },
+  beforeUnmount() { this.stopLoadingAnimation() },
+  methods: {
+    getMessagePosition(messageId) {
+      var self = this
+      return new Promise(function(resolve, reject) {
+        var query = uni.createSelectorQuery().in(self)
+        query.select('#' + messageId).boundingClientRect(function(data) {
+          if (data) resolve(data)
+          else reject(new Error('无法获取位置信息'))
+        }).exec()
+      })
+    },
+    formatMessageTime(timestamp) {
+      if (!timestamp) return ''
+      return formatTime(timestamp * 1000)
+    },
+    playHighlightAnimation() {
+      var contentEl = this.$refs.messageContentRef
+      if (!contentEl) return
+      var el = contentEl.$el || contentEl
+      if (!el || !el.children || !el.children[0]) return
+      var highlightEl = el.children[0]
+      var count = 0
+      var maxCount = 6
+      var animation = this.animation
+      var flash = function() {
+        if (count >= maxCount) {
+          animation.transition(highlightEl, { styles: { backgroundColor: 'transparent' }, duration: 150, timingFunction: 'ease-out' })
+          return
+        }
+        var isHighlight = count % 2 === 0
+        animation.transition(highlightEl, {
+          styles: { backgroundColor: isHighlight ? '#FFD54F' : 'transparent' },
+          duration: 200, timingFunction: 'ease-in-out'
+        }, function() { count++; flash() })
+      }
+      flash()
+    },
+    startLoadingAnimation() {
+      var self = this
+      if (this.loadingStartTimer !== null) clearTimeout(this.loadingStartTimer)
+      this.loadingStartTimer = setTimeout(function() {
+        self.loadingStartTimer = null
+        var ref = self.$refs.loadingIconRef
+        if (!ref) return
+        var el = ref.$el || ref
+        if (!el) return
+        var rotation = 0
+        var rotate = function() {
+          if (self.loadingAnimationTimer === null) return
+          rotation += 360
+          self.animation.transition(el, {
+            styles: { transform: 'rotateZ(' + rotation + 'deg)' },
+            duration: 800, timingFunction: 'linear'
+          }, function() { if (self.loadingAnimationTimer !== null) rotate() })
+        }
+        self.loadingAnimationTimer = 1
+        rotate()
+      }, 100)
+    },
+    stopLoadingAnimation() {
+      if (this.loadingStartTimer !== null) { clearTimeout(this.loadingStartTimer); this.loadingStartTimer = null }
+      this.loadingAnimationTimer = null
+    },
+    handleReEdit(data) { this.$emit('reEdit', data) },
+    handleTouchStart(e) {
+      this.touchStartTime = Date.now()
+      this.isLongPressing = false
+      if (e && e.touches && e.touches.length > 0) {
+        var touch = e.touches[0]
+        var systemInfo = uni.getSystemInfoSync()
+        this.lastTouchPosition = {
+          x: (touch.clientX / systemInfo.windowWidth) * 750,
+          y: (touch.clientY / systemInfo.windowHeight) * (systemInfo.windowHeight / systemInfo.windowWidth * 750)
+        }
+      }
+      if (this.longPressTimer) clearTimeout(this.longPressTimer)
+      var self = this
+      this.longPressTimer = setTimeout(function() { self.isLongPressing = true }, 350)
+    },
+    handleTouchEnd(e) {
+      if (this.longPressTimer) { clearTimeout(this.longPressTimer); this.longPressTimer = null }
+    },
+    handleTouchMove(e) {},
+    handleBubbleTouchStart(e) {
+      if (e && e.preventDefault) e.preventDefault()
+      if (e && e.stopPropagation) e.stopPropagation()
+    },
+    handleLongPress: function(e) {
+      if (e && e.preventDefault) e.preventDefault()
+      if (e && e.stopPropagation) e.stopPropagation()
+      this.isLongPressing = true
+      if (this.isCenterMessage) return
+      this.longPressPosition = { x: this.lastTouchPosition.x, y: this.lastTouchPosition.y }
+      var self = this
+      this.getMessagePosition(this.message.msgID).then(function(messagePosition) {
+        var systemInfo = uni.getSystemInfoSync()
+        self.longPressPosition = {
+          x: 132,
+          y: messagePosition.top / systemInfo.windowWidth * 750,
+          messageX: messagePosition.left,
+          messageWidth: messagePosition.width,
+          messageHeight: messagePosition.height / systemInfo.windowWidth * 750,
+          isSelf: self.message.isSelf,
+        }
+      }).catch(function(error) {
+        console.warn('获取位置失败:', error)
+      }).then(function() {
+        self.showActions = true
+        self.$nextTick(function() {
+          if (self.$refs.messageActionsRef && typeof self.$refs.messageActionsRef.setTriggerPosition === 'function') {
+            self.$refs.messageActionsRef.setTriggerPosition(self.longPressPosition)
+          }
+        })
+      })
+    },
+    handleTap: function() {
+      if (this.isLongPressing) {
+        var self = this
+        setTimeout(function() { self.isLongPressing = false }, 100)
+        return
+      }
+      if (this.longPressTimer) { clearTimeout(this.longPressTimer); this.longPressTimer = null }
+      this.$emit('onMessageListTap')
+    },
+    handleC2CCallMessageTap: function() {
+      var self = this
+      if (!isCallMessage(this.message) || !this.conversationID.startsWith('c2c_')) {
+        return false
+      }
+
+      // 防抖：上一次呼叫流程尚未完成时，不允许再次呼叫
+      if (self.isCalling) {
+        console.log('[Message] call skipped: isCalling is true');
+        return true;
+      }
+      if (isNavigating()) {
+        console.log('[Message] call skipped: navigation in progress');
+        return true;
+      }
+      if (isCallEnding()) {
+        console.log('[Message] call skipped: previous call end still processing');
+        return true;
+      }
+
+      var callData = parseCallMessageData(this.message)
+      var mediaType = isVideoCall(callData) ? CallType.VIDEO : CallType.AUDIO
+      var peerUserID = this.conversationID.replace('c2c_', '')
+      var callStateInstance = self.callStateInstance
+      var deviceStateInstance = self.deviceStateInstance
+
+      if (peerUserID) {
+        self.isCalling = true;
+
+        if (mediaType === 1) {
+          deviceStateInstance.openLocalCamera({ isFront: true });
+        }
+        deviceStateInstance.openLocalMicrophone({
+          fail: function(error) {
+            if (error === -1104) {
+              setTimeout(function() {
+                deviceStateInstance.openLocalMicrophone();
+              }, 200);
+            }
+          }
+        });
+
+        checkCallPermissionWithDialog(mediaType).then(function(hasPermission) {
+          if (!hasPermission) {
+            self.isCalling = false;
+            return;
+          }
+          callStateInstance.setFramework(15);
+          callStateInstance.calls({
+            participantIds: [peerUserID],
+            mediaType: mediaType,
+            success: function() {
+              uni.$callSource = 'caller';
+              uni.$lastPage = getCurrentPageFullPath();
+              uni.navigateTo({
+                url: '/uni_modules/tuikit-atomic-x/pages/call?layoutTemplate=Float',
+                complete: function() { self.isCalling = false; }
+              });
+            },
+            fail: function(error) {
+              if (error === CallErrorCode.PACKAGE_NOT_PURCHASED) {
+                uni.showToast({
+                  icon: 'none',
+                  title: '您的应用还未开通音视频通话（TUICallKit）能力，您可以去控制台申请免费体验'
+                });
+                console.error('控制台申请免费体验,https://console.cloud.tencent.com/trtc');
+              }
+              self.isCalling = false;
+            }
+          });
+        }).catch(function() {
+          self.isCalling = false;
+        });
+      }
+      return true
+    },
+    handleMessageContentTap: function() {
+      this.$emit('onMessageListTap')
+      this.handleC2CCallMessageTap()
+      this.$emit('onMessageTap', this.message)
+    },
+    handleResend: function() {},
+    handleActionsClose: function() {
+      this.showActions = false
+      var self = this
+      setTimeout(function() { self.isLongPressing = false }, 100)
+    }
+  }
+}
+</script>
+
+<style>
+  .msg {
+    flex-direction: row;
+    padding: 20rpx 22rpx;
+    align-items: flex-start;
+    flex: 1;
+  }
+
+  .msg--no-select {
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+  }
+
+  .msg--center {
+    justify-content: center;
+    align-items: center;
+    flex: 1;
+    width: 750rpx;
+  }
+
+  .msg--in { flex-direction: row; }
+  .msg--out { flex-direction: row-reverse; }
+
+  .msg__avatar { margin-right: 24rpx; }
+  .msg--out .msg__avatar { margin-right: 0; margin-left: 24rpx; }
+
+  .msg__main { flex: 1; flex-direction: column; align-items: flex-start; }
+  .msg__main--out { padding: 10rpx 14rpx 0 24rpx; }
+  .msg__main--in { padding: 10rpx 24rpx 0 14rpx; }
+  .msg__main--no-select { user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+  .msg--out .msg__main { align-items: flex-end; }
+
+  .msg__nickname { margin-bottom: 8rpx; }
+  .msg__nickname-text { font-size: 24rpx; line-height: 34rpx; color: rgba(0, 0, 0, 0.4); }
+
+  .msg__bubble { position: relative; justify-content: center; align-items: flex-end; }
+  .msg__bubble--no-select { user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+  .msg__bubble--in { flex-direction: row; }
+  .msg__bubble--out { flex-direction: row-reverse; }
+  .msg__text--no-select { user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+
+  .msg__status { height: 80rpx; align-items: center; justify-content: center; }
+  .msg__status--in { margin-left: 16rpx; }
+  .msg__status--out { margin-right: 16rpx; }
+  .msg__status-icon { width: 32rpx; height: 32rpx; }
+
+  .msg__time { flex-direction: row; align-items: center; margin-top: 8rpx; }
+  .msg--out .msg__time { flex-direction: row-reverse; }
+  .msg__time-text { font-size: 24rpx; line-height: 34rpx; font-weight: 400; color: rgba(0, 0, 0, 0.4); }
+
+  .msg__read-status { margin-left: 16rpx; }
+  .msg--out .msg__read-status { margin-left: 0; margin-right: 16rpx; }
+  .msg__read-text { font-size: 24rpx; line-height: 34rpx; font-weight: 400; color: rgba(0, 0, 0, 0.4); }
+</style>

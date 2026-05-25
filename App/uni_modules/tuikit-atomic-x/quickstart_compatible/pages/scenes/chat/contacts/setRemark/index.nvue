@@ -1,0 +1,39 @@
+<template>
+  <view class="set-remark-page">
+    <CustomNavbar title="修改备注" :showBack="true" @back="handleBack" />
+    <view class="page-content">
+      <SetRemark :userID="userID" :remark="remark" @success="handleSuccess" @fail="handleFail" @cancel="handleCancel" />
+    </view>
+  </view>
+</template>
+
+<script>
+import { SetRemark } from '@/uni_modules/tuikit-atomic-x/components/Contact/ContactInfo'
+import CustomNavbar from '@/uni_modules/tuikit-atomic-x/components/CustomNavbar/CustomNavbar.nvue'
+export default {
+  components: { SetRemark, CustomNavbar },
+  data() { return { friendInfo: null } },
+  computed: {
+    userID() { return (this.friendInfo && this.friendInfo.userID) || '' },
+    remark() { return (this.friendInfo && this.friendInfo.remark) || '' },
+  },
+  onLoad() {
+    // 全局变量方式（同步）
+    if (uni.$remarkData) {
+      this.friendInfo = uni.$remarkData
+      uni.$remarkData = null
+    }
+  },
+  methods: {
+    handleBack() { uni.navigateBack({ delta: 1 }) },
+    handleSuccess(userID, remark) { setTimeout(function() { uni.navigateBack({ delta: 1 }) }, 1500) },
+    handleFail(error) { console.error('设置备注失败:', error) },
+    handleCancel() { uni.navigateBack({ delta: 1 }) },
+  },
+}
+</script>
+
+<style>
+.set-remark-page { flex: 1; background-color: #F0F2F7; }
+.page-content { flex: 1; }
+</style>

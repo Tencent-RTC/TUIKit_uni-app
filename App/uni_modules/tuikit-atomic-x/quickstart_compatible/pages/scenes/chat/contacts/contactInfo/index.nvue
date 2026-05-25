@@ -1,0 +1,59 @@
+<template>
+  <view class="contact-info-page">
+    <CustomNavbar :title="navTitle" :showBack="true" @back="handleBack" />
+    <view class="page-content">
+      <ContactInfo :type="type" :userInfo="userInfo" :friendInfo="friendInfo" :friendApplication="friendApplication" :canAddFriend="canAddFriend"
+        @addFriend="handleAddFriend" @acceptFriend="handleAcceptFriend" @rejectFriend="handleRejectFriend"
+        @sendMessage="handleSendMessage" @remarkEdit="handleRemarkChange" @deleteFriend="handleDeleteFriend" />
+    </view>
+  </view>
+</template>
+
+<script>
+import ContactInfo from '@/uni_modules/tuikit-atomic-x/components/Contact/ContactInfo'
+import CustomNavbar from '@/uni_modules/tuikit-atomic-x/components/CustomNavbar/CustomNavbar.nvue'
+export default {
+  components: { ContactInfo, CustomNavbar },
+  data() { return { type: undefined, userInfo: null, friendInfo: null, friendApplication: null, canAddFriend: true } },
+  computed: {
+    navTitle() {
+      switch (this.type) {
+        case 'addFriend': return '添加好友'
+        case 'newContact': return '新的联系人'
+        case 'friend': return '好友详情'
+        default: return '联系人详情'
+      }
+    },
+  },
+  onLoad(options) {
+    if (options.type) this.type = options.type
+    // 全局变量方式（同步）
+    if (uni.$contactInfoData) {
+      if (uni.$contactInfoData.userInfo) this.userInfo = uni.$contactInfoData.userInfo
+      if (uni.$contactInfoData.friendInfo) this.friendInfo = uni.$contactInfoData.friendInfo
+      if (uni.$contactInfoData.applicationInfo) this.friendApplication = uni.$contactInfoData.applicationInfo
+      uni.$contactInfoData = null
+    }
+  },
+  methods: {
+    handleBack() { uni.navigateBack({ delta: 1 }) },
+    handleAddFriend(user) {
+      uni.$verifyData = { type: 'friend', userInfo: user }
+      uni.navigateTo({ url: '/pages/scenes/chat/contacts/applicationVerify/index?type=friend' })
+    },
+    handleAcceptFriend(application) { uni.navigateBack({ delta: 2 }) },
+    handleRejectFriend(application) { uni.navigateBack({ delta: 2 }) },
+    handleSendMessage(userID) { uni.navigateTo({ url: '/pages/scenes/chat/chat/index?conversationID=c2c_' + userID }) },
+    handleRemarkChange(data) {
+      uni.$remarkData = data
+      uni.navigateTo({ url: '/pages/scenes/chat/contacts/setRemark/index' })
+    },
+    handleDeleteFriend(userID) { uni.navigateBack({ delta: 1 }) },
+  },
+}
+</script>
+
+<style>
+.contact-info-page { flex: 1; background-color: #f5f5f5; }
+.page-content { flex: 1; }
+</style>

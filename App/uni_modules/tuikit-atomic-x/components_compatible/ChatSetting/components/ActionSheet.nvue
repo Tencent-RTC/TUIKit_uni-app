@@ -1,0 +1,100 @@
+<template>
+  <view v-if="isShow" ref="maskRef" class="action-sheet-mask" @tap="handleMaskTap">
+    <view ref="sheetRef" class="action-sheet" @tap.stop>
+      <view
+        v-for="(item, index) in options"
+        :key="index"
+        class="action-sheet__item"
+        @tap="handleSelect(item, index)"
+      >
+        <text 
+          class="action-sheet__text"
+          :style="{ color: item.color || 'rgba(0, 0, 0, 0.9)' }"
+        >{{ item.label }}</text>
+      </view>
+      <view class="action-sheet__gap"></view>
+      <view class="action-sheet__item action-sheet__item--cancel" @tap="handleCancel">
+        <text class="action-sheet__text">取消</text>
+      </view>
+    </view>
+  </view>
+</template>
+
+<script>
+export default {
+  model: { prop: 'visible', event: 'update:visible' },
+  props: {
+    visible: { type: Boolean, default: false },
+    options: { type: Array, default: function() { return [] } },
+  },
+  data() {
+    return {
+      isShow: false,
+      isAnimating: false,
+      animation: null,
+    }
+  },
+  watch: {
+    visible(newVal) {
+      if (newVal) { this.showSheet() } else { this.hideSheet() }
+    },
+  },
+  created() {
+    this.animation = uni.requireNativePlugin('animation')
+  },
+  methods: {
+    showSheet() {
+      if (this.isAnimating) return
+      this.isAnimating = true
+      this.isShow = true
+      var self = this
+      this.$nextTick(function() {
+        setTimeout(function() {
+          var maskEl = self.$refs.maskRef
+          var sheetEl = self.$refs.sheetRef
+          if (maskEl && sheetEl) {
+            self.animation.transition(maskEl, { styles: { opacity: 1 }, duration: 180, timingFunction: 'ease-out' })
+            self.animation.transition(sheetEl, {
+              styles: { transform: 'translateY(0)', opacity: 1 },
+              duration: 280, timingFunction: 'cubic-bezier(0.23, 1, 0.32, 1)'
+            }, function() { self.isAnimating = false })
+          } else { self.isAnimating = false }
+        }, 10)
+      })
+    },
+    hideSheet(callback) {
+      if (this.isAnimating) return
+      this.isAnimating = true
+      var maskEl = this.$refs.maskRef
+      var sheetEl = this.$refs.sheetRef
+      var self = this
+      if (maskEl && sheetEl) {
+        this.animation.transition(maskEl, { styles: { opacity: 0 }, duration: 150, timingFunction: 'ease-out' })
+        this.animation.transition(sheetEl, {
+          styles: { transform: 'translateY(100%)', opacity: 1 },
+          duration: 180, timingFunction: 'cubic-bezier(0.4, 0, 1, 1)'
+        }, function() { self.isShow = false; self.isAnimating = false; if (callback) callback() })
+      } else { self.isShow = false; self.isAnimating = false; if (callback) callback() }
+    },
+    handleSelect(option, index) {
+      var self = this
+      this.hideSheet(function() { self.$emit('select', option, index); self.$emit('update:visible', false) })
+    },
+    handleCancel() {
+      var self = this
+      this.hideSheet(function() { self.$emit('cancel'); self.$emit('update:visible', false) })
+    },
+    handleMaskTap() { this.handleCancel() },
+  },
+}
+</script>
+
+<style scoped>
+.action-sheet-mask { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(0, 0, 0, 0.8); justify-content: flex-end; opacity: 0; }
+.action-sheet { background-color: #F5F5F5; border-top-left-radius: 24rpx; border-top-right-radius: 24rpx; padding-bottom: 68rpx; transform: translateY(100%); }
+.action-sheet__item { padding: 32rpx 0; background-color: #FFFFFF; justify-content: center; align-items: center; border-bottom-width: 1rpx; border-bottom-style: solid; border-bottom-color: #E5E5E5; }
+.action-sheet__item:active { background-color: #F5F5F5; }
+.action-sheet__item--cancel { margin-top: 0; border-bottom-width: 0; }
+.action-sheet__text { font-size: 32rpx; font-weight: 500; color: rgba(0, 0, 0, 0.9); }
+.action-sheet__gap { height: 16rpx; background-color: #F5F5F5; }
+</style>

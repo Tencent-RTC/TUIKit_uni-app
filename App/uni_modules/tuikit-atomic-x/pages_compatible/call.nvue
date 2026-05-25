@@ -1,0 +1,247 @@
+<template>
+  <view class="call-view-container">
+    <view :style="{ height: windowHeight + 'px', width: safeAreaWidth + 'px', paddingTop: layoutTemplate === 'Grid' ? gridPaddingTop + 'px' : '0px'}">
+      <call-core-view :style="{ height: windowHeight + 'px', width: safeAreaWidth + 'px'}" :layoutTemplate="layoutTemplate" :participantAvatars="participantAvatars" :volumeLevelIcons="volumeLevelIcons" :waitingAnimation="waitingAnimation" :networkQualityIcons="networkQualityIcons"></call-core-view>
+    </view>
+    <CallTopBar />
+
+    <view class="button-panel-wrapper">
+      <CallBottomButton />
+    </view>
+  </view>
+</template>
+
+<script>
+import { useCallState } from '../state/CallState'
+import CallBottomButton from '../components/CallBottomButton.vue'
+import CallTopBar from '../components/CallTopBar.vue'
+
+var DEFAULT_AVATAR_URL = 'https://liteav.sdk.qcloud.com/app/res/picture/voiceroom/avatar/user_avatar1.png'
+
+function toAbsolutePath(relativePath) {
+  if (typeof plus !== 'undefined' && plus && plus.io && plus.io.convertLocalFileSystemURL) {
+    return plus.io.convertLocalFileSystemURL(relativePath)
+  }
+  return relativePath
+}
+
+function convertIconPaths(iconMap) {
+  var result = {}
+  var keys = Object.keys(iconMap)
+  for (var i = 0; i < keys.length; i++) {
+    result[keys[i]] = toAbsolutePath(iconMap[keys[i]])
+  }
+  return result
+}
+
+export default {
+  components: {
+    CallBottomButton,
+    CallTopBar
+  },
+  data() {
+    var callState = useCallState()
+    var initVolumeLevelIcons = convertIconPaths({
+      'Mute': '/static/images/callview-self-mute.png',
+      'Low': '/static/images/callview-network.png',
+      'Medium': '/static/images/callview-network.png',
+      'High': '/static/images/callview-network.png',
+      'Peak': '/static/images/callview-network.png'
+    })
+    var initNetworkQualityIcons = {
+      'BAD': '/static/images/callview-network-bad.png',
+      'VERY_BAD': '/static/images/callview-network-bad.png'
+    }
+    return {
+      callState: callState,
+      windowHeight: 750,
+      safeAreaWidth: 375,
+      screenWidth: 750,
+      layoutTemplate: 'Grid',
+      waitingAnimation: toAbsolutePath('/static/images/callview-loading.gif'),
+      volumeLevelIcons: initVolumeLevelIcons,
+      networkQualityIcons: initNetworkQualityIcons,
+      participantAvatars: {},
+      avatarCache: {},
+      defaultAvatarLocalPath: '',
+      defaultAvatarReady: false,
+      defaultAvatarPromise: null
+    }
+  },
+  computed: {
+    gridPaddingTop() {
+      var extraPx = (this.screenWidth || 750) / 750 * 200
+      return extraPx
+    },
+    allParticipantsValue() {
+      var ap = this.callState && this.callState.state
+      if (!ap) return []
+      return ap.allParticipants || []
+    },
+    activeCallValue() {
+      var ac = this.callState && this.callState.state
+      if (!ac) return null
+      return ac.activeCall || null
+    }
+  },
+  watch: {
+    activeCallValue: {
+      handler: function(newValue) {
+        if (!newValue || !newValue.inviteeIds) {
+          return
+        }
+        var newTemplate = (newValue.inviteeIds.length > 1 || newValue.chatGroupId !== '') ? 'Grid' : 'Float'
+        if (this.layoutTemplate !== newTemplate) {
+          console.log('[CallPage] layoutTemplate changing:', this.layoutTemplate, '->', newTemplate)
+          this.layoutTemplate = newTemplate
+        }
+      },
+      immediate: true,
+      deep: true
+    },
+    allParticipantsValue: {
+      handler: function(newVal) {
+        if (!newVal) return
+        console.log('[CallPage] allParticipants changed, count:', newVal.length, 'data:', JSON.stringify(newVal))
+        this.updateParticipantAvatars(newVal)
+      },
+      immediate: true,
+      deep: true
+    }
+  },
+  onLoad: function(option) {
+    if (option && option.layoutTemplate) {
+      this.layoutTemplate = option.layoutTemplate
+      console.log('Received layoutTemplate:', option.layoutTemplate)
+    }
+  },
+  onBackPress: function(option) {
+    if (option.from === 'backbutton') {
+      return true // 拦截系统侧滑和物理返回键
+    }
+  },
+  mounted: function() {
+    var self = this
+    uni.getSystemInfo({
+      success: function(res) {
+        self.windowHeight = res.windowHeight || 750
+        self.screenWidth = res.screenWidth || 750
+        var sa = res.safeArea
+        self.safeAreaWidth = (sa && sa.width) ? sa.width : (res.screenWidth || 375)
+      }
+    })
+    // 预下载默认头像并缓存
+    self.defaultAvatarPromise = self.downloadAvatar(DEFAULT_AVATAR_URL).then(function(localPath) {
+      self.defaultAvatarLocalPath = localPath
+      self.defaultAvatarReady = true
+      console.log('[CallPage] default avatar cached:', localPath)
+      // 默认头像就绪后，补刷一次参与者头像
+      var participants = self.allParticipantsValue
+      if (participants && participants.length > 0) {
+        self.updateParticipantAvatars(participants)
+      }
+    })
+  },
+  methods: {
+    getDefaultAvatarPath: function() {
+      return this.defaultAvatarLocalPath || ''
+    },
+    downloadAvatar: function(url) {
+      var self = this
+      if (self.avatarCache[url]) {
+        return Promise.resolve(self.avatarCache[url])
+      }
+      return new Promise(function(resolve) {
+        uni.downloadFile({
+          url: url,
+          success: function(res) {
+            if (res.statusCode === 200) {
+              var absolutePath = ''
+              if (typeof plus !== 'undefined' && plus && plus.io && plus.io.convertLocalFileSystemURL) {
+                absolutePath = plus.io.convertLocalFileSystemURL(res.tempFilePath)
+              } else {
+                absolutePath = res.tempFilePath
+              }
+              console.log('[CallPage] downloadAvatar success, temp:', res.tempFilePath, 'absolute:', absolutePath)
+              self.avatarCache[url] = absolutePath
+              resolve(absolutePath)
+            } else {
+              console.warn('[CallPage] downloadAvatar failed, statusCode:', res.statusCode, url)
+              resolve(self.getDefaultAvatarPath())
+            }
+          },
+          fail: function(err) {
+            console.error('[CallPage] downloadAvatar error:', url, err)
+            resolve(self.getDefaultAvatarPath())
+          }
+        })
+      })
+    },
+    updateParticipantAvatars: function(participants) {
+      var self = this
+      if (!participants || participants.length === 0) {
+        self.participantAvatars = {}
+        return
+      }
+
+      function doUpdate() {
+        var avatarMap = {}
+        var tasks = []
+        for (var i = 0; i < participants.length; i++) {
+          var participant = participants[i]
+          console.log('[CallPage] participant fields:', participant, participant.id, 'avatarURL:', participant.avatarURL, 'keys:', Object.keys(participant))
+          if (participant.id && participant.avatarURL) {
+            ;(function(pid, purl) {
+              tasks.push(
+                self.downloadAvatar(purl).then(function(localPath) {
+                  avatarMap[pid] = localPath
+                })
+              )
+            })(participant.id, participant.avatarURL)
+          } else if (participant.id) {
+            avatarMap[participant.id] = self.getDefaultAvatarPath()
+          }
+        }
+        Promise.all(tasks).then(function() {
+          console.log('[CallPage] participantAvatars updated:', avatarMap)
+          self.participantAvatars = avatarMap
+          self.volumeLevelIcons = convertIconPaths({
+            'Mute': '/static/images/callview-self-mute.png',
+            'Low': '/static/images/callview-network.png',
+            'Medium': '/static/images/callview-network.png',
+            'High': '/static/images/callview-network.png',
+            'Peak': '/static/images/callview-network.png'
+          })
+          self.networkQualityIcons = convertIconPaths({
+            'BAD': '/static/images/callview-network-bad.png',
+            'VERY_BAD': '/static/images/callview-network-bad.png'
+          })
+        })
+      }
+
+      // 等待默认头像下载完成
+      if (!self.defaultAvatarReady && self.defaultAvatarPromise) {
+        self.defaultAvatarPromise.then(function() {
+          doUpdate()
+        })
+      } else {
+        doUpdate()
+      }
+    }
+  }
+}
+</script>
+
+<style>
+.call-view-container {
+  background: rgba(15, 16, 20, 0.5);
+  overflow: hidden;
+}
+
+.button-panel-wrapper {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+}
+</style>

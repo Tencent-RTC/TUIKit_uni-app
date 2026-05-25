@@ -1,0 +1,24 @@
+<template>
+	<view class="page">
+		<CustomNavbar title="群通知" :showBack="true" @back="handleBack" />
+		<view class="page-content"><GroupApplicationList @accept="handleAccept" @reject="handleReject" /></view>
+	</view>
+</template>
+
+<script>
+import CustomNavbar from '@/uni_modules/tuikit-atomic-x/components/CustomNavbar/CustomNavbar.nvue'
+import { GroupApplicationList } from '@/uni_modules/tuikit-atomic-x/components/Contact'
+export default {
+  components: { CustomNavbar, GroupApplicationList },
+  methods: {
+    handleBack() { uni.navigateBack({ delta: 1 }) },
+    handleAccept(item) { uni.navigateBack({ delta: 1 }) },
+    handleReject(item) { uni.navigateBack({ delta: 1 }) },
+  },
+}
+</script>
+
+<style>
+.page { flex: 1; background-color: #f5f5f5; }
+.page-content { flex: 1; }
+</style>

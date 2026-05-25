@@ -3,15 +3,33 @@
     class="audio-message" 
     :class="'content-'+ (message.isSelf ? 'out' : 'in')" 
     :style="{ width: audioWidth + 'rpx' }"
+    @touchstart="handleTouchStart"
     @tap="handlePlayTap"
   >
     <view class="audio-highlight">
-      <image
-        src="../../../../static/icon/audio.png"
-        class="icon-image"
-        :class="['icon-'+ (message.isSelf ? 'out' : 'in'), { 'icon-playing': isPlaying }]"
-        mode="aspectFill"
-      />
+      <view class="audio-wave-container" :class="'wave-'+ (message.isSelf ? 'out' : 'in')">
+        <view class="audio-wave-clip" :style="{ width: '12rpx', opacity: waveOpacity[0] }">
+          <image
+            src="../../../../static/icon/audio.png"
+            class="audio-wave-icon"
+            mode="aspectFit"
+          />
+        </view>
+        <view class="audio-wave-clip" :style="{ width: '26rpx', opacity: waveOpacity[1] }">
+          <image
+            src="../../../../static/icon/audio.png"
+            class="audio-wave-icon"
+            mode="aspectFit"
+          />
+        </view>
+        <view class="audio-wave-clip" :style="{ width: '40rpx', opacity: waveOpacity[2] }">
+          <image
+            src="../../../../static/icon/audio.png"
+            class="audio-wave-icon"
+            mode="aspectFit"
+          />
+        </view>
+      </view>
       <view class="audio-duration">
         <text class="duration-text">{{ formatDuration(soundDuration) }}</text>
       </view>
@@ -20,19 +38,166 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import type { MessageInfo } from '../../../../types/message'
+import { MessageMediaFileType } from '../../../../types/message'
+import { useMessageListState } from '../../../../state/MessageListState'
+import { useAudioPlayer, stopGlobalAudioPlayer } from '../../../../hooks/useAudioPlayer'
+import { useCallState } from '../../../../state/CallState'
 
 interface Props {
   message: MessageInfo
+  conversationID: string
 }
 
 const props = defineProps<Props>()
 
-const isPlaying = ref(false)
-const currentPlayTime = ref(0)
+// 获取消息列表状态，用于下载资源
+const { downloadMessageResource } = useMessageListState({
+  conversationID: props.conversationID
+})
+
+// 下载状态
+const isDownloading = ref(false)
+// 等待播放标记（下载完成后自动播放）
+const pendingPlay = ref(false)
+// 本次播放是否已尝试过远端 URL 回退（避免死循环重试）
+let hasTriedRemoteFallback = false
+
+// 通话状态（用于拦截播放）
+// status === 1（呼叫中/待接听）或 2（通话中）时阻止播放，避免抢占音频焦点
+const { selfInfo: callSelfInfo } = useCallState()
+const isInCallNow = (): boolean => {
+  const status = callSelfInfo?.value?.status
+  return status === 1 || status === 2
+}
+
+// 长按判定阈值，与 Message.nvue 中保持一致
+const LONG_PRESS_THRESHOLD = 350
+const touchStartTime = ref(0)
+
+// 声波动画状态
+const waveStep = ref(0) // 0, 1, 2 循环
+let waveTimer: ReturnType<typeof setInterval> | null = null
+
+/**
+ * 获取远端语音下载 URL
+ * 路径: rawMessage.message.messageBaseElements[0].soundDownloadUrl
+ * 任一层级缺失时返回空串
+ */
+const getRemoteSoundUrl = (): string => {
+  try {
+    const rawMsg: any = (props.message as any)?.rawMessage
+    const elements: any[] = rawMsg?.message?.messageBaseElements
+    if (Array.isArray(elements) && elements.length > 0) {
+      return elements[0]?.soundDownloadUrl || ''
+    }
+  } catch (e) {
+    console.error('[AudioMessage] getRemoteSoundUrl error:', e)
+  }
+  return ''
+}
+
+// 使用音频播放器 Hook
+const { isPlaying, play, stop } = useAudioPlayer({
+  messageId: props.message.msgID,
+  onComplete: () => {
+    hasTriedRemoteFallback = false
+    stopWaveAnimation()
+  },
+  onError: (error) => {
+    console.error('[AudioMessage] onError:', error)
+    
+    // 本地播放失败时，尝试远端 URL 回退（仅回退一次）
+    if (!hasTriedRemoteFallback) {
+      const remoteUrl = getRemoteSoundUrl()
+      if (remoteUrl) {
+        hasTriedRemoteFallback = true
+        // 不 toast、不停止动画，直接用远端 URL 重新播放
+        play(remoteUrl)
+        return
+      }
+    }
+    
+    // 远端也无可用 URL 或远端也失败 → 最终报错
+    hasTriedRemoteFallback = false
+    stopWaveAnimation()
+    // -99 通常表示音频格式不受系统支持（如 SILK），提示用户
+    const errCode = error?.errCode
+    const tip = errCode === -99 ? '音频格式暂不支持' : '播放失败'
+    uni.showToast({ title: tip, icon: 'none' })
+  }
+})
+
+// 监听播放状态变化，控制动画
+watch(isPlaying, (playing) => {
+  if (playing) {
+    startWaveAnimation()
+  } else {
+    stopWaveAnimation()
+  }
+})
+
+/**
+ * 监听全局 audioPlayerStart 事件
+ * 当其他语音消息开始播放时，如果不是自己，主动重置播放状态并停止动画。
+ * 作为 useAudioPlayer 内部 isPlaying 响应式更新的兜底，防止 nvue 下 watch 延迟导致动画未停。
+ */
+const handleGlobalAudioStart = (data: { messageId: string }) => {
+  if (data?.messageId && data.messageId !== props.message.msgID && isPlaying.value) {
+    stopWaveAnimation()
+    // 调用 stop() 会同时重置 useAudioPlayer 内部状态
+    stop()
+  }
+}
+
+/**
+ * 应用切换到后台时，停止播放，避免后台继续消耗资源并释放音频焦点
+ */
+const handleAppHide = () => {
+  if (isPlaying.value) {
+    stopWaveAnimation()
+    stop()
+  }
+}
+
+// 三层声波的透明度
+const waveOpacity = computed(() => {
+  if (!isPlaying.value) {
+    // 未播放时显示完整图标
+    return [0, 0, 1]
+  }
+  // 播放时根据 waveStep 依次显示（从小到大循环）
+  switch (waveStep.value) {
+    case 0:
+      return [1, 0, 0]  // 只显示圆点
+    case 1:
+      return [0, 1, 0]  // 显示圆点+第一条弧线
+    case 2:
+      return [0, 0, 1]  // 显示完整图标
+    default:
+      return [0, 0, 1]
+  }
+})
+
+const startWaveAnimation = () => {
+  stopWaveAnimation()
+  waveStep.value = 0
+  waveTimer = setInterval(() => {
+    waveStep.value = (waveStep.value + 1) % 3
+  }, 300) // 每 300ms 切换一次
+}
+
+const stopWaveAnimation = () => {
+  if (waveTimer) {
+    clearInterval(waveTimer)
+    waveTimer = null
+  }
+  waveStep.value = 0
+}
 
 const soundUrl = computed(() => {
+  // 直接返回原始路径，play 时会自动处理私有目录文件的复制和 URL 转换
   return props.message.messageBody?.soundPath || ''
 })
 
@@ -62,80 +227,160 @@ const formatDuration = (duration: number) => {
   return `${seconds}''`
 }
 
+const handleTouchStart = (e: any) => {
+  touchStartTime.value = Date.now()
+}
+
 const handlePlayTap = () => {
-  isPlaying.value = !isPlaying.value
-  
+  // 长按判定：触摸持续时间超过阈值视为长按，交由父级 Message.nvue 处理消息操作菜单
+  // 注意：判定后必须复位 touchStartTime，否则下一次"未收到 touchstart 直接 tap"
+  // （nvue 部分场景事件丢失）会用旧时间戳算出极大 duration，导致正常点击被误判为长按
+  const startTime = touchStartTime.value
+  touchStartTime.value = 0
+  if (startTime > 0 && Date.now() - startTime >= LONG_PRESS_THRESHOLD) {
+    return
+  }
+
+  // 通话中（呼叫中 / 通话中）禁止播放语音消息，避免抢占通话音频焦点
+  if (isInCallNow()) {
+    uni.showToast({ title: '您正在通话中，无法播放语音消息', icon: 'none', duration: 2000 })
+    return
+  }
+
   if (isPlaying.value) {
-    // 触发音频播放事件
-    uni.$emit('playAudio', {
-      url: soundUrl.value,
-      messageId: props.message.msgID,
-      duration: soundDuration.value
-    })
-    
-    // 开始计时
-    startTimer()
+    // 停止播放
+    stop()
   } else {
-    // 触发音频暂停事件
-    uni.$emit('pauseAudio', {
-      messageId: props.message.msgID
-    })
-    
-    // 停止计时
-    stopTimer()
-  }
-}
-
-let timer: ReturnType<typeof setInterval> | null = null
-
-const startTimer = () => {
-  stopTimer()
-  currentPlayTime.value = 0
-  
-  timer = setInterval(() => {
-    currentPlayTime.value += 0.1
-    
-    // 播放完成
-    if (currentPlayTime.value >= soundDuration.value) {
-      handlePlayComplete()
+    // 检查是否需要先下载
+    if (!soundUrl.value) {
+      // 标记等待播放
+      pendingPlay.value = true
+      // 如果还没开始下载，触发下载
+      if (!isDownloading.value) {
+        preDownloadSound()
+      }
+    } else {
+      // 开始播放
+      handlePlay()
     }
-  }, 100)
-}
-
-const stopTimer = () => {
-  if (timer) {
-    clearInterval(timer)
-    timer = null
   }
 }
 
-const handlePlayComplete = () => {
-  isPlaying.value = false
-  currentPlayTime.value = 0
-  stopTimer()
+/**
+ * 预下载语音资源
+ */
+const preDownloadSound = async () => {
+  if (!props.message?.msgID) {
+    return
+  }
   
-  // 触发播放完成事件
-  uni.$emit('audioPlayComplete', {
-    messageId: props.message.msgID
-  })
+  // 已有本地路径，无需下载
+  if (soundUrl.value) {
+    // 如果有等待播放的标记，直接播放
+    if (pendingPlay.value) {
+      pendingPlay.value = false
+      handlePlay()
+    }
+    return
+  }
+  
+  if (isDownloading.value) {
+    return
+  }
+  
+  isDownloading.value = true
+  try {
+    await downloadMessageResource(props.message, MessageMediaFileType.SOUND)
+    // 下载完成后，如果有等待播放的标记，自动播放
+    if (pendingPlay.value && soundUrl.value) {
+      pendingPlay.value = false
+      handlePlay()
+    }
+  } catch (error) {
+    console.error('[AudioMessage] preDownloadSound failed:', error)
+    // 下载失败，尝试用远端 URL 直接播放作为兜底
+    if (pendingPlay.value) {
+      pendingPlay.value = false
+      const remoteUrl = getRemoteSoundUrl()
+      if (remoteUrl) {
+        // 标记为已尝试远端回退，避免 onError 再次重试
+        hasTriedRemoteFallback = true
+        stopGlobalAudioPlayer()
+        play(remoteUrl)
+      } else {
+        uni.showToast({ title: '语音下载失败', icon: 'none' })
+      }
+    }
+  } finally {
+    isDownloading.value = false
+  }
 }
 
-const handleGlobalAudioControl = (data: any) => {
-  // 如果是其他消息开始播放，停止当前播放
-  if (data.messageId !== props.message.msgID && isPlaying.value) {
-    isPlaying.value = false
-    stopTimer()
+/**
+ * 开始播放
+ * 策略：
+ * 1. 优先用本地路径（soundPath）播放
+ * 2. 若本地路径不存在，直接降级用远端 URL 播放
+ * 3. onError 里做一次远端 URL 回退兜底（防止本地文件损坏 / 格式不被系统支持）
+ */
+const handlePlay = async () => {
+  // 通话中（呼叫中 / 通话中）禁止播放——拦截所有路径（用户主动 tap、下载完成自动播）
+  // 静默 return：tap 入口已弹过 toast，下载完成的自动播放属内部流程，无需再扰民
+  if (isInCallNow()) {
+    pendingPlay.value = false
+    return
   }
+  // 进入新一轮播放，重置远端回退标志
+  hasTriedRemoteFallback = false
+  
+  const localUrl = soundUrl.value
+  const remoteUrl = getRemoteSoundUrl()
+  
+  // 本地路径 + 远端 URL 都没有 → 直接报错
+  if (!localUrl && !remoteUrl) {
+    uni.showToast({ title: '语音资源不可用', icon: 'none' })
+    return
+  }
+  
+  // 停止全局音频播放器（如铃声）
+  stopGlobalAudioPlayer()
+  
+  // 没本地路径，直接走远端（标记为已尝试过回退，避免 onError 再次回退造成双 toast）
+  if (!localUrl && remoteUrl) {
+    hasTriedRemoteFallback = true
+    await play(remoteUrl)
+    return
+  }
+  
+  // 播放本地资源（失败时 onError 内会自动回退到远端）
+  await play(localUrl)
 }
 
 onMounted(() => {
-  uni.$on('globalAudioControl', handleGlobalAudioControl)
+  // 订阅事件（放在生命周期内，避免 SSR/预渲染时 uni 未就绪）
+  uni.$on('audioPlayerStart', handleGlobalAudioStart)
+  // 切后台暂停：使用 plus.globalEvent 'pause' 代替不可靠的 uni.onAppHide
+  // （uni.onAppHide 在 nvue 下有版本兼容问题，plus.globalEvent 在 iOS/Android 上更稳定）
+  // #ifdef APP-PLUS
+  if (typeof plus !== 'undefined' && plus.globalEvent) {
+    plus.globalEvent.addEventListener('pause', handleAppHide)
+  }
+  // #endif
+  
+  // 初始化时预下载语音资源
+  if (!soundUrl.value) {
+    preDownloadSound()
+  }
 })
 
 onUnmounted(() => {
-  stopTimer()
-  
-  uni.$off('globalAudioControl', handleGlobalAudioControl)
+  stopWaveAnimation()
+  uni.$off('audioPlayerStart', handleGlobalAudioStart)
+  // #ifdef APP-PLUS
+  if (typeof plus !== 'undefined' && plus.globalEvent) {
+    try { plus.globalEvent.removeEventListener('pause', handleAppHide) } catch (e) {}
+  }
+  // #endif
 })
 </script>
 
@@ -166,43 +411,45 @@ onUnmounted(() => {
   flex-direction: row-reverse;
 }
 
-.icon-in {
-  transform: rotate(180deg);
-}
-
-.icon-image {
+/* 声波动画容器 */
+.audio-wave-container {
+  position: relative;
   width: 40rpx;
   height: 40rpx;
-  transition-property: transform, opacity;
-  transition-duration: 0.3s;
 }
 
-.icon-playing {
-  animation-name: pulse;
-  animation-duration: 1s;
-  animation-timing-function: ease-in-out;
-  animation-iteration-count: infinite;
+/* 接收消息的声波方向（镜像翻转） */
+.wave-in {
+  transform: scaleX(-1);
 }
 
-@keyframes pulse {
-  0% {
-    opacity: 1;
-    transform: scale(1);
-  }
-  50% {
-    opacity: 0.6;
-    transform: scale(0.9);
-  }
-  100% {
-    opacity: 1;
-    transform: scale(1);
-  }
+/* 声波裁剪容器 - 从右侧开始显示（原点在右边） */
+.audio-wave-clip {
+  position: absolute;
+  right: 0;
+  top: 0;
+  height: 40rpx;
+  overflow: hidden;
+}
+
+/* 声波图标 - 固定在右侧 */
+.audio-wave-icon {
+  position: absolute;
+  right: 0;
+  top: 0;
+  width: 40rpx;
+  height: 40rpx;
+}
+
+.audio-duration {
+  margin-left: 8rpx;
+  margin-right: 8rpx;
 }
 
 .duration-text {
   padding: 0 4rpx;
-  font-size: 20rpx;
-  line-height: 17rpx;
+  font-size: 28rpx;
+  line-height: 32rpx;
   font-weight: 500;
   color: rgba(0, 0, 0, 0.9);
 }

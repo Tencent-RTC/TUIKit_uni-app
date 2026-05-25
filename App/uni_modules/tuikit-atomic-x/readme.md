@@ -38,7 +38,7 @@
 
 参考接入文档将 TUIKit 集成到您的项目中：
 - [Chat 接入文档](https://cloud.tencent.com/document/product/269/64507)
-- [Live 接入文档](https://cloud.tencent.com/document/product/647/105442)
+- [Live 接入文档](https://cloud.tencent.com/document/product/647/122989)
 
 ### Step 3：运行体验
 

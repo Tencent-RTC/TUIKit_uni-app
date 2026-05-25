@@ -1,0 +1,23 @@
+<template>
+	<view class="page">
+		<CustomNavbar title="我的群聊" :showBack="true" @back="handleBack" />
+		<view class="page-content"><GroupList @groupSelect="handleGroupClick" /></view>
+	</view>
+</template>
+
+<script>
+import CustomNavbar from '@/uni_modules/tuikit-atomic-x/components/CustomNavbar/CustomNavbar.nvue'
+import { GroupList } from '@/uni_modules/tuikit-atomic-x/components/Contact'
+export default {
+  components: { CustomNavbar, GroupList },
+  methods: {
+    handleBack() { uni.navigateBack({ delta: 1 }) },
+    handleGroupClick(group) { uni.navigateTo({ url: '/pages/scenes/chat/chat/index?conversationID=group_' + group.groupID }) },
+  },
+}
+</script>
+
+<style>
+.page { flex: 1; background-color: #f5f5f5; }
+.page-content { flex: 1; }
+</style>

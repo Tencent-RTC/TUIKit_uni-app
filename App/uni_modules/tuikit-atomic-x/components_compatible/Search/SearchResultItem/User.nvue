@@ -1,0 +1,38 @@
+<template>
+  <ResultItem :avatarURL="avatarURL" :title="displayName" :titleSuffix="titleSuffix" :subtitle="subtitle" :keyword="keyword" :Avatar="Avatar" defaultAvatarType="user" />
+</template>
+<script>
+import AvatarComponent from '../../Avatar'
+import ResultItem from './ResultItem.nvue'
+export default {
+  components: { ResultItem },
+  props: {
+    type: { type: String, default: 'friend' },
+    user: { type: Object, default: function() { return {} } },
+    keyword: { type: String, default: '' },
+    Avatar: { type: [Object, Function], default: function() { return AvatarComponent } },
+  },
+  computed: {
+    avatarURL() {
+      if (this.type === 'friend') return (this.user.userInfo && this.user.userInfo.avatarURL) || ''
+      return this.user.avatarURL || ''
+    },
+    displayName() {
+      if (this.type === 'friend') return this.user.friendRemark || (this.user.userInfo && this.user.userInfo.nickname) || this.user.userID || '未知用户'
+      if (this.type === 'groupMember') return this.user.nameCard || this.user.friendRemark || this.user.nickname || this.user.userID || '未知用户'
+      return this.user.nickname || this.user.userID || '未知用户'
+    },
+    titleSuffix() { return this.user.userID ? '(' + this.user.userID + ')' : '' },
+    subtitle() {
+      var parts = []
+      var profile = this.type === 'friend' ? (this.user.userInfo || null) : (this.type === 'user' ? this.user : null)
+      if (profile) {
+        if (profile.gender === 1) parts.push('男')
+        else if (profile.gender === 2) parts.push('女')
+        if (profile.birthday) { var age = new Date().getFullYear() - new Date(profile.birthday * 1000).getFullYear(); if (age > 0 && age < 150) parts.push(age + '岁') }
+      }
+      return parts.join(' ')
+    },
+  },
+}
+</script>

@@ -1,0 +1,29 @@
+<template>
+  <view class="user-picker-page">
+    <UserPicker :businessType="businessType" :routeParams="routeParams" @confirm="handleConfirm" />
+  </view>
+</template>
+
+<script>
+import UserPicker from '@/uni_modules/tuikit-atomic-x/components/UserPicker/UserPicker.nvue'
+export default {
+  components: { UserPicker },
+  data() { return { businessType: -1, routeParams: {} } },
+  onLoad(options) {
+    this.businessType = parseInt(options.businessType || '-1')
+    this.routeParams = options
+  },
+  methods: {
+    handleConfirm(selectedUsers) {
+      if (this.businessType === 7 || this.businessType === 10) {
+        uni.$emit('onSelectGroupMember', { selectedUsers: selectedUsers })
+        uni.navigateBack()
+      }
+    },
+  },
+}
+</script>
+
+<style>
+.user-picker-page { flex: 1; background-color: #f5f5f5; }
+</style>

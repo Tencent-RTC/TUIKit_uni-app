@@ -1,0 +1,375 @@
+<template>
+  <view class="tools-panel">
+    <scroll-view class="tools-scroll" scroll-y="true">
+      <view class="tools-grid">
+        <view v-for="(tool, index) in displayToolList" :key="tool.id" class="tool-item" :class="{ 'last-in-row': (index + 1) % 4 === 0 }">
+          <view class="tool-icon-wrapper" @tap="handleToolClick(tool)">
+            <image class="tool-icon" :src="tool.icon" mode="aspectFit"></image>
+          </view>
+          <text class="tool-name">{{ tool.name }}</text>
+        </view>
+      </view>
+    </scroll-view>
+  </view>
+</template>
+
+<script>
+import { UserPickerType } from '../../types/userpicker'
+import { useMessageInputState } from '../../state_compatible/MessageInputState'
+import { MessageType } from '../../types/message'
+import { chooseFile } from '../../hooks/useFilePicker'
+import { DEFAULT_TOOLS } from './types'
+import { useCallState, CallErrorCode } from '../../state_compatible/CallState'
+import { useDeviceState } from '../../state_compatible/DeviceState'
+import { getCurrentPageFullPath, isNavigating, isCallEnding } from '../../server_compatible/callService'
+import { checkCallPermissionWithDialog } from '../../utils/callPermission'
+// @ts-ignore
+import { reportScene } from '@/uni_modules/tuikit-atomic-x'
+
+export default {
+  name: 'ToolsPanel',
+  props: {
+    conversationID: { type: String, default: '' },
+    toolList: { type: Array, default: undefined }
+  },
+  data: function() {
+    var callStateInstance = useCallState();
+    var deviceStateInstance = useDeviceState();
+    return {
+      messageInputState: useMessageInputState({ conversationID: this.conversationID }),
+      callStateInstance: callStateInstance,
+      callState: callStateInstance.state,
+      deviceStateInstance: deviceStateInstance,
+      isCalling: false
+    }
+  },
+  computed: {
+    displayToolList: function() {
+      return (this.toolList && this.toolList.length > 0) ? this.toolList : DEFAULT_TOOLS;
+    },
+    isC2CConversation: function() {
+      return this.conversationID.startsWith('c2c_');
+    }
+  },
+  methods: {
+    removeUnusedResourcePrefix: function(path) {
+      return path.startsWith('file:///') ? path.substring(7) : path;
+    },
+    handleToolClick: function(tool) {
+      if (tool.callback) { tool.callback(); return; }
+      var self = this;
+      switch (tool.id) {
+        case 'image':
+          uni.chooseImage({
+            count: 9,
+            sourceType: ['camera', 'album'],
+            success: function(res) {
+              res.tempFiles.forEach(function(file) {
+                uni.getImageInfo({
+                  src: file.path,
+                  success: function(info) {
+                    if (self.messageInputState) {
+                      self.messageInputState.sendImageMessage({
+                        imagePath: self.removeUnusedResourcePrefix(info.path),
+                        imageWidth: info.width,
+                        imageHeight: info.height
+                      });
+                    }
+                  },
+                  fail: function() {
+                    uni.showToast({ title: '获取图片信息失败', icon: 'none' });
+                  }
+                });
+              });
+            },
+            fail: function(err) {
+              if (err.errMsg && err.errMsg.indexOf('mission') !== -1) {
+                uni.showToast({ title: '请检查相关访问权限', icon: 'none' });
+              }
+            }
+          });
+          break;
+        case 'video':
+          uni.chooseMedia({
+            count: 1,
+            mediaType: ['video'],
+            success: function(res) {
+              res.tempFiles.forEach(function(file) {
+                if (self.messageInputState) {
+                  self.messageInputState.sendVideoMessage({
+                    videoPath: self.removeUnusedResourcePrefix(file.tempFilePath),
+                    videoSnapshotPath: self.removeUnusedResourcePrefix(file.thumbTempFilePath),
+                    videoSnapshotWidth: file.width,
+                    videoSnapshotHeight: file.height,
+                    videoDuration: Math.round(file.duration),
+                    videoType: file.type
+                  });
+                }
+              });
+            },
+            fail: function(err) {
+              if (err.errMsg && err.errMsg.indexOf('mission') !== -1) {
+                uni.showToast({ title: '请检查相关访问权限', icon: 'none' });
+              }
+            }
+          });
+          break;
+        case 'file':
+          self._chooseAndSendFile();
+          break;
+        case 'voiceCall':
+          this.startCall(0);
+          break;
+        case 'videoCall':
+          this.startCall(1);
+          break;
+        default:
+          console.log('Tool clicked:', tool);
+      }
+    },
+    _chooseAndSendFile: function() {
+      var self = this;
+      chooseFile({
+        success: function(res) {
+          if (!self.messageInputState) return;
+          var message = JSON.stringify({
+            messageType: MessageType.FILE,
+            messageBody: {
+              filePath: res.filePath,
+              fileName: res.fileName,
+              fileSize: res.fileSize
+            }
+          });
+          self.messageInputState.sendMessage(message).catch(function(err) {
+            console.error('[ToolsPanel] sendFileMessage failed:', err);
+            uni.showToast({ title: '文件发送失败', icon: 'none' });
+          });
+        },
+        fail: function(err) {
+          console.error('[ToolsPanel] chooseFile failed:', err);
+          uni.showToast({ title: '文件选择失败', icon: 'none' });
+        }
+      });
+    },
+    startCall: function(mediaType) {
+      var self = this;
+      var callStateInstance = self.callStateInstance;
+      var deviceStateInstance = self.deviceStateInstance;
+      var selfInfo = self.callState.selfInfo;
+
+      callStateInstance.setFramework(15);
+
+      // 防抖：上一次呼叫流程尚未完成时，不允许再次呼叫
+      if (self.isCalling) {
+        console.log('[ToolsPanel] call skipped: isCalling is true');
+        return;
+      }
+      if (isNavigating()) {
+        console.log('[ToolsPanel] call skipped: navigation in progress');
+        return;
+      }
+      if (isCallEnding()) {
+        console.log('[ToolsPanel] call skipped: previous call end still processing');
+        return;
+      }
+
+      var getPeerUserID = function() {
+        return self.isC2CConversation ? self.conversationID.replace('c2c_', '') : '';
+      };
+
+      if (self.isC2CConversation) {
+        // C2C 单聊呼叫
+        if (selfInfo && (selfInfo.status === 1 || selfInfo.status === 2)) {
+          plus.nativeUI.toast('您正在通话中，无法再次发起通话', {
+            align: 'center',
+            verticalAlign: 'center'
+          });
+          return;
+        }
+
+        self.isCalling = true;
+
+        if (mediaType === 1) {
+          deviceStateInstance.openLocalCamera({ isFront: true });
+        }
+        deviceStateInstance.openLocalMicrophone({
+          fail: function(error) {
+            if (error === -1104) {
+              setTimeout(function() {
+                deviceStateInstance.openLocalMicrophone();
+              }, 200);
+            }
+          }
+        });
+
+        checkCallPermissionWithDialog(mediaType).then(function(hasPermission) {
+          if (!hasPermission) {
+            self.isCalling = false;
+            return;
+          }
+          reportScene('CHAT_INVOKE_CALL');
+          callStateInstance.calls({
+            participantIds: [getPeerUserID()],
+            mediaType: mediaType,
+            success: function() {
+              uni.$callSource = 'caller';
+              uni.$lastPage = getCurrentPageFullPath();
+              uni.navigateTo({
+                url: '/uni_modules/tuikit-atomic-x/pages/call?layoutTemplate=Float',
+                complete: function() { self.isCalling = false; }
+              });
+            },
+            fail: function(error) {
+              if (error === CallErrorCode.PACKAGE_NOT_PURCHASED) {
+                uni.showToast({
+                  icon: 'none',
+                  title: '您的应用还未开通音视频通话（TUICallKit）能力，您可以去控制台申请免费体验'
+                });
+                console.error('控制台申请免费体验,https://console.cloud.tencent.com/trtc');
+              }
+              self.isCalling = false;
+            }
+          });
+        }).catch(function() {
+          self.isCalling = false;
+        });
+      } else {
+        // 群聊：先跳转到用户选择页面，通过全局事件回调获取选中用户
+        var pickerUrl = '/pages/scenes/chat/userPicker/userPicker?businessType=' + UserPickerType.SELECT_GROUP_MEMBER + '&conversationID=' + self.conversationID;
+
+        // Trap 20: navigateTo events 在 Vue2 中不可用，使用 uni.$on 全局事件替代
+        uni.$once('onSelectGroupMember', function(data) {
+          if (self.isCalling) return;
+          if (isNavigating()) return;
+          if (isCallEnding()) return;
+
+          var currentSelfInfo = self.callState.selfInfo;
+          if (currentSelfInfo && (currentSelfInfo.status === 1 || currentSelfInfo.status === 2)) {
+            plus.nativeUI.toast('您正在通话中，无法再次发起通话', {
+              align: 'center',
+              verticalAlign: 'center'
+            });
+            return;
+          }
+
+          self.isCalling = true;
+
+          if (mediaType === 1) {
+            deviceStateInstance.openLocalCamera({ isFront: true });
+          }
+          deviceStateInstance.openLocalMicrophone({
+            fail: function(error) {
+              if (error === -1104) {
+                setTimeout(function() {
+                  deviceStateInstance.openLocalMicrophone();
+                }, 200);
+              }
+            }
+          });
+
+          checkCallPermissionWithDialog(mediaType).then(function(hasPermission) {
+            if (!hasPermission) {
+              self.isCalling = false;
+              return;
+            }
+            reportScene('CHAT_INVOKE_CALL');
+            var userIDList = data.selectedUsers.map(function(user) { return user.userID; });
+            if (userIDList.length > 8) {
+              uni.showToast({
+                icon: 'none',
+                title: '当前通话最多支持 9 人同时在线'
+              });
+              self.isCalling = false;
+              return;
+            }
+            callStateInstance.calls({
+              participantIds: userIDList,
+              mediaType: mediaType,
+              params: {
+                chatGroupId: self.conversationID.replace('group_', '')
+              },
+              success: function() {
+                uni.$callSource = 'caller';
+                uni.$lastPage = getCurrentPageFullPath();
+                uni.navigateTo({
+                  url: '/uni_modules/tuikit-atomic-x/pages/call?layoutTemplate=Grid',
+                  complete: function() { self.isCalling = false; }
+                });
+              },
+              fail: function(error) {
+                if (error === CallErrorCode.PACKAGE_NOT_PURCHASED) {
+                  uni.showToast({
+                    icon: 'none',
+                    title: '您的应用还未开通音视频通话（TUICallKit）能力，您可以去控制台申请免费体验'
+                  });
+                  console.error('控制台申请免费体验,https://console.cloud.tencent.com/trtc');
+                }
+                self.isCalling = false;
+              }
+            });
+          }).catch(function() {
+            self.isCalling = false;
+          });
+        });
+
+        uni.navigateTo({ url: pickerUrl });
+      }
+    }
+  }
+}
+</script>
+
+<style scoped>
+.tools-panel {
+  flex: 1;
+  background-color: #FFF;
+  border-top-width: 1rpx;
+  border-top-style: solid;
+  border-top-color: #F0F2F7;
+}
+
+.tools-scroll {
+  flex: 1;
+  padding: 20rpx 48rpx;
+}
+
+.tools-grid {
+  flex-direction: row;
+  flex-wrap: wrap;
+}
+
+.tool-item {
+  align-items: center;
+  margin-right: 45rpx;
+  margin-bottom: 38rpx;
+}
+
+.tool-item.last-in-row {
+  margin-right: 0;
+}
+
+.tool-icon-wrapper {
+  width: 128rpx;
+  height: 128rpx;
+  background-color: #F9FAFC;
+  border-radius: 28rpx;
+  justify-content: center;
+  align-items: center;
+  margin-bottom: 8rpx;
+}
+
+.tool-icon-wrapper:active {
+  background-color: #F0F2F7;
+}
+
+.tool-icon {
+  width: 52rpx;
+  height: 42rpx;
+}
+
+.tool-name {
+  font-size: 24rpx;
+  color: rgba(0, 0, 0, 0.40);
+  text-align: center;
+}
+</style>

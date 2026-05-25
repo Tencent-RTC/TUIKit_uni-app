@@ -123,14 +123,27 @@ const groupIdInput = ref()
 // 使用常量中的群类型列表
 const groupTypes = GROUP_TYPES
 const selectedGroupType = ref<GroupType>(groupTypes[0])
+/**
+ * 创建中标志：防止重复点击导致并发调用 createGroup 创建出多个同名群组
+ *
+ * 释放策略（关键）：
+ * - 失败路径：立即释放，允许用户重试
+ * - 成功路径：**不释放**！跳转链路 sendCustomMessage → navigateBack → navigateTo 是异步的，
+ *   navigateBack 动画期间当前页仍可见且 tap 仍能触发，释放就会被重复点击。
+ *   只在 onMounted（即用户重新进入本页）时统一重置，确保跳转期间按钮始终 disabled。
+ */
+const isCreating = ref(false)
 
 // 计算属性
 const canCreate = computed(() => {
-  return groupName.value.trim().length > 0
+  return groupName.value.trim().length > 0 && !isCreating.value
 })
 
 // 页面生命周期 - 监听页面显示
 onMounted(() => {
+  // 重新进入本页面时重置创建态：处理"成功跳转后又退回本页继续建群"的场景
+  // 这是 isCreating 在成功路径下的唯一释放点
+  isCreating.value = false
   // 监听群类型选择结果
   uni.$on('groupTypeSelected', (groupType: GroupType) => {
     selectedGroupType.value = groupType
@@ -193,6 +206,13 @@ const handleAvatarSelect = (index: number) => {
 
 /**
  * 处理群组创建成功后的逻辑
+ *
+ * 跳转链路：sendCustomMessage（异步）→ navigateBack(delta=2)（异步）→ navigateTo（新会话页）
+ *
+ * 注意：本函数不释放 isCreating。
+ * 跳转过程中本页仍处于栈中，导航动画期间按钮仍可触发 @tap，若释放就会被重复点击。
+ * isCreating 由 onMounted 在用户重新进入本页时统一重置。
+ *
  * @param groupID 创建成功的群组ID
  */
 const handleGroupCreatedSuccess = (groupID: string) => {
@@ -225,9 +245,12 @@ const handleGroupCreatedSuccess = (groupID: string) => {
  * 创建群聊
  */
 const handleCreate = async () => {
-  if (!canCreate.value) {
+  // 防重：isCreating=true 期间任何 tap 直接 return
+  // 失败路径会重置；成功路径不重置，由 onMounted 在重新进入本页时重置
+  if (!canCreate.value || isCreating.value) {
     return
   }
+  isCreating.value = true
 
   try {
     const createdGroupID = await createGroup({
@@ -244,10 +267,12 @@ const handleCreate = async () => {
         title: '创建群组失败，请重试',
         icon: 'none'
       })
+      // 失败可重试，立即释放
+      isCreating.value = false
       return
     }
     
-    // 创建成功后处理跳转逻辑
+    // 创建成功：isCreating 不在此处释放，由 onMounted 在重新进入本页时统一重置
     handleGroupCreatedSuccess(createdGroupID)
     
   } catch (error) {
@@ -257,6 +282,8 @@ const handleCreate = async () => {
       title: error?.message,
       icon: 'none'
     })
+    // 失败可重试，释放
+    isCreating.value = false
   }
 }
 </script>

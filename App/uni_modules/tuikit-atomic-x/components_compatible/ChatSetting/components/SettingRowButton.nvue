@@ -1,0 +1,25 @@
+<template>
+  <view class="setting-row-button" @tap="handleTap">
+    <text class="setting-row-button__label" :style="{ color: color }">{{ label }}</text>
+  </view>
+</template>
+
+<script>
+export default {
+  props: {
+    label: { type: String, default: '' },
+    color: { type: String, default: '#0066FF' },
+  },
+  methods: {
+    handleTap() {
+      this.$emit('press')
+    },
+  },
+}
+</script>
+
+<style scoped>
+.setting-row-button { flex-direction: row; align-items: center; justify-content: center; height: 100rpx; background-color: #FFFFFF; border-bottom-width: 1rpx; border-bottom-style: solid; border-bottom-color: #E5E5E5; }
+.setting-row-button:active { background-color: #F5F5F5; }
+.setting-row-button__label { font-size: 32rpx; font-weight: 400; }
+</style>

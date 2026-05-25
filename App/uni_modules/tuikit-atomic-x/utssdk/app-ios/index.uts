@@ -68,6 +68,7 @@ export function addListener(options: HybridListenerOptions, listener: (eventData
     if (!hasReportedUIPlatform) {
       hasReportedUIPlatform = true
       DataReport.reportUIPlatform(platform = 52)
+      DataReport.setFramework(11)
     }
     const paramsStr = (options.params != null ? JSON.stringify(options.params) : "{}") as string;
     const params = JSON.parse<UTSJSONObject>(paramsStr ?? "");
@@ -161,6 +162,13 @@ export function setFramework(component: number = 21) {
       callback = (jsonData: string): void => {
       }
     )
+  });
+}
+
+export function setCallFramework(component: number = 17) {
+  DispatchQueue.main.async(execute = (): void => {
+    const data = { "api": "setFramework", "params": { "framework": 11, "component": component } }
+    TUICallEngine.createInstance().callExperimentalAPI(jsonObject = JSON.stringify(data) ?? "")
   });
 }
 /**

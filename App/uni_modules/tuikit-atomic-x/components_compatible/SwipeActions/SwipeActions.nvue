@@ -1,0 +1,196 @@
+<template>
+  <view 
+    class="swipe-actions" 
+    @touchstart="handleTouchStart"
+    @touchmove="handleTouchMove"
+    @touchend="handleTouchEnd"
+    @touchcancel="handleTouchEnd"
+  >
+    <view 
+      class="swipe-actions__wrapper" 
+      :style="wrapperStyle"
+    >
+      <!-- 主内容区域 -->
+      <view 
+        class="swipe-actions__content"
+        :style="contentStyle"
+        @tap="handleContentTap"
+        @longpress="handleContentLongPress"
+      >
+        <slot />
+      </view>
+
+      <!-- 右侧操作按钮区域 -->
+      <view class="swipe-actions__actions">
+        <slot name="actions" />
+      </view>
+    </view>
+  </view>
+</template>
+
+<script>
+export default {
+  name: 'SwipeActions',
+  props: {
+    contentWidth: {
+      type: Number,
+      default: 0
+    },
+    actionsWidth: {
+      type: Number,
+      default: 420
+    },
+    swipeThreshold: {
+      type: Number,
+      default: 30
+    },
+    tapPreventDelay: {
+      type: Number,
+      default: 250
+    },
+    disabled: {
+      type: Boolean,
+      default: false
+    }
+  },
+  data() {
+    return {
+      rpxRatio: 2,
+      screenWidth: 750,
+      startX: 0,
+      startY: 0,
+      currentX: 0,
+      shouldPreventTap: false,
+      preventTapTimerId: null
+    }
+  },
+  computed: {
+    actualContentWidth() {
+      return this.contentWidth || this.screenWidth
+    },
+    wrapperStyle() {
+      const px = this.currentX / this.rpxRatio
+      const wrapperWidth = this.actualContentWidth + this.actionsWidth
+      return {
+        width: wrapperWidth + 'rpx',
+        transform: 'translateX(' + px + 'px)',
+        transitionDuration: '300ms',
+        transitionTimingFunction: 'ease',
+        transitionProperty: 'transform'
+      }
+    },
+    contentStyle() {
+      return {
+        width: this.actualContentWidth + 'rpx'
+      }
+    },
+    isOpen() {
+      return this.currentX < 0
+    }
+  },
+  mounted() {
+    const systemInfo = uni.getSystemInfoSync()
+    this.rpxRatio = 750 / systemInfo.screenWidth
+    this.screenWidth = 750
+  },
+  beforeDestroy() {
+    this.clearPreventTapTimer()
+  },
+  beforeUnmount() {
+    this.clearPreventTapTimer()
+  },
+  methods: {
+    clearPreventTapTimer() {
+      if (this.preventTapTimerId !== null) {
+        clearTimeout(this.preventTapTimerId)
+        this.preventTapTimerId = null
+      }
+    },
+    setPreventTap() {
+      this.clearPreventTapTimer()
+      this.shouldPreventTap = true
+      this.preventTapTimerId = setTimeout(() => {
+        this.shouldPreventTap = false
+        this.preventTapTimerId = null
+      }, this.tapPreventDelay)
+    },
+    reset() {
+      this.currentX = 0
+    },
+    open() {
+      this.currentX = -this.actionsWidth
+    },
+    close() {
+      this.currentX = 0
+    },
+    handleTouchStart(e) {
+      if (this.disabled || !e.touches || e.touches.length === 0) return
+      this.clearPreventTapTimer()
+      const touch = e.touches[0]
+      this.startX = touch.pageX
+      this.startY = touch.pageY
+    },
+    handleTouchMove(e) {
+      // 不处理，只在 touchend 时判断
+    },
+    handleTouchEnd(e) {
+      if (this.disabled || !e.changedTouches || e.changedTouches.length === 0) return
+      
+      const touch = e.changedTouches[0]
+      const deltaX = touch.pageX - this.startX
+      const deltaY = touch.pageY - this.startY
+      
+      if (Math.abs(deltaY) > Math.abs(deltaX)) {
+        return
+      }
+      
+      if (deltaX < -this.swipeThreshold) {
+        this.currentX = -this.actionsWidth
+        this.setPreventTap()
+        this.$emit('open')
+      } else if (deltaX > this.swipeThreshold && this.currentX < 0) {
+        this.currentX = 0
+        this.setPreventTap()
+        this.$emit('close')
+      } else if (Math.abs(deltaX) < 10) {
+        this.shouldPreventTap = false
+      } else {
+        this.setPreventTap()
+      }
+    },
+    handleContentTap() {
+      if (this.shouldPreventTap) {
+        return
+      }
+      if (this.currentX < 0) {
+        this.close()
+      } else {
+        this.$emit('contentTap')
+      }
+    },
+    handleContentLongPress() {
+      this.reset()
+      this.$emit('contentLongPress')
+    }
+  }
+}
+</script>
+
+<style>
+.swipe-actions {
+  overflow: hidden;
+}
+
+.swipe-actions__wrapper {
+  flex-direction: row;
+}
+
+.swipe-actions__content {
+  background-color: #ffffff;
+  flex-shrink: 0;
+}
+
+.swipe-actions__actions {
+  flex-shrink: 0;
+}
+</style>

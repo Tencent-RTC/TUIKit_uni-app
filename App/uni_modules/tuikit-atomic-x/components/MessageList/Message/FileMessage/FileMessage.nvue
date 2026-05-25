@@ -2,20 +2,22 @@
   <view
     class="file-message"
     :class="['content-'+ (message.isSelf ? 'out' : 'in')]"
+    @touchstart="handleTouchStart"
+    @touchend="handleTouchEnd"
     @tap="handleFileTap"
   >
     <view class="file-highlight">
-      <view class="file-icon">
-        <text class="icon-text">{{ fileIconText }}</text>
-      </view>
+      <image :src="fileIconSrc" class="file-icon" mode="aspectFit" />
       <view class="file-info">
-        <view  class="file-name">
+        <view class="file-name">
           <text class="file-name-text" :lines="2">{{ fileName }}</text>
         </view>
-        <view  class="file-footer">
+        <view class="file-footer">
           <text class="file-size-text">{{ formatFileSize(fileSize) }}</text>
           <view class="file-download" v-if="!isDownloaded">
+            <text v-if="isDownloading" class="download-percent">{{ downloadProgress }}%</text>
             <image
+              v-else
               src="../../../../static/icon/download.png"
               class="icon-image"
               mode="aspectFill"
@@ -28,7 +30,6 @@
       v-if="isDownloading"
       class="downloading"
       :class="['content-'+ (message.isSelf ? 'out' : 'in')]"
-      :style="{ width: downloadWidth + 'rpx' }"
     >
     </view>
   </view>
@@ -37,16 +38,34 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import type { MessageInfo } from '../../../../types/message'
+import { MessageMediaFileType } from '../../../../types/message'
+import { useMessageListState } from '../../../../state/MessageListState'
+
+import wordIcon from '../../../../static/icon/file-types/word_icon.png'
+import excelIcon from '../../../../static/icon/file-types/excel_icon.png'
+import pptIcon from '../../../../static/icon/file-types/ppt_icon.png'
+import pdfIcon from '../../../../static/icon/file-types/pdf_icon.png'
+import txtIcon from '../../../../static/icon/file-types/txt_icon.png'
+import imageIcon from '../../../../static/icon/file-types/image_icon.png'
+import compressIcon from '../../../../static/icon/file-types/compress_icon.png'
+import unknownIcon from '../../../../static/icon/file-types/unknown_icon.png'
 
 interface Props {
   message: MessageInfo
+  conversationID: string
 }
 
 const props = defineProps<Props>()
 
+const { downloadMessageResource } = useMessageListState({
+  conversationID: props.conversationID
+})
+
 const isDownloading = ref(false)
-const downloadProgress = ref(0)
-const isDownloaded = ref(false)
+
+// 长按判定阈值，与 Message.nvue 中保持一致
+const LONG_PRESS_THRESHOLD = 350
+const touchStartTime = ref(0)
 
 const fileName = computed(() => {
   return props.message.messageBody?.fileName || '未知文件'
@@ -60,70 +79,160 @@ const filePath = computed(() => {
   return props.message.messageBody?.filePath || ''
 })
 
-const downloadWidth = computed(() => {
-  const maxWidth = 500
-  return (downloadProgress.value / 100) * maxWidth
+const isDownloaded = computed(() => !!filePath.value)
+
+// 下载进度（0-100），与 VideoMessage 一致：SDK 下载时通过 message.progress 推送
+const downloadProgress = computed(() => {
+  return props.message?.progress ?? 0
 })
 
-const fileType = computed(() => {
+const fileExtension = computed(() => {
   const name = fileName.value
-  const extension = name.split('.').pop()?.toLowerCase()
-  return extension || 'unknown'
+  const ext = name.split('.').pop()?.toLowerCase()
+  return ext || ''
 })
 
-const fileIconText = computed(() => {
-  const ext = fileType.value
-  if (ext === 'unknown') return 'F'
-  return ext.charAt(0).toUpperCase()
+// 文件类型 → 图标资源映射
+const FILE_TYPE_ICON_MAP: Record<string, string> = {
+  // Word
+  doc: wordIcon, docx: wordIcon,
+  // Excel
+  xls: excelIcon, xlsx: excelIcon, csv: excelIcon,
+  // PPT
+  ppt: pptIcon, pptx: pptIcon,
+  // PDF
+  pdf: pdfIcon,
+  // 文本
+  txt: txtIcon, log: txtIcon, json: txtIcon, xml: txtIcon, md: txtIcon,
+  // 图片
+  jpg: imageIcon, jpeg: imageIcon, png: imageIcon, gif: imageIcon,
+  bmp: imageIcon, webp: imageIcon, svg: imageIcon,
+  // 压缩包
+  zip: compressIcon, rar: compressIcon, '7z': compressIcon,
+  tar: compressIcon, gz: compressIcon, bz2: compressIcon,
+}
+
+const fileIconSrc = computed(() => {
+  return FILE_TYPE_ICON_MAP[fileExtension.value] || unknownIcon
 })
 
 const formatFileSize = (size: number) => {
   if (!size) return '0 B'
-  
   const units = ['B', 'KB', 'MB', 'GB', 'TB']
-  let fileSize = size
+  let value = size
   let unitIndex = 0
-  
-  while (fileSize >= 1024 && unitIndex < units.length - 1) {
-    fileSize /= 1024
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024
     unitIndex++
   }
-  
-  return `${fileSize.toFixed(unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`
+  return `${value.toFixed(unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`
 }
 
-const simulateDownload = () => {
-  isDownloading.value = true
-  downloadProgress.value = 0
-  
-  const interval = setInterval(() => {
-    downloadProgress.value += Math.random() * 15
-    
-    if (downloadProgress.value >= 100) {
-      downloadProgress.value = 100
-      isDownloading.value = false
-      isDownloaded.value = true
-      clearInterval(interval)
-      
-      uni.$emit('fileDownloadComplete', {
-        messageId: props.message.msgID,
-        url: filePath.value
-      })
-    }
-  }, 300)
-}
+// uni.openDocument 官方支持的文档类型
+const DOCUMENT_TYPES = ['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'pdf']
 
-const handleFileTap = () => {
-  if (isDownloading.value) return
-  
-  if (!isDownloaded.value) {
-    simulateDownload()
-  } else {
-    uni.$emit('openFile', {
-      url: filePath.value,
-      name: fileName.value,
-      type: fileType.value
+/**
+ * 调起系统应用打开文件
+ *
+ * 策略：
+ * 1. Office/PDF 文档（doc/xls/ppt/pdf 等）→ 优先 uni.openDocument（跨平台一致体验，自带预览 UI）
+ * 2. 其他类型（图片/视频/压缩包/apk 等）→ Android 用 plus.runtime.openFile 调起系统应用，
+ *                                          iOS 用 uni.openDocument（fileType 兜底为扩展名）
+ * 3. 失败时统一 toast 提示
+ */
+const openFile = (path: string) => {
+  if (!path) return
+  // #ifdef APP-PLUS
+  const ext = fileExtension.value
+  const isDocument = DOCUMENT_TYPES.indexOf(ext) >= 0
+  const platform = uni.getSystemInfoSync().platform
+
+  // 路径标准化：uni.openDocument 接受不带 file:// 的本地绝对路径
+  const localPath = path.startsWith('file://') ? path.substring(7) : path
+
+  if (isDocument) {
+    uni.openDocument({
+      filePath: localPath,
+      fileType: ext as any,
+      showMenu: true,
+      fail: (err: any) => {
+        console.error('[FileMessage] openDocument failed:', err)
+        // 文档类型打开失败时，Android 降级到 plus.runtime.openFile 调起其他应用
+        if (platform === 'android') {
+          tryOpenWithSystemApp(localPath)
+        } else {
+          uni.showToast({ title: '无法打开此文件', icon: 'none' })
+        }
+      },
     })
+    return
+  }
+
+  // 非文档类型
+  if (platform === 'android') {
+    tryOpenWithSystemApp(localPath)
+  } else {
+    // iOS 兜底：uni.openDocument 不传 fileType 让系统自动识别
+    uni.openDocument({
+      filePath: localPath,
+      showMenu: true,
+      fail: (err: any) => {
+        console.error('[FileMessage] iOS openDocument failed:', err)
+        uni.showToast({ title: '无法打开此文件', icon: 'none' })
+      },
+    })
+  }
+  // #endif
+}
+
+/**
+ * Android 通过 plus.runtime.openFile 调起系统已安装的应用打开文件
+ */
+const tryOpenWithSystemApp = (localPath: string) => {
+  try {
+    plus.runtime.openFile(localPath, {}, (err: any) => {
+      console.error('[FileMessage] plus.runtime.openFile failed:', err)
+      uni.showToast({ title: '无法打开此文件，请确认已安装相应应用', icon: 'none' })
+    })
+  } catch (e) {
+    console.error('[FileMessage] plus.runtime.openFile exception:', e)
+    uni.showToast({ title: '无法打开此文件', icon: 'none' })
+  }
+}
+
+const handleTouchStart = (e: any) => {
+  touchStartTime.value = Date.now()
+}
+
+const handleTouchEnd = (e: any) => {
+  // 此处不消费事件，仅用于配合 handleFileTap 的长按判定
+}
+
+const handleFileTap = async (e: any) => {
+  // 长按判定：触摸持续时间超过阈值视为长按，交由父级 Message.nvue 处理消息操作菜单
+  // 注意：判定后必须复位 touchStartTime，否则下一次"未收到 touchstart 直接 tap"
+  // （nvue 部分场景事件丢失）会用旧时间戳算出极大 duration，导致正常点击被误判为长按
+  const startTime = touchStartTime.value
+  touchStartTime.value = 0
+  if (startTime > 0 && Date.now() - startTime >= LONG_PRESS_THRESHOLD) {
+    return
+  }
+
+  if (isDownloading.value) return
+
+  if (isDownloaded.value) {
+    openFile(filePath.value)
+    return
+  }
+
+  isDownloading.value = true
+  try {
+    await downloadMessageResource(props.message, MessageMediaFileType.FILE)
+  } catch (error) {
+    console.error('[FileMessage] download failed:', error)
+    uni.showToast({ title: '下载失败', icon: 'none' })
+  } finally {
+    isDownloading.value = false
   }
 }
 </script>
@@ -145,7 +254,6 @@ const handleFileTap = () => {
   border-radius: 20rpx 4rpx 20rpx 20rpx;
 }
 
-/* 闪烁层 */
 .file-highlight {
   flex: 1;
   flex-direction: row;
@@ -158,15 +266,6 @@ const handleFileTap = () => {
   margin-right: 20rpx;
   width: 64rpx;
   height: 64rpx;
-  justify-content: center;
-  align-items: center;
-  background-color: #E54545;
-  border-radius: 10rpx;
-}
-
-.icon-text {
-  font-size: 32rpx;
-  color: #FFFFFF;
 }
 
 .file-info, .file-name, .file-footer {
@@ -206,6 +305,13 @@ const handleFileTap = () => {
   height: 28rpx;
 }
 
+.download-percent {
+  font-size: 24rpx;
+  line-height: 28rpx;
+  color: rgba(0, 0, 0, 0.55);
+  font-weight: 500;
+}
+
 .file-status {
   margin-left: 16rpx;
   align-items: center;
@@ -216,18 +322,10 @@ const handleFileTap = () => {
   position: absolute;
   top: 0;
   left: 0;
+  right: 0;
   bottom: 0;
   z-index: 0;
   background-color: rgba(204, 226, 255, 0.5);
   border-radius: 20rpx;
-  transition-property: width;
-  transition-duration: 0.3s;
-  transition-timing-function: ease-out;
-}
-
-.download-progress {
-  font-size: 20rpx;
-  color: #1890ff;
-  margin-top: 8rpx;
 }
 </style>

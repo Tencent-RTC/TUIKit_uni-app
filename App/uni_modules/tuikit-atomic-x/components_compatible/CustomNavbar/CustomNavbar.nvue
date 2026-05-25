@@ -1,0 +1,78 @@
+<template>
+  <view
+    :class="['custom-navbar', { 'fixed-navbar': position === 'fixed' }]"
+    :style="navbarStyle"
+  >
+    <view class="navbar__status-bar" :style="{ height: statusBarHeight + 'px' }"></view>
+    <view class="navbar__content">
+      <view class="navbar__left" @tap="handleBack">
+        <slot name="left">
+          <view v-if="showBack" class="navbar__back-btn">
+            <image class="navbar__back-icon" :src="arrowLeftIconSrc" />
+          </view>
+        </slot>
+      </view>
+      <view class="navbar__center">
+        <slot name="center">
+          <text class="navbar__title" :style="titleStyle" :lines="1">{{ title }}</text>
+        </slot>
+      </view>
+      <view v-if="showMenu" class="navbar__right" @tap="handleMenuTap">
+        <slot name="right">
+          <image class="navbar__menu-icon" :src="menuIconSrc" mode="aspectFit" />
+        </slot>
+      </view>
+    </view>
+    <view v-if="showShadow" class="navbar__shadow"></view>
+  </view>
+</template>
+
+<script>
+export default {
+  name: 'CustomNavbar',
+  props: {
+    position: { type: String, default: 'static' },
+    title: { type: String, default: '' },
+    showBack: { type: Boolean, default: true },
+    showMenu: { type: Boolean, default: false },
+    showShadow: { type: Boolean, default: true },
+    backgroundColor: { type: String, default: '#FFFFFF' },
+    titleColor: { type: String, default: '#333333' },
+    homePath: { type: String, default: '/pages/index/index' }
+  },
+  data() {
+    return {
+      statusBarHeight: 44,
+      arrowLeftIconSrc: '/uni_modules/tuikit-atomic-x/static/assets/navbar/nvue_arrow-left.png',
+      menuIconSrc: '/uni_modules/tuikit-atomic-x/static/assets/navbar/nvue_dots.png'
+    }
+  },
+  computed: {
+    navbarStyle() { return { backgroundColor: this.backgroundColor } },
+    titleStyle() { return { color: this.titleColor } }
+  },
+  mounted() {
+    try { this.statusBarHeight = uni.getSystemInfoSync().statusBarHeight || 44 }
+    catch (e) { this.statusBarHeight = 44 }
+  },
+  methods: {
+    handleBack() { this.$emit('back') },
+    handleMenuTap() { this.$emit('menuSelect') }
+  }
+}
+</script>
+
+<style scoped>
+.custom-navbar { background-color: #FFFFFF; }
+.fixed-navbar { position: fixed; top: 0; left: 0; right: 0; }
+.navbar__status-bar { width: 750rpx; }
+.navbar__content { height: 88rpx; flex-direction: row; align-items: center; justify-content: space-between; position: relative; }
+.navbar__left { width: 100rpx; height: 88rpx; justify-content: center; align-items: flex-start; padding-left: 24rpx; z-index: 2; }
+.navbar__back-btn { width: 60rpx; height: 60rpx; justify-content: center; align-items: center; }
+.navbar__back-icon { width: 54rpx; height: 54rpx; }
+.navbar__center { position: absolute; left: 100rpx; right: 100rpx; top: 0; bottom: 0; justify-content: center; align-items: center; z-index: 1; }
+.navbar__title { font-size: 34rpx; font-weight: 600; color: rgba(0, 0, 0, 0.9); text-align: center; text-overflow: ellipsis; lines: 1; }
+.navbar__right { width: 100rpx; height: 88rpx; justify-content: center; align-items: flex-end; padding-right: 24rpx; z-index: 2; }
+.navbar__menu-icon { width: 48rpx; height: 48rpx; }
+.navbar__shadow { height: 2rpx; background-color: #E5E5E5; }
+</style>

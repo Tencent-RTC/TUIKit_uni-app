@@ -17,6 +17,8 @@
   import { computed, ref } from 'vue';
   import { UserPickerType } from '../../types/userpicker';
   import { useMessageInputState } from '../../state/MessageInputState';
+  import { MessageType } from '../../types/message';
+  import { chooseFile } from '../../hooks/useFilePicker';
   import { DEFAULT_TOOLS } from './types';
   import type { ToolItem } from './types';
   import {
@@ -68,7 +70,7 @@
   const {
     calls,
     selfInfo,
-    setFramework
+    setCallFramework
   } = useCallState()
   const {
     openLocalCamera,
@@ -166,6 +168,9 @@
           },
         });
         break;
+      case 'file':
+        chooseAndSendFile();
+        break;
       case 'voiceCall':
         startCall(0);
         break;
@@ -177,11 +182,34 @@
     }
   };
 
+  /**
+   * 调起系统文件选择器并发送文件消息
+   */
+  const chooseAndSendFile = () => {
+    chooseFile({
+      success: ({ filePath, fileName, fileSize }) => {
+        if (!messageInputState) return;
+        const message: any = JSON.stringify({
+          messageType: MessageType.FILE,
+          messageBody: { filePath, fileName, fileSize },
+        });
+        messageInputState.sendMessage(message).catch((err: any) => {
+          console.error('[ToolsPanel] sendFileMessage failed:', err);
+          uni.showToast({ title: '文件发送失败', icon: 'none' });
+        });
+      },
+      fail: (err: any) => {
+        console.error('[ToolsPanel] chooseFile failed:', err);
+        uni.showToast({ title: '文件选择失败', icon: 'none' });
+      },
+    });
+  };
+
   // 呼叫防抖锁，防止频繁点击呼叫按钮
   const isCalling = ref(false);
 
   const startCall = async (mediaType: number) => {
-    setFramework(15)
+    setCallFramework(15)
     // 防抖：上一次呼叫流程尚未完成时，不允许再次呼叫
     if (isCalling.value) {
       console.log('[ToolsPanel] call skipped: isCalling is true');

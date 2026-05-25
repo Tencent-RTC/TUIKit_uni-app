@@ -1,0 +1,61 @@
+<template>
+  <view class="presearch">
+    <view v-if="filteredHistory.length > 0" class="presearch__section">
+      <text class="presearch__title">搜索历史</text>
+      <view v-for="(item, index) in filteredHistory" :key="index" class="presearch__item" @tap="handleHistoryClick(item)">
+        <image class="presearch__item-icon" src="/uni_modules/tuikit-atomic-x/static/icon/search.png" mode="aspectFit" />
+        <view class="presearch__item-text-wrapper">
+          <text v-if="highlightParts(item).before" class="presearch__item-text">{{ highlightParts(item).before }}</text>
+          <text v-if="highlightParts(item).match" class="presearch__item-text presearch__highlight">{{ highlightParts(item).match }}</text>
+          <text v-if="highlightParts(item).after" class="presearch__item-text">{{ highlightParts(item).after }}</text>
+        </view>
+      </view>
+    </view>
+    <view v-if="showCloudSearch" class="presearch__cloud" @tap="handleCloudSearchClick">
+      <view class="presearch__cloud-icon-wrapper">
+        <image class="presearch__cloud-icon" src="/uni_modules/tuikit-atomic-x/static/icon/search-white.png" mode="aspectFit" />
+      </view>
+      <text class="presearch__cloud-text">进入全局搜索</text>
+    </view>
+  </view>
+</template>
+<script>
+export default {
+  props: {
+    searchHistory: { type: Array, default: function() { return [] } },
+    keyword: { type: String, default: '' },
+    showCloudSearch: { type: Boolean, default: false },
+  },
+  computed: {
+    filteredHistory() {
+      if (!this.keyword) return this.searchHistory
+      var kw = this.keyword.toLowerCase()
+      return this.searchHistory.filter(function(item) { return item.toLowerCase().includes(kw) })
+    },
+  },
+  methods: {
+    highlightParts(text) {
+      if (!this.keyword) return { before: text, match: '', after: '' }
+      var kw = this.keyword.toLowerCase(); var idx = text.toLowerCase().indexOf(kw)
+      if (idx === -1) return { before: text, match: '', after: '' }
+      return { before: text.substring(0, idx), match: text.substring(idx, idx + this.keyword.length), after: text.substring(idx + this.keyword.length) }
+    },
+    handleHistoryClick(keyword) { this.$emit('historyClick', keyword) },
+    handleCloudSearchClick() { this.$emit('cloudSearchClick') },
+  },
+}
+</script>
+<style>
+.presearch { flex: 1; background-color: #F0F2F7; }
+.presearch__section { padding: 20rpx 40rpx 10rpx; background: #FFFFFF; }
+.presearch__title { font-size: 28rpx; font-weight: 400; line-height: 48rpx; color: rgba(0, 0, 0, 0.55); padding-bottom: 8rpx; }
+.presearch__item { flex-direction: row; align-items: center; padding: 16rpx 0; }
+.presearch__item-icon { width: 36rpx; height: 36rpx; margin-right: 16rpx; }
+.presearch__item-text-wrapper { flex: 1; flex-direction: row; }
+.presearch__item-text { font-size: 32rpx; font-weight: 400; line-height: 45rpx; color: rgba(0, 0, 0, 0.9); }
+.presearch__highlight { color: #1C66E5; }
+.presearch__cloud { flex-direction: row; align-items: center; background: #FFFFFF; padding: 20rpx 40rpx; border-top: 2rpx solid #F0F2F7; }
+.presearch__cloud-icon-wrapper { width: 60rpx; height: 60rpx; border-radius: 30rpx; background-color: #1C66E5; justify-content: center; align-items: center; margin-right: 20rpx; }
+.presearch__cloud-icon { width: 32rpx; height: 32rpx; }
+.presearch__cloud-text { font-size: 28rpx; font-weight: 400; line-height: 40rpx; color: rgba(0, 0, 0, 0.9); }
+</style>

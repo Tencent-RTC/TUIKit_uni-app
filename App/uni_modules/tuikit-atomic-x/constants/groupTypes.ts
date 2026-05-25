@@ -46,13 +46,13 @@ export const getGroupTypeById = (id: string): GroupType | undefined => {
 // 获取群类型名称
 export const getGroupTypeName = (id: string): string => {
   const groupType = getGroupTypeById(id)
-  return groupType?.name || '未知群类型'
+  return (groupType && groupType.name) ? groupType.name : '未知群类型'
 }
 
 // 获取群类型描述
 export const getGroupTypeDescription = (id: string): string => {
   const groupType = getGroupTypeById(id)
-  return groupType?.description || ''
+  return (groupType && groupType.description) ? groupType.description : ''
 }
 
 // 群头像资源常量

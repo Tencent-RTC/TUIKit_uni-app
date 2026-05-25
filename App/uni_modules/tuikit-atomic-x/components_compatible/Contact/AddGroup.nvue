@@ -1,0 +1,96 @@
+<template>
+  <view class="add-group" @touchstart="handleTouchStart">
+    <view class="add-group__search">
+      <view v-if="!isInputActive" class="add-group__search-wrapper" @tap="handleActivateInput">
+        <image class="add-group__search-icon" src="/uni_modules/tuikit-atomic-x/static/icon/search.png" mode="aspectFit" />
+        <text class="add-group__search-placeholder-text">搜索群ID</text>
+      </view>
+      <view v-if="isInputActive" class="add-group__search-wrapper" @touchstart="handleInputAreaTouchStart" @touchend="handleInputAreaTouchEnd">
+        <image class="add-group__search-icon" src="/uni_modules/tuikit-atomic-x/static/icon/search.png" mode="aspectFit" />
+        <input ref="inputRef" class="add-group__search-input" type="text" :value="searchValue" :focus="shouldFocus" placeholder="搜索群ID" placeholder-class="add-group__search-placeholder" confirm-type="search" @input="handleInput" @confirm="handleSearch" @focus="handleFocus" @blur="handleBlur" />
+        <view v-if="searchValue" class="add-group__search-clear" @tap="handleClear"><image class="add-group__search-clear-icon" src="/uni_modules/tuikit-atomic-x/static/icon/close.png" mode="aspectFit" /></view>
+      </view>
+    </view>
+    <view v-if="hasSearched" class="add-group__result">
+      <view v-if="isSearching" class="add-group__loading"><text class="add-group__loading-text">搜索中...</text></view>
+      <view v-else-if="searchResultList.length === 0" class="add-group__empty"><text class="add-group__empty-text">该群聊不存在</text></view>
+      <list v-else class="add-group__list">
+        <cell v-for="group in searchResultList" :key="group.groupID">
+          <view class="add-group__group" @tap="handleGroupClick(group)">
+            <component :is="Avatar" :src="group.avatarURL || ''" :name="group.groupName || group.groupID" :size="96" shape="square" defaultAvatarType="group" pureMode />
+            <view class="add-group__group-info">
+              <text class="add-group__group-name">{{ group.groupName || group.groupID }}</text>
+              <text class="add-group__group-id">ID: {{ group.groupID }}</text>
+              <text class="add-group__group-type">群类型: {{ group.groupType }}</text>
+            </view>
+          </view>
+        </cell>
+      </list>
+    </view>
+  </view>
+</template>
+<script>
+import AvatarComponent from '../Avatar'
+import { useGroupState } from '../../state/GroupState'
+import { showToast } from '../../utils/toast'
+export default {
+  props: { Avatar: { type: [Object, Function], default: function() { return AvatarComponent } } },
+  data() {
+    var groupState = useGroupState()
+    return { searchValue: '', hasSearched: false, isSearching: false, searchResultList: [], isInputActive: false, isFocused: false, isTouchingInput: false, shouldFocus: false, groupState: groupState, debounceTimer: null }
+  },
+  onShow() {
+    if (this.searchValue.trim() && this.hasSearched) {
+      if (this.debounceTimer) clearTimeout(this.debounceTimer)
+      var self = this; this.debounceTimer = setTimeout(function() { self.silentRefreshSearch() }, 300)
+    }
+  },
+  beforeDestroy() { if (this.debounceTimer) { clearTimeout(this.debounceTimer); this.debounceTimer = null } },
+  beforeUnmount() { if (this.debounceTimer) { clearTimeout(this.debounceTimer); this.debounceTimer = null } },
+  methods: {
+    handleActivateInput() { this.isInputActive = true; var self = this; this.$nextTick(function() { self.shouldFocus = true }) },
+    handleFocus() { this.isFocused = true },
+    handleBlur() { this.isFocused = false; if (!this.searchValue && !this.hasSearched) this.isInputActive = false },
+    handleTouchStart() { if (!this.isFocused || this.isTouchingInput) return; uni.hideKeyboard() },
+    handleInputAreaTouchStart() { this.isTouchingInput = true },
+    handleInputAreaTouchEnd() { var self = this; setTimeout(function() { self.isTouchingInput = false }, 100) },
+    handleInput(e) { this.searchValue = e.detail.value || '' },
+    handleClear() { this.searchValue = ''; this.hasSearched = false; this.searchResultList = [] },
+    handleSearch() {
+      var groupID = this.searchValue.trim()
+      if (!groupID) { showToast('请输入群ID'); return }
+      uni.hideKeyboard(); this.hasSearched = true; this.isSearching = true; this.searchResultList = []
+      this.$emit('search', groupID)
+      var self = this
+      this.groupState.fetchGroupInfo([groupID]).then(function(result) { self.searchResultList = result }).catch(function(err) { console.error('[AddGroup] Search failed:', err); self.searchResultList = [] }).finally(function() { self.isSearching = false })
+    },
+    handleGroupClick(group) { uni.hideKeyboard(); this.$emit('groupSelect', group) },
+    silentRefreshSearch() {
+      var groupID = this.searchValue.trim(); if (!groupID) return
+      var self = this
+      this.groupState.fetchGroupInfo([groupID]).then(function(result) { self.searchResultList = result }).catch(function(err) { console.error('[AddGroup] silentRefreshSearch failed:', err) })
+    },
+  },
+}
+</script>
+<style>
+.add-group { flex: 1; background-color: #F5F5F5; }
+.add-group__search { flex-direction: row; align-items: center; padding: 20rpx 32rpx; background-color: #FFFFFF; }
+.add-group__search-placeholder-text { font-size: 28rpx; line-height: 46rpx; color: #999999; }
+.add-group__search-wrapper { flex: 1; flex-direction: row; align-items: center; background-color: #F0F2F7; border-radius: 8rpx; padding: 16rpx 24rpx; }
+.add-group__search-icon { width: 32rpx; height: 32rpx; margin-right: 12rpx; }
+.add-group__search-input { flex: 1; font-size: 28rpx; line-height: 40rpx; color: rgba(0, 0, 0, 0.9); }
+.add-group__search-clear { padding: 8rpx; margin-left: 8rpx; }
+.add-group__search-clear-icon { width: 28rpx; height: 28rpx; }
+.add-group__result { flex: 1; }
+.add-group__list { flex: 1; }
+.add-group__loading { padding: 60rpx; align-items: center; }
+.add-group__loading-text { font-size: 28rpx; color: #999999; }
+.add-group__empty { padding: 60rpx; align-items: center; }
+.add-group__empty-text { font-size: 28rpx; color: #999999; }
+.add-group__group { flex-direction: row; padding: 24rpx 32rpx; background-color: #FFFFFF; }
+.add-group__group-info { flex: 1; margin-left: 32rpx; }
+.add-group__group-name { font-size: 36rpx; line-height: 48rpx; color: #000000; font-weight: 400; lines: 1; text-overflow: ellipsis; }
+.add-group__group-id { font-size: 26rpx; font-weight: 400; line-height: 40rpx; color: #888888; margin-top: 8rpx; }
+.add-group__group-type { font-size: 26rpx; font-weight: 400; line-height: 40rpx; color: #888888; margin-top: 4rpx; }
+</style>

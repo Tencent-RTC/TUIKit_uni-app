@@ -1,0 +1,18 @@
+<template>
+  <view class="empty-list">
+    <text class="empty-list__text">{{ text }}</text>
+  </view>
+</template>
+
+<script>
+export default {
+  props: {
+    text: { type: String, default: '暂无联系人' },
+  },
+}
+</script>
+
+<style>
+.empty-list { flex: 1; justify-content: center; align-items: center; padding: 100rpx 60rpx; }
+.empty-list__text { font-size: 28rpx; color: #999999; text-align: center; }
+</style>

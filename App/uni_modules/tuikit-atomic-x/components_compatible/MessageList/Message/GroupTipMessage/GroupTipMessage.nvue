@@ -1,0 +1,29 @@
+<template>
+  <view class="group-tip-message"><text class="tip-text">{{ tipText }}</text></view>
+</template>
+
+<script>
+import { resolveGroupTipMessage } from './resolveGroupTipMessage'
+import { MessageType } from '../../../../types/message'
+import { safeJsonParse } from '../../../../utils/utsUtils'
+
+export default {
+  name: 'GroupTipMessage',
+  props: { message: { type: Object, required: true } },
+  computed: {
+    tipText() {
+      if (this.message.messageType === MessageType.CUSTOM) {
+        var data = safeJsonParse((this.message.messageBody.customMessage && this.message.messageBody.customMessage.data), { businessID: '', content: '', opUser: '' })
+        if (data.businessID === 'group_create') return (this.message.sender.nickname || '') + ' ' + (data.content || '创建了群组')
+        return '群组创建成功'
+      }
+      return resolveGroupTipMessage(this.message)
+    }
+  }
+}
+</script>
+
+<style>
+.group-tip-message { flex-direction: row; align-items: center; justify-content: center; padding: 16rpx 0; }
+.tip-text { max-width: 650rpx; font-size: 24rpx; line-height: 34rpx; font-weight: 400; color: rgba(0, 0, 0, 0.4); }
+</style>

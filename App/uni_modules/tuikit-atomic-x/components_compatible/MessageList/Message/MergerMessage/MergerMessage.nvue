@@ -1,0 +1,37 @@
+<template>
+  <view class="merger-message" :class="'merger-message-' + (message.isSelf ? 'out' : 'in')" @tap="handleTap">
+    <view class="merger-highlight"><view class="merger-container">
+      <text class="merger-title">{{ mergerTitle }}</text>
+      <view class="merger-abstract-list">
+        <view v-for="(item, index) in abstractList" :key="index" class="merger-abstract-item"><text class="abstract-content">{{ item }}</text></view>
+      </view>
+      <text class="merger-label">聊天记录</text>
+    </view></view>
+  </view>
+</template>
+
+<script>
+export default {
+  name: 'MergerMessage',
+  props: { message: { type: Object, required: true } },
+  computed: {
+    mergedMessage() { return this.message.messageBody && this.message.messageBody.mergedMessage },
+    mergerTitle() { return (this.mergedMessage && this.mergedMessage.title) || '聊天记录' },
+    abstractList() { var a = (this.mergedMessage && this.mergedMessage.abstractList) || []; return a.slice(0, 4) }
+  },
+  methods: { handleTap() { this.$emit('tap', this.message) } }
+}
+</script>
+
+<style scoped>
+.merger-message { flex-direction: row; }
+.merger-message-in { justify-content: flex-start; }
+.merger-message-out { justify-content: flex-end; }
+.merger-highlight { background-color: transparent; border-radius: 20rpx; }
+.merger-container { max-width: 500rpx; background-color: #FFFFFF; border-radius: 20rpx; padding: 20rpx 24rpx; flex-direction: column; }
+.merger-title { font-size: 32rpx; line-height: 42rpx; font-weight: 400; color: rgba(0, 0, 0, 0.9); margin-bottom: 10rpx; }
+.merger-abstract-list { flex-direction: column; margin-bottom: 18rpx; }
+.merger-abstract-item { flex-direction: row; margin-bottom: 8rpx; }
+.abstract-content { font-weight: 400; font-size: 24rpx; line-height: 36rpx; color: rgba(0, 0, 0, 0.4); flex: 1; lines: 1; text-overflow: ellipsis; }
+.merger-label { font-weight: 400; font-size: 18rpx; line-height: 28rpx; color: rgba(0, 0, 0, 0.4); border-top: 1rpx solid #E6E9F0; padding-top: 12rpx; }
+</style>

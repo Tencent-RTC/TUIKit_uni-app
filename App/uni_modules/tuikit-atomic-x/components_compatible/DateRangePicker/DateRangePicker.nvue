@@ -1,0 +1,256 @@
+<template>
+  <view class="date-range-picker">
+  <view v-if="showPicker" class="date-range-picker__popup">
+      <view class="date-range-picker__mask" @tap="handleCancel"></view>
+      <view class="date-range-picker__panel">
+        <view class="date-range-picker__header">
+          <view class="date-range-picker__range">
+            <view 
+              class="date-range-picker__range-item"
+              :class="{ 'date-range-picker__range-item--active': selectingType === 'start' }"
+              @tap="selectingType = 'start'"
+            >
+              <text class="date-range-picker__range-label">开始日期</text>
+              <text class="date-range-picker__range-value">{{ formatDisplayDate(tempStartDate) || '请选择' }}</text>
+            </view>
+            <text class="date-range-picker__range-separator">至</text>
+            <view 
+              class="date-range-picker__range-item"
+              :class="{ 'date-range-picker__range-item--active': selectingType === 'end' }"
+              @tap="selectingType = 'end'"
+            >
+              <text class="date-range-picker__range-label">结束日期</text>
+              <text class="date-range-picker__range-value">{{ formatDisplayDate(tempEndDate) || '请选择' }}</text>
+            </view>
+          </view>
+        </view>
+        <view class="date-range-picker__nav">
+          <view class="date-range-picker__nav-left">
+            <text class="date-range-picker__nav-btn" @tap="changeYear(-1)">&lt;&lt;</text>
+            <text class="date-range-picker__nav-btn" @tap="changeMonth(-1)">&lt;</text>
+          </view>
+          <text class="date-range-picker__nav-title">{{ currentYear }}年 {{ monthNames[currentMonth] }}</text>
+          <view class="date-range-picker__nav-right">
+            <text class="date-range-picker__nav-btn" @tap="changeMonth(1)">&gt;</text>
+            <text class="date-range-picker__nav-btn" @tap="changeYear(1)">&gt;&gt;</text>
+          </view>
+        </view>
+        <view class="date-range-picker__weekdays">
+          <text v-for="day in weekDays" :key="day" class="date-range-picker__weekday">{{ day }}</text>
+        </view>
+        <view class="date-range-picker__calendar">
+          <view v-for="(week, weekIndex) in calendarDays" :key="weekIndex" class="date-range-picker__week">
+            <view 
+              v-for="(day, dayIndex) in week" 
+              :key="dayIndex" 
+              class="date-range-picker__day"
+              :class="{
+                'date-range-picker__day--other': day.isOtherMonth,
+                'date-range-picker__day--start': isStartDate(day),
+                'date-range-picker__day--end': isEndDate(day),
+                'date-range-picker__day--in-range': isInRange(day),
+                'date-range-picker__day--today': isToday(day)
+              }"
+              @tap="handleDayClick(day)"
+            >
+              <text 
+                class="date-range-picker__day-text"
+                :class="{
+                  'date-range-picker__day-text--other': day.isOtherMonth,
+                  'date-range-picker__day-text--selected': isStartDate(day) || isEndDate(day),
+                  'date-range-picker__day-text--today': isToday(day) && !isStartDate(day) && !isEndDate(day)
+                }"
+              >{{ day.day }}</text>
+            </view>
+          </view>
+        </view>
+        <view class="date-range-picker__footer">
+          <text class="date-range-picker__btn date-range-picker__btn--cancel" @tap="handleCancel">取消</text>
+          <text class="date-range-picker__btn date-range-picker__btn--confirm" @tap="handleConfirm">确定</text>
+        </view>
+      </view>
+    </view>
+  </view>
+</template>
+
+<script>
+export default {
+  props: {
+    startDate: { type: String, default: '' },
+    endDate: { type: String, default: '' },
+    minYear: { type: Number, default: 2020 },
+    maxYear: { type: Number, default: 2030 },
+    visible: { type: Boolean, default: false },
+  },
+  data() {
+    return {
+      showPicker: this.visible,
+      currentYear: new Date().getFullYear(),
+      currentMonth: new Date().getMonth(),
+      selectingType: 'start',
+      tempStartDate: null,
+      tempEndDate: null,
+      weekDays: ['一', '二', '三', '四', '五', '六', '日'],
+      monthNames: ['1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月'],
+    }
+  },
+  computed: {
+    calendarDays() {
+      var year = this.currentYear
+      var month = this.currentMonth
+      var firstDay = new Date(year, month, 1)
+      var lastDay = new Date(year, month + 1, 0)
+      var daysInMonth = lastDay.getDate()
+      var startWeekDay = firstDay.getDay() - 1
+      if (startWeekDay < 0) startWeekDay = 6
+      var weeks = []
+      var currentWeek = []
+      var prevMonth = month === 0 ? 11 : month - 1
+      var prevYear = month === 0 ? year - 1 : year
+      var daysInPrevMonth = new Date(prevYear, prevMonth + 1, 0).getDate()
+      for (var i = startWeekDay - 1; i >= 0; i--) {
+        currentWeek.push({ year: prevYear, month: prevMonth + 1, day: daysInPrevMonth - i, isOtherMonth: true })
+      }
+      for (var day = 1; day <= daysInMonth; day++) {
+        currentWeek.push({ year: year, month: month + 1, day: day, isOtherMonth: false })
+        if (currentWeek.length === 7) { weeks.push(currentWeek); currentWeek = [] }
+      }
+      var nextMonth = month === 11 ? 0 : month + 1
+      var nextYear = month === 11 ? year + 1 : year
+      var nextDay = 1
+      while (currentWeek.length < 7 && currentWeek.length > 0) {
+        currentWeek.push({ year: nextYear, month: nextMonth + 1, day: nextDay++, isOtherMonth: true })
+      }
+      if (currentWeek.length > 0) weeks.push(currentWeek)
+      while (weeks.length < 6) {
+        var week = []
+        for (var j = 0; j < 7; j++) { week.push({ year: nextYear, month: nextMonth + 1, day: nextDay++, isOtherMonth: true }) }
+        weeks.push(week)
+      }
+      return weeks
+    },
+  },
+  watch: {
+    visible(val) {
+      this.showPicker = val
+      if (val) {
+        this.selectingType = 'start'
+        if (this.startDate) {
+          var date = this.parseDate(this.startDate)
+          this.tempStartDate = { year: date.year, month: date.month, day: date.day }
+          this.currentYear = date.year
+          this.currentMonth = date.month - 1
+        } else {
+          this.tempStartDate = null
+          this.currentYear = new Date().getFullYear()
+          this.currentMonth = new Date().getMonth()
+        }
+        if (this.endDate) {
+          var edate = this.parseDate(this.endDate)
+          this.tempEndDate = { year: edate.year, month: edate.month, day: edate.day }
+        } else {
+          this.tempEndDate = null
+        }
+      }
+    },
+  },
+  methods: {
+    parseDate(dateStr) {
+      if (!dateStr) { var now = new Date(); return { year: now.getFullYear(), month: now.getMonth() + 1, day: now.getDate() } }
+      var parts = dateStr.split('-').map(Number)
+      return { year: parts[0], month: parts[1], day: parts[2] }
+    },
+    formatDate(year, month, day) {
+      return year + '-' + String(month).padStart(2, '0') + '-' + String(day).padStart(2, '0')
+    },
+    formatDisplayDate(date) {
+      if (!date) return ''
+      return date.year + '/' + String(date.month).padStart(2, '0') + '/' + String(date.day).padStart(2, '0')
+    },
+    dateToTimestamp(date) {
+      return new Date(date.year, date.month - 1, date.day).getTime()
+    },
+    changeYear(delta) { this.currentYear += delta },
+    changeMonth(delta) {
+      this.currentMonth += delta
+      if (this.currentMonth > 11) { this.currentMonth = 0; this.currentYear++ }
+      else if (this.currentMonth < 0) { this.currentMonth = 11; this.currentYear-- }
+    },
+    isStartDate(day) {
+      if (!this.tempStartDate) return false
+      return this.tempStartDate.year === day.year && this.tempStartDate.month === day.month && this.tempStartDate.day === day.day
+    },
+    isEndDate(day) {
+      if (!this.tempEndDate) return false
+      return this.tempEndDate.year === day.year && this.tempEndDate.month === day.month && this.tempEndDate.day === day.day
+    },
+    isInRange(day) {
+      if (!this.tempStartDate || !this.tempEndDate) return false
+      var dayTs = this.dateToTimestamp(day)
+      return dayTs > this.dateToTimestamp(this.tempStartDate) && dayTs < this.dateToTimestamp(this.tempEndDate)
+    },
+    isToday(day) {
+      if (day.isOtherMonth) return false
+      var today = new Date()
+      return today.getFullYear() === day.year && today.getMonth() + 1 === day.month && today.getDate() === day.day
+    },
+    handleDayClick(day) {
+      var clickedDate = { year: day.year, month: day.month, day: day.day }
+      if (this.selectingType === 'start') {
+        this.tempStartDate = clickedDate
+        if (this.tempEndDate && this.dateToTimestamp(clickedDate) > this.dateToTimestamp(this.tempEndDate)) { this.tempEndDate = null }
+        this.selectingType = 'end'
+      } else {
+        if (this.tempStartDate && this.dateToTimestamp(clickedDate) < this.dateToTimestamp(this.tempStartDate)) {
+          this.tempEndDate = this.tempStartDate; this.tempStartDate = clickedDate
+        } else { this.tempEndDate = clickedDate }
+      }
+    },
+    handleCancel() { this.showPicker = false; this.$emit('update:visible', false) },
+    handleConfirm() {
+      if (this.tempStartDate) { this.$emit('update:startDate', this.formatDate(this.tempStartDate.year, this.tempStartDate.month, this.tempStartDate.day)) }
+      if (this.tempEndDate) { this.$emit('update:endDate', this.formatDate(this.tempEndDate.year, this.tempEndDate.month, this.tempEndDate.day)) }
+      var startStr = this.tempStartDate ? this.formatDate(this.tempStartDate.year, this.tempStartDate.month, this.tempStartDate.day) : ''
+      var endStr = this.tempEndDate ? this.formatDate(this.tempEndDate.year, this.tempEndDate.month, this.tempEndDate.day) : ''
+      this.$emit('change', startStr, endStr)
+      this.showPicker = false
+      this.$emit('update:visible', false)
+    },
+  },
+}
+</script>
+
+<style>
+.date-range-picker__popup { position: fixed; top: 0; left: 0; right: 0; bottom: 0; }
+.date-range-picker__mask { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(0, 0, 0, 0.5); }
+.date-range-picker__panel { position: absolute; left: 0; right: 0; bottom: 0; background-color: #ffffff; border-top-left-radius: 24rpx; border-top-right-radius: 24rpx; padding: 32rpx; }
+.date-range-picker__header { margin-bottom: 24rpx; }
+.date-range-picker__range { flex-direction: row; align-items: center; justify-content: center; }
+.date-range-picker__range-item { flex: 1; align-items: center; padding: 16rpx; border-radius: 12rpx; border-width: 2rpx; border-color: #E6E9F0; }
+.date-range-picker__range-item--active { border-color: #1C66E5; background-color: #F0F7FF; }
+.date-range-picker__range-label { font-size: 24rpx; color: #999999; margin-bottom: 8rpx; }
+.date-range-picker__range-value { font-size: 28rpx; color: #333333; }
+.date-range-picker__range-separator { font-size: 28rpx; color: #999999; margin-left: 24rpx; margin-right: 24rpx; }
+.date-range-picker__nav { flex-direction: row; align-items: center; justify-content: space-between; margin-bottom: 24rpx; }
+.date-range-picker__nav-left { flex-direction: row; align-items: center; }
+.date-range-picker__nav-right { flex-direction: row; align-items: center; }
+.date-range-picker__nav-btn { font-size: 28rpx; color: #999999; padding: 16rpx; }
+.date-range-picker__nav-title { font-size: 32rpx; font-weight: 500; color: #333333; }
+.date-range-picker__weekdays { flex-direction: row; margin-bottom: 16rpx; }
+.date-range-picker__weekday { flex: 1; text-align: center; font-size: 24rpx; color: #999999; }
+.date-range-picker__calendar { flex-direction: column; }
+.date-range-picker__week { flex-direction: row; }
+.date-range-picker__day { flex: 1; height: 80rpx; justify-content: center; align-items: center; }
+.date-range-picker__day--start { background-color: #1C66E5; border-top-left-radius: 40rpx; border-bottom-left-radius: 40rpx; }
+.date-range-picker__day--end { background-color: #1C66E5; border-top-right-radius: 40rpx; border-bottom-right-radius: 40rpx; }
+.date-range-picker__day--in-range { background-color: #E8F3FF; }
+.date-range-picker__day--today { border-width: 2rpx; border-color: #1C66E5; border-radius: 40rpx; }
+.date-range-picker__day-text { font-size: 28rpx; color: #333333; }
+.date-range-picker__day-text--other { color: #CCCCCC; }
+.date-range-picker__day-text--selected { color: #FFFFFF; }
+.date-range-picker__day-text--today { color: #1C66E5; }
+.date-range-picker__footer { flex-direction: row; margin-top: 32rpx; padding-top: 24rpx; border-top-width: 1rpx; border-top-color: #E6E9F0; }
+.date-range-picker__btn { flex: 1; text-align: center; padding: 24rpx; font-size: 32rpx; border-radius: 12rpx; }
+.date-range-picker__btn--cancel { color: #666666; background-color: #F5F6F7; margin-right: 24rpx; }
+.date-range-picker__btn--confirm { color: #FFFFFF; background-color: #1C66E5; }
+</style>

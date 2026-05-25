@@ -1,0 +1,43 @@
+<template>
+  <view class="search-bar">
+    <view class="search-bar__input-wrapper" @click.stop>
+      <image class="search-bar__icon" src="/uni_modules/tuikit-atomic-x/static/icon/search.png" mode="aspectFit" />
+      <input ref="inputRef" class="search-bar__input" type="text" :value="modelValue" :placeholder="placeholder" :focus="autoFocus" :disabled="disabled" confirm-type="search" @input="handleInput" @focus="handleFocus" @blur="handleBlur" @confirm="handleConfirm" />
+      <view v-if="modelValue" class="search-bar__clear" @tap="handleClear"><image class="search-bar__clear-icon" src="/uni_modules/tuikit-atomic-x/static/icon/close.png" mode="aspectFit" /></view>
+    </view>
+    <text v-if="showCancel" class="search-bar__cancel" @tap="handleCancel">{{ cancelText }}</text>
+  </view>
+</template>
+<script>
+export default {
+  model: { prop: 'modelValue', event: 'update:modelValue' },
+  props: {
+    placeholder: { type: String, default: '搜索' },
+    modelValue: { type: String, default: '' },
+    autoFocus: { type: Boolean, default: false },
+    showCancel: { type: Boolean, default: true },
+    cancelText: { type: String, default: '取消' },
+    debounceTime: { type: Number, default: 300 },
+    disabled: { type: Boolean, default: false },
+  },
+  methods: {
+    handleInput(e) { var v = e.detail.value || ''; this.$emit('update:modelValue', v); this.$emit('input', v) },
+    handleFocus() { this.$emit('focus') },
+    handleBlur() { this.$emit('blur') },
+    handleConfirm() { this.$emit('search', this.modelValue || '') },
+    handleClear() { this.$emit('update:modelValue', ''); this.$emit('clear') },
+    handleCancel() { this.$emit('update:modelValue', ''); this.$emit('cancel') },
+    focus() { var _fn = this.$refs.inputRef && this.$refs.inputRef.focus; if (_fn) _fn() },
+    blur() { var _fn2 = this.$refs.inputRef && this.$refs.inputRef.blur; if (_fn2) _fn2() },
+  },
+}
+</script>
+<style>
+.search-bar { flex-direction: row; align-items: center; padding: 20rpx 32rpx 34rpx; background-color: #ffffff; }
+.search-bar__input-wrapper { flex: 1; flex-direction: row; align-items: center; background-color: #F0F2F7; border-radius: 8rpx; padding: 20rpx 24rpx; }
+.search-bar__icon { width: 36rpx; height: 36rpx; margin-right: 13rpx; }
+.search-bar__input { flex: 1; font-weight: 400; font-size: 28rpx; line-height: 40rpx; color: rgba(0, 0, 0, 0.9); }
+.search-bar__clear { padding: 8rpx; margin-left: 8rpx; }
+.search-bar__clear-icon { width: 28rpx; height: 28rpx; }
+.search-bar__cancel { font-weight: 400; font-size: 32rpx; line-height: 45rpx; color: rgba(0, 0, 0, 0.9); margin-left: 20rpx; padding: 8rpx 0; }
+</style>

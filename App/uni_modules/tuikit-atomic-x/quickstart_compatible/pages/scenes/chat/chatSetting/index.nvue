@@ -1,0 +1,23 @@
+<template>
+  <C2CChatSetting v-if="isC2C" :conversationID="conversationID" :showType="showType" />
+  <GroupChatSetting v-else-if="isGroup" :conversationID="conversationID" />
+</template>
+
+<script>
+import C2CChatSetting from '@/uni_modules/tuikit-atomic-x/components/ChatSetting/C2CChatSetting.nvue';
+import GroupChatSetting from '@/uni_modules/tuikit-atomic-x/components/ChatSetting/GroupChatSetting.nvue';
+export default {
+  components: { C2CChatSetting, GroupChatSetting },
+  data() { return { conversationID: '', showType: 0 } },
+  computed: {
+    isC2C() { return (this.conversationID && this.conversationID.startsWith('c2c_')) },
+    isGroup() { return (this.conversationID && this.conversationID.startsWith('group_')) },
+  },
+  onLoad(options) {
+    if (options.conversationID) this.conversationID = options.conversationID
+    if (options.showType) this.showType = parseInt(options.showType)
+  },
+}
+</script>
+
+<style scoped></style>

@@ -1,0 +1,82 @@
+<template>
+  <view v-if="isShow" ref="maskRef" class="popup-mask" @tap="handleMaskTap">
+    <view ref="containerRef" class="popup-container" @tap.stop>
+      <slot></slot>
+    </view>
+  </view>
+</template>
+
+<script>
+export default {
+  props: {
+    visible: { type: Boolean, default: false },
+    closeOnMaskTap: { type: Boolean, default: true },
+  },
+  data() {
+    return {
+      isShow: false,
+      isAnimating: false,
+      animation: null,
+    }
+  },
+  watch: {
+    visible(newVal) {
+      if (newVal) { this.showPopup() } else { this.hidePopup() }
+    },
+  },
+  created() {
+    this.animation = uni.requireNativePlugin('animation')
+  },
+  methods: {
+    showPopup() {
+      if (this.isAnimating) return
+      this.isAnimating = true
+      this.isShow = true
+      var self = this
+      this.$nextTick(function() {
+        setTimeout(function() {
+          var maskEl = self.$refs.maskRef
+          var containerEl = self.$refs.containerRef
+          if (maskEl && containerEl) {
+            self.animation.transition(maskEl, { styles: { opacity: 1 }, duration: 180, timingFunction: 'ease-out' })
+            self.animation.transition(containerEl, {
+              styles: { transform: 'translateY(0) scale(1)', opacity: 1 },
+              duration: 240, timingFunction: 'cubic-bezier(0.175, 0.885, 0.32, 1.275)'
+            }, function() { self.isAnimating = false })
+          } else { self.isAnimating = false }
+        }, 10)
+      })
+    },
+    hidePopup(callback) {
+      if (this.isAnimating) return
+      this.isAnimating = true
+      var maskEl = this.$refs.maskRef
+      var containerEl = this.$refs.containerRef
+      var self = this
+      if (maskEl && containerEl) {
+        this.animation.transition(maskEl, { styles: { opacity: 0 }, duration: 150, timingFunction: 'ease-out' })
+        this.animation.transition(containerEl, {
+          styles: { transform: 'translateY(20px) scale(0.9)', opacity: 0 },
+          duration: 150, timingFunction: 'cubic-bezier(0.4, 0, 1, 1)'
+        }, function() { self.isShow = false; self.isAnimating = false; if (callback) callback() })
+      } else { this.isShow = false; this.isAnimating = false; if (callback) callback() }
+    },
+    close(callback) {
+      var self = this
+      this.hidePopup(function() {
+        self.$emit('update:visible', false)
+        self.$emit('close')
+        if (callback) callback()
+      })
+    },
+    handleMaskTap() {
+      if (this.closeOnMaskTap) { this.close() }
+    },
+  },
+}
+</script>
+
+<style scoped>
+.popup-mask { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(0, 0, 0, 0.8); justify-content: center; align-items: center; opacity: 0; }
+.popup-container { width: 654rpx; background-color: #FFFFFF; border-radius: 24rpx; overflow: hidden; opacity: 0; transform: translateY(20px) scale(0.9); }
+</style>

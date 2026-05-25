@@ -1,0 +1,17 @@
+<template>
+  <GroupMemberList :conversationID="conversationID" :hideMember="hideMember" />
+</template>
+
+<script>
+import GroupMemberList from '@/uni_modules/tuikit-atomic-x/components/ChatSetting/GroupMemberList.nvue';
+export default {
+  components: { GroupMemberList },
+  data() { return { conversationID: '', hideMember: false } },
+  onLoad(options) {
+    if (options.conversationID) this.conversationID = options.conversationID
+    if (options.hideMember === 'true' || options.hideMember === '1') this.hideMember = true
+  },
+}
+</script>
+
+<style scoped></style>

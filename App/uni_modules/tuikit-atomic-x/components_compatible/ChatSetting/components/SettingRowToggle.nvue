@@ -1,0 +1,35 @@
+<template>
+  <view class="setting-row-toggle">
+    <text class="setting-row-toggle__label">{{ label }}</text>
+    <ToggleSwitch 
+      :checked="modelValue" 
+      :activeColor="switchColor"
+      :disabled="disabled"
+      @change="handleChange" 
+    />
+  </view>
+</template>
+
+<script>
+import ToggleSwitch from '../../ToggleSwitch/ToggleSwitch.nvue'
+export default {
+  components: { ToggleSwitch },
+  model: { prop: 'modelValue', event: 'update:modelValue' },
+  props: {
+    label: { type: String, default: '' },
+    modelValue: { type: Boolean, default: false },
+    switchColor: { type: String, default: '#0066FF' },
+    disabled: { type: Boolean, default: false },
+  },
+  methods: {
+    handleChange(e) {
+      this.$emit('change', e.detail.value)
+    },
+  },
+}
+</script>
+
+<style scoped>
+.setting-row-toggle { flex-direction: row; align-items: center; justify-content: space-between; padding: 24rpx 32rpx; background-color: #FFFFFF; border-bottom-width: 1rpx; border-bottom-style: solid; border-bottom-color: #E5E5E5; }
+.setting-row-toggle__label { font-size: 32rpx; color: rgba(0, 0, 0, 0.55); }
+</style>

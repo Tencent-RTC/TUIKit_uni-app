@@ -1,0 +1,153 @@
+<template>
+  <view class="group-management">
+    <view class="navbar" :style="{ paddingTop: statusBarHeight + 'px' }">
+      <view class="navbar__content">
+        <view class="navbar__back" @tap="handleBack"><image class="navbar__back-icon" :src="arrowLeftIcon" /></view>
+        <text class="navbar__title">群管理</text>
+        <view class="navbar__placeholder"></view>
+      </view>
+    </view>
+    <scroll-view class="content" scroll-y="true">
+      <view class="member-section">
+        <view class="member-section__header" @tap="handleMemberListClick">
+          <text class="member-section__label">群管理员</text>
+          <view class="member-section__right">
+            <text class="member-section__count">{{ adminAndOwnerMembers.length }}人</text>
+            <image class="member-section__arrow" :src="arrowRightIcon" />
+          </view>
+        </view>
+        <MemberAvatarList :members="adminAndOwnerMembers" :maxDisplay="5" :showAddButton="canPromoteAdmin" :showRemoveButton="canDemoteAdmin" :showName="true" @add="handlePromoteAdmin" @remove="handleDemoteAdmin" @member-click="handleMemberClick" />
+      </view>
+      <view class="section-gap"></view>
+      <view class="mute-all-section">
+        <SettingRowToggle label="全员禁言" :modelValue="isAllMuted" :disabled="!canMuteAllMembers" @change="handleMuteAllChange" />
+      </view>
+      <text class="mute-all-section__desc">开启后，只允许群主和管理员发言</text>
+      <view v-if="canMuteMember && !isAllMuted" class="mute-member-section">
+        <view class="mute-member-section__header"><text class="mute-member-section__label">单独禁言</text></view>
+        <MemberAvatarList :members="mutedMembers" :maxDisplay="500" :showAddButton="true" :showRemoveButton="mutedMembers.length > 0" :showName="true" @add="handleAddMuteMember" @remove="handleRemoveMuteMember" @member-click="handleMutedMemberClick" />
+      </view>
+    </scroll-view>
+  </view>
+</template>
+
+<script>
+import MemberAvatarList from './components/MemberAvatarList.nvue';
+import SettingRowToggle from './components/SettingRowToggle.nvue';
+import { useGroupMemberState } from '../../state/GroupMemberState';
+import { useGroupState } from '../../state/GroupState';
+import { GroupMemberRole, GroupType } from '../../types/group';
+import { hasPermission, GroupPermission } from './utils/groupPermission';
+import { UserPickerType } from '../../types/userpicker';
+
+var arrowRightIcon = '/uni_modules/tuikit-atomic-x/static/assets/chat-setting/nvue_arrow-right.png'
+var arrowLeftIcon = '/uni_modules/tuikit-atomic-x/static/assets/chat-setting/nvue_arrow-left.png'
+
+export default {
+  components: { MemberAvatarList, SettingRowToggle },
+  props: {
+    conversationID: { type: String, default: '' },
+  },
+  data() {
+    var groupID = this.conversationID.startsWith('group_') ? this.conversationID.replace('group_', '') : ''
+    var adminState = useGroupMemberState({ groupID: groupID, role: GroupMemberRole.Admin })
+    var ownerState = useGroupMemberState({ groupID: groupID, role: GroupMemberRole.Owner })
+    var allState = useGroupMemberState({ groupID: groupID })
+    var groupState = useGroupState()
+    return {
+      groupID: groupID,
+      adminState: adminState,
+      ownerState: ownerState,
+      allState: allState,
+      groupState: groupState,
+      groupInfo: null,
+      statusBarHeight: 44,
+      arrowRightIcon: arrowRightIcon,
+      arrowLeftIcon: arrowLeftIcon,
+    }
+  },
+  computed: {
+    groupType() { return ((this.groupInfo && this.groupInfo.groupType) != null ? (this.groupInfo && this.groupInfo.groupType) : GroupType.Work) },
+    isAllMuted() { return ((this.groupInfo && this.groupInfo.isAllMuted) != null ? (this.groupInfo && this.groupInfo.isAllMuted) : false) },
+    selfRole() { return ((this.groupInfo && this.groupInfo.selfRole) != null ? (this.groupInfo && this.groupInfo.selfRole) : GroupMemberRole.Member) },
+    canPromoteAdmin() { return this.selfRole === GroupMemberRole.Owner },
+    canDemoteAdmin() { return this.selfRole === GroupMemberRole.Owner },
+    canMuteMember() { return hasPermission(this.groupType, this.selfRole, GroupPermission.MUTE_MEMBER) },
+    canMuteAllMembers() { return hasPermission(this.groupType, this.selfRole, GroupPermission.MUTE_ALL_MEMBERS) },
+    adminAndOwnerMembers() {
+      var combined = [].concat(this.adminState.groupMemberList.value, this.ownerState.groupMemberList.value).filter(function(m) { return m !== null })
+      var seen = {}
+      return combined.filter(function(m) {
+        if (seen[m.userID]) return false
+        if (m.role === GroupMemberRole.Owner || m.role === GroupMemberRole.Admin) { seen[m.userID] = true; return true }
+        return false
+      })
+    },
+    mutedMembers() {
+      var now = Date.now() / 1000
+      return this.allState.groupMemberList.value.filter(function(m) { return m.muteUntil > now })
+    },
+  },
+  mounted() {
+    var systemInfo = uni.getSystemInfoSync()
+    this.statusBarHeight = systemInfo.statusBarHeight || 44
+    this.loadGroupInfo()
+    this.fetchAllAdmin()
+    this.ownerState.fetchGroupMemberList(GroupMemberRole.Owner)
+    this.allState.fetchGroupMemberList(GroupMemberRole.All)
+  },
+  methods: {
+    fetchAllAdmin() {
+      var self = this
+      function loop() {
+        if (self.adminState.hasMoreGroupMembers.value) {
+          self.adminState.fetchGroupMemberList(GroupMemberRole.Admin).then(loop)
+        }
+      }
+      loop()
+    },
+    loadGroupInfo() {
+      if (!this.groupID) return
+      var self = this
+      this.groupState.fetchGroupInfo([this.groupID]).then(function(list) {
+        if (list.length > 0) self.groupInfo = list[0]
+      }).catch(function(err) { console.error('[GroupManagement] Failed to fetch group info:', err) })
+    },
+    handleBack() { uni.navigateBack() },
+    handleMemberListClick() { uni.navigateTo({ url: '/pages/scenes/chat/groupMemberList/index?conversationID=' + this.conversationID + '&hideMember=true' }) },
+    handlePromoteAdmin() { uni.navigateTo({ url: '/pages/scenes/chat/userPicker/userPicker?businessType=' + UserPickerType.PROMOTE_ADMIN + '&conversationID=' + this.conversationID }) },
+    handleDemoteAdmin() { uni.navigateTo({ url: '/pages/scenes/chat/userPicker/userPicker?businessType=' + UserPickerType.DEMOTE_ADMIN + '&conversationID=' + this.conversationID }) },
+    handleMemberClick(member) {},
+    handleMuteAllChange(value) {
+      var self = this
+      this.allState.setMuteAllMembers(value).then(function() { self.loadGroupInfo() })
+    },
+    handleAddMuteMember() { uni.navigateTo({ url: '/pages/scenes/chat/userPicker/userPicker?businessType=' + UserPickerType.MUTE_GROUP_MEMBER + '&conversationID=' + this.conversationID }) },
+    handleRemoveMuteMember() { uni.navigateTo({ url: '/pages/scenes/chat/userPicker/userPicker?businessType=' + UserPickerType.UNMUTE_GROUP_MEMBER + '&conversationID=' + this.conversationID }) },
+    handleMutedMemberClick(member) {},
+  },
+}
+</script>
+
+<style scoped>
+.group-management { flex: 1; background-color: #F0F2F7; }
+.navbar { background-color: #FFFFFF; border-bottom-width: 1rpx; border-bottom-style: solid; border-bottom-color: #E5E5E5; }
+.navbar__content { height: 88rpx; flex-direction: row; align-items: center; justify-content: space-between; padding: 0 32rpx; }
+.navbar__back { width: 60rpx; height: 60rpx; justify-content: center; align-items: center; }
+.navbar__back-icon { width: 54rpx; height: 54rpx; }
+.navbar__title { font-size: 36rpx; font-weight: 500; color: #333333; }
+.navbar__placeholder { width: 60rpx; }
+.content { flex: 1; }
+.section-gap { height: 20rpx; background-color: #F0F2F7; }
+.member-section { background-color: #FFFFFF; }
+.member-section__header { flex-direction: row; align-items: center; justify-content: space-between; padding: 24rpx 32rpx 0; }
+.member-section__label { font-size: 32rpx; color: rgba(0, 0, 0, 0.5); }
+.member-section__right { flex-direction: row; align-items: center; }
+.member-section__count { font-size: 28rpx; color: rgba(0, 0, 0, 0.55); }
+.member-section__arrow { width: 28rpx; height: 28rpx; }
+.mute-all-section { background-color: #FFFFFF; }
+.mute-all-section__desc { padding: 8rpx 32rpx 32rpx 32rpx; font-size: 28rpx; background-color: #F0F2F7; color: rgba(0, 0, 0, 0.4); }
+.mute-member-section { background-color: #FFFFFF; }
+.mute-member-section__header { padding: 24rpx 32rpx 0; }
+.mute-member-section__label { font-size: 32rpx; color: rgba(0, 0, 0, 0.55); }
+</style>
