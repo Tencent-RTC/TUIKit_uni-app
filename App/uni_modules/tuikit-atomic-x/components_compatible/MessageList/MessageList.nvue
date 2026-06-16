@@ -40,6 +40,7 @@
             :showNickname="item.showNickname"
             :highlight="item.message && item.message.msgID === currentHighlightID"
             :customCenterChecker="customCenterChecker"
+            :customMessageRender="customMessageRender"
             @reEdit="handleReEdit"
             @onMessageListTap="handleMessageListTap"
             @onMessageTap="handleMessageTap"
@@ -88,7 +89,8 @@ export default {
     locateMessage: { type: Object, default: null },
     inputToolbarHeight: { type: Number, default: 0 },
     inputPanelHeight: { type: Number, default: 0 },
-    customCenterChecker: { type: Function, default: null }
+    customCenterChecker: { type: Function, default: null },
+    customMessageRender: { type: Function, default: null }
   },
   data() {
     var msgState = useMessageListState({
@@ -236,6 +238,77 @@ export default {
         self.pendingTimers.push(t1)
       })
     }
+    // 监听 AudioMessage "转写文本入场"事件
+    //
+    // 滚动策略——精确测量 + 最小相对滚动：
+    // 1. 通过 boxRef 测量 audio-convert-box 是否被输入框遮挡
+    // 2. 不被遮挡 → 不滚动
+    // 3. 被遮挡 → scrollToElement(cell, offset:boxHeight - cellTopInList)
+    //    nvue offset 语义：cell 顶部对齐 list 视口顶 + 多滚 N px（N 可负，等价回退）
+    //    boxHeight - cellTopInList → 等价于 list 净滚动 boxHeight
+    // 时机 380ms：等幕布动画 360ms 拉开后 box 才有真实高度
+    this._handleAudioConvertStreamGrow = function(data) {
+      if (!data || !data.msgID) return
+      if (self.showScrollToBottom) return
+
+      var targetIndex = -1
+      for (var i = 0; i < self.messageItems.length; i++) {
+        var item = self.messageItems[i]
+        if (item.type === 'message' && item.message && item.message.msgID === data.msgID) {
+          targetIndex = i
+          break
+        }
+      }
+      if (targetIndex < 0) return
+      var targetCell = self.getCellRef(targetIndex)
+      if (!targetCell) return
+      var listEl = self.$refs.messageListRef
+      if (Array.isArray(listEl)) listEl = listEl[0]
+      if (!listEl) return
+
+      var t = setTimeout(function() {
+        if (!data.boxRef) return
+        var dom = uni.requireNativePlugin('dom')
+        var inputTotalHeight = (self.inputPanelHeight || 0) + (self.inputToolbarHeight || 0)
+        var buffer = 16
+
+        dom.getComponentRect(data.boxRef, function(boxResult) {
+          if (!boxResult || !boxResult.result || !boxResult.size) return
+
+          var windowHeight = 0
+          try { windowHeight = uni.getSystemInfoSync().windowHeight || 0 } catch (e) {}
+          if (!windowHeight) return
+
+          var boxBottom = boxResult.size.bottom || 0
+          var boxHeight = boxResult.size.height || 0
+          var visibleBottom = windowHeight - inputTotalHeight
+
+          // box 已完全可见 → 不滚动
+          if (boxBottom <= visibleBottom - buffer) return
+          if (boxHeight <= 0) return
+
+          dom.getComponentRect(targetCell, function(cellResult) {
+            if (!cellResult || !cellResult.result || !cellResult.size) return
+            dom.getComponentRect(listEl, function(listResult) {
+              if (!listResult || !listResult.result || !listResult.size) return
+
+              var cellTop = cellResult.size.top || 0
+              var listTop = listResult.size.top || 0
+              var cellTopInList = cellTop - listTop
+
+              // 净滚动 boxHeight
+              var offset = boxHeight - cellTopInList
+              dom.scrollToElement(targetCell, {
+                offset: offset,
+                animated: true
+              })
+            })
+          })
+        })
+      }, 380)
+      self.pendingTimers.push(t)
+    }
+    uni.$on('audioConvertStreamGrow', this._handleAudioConvertStreamGrow)
   },
   beforeDestroy() { this._cleanup() },
   beforeUnmount() { this._cleanup() },
@@ -246,6 +319,9 @@ export default {
       for (var i = 0; i < this.pendingTimers.length; i++) clearTimeout(this.pendingTimers[i])
       this.pendingTimers = []
       this.convState.clearConversationUnreadCount(this.conversationID)
+      if (this._handleAudioConvertStreamGrow) {
+        uni.$off('audioConvertStreamGrow', this._handleAudioConvertStreamGrow)
+      }
       this.msgState.destroyStore()
     },
     getCellRef(index) {

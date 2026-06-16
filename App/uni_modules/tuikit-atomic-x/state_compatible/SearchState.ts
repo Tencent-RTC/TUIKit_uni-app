@@ -272,7 +272,9 @@ class SearchState {
             resolve();
           } else {
             console.error(`[${this.instanceId}][search] Failed:`, result.message);
-            reject(new Error(result.message || 'Failed to search'));
+            const err = new Error(result.message || 'Failed to search') as Error & { code?: number };
+            err.code = result.code;
+            reject(err);
           }
         } catch (error) {
           console.error(`[${this.instanceId}][search] Parse error:`, error);
@@ -304,7 +306,9 @@ class SearchState {
             resolve();
           } else {
             console.error(`[${this.instanceId}][searchMore] Failed:`, result.message);
-            reject(new Error(result.message || 'Failed to search more'));
+            const err = new Error(result.message || 'Failed to search more') as Error & { code?: number };
+            err.code = result.code;
+            reject(err);
           }
         } catch (error) {
           console.error(`[${this.instanceId}][searchMore] Parse error:`, error);

@@ -2,7 +2,7 @@
   <view v-if="isCenterMessage" class="msg msg--center" @tap.stop="handleMessageContentTap">
     <RecalledMessage v-if="message.status === MessageStatus.RECALLED" :message="message" @reEdit="handleReEdit" />
     <GroupTipMessage v-else-if="isSystemMessage || isGroupCreateMessage" :message="message" />
-    <CustomMessage v-else-if="isCustomCenterMessage" :message="message" :conversationID="conversationID" />
+    <component v-else-if="isCustomCenterMessage" :is="centerCustomComponent" :message="message" :conversationID="conversationID" />
   </view>
   <view v-else class="msg msg--no-select" :class="messageClasses" :data-message-id="message.msgID" @touchstart="handleTouchStart" @touchend="handleTouchEnd" @tap.stop="handleTap" @touchmove.stop.prevent="handleTouchMove">
     <Avatar v-if="showAvatar" :src="message.sender.avatarURL" :name="displayName" :size="80" defaultAvatarType="user" class="msg__avatar" />
@@ -75,7 +75,8 @@ export default {
     showTime: { type: Boolean, default: false },
     messageActionList: { type: Array, default: function() { return [] } },
     highlight: { type: Boolean, default: false },
-    customCenterChecker: { type: Function, default: null }
+    customCenterChecker: { type: Function, default: null },
+    customMessageRender: { type: Function, default: null }
   },
   data: function() {
     var callStateInstance = useCallState();
@@ -148,7 +149,25 @@ export default {
       var sender = this.message.sender
       return sender.nameCard || sender.friendRemark || sender.nickname || sender.userID
     },
+    // 调用业务方传入的 customMessageRender 解析 CUSTOM 消息对应的渲染组件
+    // 仅在 messageType === CUSTOM 时生效；render 抛错或返回空值时降级走默认渲染
+    customComponent() {
+      if (this.message.messageType !== MessageType.CUSTOM) return null
+      if (!this.customMessageRender) return null
+      try {
+        var comp = this.customMessageRender(this.message, this.conversationID)
+        return comp || null
+      } catch (e) {
+        console.error('[Message] customMessageRender failed:', e)
+        return null
+      }
+    },
+    // 居中分支自定义消息渲染：业务组件优先，否则走内置 CustomMessage
+    centerCustomComponent() {
+      return this.customComponent || CustomMessage
+    },
     currentMessageComponent() {
+      if (this.customComponent) return this.customComponent
       var map = {}
       map[MessageType.TEXT] = TextMessage
       map[MessageType.IMAGE] = ImageMessage
@@ -359,7 +378,6 @@ export default {
             self.isCalling = false;
             return;
           }
-          callStateInstance.setFramework(15);
           callStateInstance.calls({
             participantIds: [peerUserID],
             mediaType: mediaType,

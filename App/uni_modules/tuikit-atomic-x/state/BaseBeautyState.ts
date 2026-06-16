@@ -7,9 +7,8 @@
  * 业务价值：为直播平台提供基础的美颜能力，提升用户形象和直播质量。
  * 应用场景：美颜直播、形象优化、美颜调节、直播美化等需要美颜功能的场景。
  */
-import { ref, watch } from "vue";
+import { ref } from "vue";
 import { callAPI, addListener, removeListener, reportUIPlatform } from "@/uni_modules/tuikit-atomic-x";
-import { currentLive } from "./LiveListState";
 import { safeJsonParse } from "../utils/utsUtils";
 
 /**
@@ -42,7 +41,7 @@ export type SetRuddyLevelOptions = {
  * @memberof module:BaseBeautyState
  * @example
  * import { useBaseBeautyState } from '@/uni_modules/tuikit-atomic-x/state/BaseBeautyState';
- * const { smoothLevel } = useBaseBeautyState('your_live_id');
+ * const { smoothLevel } = useBaseBeautyState();
  *
  * // 监听磨皮级别变化
  * watch(smoothLevel, (newLevel) => {
@@ -61,7 +60,7 @@ const smoothLevel = ref<number>(0);
  * @memberof module:BaseBeautyState
  * @example
  * import { useBaseBeautyState } from '@/uni_modules/tuikit-atomic-x/state/BaseBeautyState';
- * const { whitenessLevel } = useBaseBeautyState('your_live_id');
+ * const { whitenessLevel } = useBaseBeautyState();
  *
  * // 监听美白级别变化
  * watch(whitenessLevel, (newLevel) => {
@@ -80,7 +79,7 @@ const whitenessLevel = ref<number>(0);
  * @memberof module:BaseBeautyState
  * @example
  * import { useBaseBeautyState } from '@/uni_modules/tuikit-atomic-x/state/BaseBeautyState';
- * const { ruddyLevel } = useBaseBeautyState('your_live_id');
+ * const { ruddyLevel } = useBaseBeautyState();
  *
  * // 监听红润级别变化
  * watch(ruddyLevel, (newLevel) => {
@@ -106,7 +105,7 @@ const realUiValues = ref({
  * @memberof module:BaseBeautyState
  * @example
  * import { useBaseBeautyState } from '@/uni_modules/tuikit-atomic-x/state/BaseBeautyState';
- * const { setSmoothLevel } = useBaseBeautyState('your_live_id');
+ * const { setSmoothLevel } = useBaseBeautyState();
  * setSmoothLevel({ smoothLevel: 5 });
  */
 function setSmoothLevel(params: SetSmoothLevelOptions): void {
@@ -123,7 +122,7 @@ function setSmoothLevel(params: SetSmoothLevelOptions): void {
  * @memberof module:BaseBeautyState
  * @example
  * import { useBaseBeautyState } from '@/uni_modules/tuikit-atomic-x/state/BaseBeautyState';
- * const { setWhitenessLevel } = useBaseBeautyState('your_live_id');
+ * const { setWhitenessLevel } = useBaseBeautyState();
  * setWhitenessLevel({ whitenessLevel: 6 });
  */
 function setWhitenessLevel(params: SetWhitenessLevelOptions): void {
@@ -140,7 +139,7 @@ function setWhitenessLevel(params: SetWhitenessLevelOptions): void {
  * @memberof module:BaseBeautyState
  * @example
  * import { useBaseBeautyState } from '@/uni_modules/tuikit-atomic-x/state/BaseBeautyState';
- * const { setRuddyLevel } = useBaseBeautyState('your_live_id');
+ * const { setRuddyLevel } = useBaseBeautyState();
  * setRuddyLevel({ ruddyLevel: 4 });
  */
 function setRuddyLevel(params: SetRuddyLevelOptions): void {
@@ -170,16 +169,13 @@ const BINDABLE_DATA_NAMES = [
   "ruddyLevel"
 ] as const;
 
-let boundLiveID: string | null = null;
+let isBound = false;
 
-function bindEvent(liveID: string): void {
-  if (boundLiveID === liveID) {
+function bindEvent(): void {
+  if (isBound) {
     return;
   }
-  if (boundLiveID) {
-    unbindEvent(boundLiveID);
-  }
-  boundLiveID = liveID;
+  isBound = true;
 
   BINDABLE_DATA_NAMES.forEach(dataName => {
     addListener({
@@ -199,7 +195,7 @@ function bindEvent(liveID: string): void {
   });
 }
 
-function unbindEvent(liveID: string): void {
+function unbindEvent(): void {
   BINDABLE_DATA_NAMES.forEach(dataName => {
     removeListener({
       type: "state",
@@ -208,25 +204,7 @@ function unbindEvent(liveID: string): void {
       params: {}
     });
   });
-  if (boundLiveID === liveID) {
-    boundLiveID = null;
-  }
-}
-
-let stopWatchingCurrentLive: (() => void) | null = null;
-
-function ensureWatchCurrentLive() {
-  if (stopWatchingCurrentLive) return;
-  stopWatchingCurrentLive = watch(
-    () => currentLive.value,
-    (newVal, oldVal) => {
-      if (oldVal && oldVal.liveID !== '') {
-        if (newVal.liveID === '' && boundLiveID) {
-          unbindEvent(boundLiveID);
-        }
-      }
-    }
-  );
+  isBound = false;
 }
 
 const onBeautyStoreChanged: Record<string, (result: any) => void> = {
@@ -241,9 +219,8 @@ const onBeautyStoreChanged: Record<string, (result: any) => void> = {
   },
 };
 
-export function useBaseBeautyState(liveID: string) {
-  bindEvent(liveID);
-  ensureWatchCurrentLive();
+export function useBaseBeautyState() {
+  bindEvent();
   return {
     smoothLevel,         // 磨皮级别状态
     whitenessLevel,      // 美白级别状态
@@ -257,6 +234,7 @@ export function useBaseBeautyState(liveID: string) {
     setRealUiValue,
     getRealUiValue,
     resetRealUiValues,
+    unbindEvent,
   };
 }
 

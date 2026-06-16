@@ -1,9 +1,16 @@
 import { UTSiOS } from "DCloudUTSFoundation"
 
 // HybridBridge
-import { HybridBridge, DataReport, InteractionMetrics, AtomicMetrics } from 'AtomicXCore';
+import { HybridBridge, DataReport, InteractionMetrics } from 'AtomicXCore';
 import { TUIRoomEngine, TUICallEngine } from "RTCRoomEngine";
+import { V2TIMManager } from "ImSDK_Plus";
 import { CallExperimentalAPIOptions, HybridListenerOptions } from "../interface";
+
+const MetricsMap: Map<string, number> = new Map([
+  ["ROOM_STATE", 1201],
+  ["ROOM_PARTICIPANT_STATE", 1202],
+  ["ROOM_SCENE", 1205],
+])
 
 // ================= 实验性接口 =================
 export function hybirdCallExperimentalAPI(options: CallExperimentalAPIOptions) {
@@ -140,8 +147,6 @@ const SceneMap: Map<string, InteractionMetrics> = new Map([
   ["CHAT_INVOKE_CALL", InteractionMetrics.chatInvokeCall]
 ])
 
-
-
 export function reportScene(scene: string) {
   const metrics = SceneMap.get(scene)
   if (metrics != null) {
@@ -152,6 +157,20 @@ export function reportScene(scene: string) {
 
 export function reportUIPlatform() {
   DataReport.reportUIPlatform(platform = 52)
+}
+
+export function reportMetrics(type: string) {
+  const metrics = MetricsMap.get(type)
+  if (metrics == null) {
+    return
+  }
+  const param = JSON.stringify({ "UIComponentType": metrics! }) ?? ""
+  V2TIMManager.sharedInstance().callExperimentalAPI(
+    api = "reportTUIFeatureUsage",
+    param = param as NSObject,
+    succ = nil,
+    fail = nil
+  )
 }
 
 export function setFramework(component: number = 21) {
@@ -271,6 +290,24 @@ export function stopVibrating() {
   })
 }
 
+// ================= AlbumPicker: showAlbumPicker / hideAlbumPicker ====================
+
+/**
+ * Show album picker with session isolation
+ */
+@UTSJS.keepAlive
+export function showAlbumPicker(
+  configJSON: string, themeJSON: string, sessionId: string, onPickConfirm: (jsonStr: string) => void,
+  onMediaProcessing: (jsonStr: string) => void, onMediaProcessed: () => void, onCancel: () => void): void {
+  DispatchQueue.main.async(execute = (): void => {
+    console.log("showAlbumPicker called, sessionId: " + sessionId);
+    const vc = UTSiOS.getCurrentViewController();
+    AlbumPickerManager.shared.show( configJSON, themeJSON, sessionId = sessionId, viewController = vc,
+      onPickConfirm = onPickConfirm, onMediaProcessing = onMediaProcessing,
+      onMediaProcessed = onMediaProcessed, onCancel = onCancel)
+  });
+}
+
 // ================= ImageUploader: pickSingleImageFromAlbum ====================
 
 @UTSJS.keepAlive
@@ -314,4 +351,52 @@ export function shareLog(row: number) {
     console.log("shareLog called, row:", row)
     LogUpload.shared.shareLog(Int(row))
   })
+}
+
+// ================= Engine Bridge =================
+
+type BridgeObserverCallback = (eventName: string, jsonData: string) => void;
+
+const bridgeObservers = new Map<string, BridgeObserverCallback>();
+let nativeBridgeToken: NSNumber | null = null;
+
+export function invokeEngineBridgeApi(
+  api: string,
+  params: string,
+  callback: (code: number, message: string, data: string) => void
+) {
+  DispatchQueue.main.async(execute = (): void => {
+    EngineBridgeFacade.shared.invoke(api, params, (code: NSNumber, message: string, data: string): void => {
+      callback(code as number, message, data);
+    });
+  });
+}
+
+@UTSJS.keepAlive
+export function addEngineBridgeObserver(listenerID: string, callback: BridgeObserverCallback) {
+  DispatchQueue.main.async(execute = (): void => {
+    if (nativeBridgeToken == null) {
+      const token = EngineBridgeFacade.shared.addObserver((eventName: string, jsonData: string): void => {
+        bridgeObservers.forEach((cb: BridgeObserverCallback, lid: string) => {
+          try {
+            cb(eventName, jsonData);
+          } catch (e) {
+            console.error(`EngineBridge observer dispatch error (${lid}):`, e);
+          }
+        });
+      });
+      nativeBridgeToken = token;
+    }
+    bridgeObservers.set(listenerID, callback);
+  });
+}
+
+export function removeEngineBridgeObserver(listenerID: string) {
+  DispatchQueue.main.async(execute = (): void => {
+    bridgeObservers.delete(listenerID);
+    if (bridgeObservers.size === 0 && nativeBridgeToken != null) {
+      EngineBridgeFacade.shared.removeObserver(nativeBridgeToken!);
+      nativeBridgeToken = null;
+    }
+  });
 }

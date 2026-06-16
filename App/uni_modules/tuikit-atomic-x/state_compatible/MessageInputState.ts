@@ -2,20 +2,27 @@
  * 消息输入状态管理
  * @module MessageInputState
  */
-import type { MessageInfo } from '../types/message'
+import type { MessageInfo, OfflinePushInfo } from '../types/message'
 // @ts-ignore
 import { callAPI, HybridResponseData } from "../utils/tuikitBridge";
 import { MessageType } from '../types/message';
 import { safeJsonParse } from '../utils/utsUtils';
+import { MAX_AT_USER_COUNT } from '../utils/mention';
 
 interface SendTextMessageOptions {
   text: string;
+  /** 离线推送配置；不传则不附带，由 SDK 走默认 */
+  offlinePushInfo?: OfflinePushInfo;
+  /** 被 @ 的 userID 列表；'__kImSDK_MesssageAtALL__' 表示 @所有人 */
+  atUserList?: string[];
 }
 
 interface SendImageMessageOptions {
   imagePath: string;
   imageWidth: number;
   imageHeight: number;
+  /** 离线推送配置；不传则不附带，由 SDK 走默认 */
+  offlinePushInfo?: OfflinePushInfo;
 }
 
 interface SendVideoMessageOptions {
@@ -25,9 +32,19 @@ interface SendVideoMessageOptions {
   videoDuration: number;
   videoType: string | 'mp4';
   videoPath: string;
+  /** 离线推送配置；不传则不附带，由 SDK 走默认 */
+  offlinePushInfo?: OfflinePushInfo;
 }
 
+/**
+ * 自定义消息发送选项
+ *
+ * 业务方传入的字段（如 businessID / version / data 等）会被序列化进 customMessage.data；
+ * 但 offlinePushInfo 是发送配置，会在方法体内通过解构剥离，不会污染 customMessage.data。
+ */
 interface SendCustomMessageOptions {
+  /** 离线推送配置；不传则不附带，由 SDK 走默认 */
+  offlinePushInfo?: OfflinePushInfo;
   [key: string]: any;
 }
 
@@ -172,16 +189,31 @@ class MessageInputState {
    */
   sendTextMessage = (options: SendTextMessageOptions): Promise<void> => {
     return new Promise((resolve, reject) => {
+      // atUserList 数量校验
+      if (options.atUserList && options.atUserList.length > MAX_AT_USER_COUNT) {
+        reject(Object.assign(
+          new Error('atUserList 超过最大限制 ' + MAX_AT_USER_COUNT + ' 个'),
+          { errCode: 'AT_USER_LIST_EXCEED' }
+        ));
+        return;
+      }
+      const messageObj: any = {
+        messageType: MessageType.TEXT,
+        messageBody: {
+          text: options.text
+        }
+      };
+      if (options.offlinePushInfo) {
+        messageObj.offlinePushInfo = options.offlinePushInfo;
+      }
+      if (options.atUserList && options.atUserList.length > 0) {
+        messageObj.atUserList = options.atUserList;
+      }
       const hybridCallOptions = {
         api: 'sendMessage',
         params: {
           createStoreParams: this.instanceId,
-          message: JSON.stringify({
-            messageType: MessageType.TEXT,
-            messageBody: {
-              text: options.text
-            }
-          })
+          message: JSON.stringify(messageObj)
         },
       };
 
@@ -211,18 +243,22 @@ class MessageInputState {
    */
   sendImageMessage = (options: SendImageMessageOptions): Promise<void> => {
     return new Promise((resolve, reject) => {
+      const messageObj: any = {
+        messageType: MessageType.IMAGE,
+        messageBody: {
+          originalImagePath: options.imagePath,
+          originalImageWidth: options.imageWidth,
+          originalImageHeight: options.imageHeight
+        }
+      };
+      if (options.offlinePushInfo) {
+        messageObj.offlinePushInfo = options.offlinePushInfo;
+      }
       const hybridCallOptions = {
         api: 'sendMessage',
         params: {
           createStoreParams: this.instanceId,
-          message: JSON.stringify({
-            messageType: MessageType.IMAGE,
-            messageBody: {
-              originalImagePath: options.imagePath,
-              originalImageWidth: options.imageWidth,
-              originalImageHeight: options.imageHeight
-            }
-          })
+          message: JSON.stringify(messageObj)
         },
       };
 
@@ -251,21 +287,25 @@ class MessageInputState {
    */
   sendVideoMessage = (options: SendVideoMessageOptions): Promise<void> => {
     return new Promise((resolve, reject) => {
+      const messageObj: any = {
+        messageType: MessageType.VIDEO,
+        messageBody: {
+          videoPath: options.videoPath,
+          videoSnapshotPath: options.videoSnapshotPath,
+          videoSnapshotWidth: options.videoSnapshotWidth,
+          videoSnapshotHeight: options.videoSnapshotHeight,
+          videoDuration: options.videoDuration,
+          videoType: "mp4"
+        }
+      };
+      if (options.offlinePushInfo) {
+        messageObj.offlinePushInfo = options.offlinePushInfo;
+      }
       const hybridCallOptions = {
         api: 'sendMessage',
         params: {
           createStoreParams: this.instanceId,
-          message: JSON.stringify({
-            messageType: MessageType.VIDEO,
-            messageBody: {
-              videoPath: options.videoPath,
-              videoSnapshotPath: options.videoSnapshotPath,
-              videoSnapshotWidth: options.videoSnapshotWidth,
-              videoSnapshotHeight: options.videoSnapshotHeight,
-              videoDuration: options.videoDuration,
-              videoType: "mp4"
-            }
-          })
+          message: JSON.stringify(messageObj)
         },
       };
       
@@ -289,18 +329,24 @@ class MessageInputState {
 
   sendCustomMessage = (options: SendCustomMessageOptions): Promise<void> => {
     return new Promise((resolve, reject) => {
+      // 剥离 offlinePushInfo：它是发送配置不应进入 customMessage.data，避免污染业务字段
+      const { offlinePushInfo, ...customData } = options;
+      const messageObj: any = {
+        messageType: MessageType.CUSTOM,
+        messageBody: {
+          customMessage: {
+            data: JSON.stringify(customData),
+          }
+        }
+      };
+      if (offlinePushInfo) {
+        messageObj.offlinePushInfo = offlinePushInfo;
+      }
       const hybridCallOptions = {
         api: 'sendMessage',
         params: {
           createStoreParams: this.instanceId,
-          message: JSON.stringify({
-            messageType: MessageType.CUSTOM,
-            messageBody: {
-              customMessage: {
-                data: JSON.stringify(options),
-              }
-            }
-          })
+          message: JSON.stringify(messageObj)
         },
       };
 

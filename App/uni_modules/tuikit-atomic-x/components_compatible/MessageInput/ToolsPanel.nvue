@@ -17,6 +17,7 @@
 import { UserPickerType } from '../../types/userpicker'
 import { useMessageInputState } from '../../state_compatible/MessageInputState'
 import { MessageType } from '../../types/message'
+import { buildOfflinePushInfo } from '../../utils/buildOfflinePushInfo'
 import { chooseFile } from '../../hooks/useFilePicker'
 import { DEFAULT_TOOLS } from './types'
 import { useCallState, CallErrorCode } from '../../state_compatible/CallState'
@@ -30,7 +31,12 @@ export default {
   name: 'ToolsPanel',
   props: {
     conversationID: { type: String, default: '' },
-    toolList: { type: Array, default: undefined }
+    toolList: { type: Array, default: undefined },
+    /**
+     * 业务方注入：在每次发送消息前回调本函数计算 offlinePushInfo（透传自 MessageInput）
+     * 同步函数；返回 null/undefined 表示不附带；异常时兜底为不附带
+     */
+    setOfflinePushInfo: { type: Function, default: null },
   },
   data: function() {
     var callStateInstance = useCallState();
@@ -68,19 +74,27 @@ export default {
                 uni.getImageInfo({
                   src: file.path,
                   success: function(info) {
-                    if (self.messageInputState) {
-                      self.messageInputState.sendImageMessage({
-                        imagePath: self.removeUnusedResourcePrefix(info.path),
-                        imageWidth: info.width,
-                        imageHeight: info.height
-                      });
+                    if (!self.messageInputState) return
+                    var messageBody = {
+                      originalImagePath: self.removeUnusedResourcePrefix(info.path),
+                      originalImageWidth: info.width,
+                      originalImageHeight: info.height,
                     }
+                    self.messageInputState.sendImageMessage({
+                      imagePath: self.removeUnusedResourcePrefix(info.path),
+                      imageWidth: info.width,
+                      imageHeight: info.height,
+                      offlinePushInfo: buildOfflinePushInfo(self.setOfflinePushInfo, {
+                        messageType: MessageType.IMAGE,
+                        messageBody: messageBody,
+                        conversationID: self.conversationID,
+                      })
+               
+                    })
                   },
-                  fail: function() {
-                    uni.showToast({ title: '获取图片信息失败', icon: 'none' });
-                  }
-                });
-              });
+                  fail: function() { uni.showToast({ title: '获取图片信息失败', icon: 'none' }) }
+                })
+              })
             },
             fail: function(err) {
               if (err.errMsg && err.errMsg.indexOf('mission') !== -1) {
@@ -95,17 +109,24 @@ export default {
             mediaType: ['video'],
             success: function(res) {
               res.tempFiles.forEach(function(file) {
-                if (self.messageInputState) {
-                  self.messageInputState.sendVideoMessage({
-                    videoPath: self.removeUnusedResourcePrefix(file.tempFilePath),
-                    videoSnapshotPath: self.removeUnusedResourcePrefix(file.thumbTempFilePath),
-                    videoSnapshotWidth: file.width,
-                    videoSnapshotHeight: file.height,
-                    videoDuration: Math.round(file.duration),
-                    videoType: file.type
-                  });
+                if (!self.messageInputState) return
+                var messageBody = {
+                  videoPath: self.removeUnusedResourcePrefix(file.tempFilePath),
+                  videoSnapshotPath: self.removeUnusedResourcePrefix(file.thumbTempFilePath),
+                  videoSnapshotWidth: file.width,
+                  videoSnapshotHeight: file.height,
+                  videoDuration: Math.round(file.duration),
+                  videoType: file.type,
                 }
-              });
+                self.messageInputState.sendVideoMessage({
+                  ...messageBody,
+                  offlinePushInfo: buildOfflinePushInfo(self.setOfflinePushInfo, {
+                    messageType: MessageType.VIDEO,
+                    messageBody: messageBody,
+                    conversationID: self.conversationID,
+                  })
+                })
+              })
             },
             fail: function(err) {
               if (err.errMsg && err.errMsg.indexOf('mission') !== -1) {
@@ -131,15 +152,25 @@ export default {
       var self = this;
       chooseFile({
         success: function(res) {
-          if (!self.messageInputState) return;
-          var message = JSON.stringify({
+          if (!self.messageInputState) return
+          var messageBody = {
+            filePath: res.filePath,
+            fileName: res.fileName,
+            fileSize: res.fileSize
+          }
+          var offlinePushInfo = buildOfflinePushInfo(self.setOfflinePushInfo, {
             messageType: MessageType.FILE,
-            messageBody: {
-              filePath: res.filePath,
-              fileName: res.fileName,
-              fileSize: res.fileSize
-            }
-          });
+            messageBody: messageBody,
+            conversationID: self.conversationID,
+          })
+          var messageObj = {
+            messageType: MessageType.FILE,
+            messageBody: messageBody,
+          }
+          if (offlinePushInfo) {
+            messageObj.offlinePushInfo = offlinePushInfo
+          }
+          var message = JSON.stringify(messageObj)
           self.messageInputState.sendMessage(message).catch(function(err) {
             console.error('[ToolsPanel] sendFileMessage failed:', err);
             uni.showToast({ title: '文件发送失败', icon: 'none' });
@@ -156,8 +187,6 @@ export default {
       var callStateInstance = self.callStateInstance;
       var deviceStateInstance = self.deviceStateInstance;
       var selfInfo = self.callState.selfInfo;
-
-      callStateInstance.setFramework(15);
 
       // 防抖：上一次呼叫流程尚未完成时，不允许再次呼叫
       if (self.isCalling) {
@@ -237,7 +266,8 @@ export default {
         // 群聊：先跳转到用户选择页面，通过全局事件回调获取选中用户
         var pickerUrl = '/pages/scenes/chat/userPicker/userPicker?businessType=' + UserPickerType.SELECT_GROUP_MEMBER + '&conversationID=' + self.conversationID;
 
-        // Trap 20: navigateTo events 在 Vue2 中不可用，使用 uni.$on 全局事件替代
+        // Trap 20: navigateTo events 在 Vue2 中不可用，使用 uni.$once 全局事件替代
+        uni.$off('onSelectGroupMember')
         uni.$once('onSelectGroupMember', function(data) {
           if (self.isCalling) return;
           if (isNavigating()) return;
@@ -312,7 +342,12 @@ export default {
           });
         });
 
-        uni.navigateTo({ url: pickerUrl });
+        uni.navigateTo({
+          url: pickerUrl,
+          fail: function() {
+            uni.$off('onSelectGroupMember')
+          }
+        });
       }
     }
   }

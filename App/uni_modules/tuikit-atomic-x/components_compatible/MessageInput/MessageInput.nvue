@@ -111,7 +111,7 @@
     <view class="message-input__mask">
       <view class="message-input__panel" ref="messageInputPanelRef" :style="{ height: inputPanelDisplayHeightPx + 'px' }">
         <view class="message-input__panel-wrapper">
-          <ToolsPanel v-if="showToolsPanel" ref="toolsPanelRef" :style="{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, opacity: toolsPanelOpacity }" :conversationID="conversationID" :toolList="toolList" />
+          <ToolsPanel v-if="showToolsPanel" ref="toolsPanelRef" :style="{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, opacity: toolsPanelOpacity }" :conversationID="conversationID" :toolList="toolList" :setOfflinePushInfo="setOfflinePushInfo" />
           <EmojiPanel v-if="showEmojiPanel" ref="emojiPanelRef" :style="{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, opacity: emojiPanelOpacity }" :conversationID="conversationID" @select="handleEmojiSelect" @delete="handleEmojiDelete" />
         </view>
       </view>
@@ -126,7 +126,9 @@ export { DEFAULT_TOOLS } from './types';
 import { throttle } from '../../utils/lodash';
 import { useMessageInputState } from '../../state/MessageInputState';
 import { resolveSendError } from './utils/resolveSendError';
+import { transformEmojiNameToKey, transformEmojiKeyToName, hasEmoji } from '../../utils/emojiUtils';
 import { MessageType } from '../../types/message';
+import { buildOfflinePushInfo } from '../../utils/buildOfflinePushInfo';
 import permission from '../../utils/permission';
 import { requestCallPermissions, showPermissionDialog } from '../../utils/callPermission';
 import { stopGlobalAudioPlayer, RECORDING_PSEUDO_ID } from '../../hooks/useAudioPlayer';
@@ -134,6 +136,16 @@ import { prewarmFilePicker } from '../../hooks/useFilePicker';
 import { useCallState } from '../../state/CallState';
 import EmojiPanel from './EmojiPanel.nvue';
 import ToolsPanel from './ToolsPanel.nvue';
+import {
+  insertMention,
+  scanMentions,
+  tryDeleteWholeMention,
+  MAX_AT_USER_COUNT,
+  AT_ALL_TAG
+} from '../../utils/mention';
+import { GroupType } from '../../types/group';
+import { UserPickerType } from '../../types/userpicker';
+import { useGroupState } from '../../state/GroupState';
 
 var ANIMATION_DURATION = 220;
 var DEFAULT_CACHED_KEYBOARD_HEIGHT = 280;
@@ -196,6 +208,12 @@ export default {
     enableEmoji: { type: Boolean, default: true },
     enableTools: { type: Boolean, default: true },
     toolList: { type: Array, default: undefined },
+    /**
+     * 业务方注入：在每次发送消息前回调本函数计算 offlinePushInfo
+     * - 同步函数；返回 OfflinePushInfo 表示附带；返回 null/undefined 表示不附带
+     * - 异常时组件兜底为不附带，不阻断 send
+     */
+    setOfflinePushInfo: { type: Function, default: null },
   },
   data() {
     return {
@@ -206,17 +224,38 @@ export default {
       showEmojiPanel: false, showToolsPanel: false, emojiPanelOpacity: 0, toolsPanelOpacity: 0,
       isPanelSwitching: false, messageInputStateInst: null, animationPlugin: null,
       lastOpTime: 0, OP_THRESHOLD: 300, isCleaned: false,
+      groupStateInst: null,
       // 录音相关
       isRecording: false, isCancelArea: false, recordStartY: 0,
       recordingDuration: 0, recordingTimer: null, recordStartTime: 0,
       recorderManager: null, voiceTempFilePath: '',
       waveAnimationTimer: null, waveAnimationPhase: 0,
       isAutoStopByMaxDuration: false,
-      waveBarConfigs: WAVE_BAR_CONFIGS
+      waveBarConfigs: WAVE_BAR_CONFIGS,
+      // @ 群成员相关
+      mentions: [],
+      selectedMembers: new Map(),
+      mentionAnchor: -1,
+      lastInputText: '',
+      lastInputCursor: 0,
+      // @ 整体删除后的"冷静期"截止时间戳；期间所有 input 事件按原生层视角被动接受
+      mentionDeleteCooldownUntil: 0
     }
   },
   computed: {
     hasContent() { return this.inputText.trim().length > 0 },
+    isGroupConversation() { return (this.conversationID || '').startsWith('group_') },
+    groupID() { return this.isGroupConversation ? this.conversationID.replace('group_', '') : '' },
+    currentGroupType() {
+      if (!this.isGroupConversation) return undefined
+      var list = (this.groupStateInst && this.groupStateInst.joinedGroupList && this.groupStateInst.joinedGroupList.value) || []
+      var gid = this.groupID
+      var info = list.find(function(g) { return g.groupID === gid })
+      return info ? info.groupType : undefined
+    },
+    isAtSupported() {
+      return this.isGroupConversation && this.currentGroupType !== GroupType.AVChatRoom
+    },
     inputPanelDisplayHeightPx() {
       if (this.lastInputPopupHeightPx <= 0) return (this.cachedKeyboardHeight > 0 ? this.cachedKeyboardHeight : DEFAULT_CACHED_KEYBOARD_HEIGHT)
       return this.lastInputPopupHeightPx
@@ -231,6 +270,7 @@ export default {
     var si = uni.getSystemInfoSync()
     this.safeAreaBottomRpx = Math.max(this._pxToRpx((si.safeAreaInsets && si.safeAreaInsets.bottom) || 0), 16)
     this.messageInputStateInst = useMessageInputState({ conversationID: this.conversationID })
+    this.groupStateInst = useGroupState()
     this.animationPlugin = uni.requireNativePlugin('animation')
     var self = this
     this.$nextTick(function() {
@@ -362,13 +402,176 @@ export default {
     onTextareaTouchstart: throttle(function(e) { if (Date.now() - this.lastOpTime < this.OP_THRESHOLD) return; this.lastOpTime = Date.now(); this.isFocused = true; this._switchMode('TEXT') }, 250, { leading: true, trailing: false }),
     handleFocus(e) { this.isFocused = true; if (this.inputState !== 'TEXT') this._switchMode('TEXT') },
     handleBlur(event) { this.isFocused = false; this.focusTrigger = false; this.lastCursorPosition = event.detail.cursor },
-    handleInput() {},
+    handleInput(e) {
+      var newText = (e && e.detail && e.detail.value) || ''
+      var newCursor = (e && e.detail && typeof e.detail.cursor === 'number') ? e.detail.cursor : newText.length
+      var self0 = this
+
+      // 归一化：粘贴/手动输入带进来的 [TUIEmoji_Xxx] key 立即替换为中文名 [微笑]，
+      // 与 EmojiPanel 选中后的形态保持一致；handleSend 仍会用 transformEmojiNameToKey 反查回 key 发送
+      if (hasEmoji(newText)) {
+        var beforeCursor = newText.slice(0, newCursor)
+        var afterCursor = newText.slice(newCursor)
+        var normalizedBefore = transformEmojiKeyToName(beforeCursor)
+        var normalizedAfter = transformEmojiKeyToName(afterCursor)
+        newText = normalizedBefore + normalizedAfter
+        newCursor = normalizedBefore.length
+        // 立刻同步 inputText，让 v-model 把转换后的文本反向写回原生 textarea
+        this.inputText = newText
+        this.cursorPosition = newCursor
+      }
+
+      // 0. 冷静期：刚命中过整段删除，丢弃后续重影 input 事件；
+      //    长度守卫：newText.length <= lastInputText.length 时立即解除冷静期并继续处理本次事件
+      if (Date.now() < this.mentionDeleteCooldownUntil) {
+        if (newText.length <= this.lastInputText.length) {
+          this.mentionDeleteCooldownUntil = 0
+          // fall through 继续处理
+        } else {
+          return
+        }
+      }
+
+      // 1. 整体删除：群会话且支持 @ 时，删除 mention 段尾部 1 字符时一次性删整段
+      if (this.isAtSupported) {
+        var deleted = tryDeleteWholeMention(this.lastInputText, newText, this.lastInputCursor, this.mentions)
+        if (deleted) {
+          this.inputText = deleted.newText
+          this.lastInputText = deleted.newText
+          this.lastInputCursor = deleted.newCursor
+          this.mentions = scanMentions(deleted.newText, this.selectedMembers)
+          // 进入冷静期：500ms 内丢弃所有 input 事件
+          this.mentionDeleteCooldownUntil = Date.now() + 500
+          // 延迟设 cursor 让 textarea 重排完成；不释放为 -1（nvue 上 -1 会被识别为位置 0 导致光标跳到字符串首）
+          setTimeout(function() {
+            self0.cursorPosition = deleted.newCursor
+          }, 30)
+          return
+        }
+      }
+
+      // 2. 派生重建 mentions
+      if (this.isAtSupported) {
+        this.mentions = scanMentions(newText, this.selectedMembers)
+      }
+
+      // 3. 检测刚输入了 @ 字符 → 跳转到选人页
+      if (
+        this.isAtSupported &&
+        newText.length === this.lastInputText.length + 1 &&
+        newCursor > 0 &&
+        newText[newCursor - 1] === '@'
+      ) {
+        this.mentionAnchor = newCursor - 1
+        this._navigateToAtUserPicker()
+      }
+
+      this.lastInputText = newText
+      this.lastInputCursor = newCursor
+    },
+ _navigateToAtUserPicker() {
+      var existing = {}
+      var existingCount = 0
+      for (var i = 0; i < this.mentions.length; i++) {
+        var uid = this.mentions[i].userID
+        if (!existing[uid]) {
+          existing[uid] = true
+          existingCount++
+        }
+      }
+      if (existingCount >= MAX_AT_USER_COUNT) {
+        uni.showToast({ title: '最多 @ ' + MAX_AT_USER_COUNT + ' 人', icon: 'none' })
+        return
+      }
+
+      const collapseTimer = setTimeout(()=> {
+        this.collapse();
+        clearTimeout(collapseTimer);
+      }, 100);
+
+      var self = this
+      // 跳转到统一的 UserPicker 承载页（宿主工程注册的页面）
+      // Vue2 nvue 下 navigateTo events 不可用（参考 ToolsPanel 中 Trap 20），
+      // 且 Vue2 的 onShow 钩子不执行，统一在 uni.$once 回调里恢复 focus
+      uni.$off('onSelectGroupMember')
+      uni.$once('onSelectGroupMember', function(payload) {
+        if (!payload || !payload.selectedUsers || payload.selectedUsers.length === 0) return
+        var picked = payload.selectedUsers[0]
+        var displayName = picked.userID === AT_ALL_TAG ? '所有人' : (picked.nickname || picked.userID)
+        self._applyMentionSelection(displayName, picked.userID)
+
+        // iOS nvue 上 :focus 的唤起必须经由 false → true 的"边沿"才会生效，
+        // 直接同步设为 true 会被 nvue 合批掉，原生层把 :focus=true 当作初始 prop 忽略，键盘不弹起。
+        // 这里参考 VOICE → TEXT 路径：先强制复位 false，nextTick + setTimeout 让原生节点就绪后再置 true，
+        // 并叠加方法式 focus() 兜底（Android 可靠）
+        self.focusTrigger = false
+        self.$nextTick(function() {
+          const timer = setTimeout(function() {
+            self.focusTrigger = true
+            self.$refs.textareaRef && self.$refs.textareaRef.focus()
+            clearTimeout(timer)
+          }, 50)
+        })
+      })
+      uni.navigateTo({
+        url: '/pages/scenes/chat/userPicker/userPicker?businessType=' + UserPickerType.SELECT_GROUP_AT_USER + '&conversationID=' + this.conversationID,
+        fail: function() {
+          uni.$off('onSelectGroupMember')
+        }
+      })
+    },
+    _applyMentionSelection(displayName, userID) {
+      if (this.mentionAnchor < 0) return
+      var result = insertMention(this.inputText, this.mentionAnchor, 0, displayName)
+      this.selectedMembers.set(displayName, userID)
+      this.inputText = result.newText
+      this.lastInputText = result.newText
+      this.lastInputCursor = result.newCursor
+      this.mentions = scanMentions(result.newText, this.selectedMembers)
+      this.mentionAnchor = -1
+      var self = this
+      // 注意：不要释放为 -1，nvue 上 cursorPosition = -1 会被识别为位置 0 导致光标跳到字符串首
+      // 延迟 30ms 让 v-model 同步完成后再设光标
+      setTimeout(function() {
+        self.cursorPosition = result.newCursor
+      }, 30)
+    },
     handleSend() {
-      var text = this.inputText.trim(); if (!text) return; var self = this
+      var rawText = this.inputText.trim(); if (!rawText) return
+      // 输入框里 emoji 显示为中文名（如 [微笑]），发送前反查回 [TUIEmoji_Smile] key
+      var text = transformEmojiNameToKey(rawText)
+      var atUserList
+      if (this.isAtSupported && this.mentions.length > 0) {
+        var seen = {}
+        atUserList = []
+        for (var j = 0; j < this.mentions.length; j++) {
+          var uid2 = this.mentions[j].userID
+          if (!seen[uid2]) {
+            seen[uid2] = true
+            atUserList.push(uid2)
+          }
+        }
+      }
       if (this.messageInputStateInst) {
-        this.messageInputStateInst.sendTextMessage({ text: text }).catch(function(err) { uni.showToast({ title: resolveSendError(err), icon: 'none' }) })
+        var messageBody = { text: text }
+        var offlinePushInfo = buildOfflinePushInfo(this.setOfflinePushInfo, {
+          messageType: MessageType.TEXT,
+          messageBody: messageBody,
+          conversationID: this.conversationID,
+        })
+        this.messageInputStateInst.sendTextMessage({
+          text: text,
+          atUserList: atUserList,
+          offlinePushInfo: offlinePushInfo,
+        }).catch(function(err) { uni.showToast({ title: resolveSendError(err), icon: 'none' }) })
       }
       this.$emit('send', text); this.inputText = ''
+      // 清理 mention 上下文
+      this.mentions = []
+      this.selectedMembers = new Map()
+      this.mentionAnchor = -1
+      this.lastInputText = ''
+      this.lastInputCursor = 0
     },
     handleFaceTap: throttle(function() {
       if (this.inputState === 'TEXT' && Date.now() - this.lastOpTime < this.OP_THRESHOLD + 200) return
@@ -384,7 +587,13 @@ export default {
       this._switchMode(this.inputState === 'TOOLS' ? 'TEXT' : 'TOOLS')
     }, 250, { leading: true, trailing: false }),
     handleEmojiSelect(emoji) {
-      var emojiStr = (typeof emoji === 'string') ? emoji : ((emoji && emoji.key) ? emoji.key : '')
+      // 优先用 name（如 [微笑]）；无 name 则降级用 key（如 [TUIEmoji_Smile]）；string 入参直接拼
+      var emojiStr = ''
+      if (typeof emoji === 'string') {
+        emojiStr = emoji
+      } else if (emoji) {
+        emojiStr = emoji.name || emoji.key || ''
+      }
       if (!emojiStr) return
       this.inputText = this.inputText + emojiStr
     },
@@ -510,10 +719,20 @@ export default {
     _sendVoiceMessage(filePath, duration) {
       if (!this.messageInputStateInst) return
       var absolutePath = convertToAbsolutePath(filePath)
-      var message = JSON.stringify({
+      var messageBody = { soundPath: absolutePath, soundDuration: duration }
+      var offlinePushInfo = buildOfflinePushInfo(this.setOfflinePushInfo, {
         messageType: MessageType.SOUND,
-        messageBody: { soundPath: absolutePath, soundDuration: duration }
+        messageBody: messageBody,
+        conversationID: this.conversationID,
       })
+      var messageObj = {
+        messageType: MessageType.SOUND,
+        messageBody: messageBody,
+      }
+      if (offlinePushInfo) {
+        messageObj.offlinePushInfo = offlinePushInfo
+      }
+      var message = JSON.stringify(messageObj)
       var self = this
       this.messageInputStateInst.sendMessage(message).then(function() {
         self.$emit('sendVoice', filePath)

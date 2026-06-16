@@ -28,6 +28,20 @@
     {
       "name": "AtomicXCore",
       "version": "4.1.3"
+    },
+	  {
+	  "name": "AlbumPicker",
+	  "version": "~> 1.0"
+    },
+    {
+      "name": "SnapKit",
+      "version": "5.7.1",
+      "source": "https://cdn.cocoapods.org/"
+    },
+    {
+      "name": "Kingfisher",
+      "version": "7.10.2",
+      "source": "https://cdn.cocoapods.org/"
     }
   ]
 }

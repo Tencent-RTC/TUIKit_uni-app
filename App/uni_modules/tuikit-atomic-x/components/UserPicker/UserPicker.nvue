@@ -1,12 +1,22 @@
 <template>
   <view class="user-picker-page">
-    <UserPickerList :maxCount="maxCount" :dataSource="userList" :lockedItems="lockedItems" :title="title"
-      @confirm="handleConfirm" />
+    <UserPickerList
+      :maxCount="maxCount"
+      :dataSource="userList"
+      :lockedItems="lockedItems"
+      :title="title"
+      :singleSelect="singleSelect"
+      :pinnedTopItems="pinnedTopItems"
+      :remoteSearch="remoteSearch"
+      :enableSearch="enableSearch"
+      @confirm="handleConfirm"
+      @searchChange="handleSearchChange"
+    />
   </view>
 </template>
 
 <script setup lang="ts">
-import { onBeforeUnmount } from 'vue'
+import { onBeforeUnmount, computed } from 'vue'
 import UserPickerList from './components/UserPickerList.nvue'
 import { useUserPicker, type User } from './service/index'
 
@@ -24,9 +34,8 @@ const emit = defineEmits<{
   (e: 'confirm', selectedUsers: User[]): void
 }>()
 
-// ============================================================================
-// 调用 Hook，获取响应式状态和方法
-// ============================================================================
+// 调用 Hook
+const pickerResult = useUserPicker(props.businessType, props.routeParams)
 
 const {
   userList,
@@ -37,19 +46,33 @@ const {
   handleConfirm: confirmHandler,
   handleCancel: cancelHandler,
   onReachEnd,
-} = useUserPicker(props.businessType, props.routeParams)
+} = pickerResult
 
-// ============================================================================
-// 事件处理
-// ============================================================================
+const singleSelect = computed<boolean>(() => !!pickerResult.singleSelect)
+const pinnedTopItems = computed<User[]>(() => pickerResult.pinnedTopItems?.value || [])
+const remoteSearch = computed<boolean>(() => typeof pickerResult.onSearchChange === 'function')
+// enableSearch 优先取 hook 返回值；其次回退到 routeParams.enableSearch；默认 true
+const enableSearch = computed<boolean>(() => {
+  if (pickerResult.enableSearch != null) return !!pickerResult.enableSearch
+  if (props.routeParams && props.routeParams.enableSearch != null) {
+    // routeParams 来自 query string 时是字符串，需做容错
+    const v = props.routeParams.enableSearch
+    return !(v === false || v === 'false' || v === 0 || v === '0')
+  }
+  return true
+})
 
-/** 处理确认选择 */
 const handleConfirm = async (selectedUsers: User[]) => {
   emit('confirm', selectedUsers)
   await confirmHandler(selectedUsers)
 }
 
-/** 处理触底加载（预留给 UserPickerList 后续支持） */
+const handleSearchChange = (keyword: string) => {
+  if (pickerResult.onSearchChange) {
+    pickerResult.onSearchChange(keyword)
+  }
+}
+
 const handleReachEnd = async () => {
   if (onReachEnd) {
     await onReachEnd()

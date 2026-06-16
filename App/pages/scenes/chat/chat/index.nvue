@@ -6,7 +6,7 @@
       <MessageList v-if="conversationID" :conversationID="conversationID" :locateMessage="locateMessage" :inputToolbarHeight="inputToolbarHeight" :inputPanelHeight="inputPanelHeight" @onMessageListTap="closeSoftKeyboard" />
     </view>
 
-    <MessageInput v-if="conversationID" ref="messageInputRef" :conversationID="conversationID" @height-change="onMessageInputHeightChange" />
+    <MessageInput v-if="conversationID" ref="messageInputRef" :conversationID="conversationID" :setOfflinePushInfo="setOfflinePushInfo" @height-change="onMessageInputHeightChange" />
   </view>
 </template>
 
@@ -18,6 +18,8 @@
   import CustomNavbar from '@/uni_modules/tuikit-atomic-x/components/CustomNavbar/CustomNavbar.nvue'
   import { useConversationListState } from '@/uni_modules/tuikit-atomic-x/state/ConversationListState'
   import { useGroupState } from '@/uni_modules/tuikit-atomic-x/state/GroupState'
+  import { MessageType } from '@/uni_modules/tuikit-atomic-x/types/message'
+  import type { OfflinePushContext, OfflinePushInfo } from '@/uni_modules/tuikit-atomic-x/types/message'
 
   // ==================== State ====================
   const {
@@ -72,6 +74,46 @@
   }
 
   const closeSoftKeyboard = () => messageInputRef.value?.collapse()
+
+  // ==================== 离线推送 ====================
+  const setOfflinePushInfo = (ctx: OfflinePushContext): OfflinePushInfo | null => {
+    const title = currentConversation.value?.title || '新消息'
+    const conv = ctx.conversationID
+
+    let description = '[新消息]'
+    switch (ctx.messageType) {
+      case MessageType.TEXT:
+        description = (ctx.messageBody as { text?: string })?.text || '[文本消息]'
+        break
+      case MessageType.IMAGE:
+        description = '[图片]'
+        break
+      case MessageType.VIDEO:
+        description = '[视频]'
+        break
+      case MessageType.SOUND:
+        description = '[语音]'
+        break
+      case MessageType.FILE:
+        description = '[文件]'
+        break
+      case MessageType.CUSTOM:
+        return null
+      default:
+        return null
+    }
+
+    return {
+      title,
+      description,
+      extensionInfo: {
+        ext: JSON.stringify({
+          conversationID: conv,
+          messageType: ctx.messageType,
+        })
+      },
+    }
+  }
 
   // ==================== 生命周期 ====================
   onLoad((options) => {

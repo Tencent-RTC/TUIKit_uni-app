@@ -69,6 +69,45 @@ export enum MirrorType {
 }
 
 /**
+ * 设备类型，表示房间内可控制的媒体设备。
+ */
+export enum DeviceType {
+  /** 麦克风 */
+  Microphone = 0,
+  /** 摄像头 */
+  Camera = 1,
+  /** 屏幕共享 */
+  ScreenShare = 2,
+}
+
+/**
+ * 用户网络质量信息。
+ */
+export interface NetworkInfo {
+  /** 网络质量等级 */
+  quality: NetworkQuality;
+  /** 上行丢包率（%） */
+  upLoss: number;
+  /** 下行丢包率（%） */
+  downLoss: number;
+  /** 网络延迟（毫秒） */
+  delay: number;
+}
+
+/**
+ * 网络质量等级枚举。
+ */
+export enum NetworkQuality {
+  Unknown = 0,
+  Excellent = 1,
+  Good = 2,
+  Poor = 3,
+  Bad = 4,
+  VeryBad = 5,
+  Down = 6,
+}
+
+/**
  * 视频质量类型
  * @remarks
  * 可用值：
@@ -413,7 +452,9 @@ async function openLocalMicrophone(params?: OpenLocalMicrophoneOptions): Promise
           resolve();
         } else {
           params?.fail?.(data.code, data.message);
-          reject(new Error(data.message || 'openLocalMicrophone failed'));
+          const err: any = new Error(data.message || 'openLocalMicrophone failed');
+          err.code = data.code;
+          reject(err);
         }
       } catch (error) {
         params?.fail?.(-1, error.message);
@@ -519,7 +560,9 @@ async function openLocalCamera(params?: OpenLocalCameraOptions): Promise<void> {
           resolve();
         } else {
           params?.fail?.(data.code, data.message);
-          reject(new Error(data.message || 'openLocalCamera failed'));
+          const err: any = new Error(data.message || 'openLocalCamera failed');
+          err.code = data.code;
+          reject(err);
         }
       } catch (error) {
         params?.fail?.(-1, error.message);

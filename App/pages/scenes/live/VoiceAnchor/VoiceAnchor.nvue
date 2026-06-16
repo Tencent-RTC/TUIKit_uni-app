@@ -168,7 +168,7 @@
   const { loginUserInfo } = useLoginState();
   uni.$liveID = `voice_${uni.$userID}`;
   const { createLive, endLive } = useLiveListState();
-  const { openLocalMicrophone, closeLocalMicrophone, microphoneStatus } = useDeviceState(uni.$liveID);
+  const { openLocalMicrophone, closeLocalMicrophone, microphoneStatus } = useDeviceState();
   const { seatList, speakingUsers, muteMicrophone, unmuteMicrophone } = useLiveSeatState(uni.$liveID);
   const { applicants, acceptApplication, rejectApplication } = useCoGuestState(uni.$liveID);
 

@@ -15,27 +15,29 @@ declare const uni: any
 
 const businessType = ref<number>(-1)
 const routeParams = ref<Record<string, string>>({})
-let eventChannel: any = null
 
 onLoad((options) => {
-  console.log('>>> options', options);
   businessType.value = parseInt(options.businessType || '-1')
   routeParams.value = options;
-  
-  // 获取 eventChannel
-  const pages = getCurrentPages()
-  const currentPage = pages[pages.length - 1]
-  eventChannel = currentPage.getOpenerEventChannel?.()
+
+  // 按业务类型设置导航栏标题
+  const titleMap: Record<number, string> = {
+    [UserPickerType.SELECT_GROUP_AT_USER]: '选择提醒的人',
+  }
+  const title = titleMap[businessType.value]
+  if (title) {
+    uni.setNavigationBarTitle({ title })
+  }
 })
 
 const handleConfirm = (selectedUsers: User[]) => {
-  console.log('>>> selectedUsers', selectedUsers);
-  
-  // 如果是选择群成员类型，通过 eventChannel 返回数据并返回上一层
-  if (businessType.value === UserPickerType.SELECT_GROUP_MEMBER) {
-    if (eventChannel) {
-      eventChannel.emit('onSelectGroupMember', { selectedUsers })
-    }
+  // 选择群成员 / 选择 @ 提及成员：通过 uni.$emit 回传，监听方用 uni.$once
+  // Vue2/Vue3 nvue 统一走 uni 全局事件总线（避免 Vue2 nvue 上 navigateTo events 不可用的差异）
+  if (
+    businessType.value === UserPickerType.SELECT_GROUP_MEMBER ||
+    businessType.value === UserPickerType.SELECT_GROUP_AT_USER
+  ) {
+    uni.$emit('onSelectGroupMember', { selectedUsers })
     uni.navigateBack()
   }
 }

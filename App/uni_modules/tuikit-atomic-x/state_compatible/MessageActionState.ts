@@ -152,6 +152,46 @@ class MessageActionState {
   }
 
   /**
+   * 语音转文字
+   *
+   * 透传到底层 Native Store 已实现的 convertVoiceToText 接口，
+   * 触发当前 SOUND 类型消息的语音转文本。
+   *
+   * 注意：转换结果由 SDK 异步更新到 message.messageBody.asrText，
+   * 通过 MessageList 的响应式数据流刷新到 AudioMessage 组件，
+   * 本接口的 Promise 仅表示 "调用是否成功触发"，无需等待返回文本。
+   *
+   * @param language 转换语言，如 'zh' / 'en'，由 Native 侧定义并校验
+   * @returns Promise<void> 调用是否成功
+   */
+  convertVoiceToText = async(language: string): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      const options = {
+        api: 'convertVoiceToText',
+        params: {
+          createStoreParams: this.instanceId,
+          language: language,
+        }
+      }
+
+      callAPI(JSON.stringify(options), (data: string) => {
+        try {
+          const result = safeJsonParse(data, {}) as any;
+          if (result.code === 0) {
+            resolve()
+          } else {
+            const err = new Error(result.message || 'convertVoiceToText failed') as Error & { code?: number }
+            err.code = result.code
+            reject(err)
+          }
+        } catch (error) {
+          reject(error)
+        }
+      })
+    })
+  }
+
+  /**
    * 移除事件监听
    */
   private unbindEvent(): void {

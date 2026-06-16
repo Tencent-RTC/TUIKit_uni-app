@@ -1,77 +1,167 @@
-import { computed } from 'vue'
+import { ref, computed } from 'vue'
+import type { Ref } from 'vue'
 import { type UserPickerHookResult, type User } from './types'
 import { useGroupMemberState } from '../../../state/GroupMemberState'
-import useLoginState from '../../../state/LoginState'
+import { useSearchState } from '../../../state/SearchState'
+import { useLoginState } from '../../../state/LoginState'
+import { SearchType, KeywordListMatchType } from '../../../types/search'
+import { AT_ALL_TAG } from '../../../utils/mention'
+import type { GroupMember } from '../../../types/group'
 
 declare const uni: any
 
+const SEARCH_DEBOUNCE_MS = 300
+const SEARCH_INSTANCE_ID = 'groupMemberPicker_search'
+
 /**
- * 选择群成员 Hook
- * 
- * 场景：从群成员中选择成员（通用选择，不执行具体操作）
- * 数据源：群成员列表
- * 过滤：无
+ * 选择群成员 Hook（统一处理普通选择 + @ 提及选人两种业务）
+ *
+ * routeParams 支持的开关：
+ *  - conversationID: 会话 ID（必传）
+ *  - excludeSelf: 是否过滤当前登录用户，默认 true
+ *  - maxCount: 最大可选人数，默认 500
+ *  - title: 页面标题，默认 '选择群成员'
+ *  - singleSelect: 单选模式（点击立即返回），默认 false
+ *  - enableAtAll: 是否在顶部置顶 @所有人，默认 false
+ *  - enableRemoteSearch: 是否启用 SearchState 服务端搜索，默认 false
+ *      （大群本地过滤会漏匹配，开启后用 SearchState 替换 dataSource）
  */
 export function useSelectGroupMember(routeParams?: any): UserPickerHookResult {
-        console.warn('routeParams', routeParams)
   const conversationID = routeParams?.conversationID || ''
-  const groupID = conversationID.startsWith('group_') ? conversationID.replace('group_', '') : ''
-  const maxCount = routeParams?.maxCount || 500
-  const title = routeParams?.title || '选择群成员'
-  const excludeSelf = routeParams?.excludeSelf ?? true
-  
-  // ======================== 数据源 ========================
-  const groupMemberState = useGroupMemberState({ groupID })
-  const { loginUserInfo } = useLoginState()
-  const { 
-    groupMemberList: allMembers,
-    hasMoreGroupMembers, 
-    fetchMoreGroupMemberList, 
-    destroyStore 
-  } = groupMemberState
-  
-  // ======================== 响应式状态 ========================
-  
-  /** 用户列表 */
-  const userList = computed<User[]>(() => {
-    let members = allMembers.value || []
+  const groupID = conversationID.startsWith('group_')
+    ? conversationID.replace('group_', '')
+    : ''
+  const excludeSelf: boolean = routeParams?.excludeSelf ?? true
+  const maxCount: number = routeParams?.maxCount || 500
+  const title: string = routeParams?.title || '选择群成员'
+  const singleSelect: boolean = !!routeParams?.singleSelect
+  const enableAtAll: boolean = !!routeParams?.enableAtAll
+  const enableRemoteSearch: boolean = !!routeParams?.enableRemoteSearch
 
-    // 如果需要排除自己
-    if (excludeSelf && loginUserInfo.value?.userID) {
-      members = members.filter(member => member.userID !== loginUserInfo.value?.userID)
-    }
-    
-    return members.map(member => ({
-      userID: member.userID,
-      nickname: member.nameCard || member.nickname || member.userID,
-      avatarURL: member.avatarURL || ''
+  // ======================== 数据源：群成员浏览 ========================
+  const groupMemberState = groupID ? useGroupMemberState({ groupID }) : null
+  const allMembers: Ref<GroupMember[]> = groupMemberState
+    ? groupMemberState.groupMemberList
+    : ref<GroupMember[]>([])
+  const hasMoreGroupMembers: Ref<boolean> = groupMemberState
+    ? groupMemberState.hasMoreGroupMembers
+    : ref<boolean>(false)
+
+  // 首屏拉取（仅 enableRemoteSearch 场景下需要主动拉，普通场景由 GroupMemberState 自身管理）
+  if (enableRemoteSearch && groupMemberState && allMembers.value.length === 0) {
+    groupMemberState.fetchGroupMemberList().catch((err) => {
+      console.error('[useSelectGroupMember] fetchGroupMemberList failed:', err)
+    })
+  }
+
+  // ======================== 当前登录用户（用于过滤自己） ========================
+  const { loginUserInfo } = useLoginState()
+  const myUserID = computed<string>(() => loginUserInfo.value?.userID || '')
+
+  // ======================== 服务端搜索（按需启用） ========================
+  const searchState = enableRemoteSearch ? useSearchState(SEARCH_INSTANCE_ID) : null
+  const searchKeyword = ref('')
+  const isSearching = computed(() => enableRemoteSearch && searchKeyword.value.trim().length > 0)
+  const searchResultList = computed<GroupMember[]>(() => {
+    if (!searchState) return []
+    const map = searchState.groupMemberList.value || {}
+    return map[groupID] || []
+  })
+
+  let searchDebounceTimer: ReturnType<typeof setTimeout> | null = null
+
+  const onSearchChange = enableRemoteSearch
+    ? (kw: string): void => {
+        searchKeyword.value = kw
+        if (searchDebounceTimer) clearTimeout(searchDebounceTimer)
+        searchDebounceTimer = setTimeout(() => {
+          const trimmed = kw.trim()
+          if (!trimmed) {
+            searchState!.clearSearchResults()
+            return
+          }
+          searchState!
+            .search([trimmed], {
+              keywordListMatchType: KeywordListMatchType.OR,
+              searchType: SearchType.GroupMember,
+              searchCount: 100,
+              groupMemberFilter: { groupIDList: [groupID] },
+            })
+            .catch((err) => {
+              console.error('[useSelectGroupMember] search failed:', err?.code)
+              let toastTitle = '搜索失败'
+              if (err && err.code === 7013) {
+                toastTitle = '当前套餐不支持群成员搜索，可升级为旗舰版/企业版后使用'
+              } else if (err && err.message) {
+                toastTitle = err.message
+              }
+              uni.showToast({ title: toastTitle, icon: 'none' })
+            })
+        }, SEARCH_DEBOUNCE_MS)
+      }
+    : undefined
+
+  // ======================== userList：浏览 / 搜索模式切换 + 过滤自己 ========================
+  const userList = computed<User[]>(() => {
+    const source = isSearching.value ? searchResultList.value : (allMembers.value || [])
+    const me = myUserID.value
+    const filtered = excludeSelf && me
+      ? source.filter((m: GroupMember) => m.userID !== me)
+      : source
+    return filtered.map((m: GroupMember) => ({
+      userID: m.userID,
+      nickname: m.nameCard || m.nickname || m.userID,
+      avatarURL: m.avatarURL || '',
     }))
   })
 
-  /** 锁定项（选择场景无锁定项） */
+  // ======================== 置顶项：@所有人（按需启用） ========================
+  const pinnedTopItems = computed<User[]>(() => {
+    if (!enableAtAll) return []
+    return [{ userID: AT_ALL_TAG, nickname: '所有人', avatarURL: '' }]
+  })
+
   const lockedItems = computed<string[]>(() => [])
+  const hasMore = computed<boolean>(() => hasMoreGroupMembers.value)
 
-  /** 是否有更多数据 */
-  const hasMore = computed(() => hasMoreGroupMembers.value)
-
-  // ======================== 方法 ========================
-
-  /** 确认选择 */
-  const handleConfirm = async (selectedUsers: User[]): Promise<void> => {
-    await destroyStore();
-  }
-
-  /** 触底加载更多 */
-  const onReachEnd = async (): Promise<void> => {
-    if (!hasMoreGroupMembers.value) return
-    try {
-      await fetchMoreGroupMemberList()
-    } catch (error) {
-      console.error('[useSelectGroupMember] onReachEnd failed:', error)
+  // ======================== 行为 ========================
+  const cleanup = (): void => {
+    if (searchDebounceTimer) {
+      clearTimeout(searchDebounceTimer)
+      searchDebounceTimer = null
+    }
+    if (searchState) {
+      try { searchState.destroyStore() } catch (e) {
+        console.error('[useSelectGroupMember] destroyStore failed:', e)
+      }
+    }
+    if (groupMemberState) {
+      try { groupMemberState.destroyStore() } catch (e) {
+        console.error('[useSelectGroupMember] destroyStore (groupMember) failed:', e)
+      }
     }
   }
 
-  // ======================== 返回 ========================
+  const handleConfirm = async (_selectedUsers: User[]): Promise<void> => {
+    cleanup()
+  }
+
+  const handleCancel = async (): Promise<void> => {
+    cleanup()
+  }
+
+  const onReachEnd = async (): Promise<void> => {
+    // 搜索模式分页由 SearchState 控制（当前需求保持单页）
+    if (isSearching.value) return
+    if (!groupMemberState) return
+    if (!hasMoreGroupMembers.value) return
+    try {
+      await groupMemberState.fetchMoreGroupMemberList()
+    } catch (err) {
+      console.error('[useSelectGroupMember] fetchMoreGroupMemberList failed:', err)
+    }
+  }
+
   return {
     userList,
     lockedItems,
@@ -79,6 +169,10 @@ export function useSelectGroupMember(routeParams?: any): UserPickerHookResult {
     title,
     hasMore,
     handleConfirm,
+    handleCancel,
     onReachEnd,
+    singleSelect,
+    pinnedTopItems,
+    onSearchChange,
   }
 }

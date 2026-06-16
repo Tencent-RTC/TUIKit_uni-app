@@ -1,0 +1,341 @@
+<template>
+  <view
+    class="room-page"
+    :style="{ height: systemInfo?.windowHeight + 'px', width: systemInfo?.safeArea?.width + 'px' }"
+  >
+    <RoomView
+      class="room-view"
+      :style="{
+        marginTop: ((systemInfo?.statusBarHeight || 0) + 53) + 'px',
+      }"
+      :roomID="roomID"
+    />
+
+    <view
+      v-if="roomID.length > 0"
+      class="top-bar"
+      :style="{
+        paddingTop: (systemInfo?.statusBarHeight || 0) + 'px',
+        height: ((systemInfo?.statusBarHeight || 0) + 53) + 'px',
+      }"
+    >
+      <view class="top-bar-left">
+        <SpeakerButton />
+        <view class="top-icon-gap"></view>
+        <SwitchCameraButton />
+      </view>
+
+      <RoomInfo :roomID="roomID" />
+
+      <view class="top-bar-right">
+        <ExitButton ref="exitBtnRef" :isOwner="isOwner" @leave="handleLeaveRoom" @end="handleEndRoom" />
+      </view>
+    </view>
+
+    <view v-if="roomID.length > 0" class="bottom-bar">
+      <MembersButton :roomID="roomID" />
+      <MicButton />
+      <CameraButton />
+    </view>
+
+    <RoomEnterPasswordSheet
+      :visible="isPasswordSheetVisible"
+      @cancel="handlePasswordCancel"
+      @join="handlePasswordJoin"
+    />
+
+    <RoomDialog
+      :modelValue="tipsDialogRef.visible"
+      :title="tipsDialogRef.title"
+      :confirmButton="tipsDialogRef.confirmButton"
+      :cancelButton="tipsDialogRef.cancelButton"
+      :modal="true"
+      @confirm="tipsDialogRef.onConfirm"
+      @cancel="tipsDialogRef.onCancel"
+      @update:modelValue="(val: boolean) => { if (!val) tipsDialogRef.visible = false; }"
+    />
+  </view>
+</template>
+
+<script setup lang="ts">
+  import { onLoad, onBackPress, onShow, onHide, onUnload } from '@dcloudio/uni-app';
+  import { ref, computed, onMounted, onUnmounted } from 'vue';
+  import {
+    useRoomState, RoomType,
+    useRoomParticipantState, RoomParticipantRole,
+    useDeviceState, AudioOutput,
+  } from '@/uni_modules/tuikit-atomic-x/state';
+  import { useRoomTips } from '../hooks/useRoomTips';
+  import { showErrorToast, parseErrorCode } from '../utils/errorHandler';
+  import { showToast } from '@/uni_modules/tuikit-atomic-x/utils/toast';
+  import { RoomView } from '@/uni_modules/tuikit-atomic-x/components';
+  import SpeakerButton from '../components/SpeakerButton/index.nvue';
+  import SwitchCameraButton from '../components/SwitchCameraButton/index.nvue';
+  import RoomInfo from '../components/RoomInfo/index.nvue';
+  import ExitButton from '../components/ExitButton/index.nvue';
+  import MembersButton from '../components/MembersButton/index.nvue';
+  import MicButton from '../components/MicButton/index.nvue';
+  import CameraButton from '../components/CameraButton/index.nvue';
+  import RoomEnterPasswordSheet from '../components/RoomEnterPasswordSheet/index.nvue';
+  import RoomDialog from '../components/RoomDialog/index.vue';
+
+  const mode = ref<'create' | 'join'>('create');
+  const roomID = ref<string>('');
+  const roomName = ref<string>('');
+  const autoEnableCamera = ref<boolean>(false);
+  const autoEnableMicrophone = ref<boolean>(true);
+  const autoEnableSpeaker = ref<boolean>(true);
+
+  const roomState = useRoomState();
+  const roomParticipantState = useRoomParticipantState();
+  const { localParticipant } = roomParticipantState;
+
+  const {
+    openLocalCamera,
+    closeLocalCamera,
+    openLocalMicrophone,
+    closeLocalMicrophone,
+    setAudioRoute,
+  } = useDeviceState();
+
+  const systemInfo = ref<any>({});
+  const exitBtnRef = ref<any>(null);
+
+  const isOwner = computed(() => localParticipant.value?.role === RoomParticipantRole.Owner);
+
+  const isPasswordSheetVisible = ref(false);
+
+  const { dialogState: tipsDialogRef } = useRoomTips({
+    onExitConfirmed: () => {
+      triggerExit();
+    },
+    onDemotedToAudience: () => {
+      closeLocalMicrophone();
+    },
+  });
+
+  onBackPress((option) => {
+    if (option.from === 'backbutton') {
+      exitBtnRef.value?.showExit();
+      return true;
+    }
+    return false;
+  });
+
+  const EXIT_DELAY_MS = 800;
+
+  async function createOrEnterRoom() {
+    if (mode.value === 'create') {
+      try {
+        await roomState.createAndJoinRoom({
+          roomID: roomID.value,
+          roomType: RoomType.Standard,
+          options: {
+            roomName: roomName.value || `Room ${roomID.value}`,
+          },
+        });
+      } catch (e) {
+        showErrorToast(e, '进入房间失败');
+        setTimeout(() => navigateBack(), EXIT_DELAY_MS);
+        return;
+      }
+      await roomParticipantState.getParticipantList({ cursor: '' }).catch(() => {});
+      initMediaState();
+    } else {
+      await tryJoinRoom();
+    }
+  }
+
+  async function tryJoinRoom(password?: string) {
+    try {
+      await roomState.joinRoom({
+        roomID: roomID.value,
+        roomType: RoomType.Standard,
+        password,
+      });
+    } catch (e) {
+      const code = parseErrorCode(e);
+      // 100018: 房间需要密码 → 弹密码框，由用户重试
+      if (code === 100018) {
+        isPasswordSheetVisible.value = true;
+        return;
+      }
+      // 100019: 密码错误 → 仅提示，保持密码框打开让用户重试，不退出页面
+      if (code === 100019) {
+        isPasswordSheetVisible.value = true;
+        showErrorToast(e, '进房密码错误');
+        return;
+      }
+      showErrorToast(e, '进入房间失败');
+      setTimeout(() => navigateBack(), EXIT_DELAY_MS);
+      return;
+    }
+    isPasswordSheetVisible.value = false;
+    await roomParticipantState.getParticipantList({ cursor: '' }).catch(() => {});
+    initMediaState();
+  }
+
+  async function initMediaState() {
+    const isAllCameraDisabled = roomState.currentRoom.value?.isAllCameraDisabled === true;
+    const isAllMicrophoneDisabled = roomState.currentRoom.value?.isAllMicrophoneDisabled === true;
+
+    if (autoEnableCamera.value && !isAllCameraDisabled) {
+      try {
+        await openLocalCamera({ isFront: true });
+      } catch (e) {
+        showErrorToast(e);
+      }
+    }
+    if (autoEnableMicrophone.value && !isAllMicrophoneDisabled) {
+      try {
+        await openLocalMicrophone();
+        await roomParticipantState.unmuteMicrophone();
+      } catch (e) {
+        showErrorToast(e);
+      }
+    }
+    setAudioRoute({
+      audioRoute: autoEnableSpeaker.value ? AudioOutput.SPEAKERPHONE : AudioOutput.EARPIECE,
+    });
+  }
+
+  function handlePasswordCancel() {
+    isPasswordSheetVisible.value = false;
+    navigateBack();
+  }
+
+  async function handlePasswordJoin(password: string) {
+    if (!password || !password.trim()) {
+      showToast('请输入入会密码');
+      return;
+    }
+    await tryJoinRoom(password.trim());
+  }
+
+  async function handleLeaveRoom() {
+    try {
+      await roomState.leaveRoom();
+    } catch (e) {
+      console.warn('[room] leaveRoom fail:', e);
+    }
+    triggerExit();
+  }
+
+  async function handleEndRoom() {
+    try {
+      await roomState.endRoom();
+    } catch (e) {
+      console.warn('[room] endRoom fail:', e);
+    }
+    triggerExit();
+  }
+
+  function triggerExit() {
+    closeLocalMicrophone();
+    closeLocalCamera();
+    navigateBack();
+  }
+
+  function navigateBack() {
+    uni.navigateBack({
+      fail: () => {
+        uni.redirectTo({ url: '/pages/scenes/room/index' });
+      },
+    });
+  }
+
+  onLoad((options: any) => {
+    const safeDecode = (v: any): string => {
+      const s = (v || '').toString();
+      try {
+        return decodeURIComponent(s);
+      } catch (_) {
+        return s;
+      }
+    };
+    mode.value = options?.mode === 'join' ? 'join' : 'create';
+    roomID.value = safeDecode(options?.roomID);
+    roomName.value = safeDecode(options?.roomName);
+    autoEnableCamera.value = options?.autoEnableCamera === '1';
+    autoEnableMicrophone.value = options?.autoEnableMicrophone !== '0';
+    autoEnableSpeaker.value = options?.autoEnableSpeaker !== '0';
+  });
+
+  onMounted(() => {
+    uni.setKeepScreenOn({ keepScreenOn: true });
+    uni.getSystemInfo({
+      success: (res: any) => { systemInfo.value = res; },
+    });
+
+    if (!roomID.value) {
+      showToast('缺少 roomID');
+      setTimeout(() => navigateBack(), EXIT_DELAY_MS);
+      return;
+    }
+
+    createOrEnterRoom();
+  });
+
+  onUnmounted(() => {
+    uni.setKeepScreenOn({ keepScreenOn: false });
+  });
+</script>
+
+<style>
+  .room-page {
+    flex: 1;
+    background-color: #0F1014;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .room-view {
+    flex: 1;
+    margin-bottom: 192rpx;
+  }
+
+  .top-bar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    padding-left: 32rpx;
+    padding-right: 32rpx;
+    flex-direction: row;
+    align-items: center;
+    background-color: #0F1014;
+  }
+
+  .top-bar-left {
+    flex: 1;
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-start;
+  }
+
+  .top-bar-right {
+    flex: 1;
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-end;
+  }
+
+  .top-icon-gap {
+    width: 32rpx;
+  }
+
+  .bottom-bar {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 192rpx;
+    background-color: #0F1014;
+    flex-direction: row;
+    justify-content: space-around;
+    align-items: center;
+    padding-left: 32rpx;
+    padding-right: 32rpx;
+    padding-bottom: 68rpx;
+  }
+</style>

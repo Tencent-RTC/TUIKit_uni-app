@@ -18,7 +18,9 @@ enum UserPickerType {
     // 转交群主
     TRANSFER_GROUP_OWNER = 9,
     // 选择群成员
-    SELECT_GROUP_MEMBER = 10
+    SELECT_GROUP_MEMBER = 10,
+    // 选择 @ 提及的群成员（单选 + @所有人 + 服务端搜索）
+    SELECT_GROUP_AT_USER = 11
 };
 
 export { UserPickerType }

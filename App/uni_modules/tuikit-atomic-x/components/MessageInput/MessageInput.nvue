@@ -128,6 +128,7 @@
             :style="{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, opacity: toolsPanelOpacity }"
             :conversationID="conversationID"
             :toolList="props.toolList"
+            :setOfflinePushInfo="setOfflinePushInfo"
           />
           <EmojiPanel 
             v-if="showEmojiPanel"
@@ -154,14 +155,28 @@ export type { ToolItem } from './types';
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeMount, onUnmounted, watch, nextTick, getCurrentInstance } from 'vue';
 import type { Ref, ComputedRef } from 'vue';
+import { onShow } from '@dcloudio/uni-app';
 import { throttle } from '../../utils/lodash';
 import { useMessageInputState } from '../../state/MessageInputState';
 import { resolveSendError } from './utils/resolveSendError';
+import { transformEmojiNameToKey, transformEmojiKeyToName, hasEmoji } from '../../utils/emojiUtils';
 import EmojiPanel from './EmojiPanel.nvue';
 import ToolsPanel from './ToolsPanel.nvue';
+import {
+  insertMention,
+  scanMentions,
+  tryDeleteWholeMention,
+  MAX_AT_USER_COUNT,
+  AT_ALL_TAG,
+  type MentionSegment,
+} from '../../utils/mention';
+import { GroupType } from '../../types/group';
+import { UserPickerType } from '../../types/userpicker';
+import { useGroupState } from '../../state/GroupState';
 import type { ToolItem } from './types';
 import { MessageType, MessageStatus } from '../../types/message';
-import type { MessageInfo } from '../../types/message';
+import type { MessageInfo, OfflinePushInfoResolver } from '../../types/message';
+import { buildOfflinePushInfo } from '../../utils/buildOfflinePushInfo';
 import permission from '../../utils/permission';
 import { requestCallPermissions, showPermissionDialog } from '../../utils/callPermission';
 import { stopGlobalAudioPlayer, RECORDING_PSEUDO_ID } from '../../hooks/useAudioPlayer';
@@ -237,6 +252,14 @@ interface MessageInputProps {
   enableEmoji?: boolean;
   enableTools?: boolean;
   toolList?: ToolItem[];
+  /**
+   * 业务方注入：在每次发送消息前回调本函数计算 offlinePushInfo
+   *
+   * - 同步函数；返回 OfflinePushInfo 表示附带 push；返回 null/undefined 表示不附带
+   * - 抛异常时组件兜底为不附带，不会阻断 send
+   * - resolver 收到 ctx 含 messageType / messageBody / conversationID
+   */
+  setOfflinePushInfo?: OfflinePushInfoResolver;
 }
 
 const props = withDefaults(defineProps<MessageInputProps>(), {
@@ -309,6 +332,42 @@ const lastCursorPosition: Ref<number> = ref(0);
 // selection-start/end 控制光标位置：-1 表示不控制（交由系统管理）
 // 仅在表情插入等需要主动定位光标的场景设置具体值，操作完毕后重置回 -1
 const cursorPosition: Ref<number> = ref(-1);
+
+// ==================== @ 群成员 状态 ====================
+const isGroupConversation = computed(() => props.conversationID.startsWith('group_'));
+const groupID = computed(() => isGroupConversation.value ? props.conversationID.replace('group_', '') : '');
+
+const { joinedGroupList } = useGroupState();
+const currentGroupType = computed(() => {
+  if (!isGroupConversation.value) return undefined;
+  const info = joinedGroupList.value.find(g => g.groupID === groupID.value);
+  return info?.groupType;
+});
+
+// 是否启用 @ 功能：仅群会话 & 非直播群（AVChatRoom 不支持 @ 消息）
+const isAtSupported = computed(() => {
+  return isGroupConversation.value && currentGroupType.value !== GroupType.AVChatRoom;
+});
+
+// mention 段（派生自 inputText + selectedMembers）
+const mentions = ref<MentionSegment[]>([]);
+const selectedMembers = ref<Map<string, string>>(new Map());
+
+// @ 触发位置：当输入 @ 字符并跳转到选人页时记录，便于回填时计算插入位置
+const mentionAnchor = ref(-1);
+
+// 标记：跳转选人页时置 true，从选人页返回时由 onShow 钩子消费并恢复 textarea 聚焦
+let pendingFocusAfterAtPicker = false;
+
+// 上一次 input 的文本与光标，用于整体删除判定
+const lastInputText = ref('');
+const lastInputCursor = ref(0);
+
+// @ 整体删除后的"冷静期"：v-model 同步到原生 textarea 是异步的，期间原生层
+// 会按自己的视角连续冒出 input 事件（尤其长按删除场景）。
+// 命中整段删除后进入冷静期，期间所有 input 事件都按"原生层视角为准"被动接受，
+// 不再触发新一轮整段删除，让 v-model 平滑追上。冷静期结束后恢复正常逻辑。
+const mentionDeleteCooldownUntil = ref(0);
 
 // 高度定义
 let inputToolbarHeightPx: number = 0;
@@ -475,6 +534,15 @@ onMounted(() => {
   setTimeout(() => {
     prewarmFilePicker();
   }, 500);
+});
+
+onShow(() => {
+  // 从选人页返回时恢复 textarea 聚焦（无论选中或取消都聚焦）
+  if (!pendingFocusAfterAtPicker) return;
+  pendingFocusAfterAtPicker = false;
+
+  switchMode('TEXT');
+  focusTrigger.value = true;
 });
 
 onUnmounted(() => {
@@ -1034,17 +1102,178 @@ const handleBlur = (event: { detail: { value: string, cursor: number } }): void 
 };
 
 // 输入事件
-const handleInput = (_e: Event): void => {
-  // 可扩展：输入字数统计等
+const handleInput = (e: { detail: { value: string; cursor?: number } }): void => {
+  let newText = e.detail.value;
+  let newCursor = typeof e.detail.cursor === 'number' ? e.detail.cursor : newText.length;
+
+  // 归一化：粘贴/手动输入带进来的 [TUIEmoji_Xxx] key 立即替换为中文名 [微笑]，
+  // 与 EmojiPanel 选中后的形态保持一致；handleSend 仍会用 transformEmojiNameToKey 反查回 key 发送。
+  // 仅当 newText 中含 [TUIEmoji_*] 时才进入转换分支，避免每次按键都跑正则。
+  if (hasEmoji(newText)) {
+    // 按"光标前/后"分别转换，保持光标在等价位置（key 和 name 长度不一）
+    const beforeCursor = newText.slice(0, newCursor);
+    const afterCursor = newText.slice(newCursor);
+    const normalizedBefore = transformEmojiKeyToName(beforeCursor);
+    const normalizedAfter = transformEmojiKeyToName(afterCursor);
+    newText = normalizedBefore + normalizedAfter;
+    newCursor = normalizedBefore.length;
+    // 立刻同步 inputText，让 v-model 把转换后的文本反向写回原生 textarea，
+    // 用户视觉上看到的就是"粘贴后立刻变成 [微笑]"
+    inputText.value = newText;
+    cursorPosition.value = newCursor;
+  }
+
+  // 0. 冷静期：刚命中过整段删除，v-model 同步到原生 textarea 需要时间。
+  //    期间原生层会按"删除前视角 -1 字符"的速率连续冒 input 事件（长按删除）。
+  //    若被动接受会把已删的整段 mention 又写回来；若按内容差量计算又会一字一字
+  //    破坏下一个 mention 段。所以冷静期内一律丢弃 input 事件 ——
+  //    视觉上 textarea 维持在"整段删除后"状态，给用户明确的边界信号：
+  //    刚才那段 @xxx 被作为整体删除，请松开后重新按下继续删除。
+  //    长度守卫：一旦 newText.length <= lastInputText.length（原生层已追上或用户重新按了一次），
+  //    立即解除冷静期。
+  if (Date.now() < mentionDeleteCooldownUntil.value) {
+    if (newText.length <= lastInputText.value.length) {
+      // 原生层已同步到我们的短文本（或用户在短文本基础上又删了一字），解除冷静期
+      mentionDeleteCooldownUntil.value = 0;
+      // 继续走下面的正常逻辑处理本次事件
+    } else {
+      // 长按仍在原生层旧视角上删字符，丢弃事件
+      return;
+    }
+  }
+
+  // 1. 整体删除：群会话且支持 @ 时，删除 mention 段尾部 1 字符时一次性删整段
+  if (isAtSupported.value) {
+    const deleted = tryDeleteWholeMention(
+      lastInputText.value,
+      newText,
+      lastInputCursor.value,
+      mentions.value
+    );
+    if (deleted) {
+      inputText.value = deleted.newText;
+      lastInputText.value = deleted.newText;
+      lastInputCursor.value = deleted.newCursor;
+      mentions.value = scanMentions(deleted.newText, selectedMembers.value);
+      // 进入冷静期：500ms 内丢弃所有 input 事件，避免长按删除把已删的段写回来或破坏下一段
+      mentionDeleteCooldownUntil.value = Date.now() + 500;
+      // 延迟设 cursor 让 textarea 重排完成；不释放为 -1（nvue 上 -1 会被识别为位置 0）
+      setTimeout(() => {
+        cursorPosition.value = deleted.newCursor;
+      }, 30);
+      return;
+    }
+  }
+
+  // 2. 派生重建 mentions（手改文本破坏 @ 段时自动剥离）
+  if (isAtSupported.value) {
+    mentions.value = scanMentions(newText, selectedMembers.value);
+  }
+
+  // 3. 检测刚输入了 @ 字符 → 跳转到选人页
+  if (
+    isAtSupported.value &&
+    newText.length === lastInputText.value.length + 1 &&
+    newCursor > 0 &&
+    newText[newCursor - 1] === '@'
+  ) {
+    mentionAnchor.value = newCursor - 1;
+    navigateToAtUserPicker();
+  }
+
+  lastInputText.value = newText;
+  lastInputCursor.value = newCursor;
+  // 释放受控光标：把 cursorPosition 同步到系统光标，避免下次输入光标被旧值锁定
+  if (cursorPosition.value !== -1 && cursorPosition.value !== newCursor) {
+    cursorPosition.value = newCursor;
+  }
+};
+
+// 跳转到 @ 选人页
+const navigateToAtUserPicker = (): void => {
+  // 上限校验：当前已 @ 的不重复用户数已达上限则提示
+  const existingUserIDs = new Set(mentions.value.map(m => m.userID));
+  if (existingUserIDs.size >= MAX_AT_USER_COUNT) {
+    uni.showToast({
+      title: `最多 @ ${MAX_AT_USER_COUNT} 人`,
+      icon: 'none',
+    });
+    return;
+  }
+
+  const collapseTimer = setTimeout(()=> {
+    switchMode('NONE');
+    clearTimeout(collapseTimer);
+  }, 100);
+
+  // 标记：返回时由 onShow 钩子恢复 focus
+  pendingFocusAfterAtPicker = true;
+
+  // 跳转到统一的 UserPicker 承载页（宿主工程注册的页面）
+  // Vue2/Vue3 nvue 统一通过 uni.$emit/uni.$once 全局事件总线接收回传
+  // （Vue2 nvue 上 navigateTo events 不可用，统一方案避免双轨）
+  uni.$off('onSelectGroupMember')
+  uni.$once('onSelectGroupMember', (payload: { selectedUsers: Array<{ userID: string; nickname?: string }> }) => {
+    if (!payload || !payload.selectedUsers || payload.selectedUsers.length === 0) return;
+    const picked = payload.selectedUsers[0];
+    const displayName = picked.userID === AT_ALL_TAG ? '所有人' : (picked.nickname || picked.userID);
+    applyMentionSelection(displayName, picked.userID);
+  });
+  uni.navigateTo({
+    url: `/pages/scenes/chat/userPicker/userPicker?businessType=${UserPickerType.SELECT_GROUP_AT_USER}&conversationID=${props.conversationID}`,
+    fail: () => {
+      uni.$off('onSelectGroupMember')
+      pendingFocusAfterAtPicker = false;
+    },
+  });
+};
+
+// 把选中成员回填到文本里
+const applyMentionSelection = (displayName: string, userID: string): void => {
+  if (mentionAnchor.value < 0) return;
+  const result = insertMention(
+    inputText.value,
+    mentionAnchor.value,
+    0,  // keywordLen 永远为 0 —— 用户只输入了 @ 就跳转
+    displayName
+  );
+  selectedMembers.value.set(displayName, userID);
+  inputText.value = result.newText;
+  lastInputText.value = result.newText;
+  lastInputCursor.value = result.newCursor;
+  mentions.value = scanMentions(result.newText, selectedMembers.value);
+  mentionAnchor.value = -1;
+  // 注意：不要释放为 -1，nvue 上 cursorPosition = -1 会被识别为位置 0 导致光标跳到字符串首
+  // 延迟 30ms 让 v-model 同步完成后再设光标
+  setTimeout(() => {
+    cursorPosition.value = result.newCursor;
+  }, 30);
 };
 
 // 发送消息
 const handleSend = (): void => {
-  const text: string = inputText.value.trim();
-  if (!text) return;
-  
+  const rawText: string = inputText.value.trim();
+  if (!rawText) return;
+
+  // 输入框里 emoji 显示为中文名（如 [微笑]），发送前反查回 [TUIEmoji_Smile] key，
+  // 接收端按 key 渲染 PNG，跨端表情视觉一致
+  const text: string = transformEmojiNameToKey(rawText);
+
+  const messageBody = { text };
+
+  // 派生 atUserList（去重）；仅在支持 @ 的会话才附带
+  const atUserList = isAtSupported.value && mentions.value.length > 0
+    ? Array.from(new Set(mentions.value.map(m => m.userID)))
+    : undefined;
+
   messageInputState?.sendTextMessage({
     text: text,
+    atUserList,
+    offlinePushInfo: buildOfflinePushInfo(props.setOfflinePushInfo, {
+      messageType: MessageType.TEXT,
+      messageBody,
+      conversationID: props.conversationID,
+    }),
   }).then(() => {
     // success
   }).catch((error) => {
@@ -1056,6 +1285,12 @@ const handleSend = (): void => {
   });
   emit('send', text);
   inputText.value = '';
+  // 清理 mention 上下文
+  mentions.value = [];
+  selectedMembers.value = new Map();
+  mentionAnchor.value = -1;
+  lastInputText.value = '';
+  lastInputCursor.value = 0;
 };
 
 /**
@@ -1161,6 +1396,8 @@ const handleMoreTap = throttle(() => {
 }, 250, { leading: true, trailing: false });
 
 // 表情选择
+// nvue textarea 不支持内嵌图片，用中文名（如 [微笑]）作为输入框可视形态；
+// 发送时由 handleSend 用 transformEmojiNameToKey 反查回 [TUIEmoji_Xxx] key，再发出去
 const handleEmojiSelect = (emoji: EmojiItem | string): void => {
   textareaRef.value?.getSelectionRange((res: { selectionStart: number, selectionEnd: number }) => {
     const {
@@ -1168,15 +1405,21 @@ const handleEmojiSelect = (emoji: EmojiItem | string): void => {
       selectionEnd,
     } = res;
 
+    let insertText = '';
     if (typeof emoji === 'string') {
-      inputText.value = inputText.value.slice(0, res.selectionStart) + emoji + inputText.value.slice(res.selectionEnd);
-      cursorPosition.value = selectionStart + emoji.length;
+      insertText = emoji;
     } else {
-      inputText.value = inputText.value.slice(0, selectionStart) + emoji.key + inputText.value.slice(selectionEnd);
-      cursorPosition.value = selectionStart + emoji.key.length;
+      // 优先用 name（如 [微笑]）；无 name 则降级用 key（如 [TUIEmoji_Smile]）
+      insertText = (emoji.name as string) || emoji.key || '';
     }
-    // 下一帧重置为 -1，交还光标控制权给系统（否则 iOS 粘贴/选择等操作会被锁定）
-    setTimeout(() => { cursorPosition.value = -1; }, 50);
+    if (!insertText) return;
+
+    inputText.value = inputText.value.slice(0, selectionStart) + insertText + inputText.value.slice(selectionEnd);
+    cursorPosition.value = selectionStart + insertText.length;
+    // 注意：不要释放为 -1，nvue 上 cursorPosition = -1 会被识别为位置 0 导致光标跳到字符串首
+    // 同步 lastInputText/lastInputCursor，避免 @ 检测/整段删除等逻辑误判文本变化
+    lastInputText.value = inputText.value;
+    lastInputCursor.value = cursorPosition.value;
   });
 };
 
@@ -1365,13 +1608,23 @@ const sendVoiceMessage = (filePath: string, duration: number): void => {
   const absolutePath = convertToAbsolutePath(filePath);
   
   // 构建语音消息
-  const message: MessageInfo = JSON.stringify({
+  const messageBody = {
+    soundPath: absolutePath,
+    soundDuration: duration,
+  };
+  const offlinePushInfo = buildOfflinePushInfo(props.setOfflinePushInfo, {
     messageType: MessageType.SOUND,
-    messageBody: {
-      soundPath: absolutePath,
-      soundDuration: duration,
-    },
-  })
+    messageBody,
+    conversationID: props.conversationID,
+  });
+  const messageObj: any = {
+    messageType: MessageType.SOUND,
+    messageBody,
+  };
+  if (offlinePushInfo) {
+    messageObj.offlinePushInfo = offlinePushInfo;
+  }
+  const message: MessageInfo = JSON.stringify(messageObj);
   
   messageInputState.sendMessage(message).then(() => {
     emit('sendVoice', filePath);

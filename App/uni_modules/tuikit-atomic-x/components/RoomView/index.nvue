@@ -1,0 +1,87 @@
+<template>
+  <view class="room-stage-wrap">
+    <room-core-view
+      class="room-stage"
+      :roomID="roomID"
+      :roomType="roomTypeForRender"
+      :icons="roomViewIcons"
+    />
+    <view class="room-stage room-stage-loading" v-if="!roomID">
+      <text class="stage-placeholder-title">房间画面加载中...</text>
+    </view>
+  </view>
+</template>
+
+<script setup lang="ts">
+  import { computed, ref, onMounted } from 'vue';
+  import { useRoomState, RoomType } from '@/uni_modules/tuikit-atomic-x/state';
+
+  const props = defineProps({
+    roomID: { type: String, default: '' },
+  });
+
+  const roomState = useRoomState();
+  const { currentRoom } = roomState;
+
+  const roomTypeForRender = computed<number>(() => {
+    return currentRoom.value?.roomType ?? RoomType.Standard;
+  });
+
+  function toAbsolutePath(relativePath: string): string {
+    // @ts-ignore
+    if (typeof plus !== 'undefined' && plus && plus.io && plus.io.convertLocalFileSystemURL) {
+      // @ts-ignore
+      return plus.io.convertLocalFileSystemURL(relativePath);
+    }
+    return relativePath;
+  }
+  function convertIconPaths(map: Record<string, string>): Record<string, string> {
+    const result: Record<string, string> = {};
+    Object.keys(map).forEach((key) => {
+      result[key] = toAbsolutePath(map[key]);
+    });
+    return result;
+  }
+  function buildRoomViewIcons(): Record<string, string> {
+    return convertIconPaths({
+      defaultAvatar: '/static/images/room/room_default_avatar.png',
+      microphoneOn: '/static/images/room/room_mic_on.png',
+      microphoneOff: '/static/images/room/room_mic_off.png',
+      roleOwner: '/static/images/room/room_video_view_owner.png',
+      roleManager: '/static/images/room/room_video_view_admin.png',
+      arrowLeft: '/static/images/room/room_arrow_left.png',
+      arrowRight: '/static/images/room/room_arrow_right.png',
+    });
+  }
+  const roomViewIcons = ref<Record<string, string>>(buildRoomViewIcons());
+  onMounted(() => {
+    setTimeout(() => {
+      roomViewIcons.value = buildRoomViewIcons();
+    }, 0);
+  });
+</script>
+
+<style>
+  .room-stage-wrap {
+    flex: 1;
+  }
+
+  .room-stage {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    background-color: #17181F;
+  }
+
+  .stage-placeholder-title {
+    font-size: 32rpx;
+    color: #C5CCDC;
+    font-weight: 500;
+    margin-bottom: 12rpx;
+  }
+</style>

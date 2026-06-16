@@ -2,7 +2,7 @@
   <view v-if="isCenterMessage" class="msg msg--center" @tap.stop="handleMessageContentTap">
     <RecalledMessage v-if="message.status === MessageStatus.RECALLED" :message="message" @reEdit="handleReEdit" />
     <GroupTipMessage v-else-if="isSystemMessage || isGroupCreateMessage" :message="message" />
-    <CustomMessage v-else-if="isCustomCenterMessage" :message="message" :conversationID="conversationID" />
+    <component v-else-if="isCustomCenterMessage" :is="centerCustomComponent" :message="message" :conversationID="conversationID" />
   </view>
   <view v-else class="msg msg--no-select" :class="messageClasses" :data-message-id="message.msgID" @touchstart="handleTouchStart" @touchend="handleTouchEnd" @tap.stop="handleTap" @touchmove.stop.prevent="handleTouchMove">
     <Avatar v-if="showAvatar" :src="message.sender.avatarURL" :name="displayName" :size="80" defaultAvatarType="user" class="msg__avatar" />
@@ -69,6 +69,7 @@
     messageActionList?: any[]
     highlight?: boolean
     customCenterChecker?: (message: MessageInfo, conversationID: string) => boolean
+    customMessageRender?: any
   }
 
   const props = withDefaults(defineProps<Props>(), {
@@ -78,7 +79,8 @@
     showTime: false,
     messageActionList: () => [],
     highlight: false,
-    customCenterChecker: null
+    customCenterChecker: null,
+    customMessageRender: null
   })
 
   const emit = defineEmits<{
@@ -202,7 +204,28 @@
     return sender.nameCard || sender.friendRemark || sender.nickname || sender.userID
   })
 
+  // 调用业务方传入的 customMessageRender 解析 CUSTOM 消息对应的渲染组件
+  // 仅在 messageType === CUSTOM 时生效；render 抛错或返回空值时降级走默认渲染
+  const customComponent = computed(() => {
+    if (props.message.messageType !== MessageType.CUSTOM) return null
+    if (!props.customMessageRender) return null
+    try {
+      const comp = props.customMessageRender(props.message, props.conversationID)
+      return comp || null
+    } catch (e) {
+      console.error('[Message] customMessageRender failed:', e)
+      return null
+    }
+  })
+
+  // 居中分支自定义消息渲染：业务组件优先，否则走内置 CustomMessage
+  const centerCustomComponent = computed(() => {
+    return customComponent.value || CustomMessage
+  })
+
   const currentMessageComponent = computed(() => {
+    if (customComponent.value) return customComponent.value
+
     const componentMap = {
       [MessageType.TEXT]: TextMessage,
       [MessageType.IMAGE]: ImageMessage,

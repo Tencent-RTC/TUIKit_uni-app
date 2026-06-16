@@ -1,0 +1,535 @@
+<template>
+  <view v-if="visible || transferDialogVisible || kickDialogVisible" class="mgr-root">
+    <view class="mgr-mask" v-if="visible" @tap="onClose">
+    <view class="mgr-sheet" @tap.stop>
+      <view class="drop-bar" @tap="onClose">
+        <image class="drop-line" src="/static/images/room/room_lineImage.png" mode="aspectFit" />
+      </view>
+
+      <view class="user-header">
+        <image class="header-avatar" :src="avatarSrc" mode="aspectFill" />
+        <view class="header-info">
+          <view class="header-name-row">
+            <text class="header-name" :numberOfLines="1">{{ displayName }}</text>
+            <text v-if="isLocal" class="header-me-tag">（我）</text>
+          </view>
+          <view v-if="badgeConfig" class="badge-row">
+            <image
+              class="badge-icon"
+              :src="badgeConfig.icon"
+              mode="aspectFit"
+            />
+            <text class="badge-text" :style="{ color: badgeConfig.color }">
+              {{ badgeConfig.text }}
+            </text>
+          </view>
+        </view>
+      </view>
+
+      <view class="header-gap"></view>
+
+      <view class="ctrl-list">
+        <template v-if="isWebinar && canSwitchParticipantRole">
+          <view class="ctrl-item" @tap="handleSetParticipant">
+            <image class="ctrl-icon" src="/static/images/room/room_set_admin.png" mode="aspectFit" />
+            <text class="ctrl-text">{{ webinarSwitchText }}</text>
+          </view>
+          <view class="ctrl-divider"></view>
+        </template>
+
+        <template v-if="type === 'participant' && canControlTarget">
+          <view class="ctrl-item" @tap="handleAudioControl">
+            <image
+              class="ctrl-icon"
+              :src="audioCtrlIconSrc"
+              mode="aspectFit"
+            />
+            <text class="ctrl-text">
+              {{ audioCtrlText }}
+            </text>
+          </view>
+          <view class="ctrl-divider"></view>
+
+          <view v-if="!isWebinar" class="ctrl-item" @tap="handleVideoControl">
+            <image
+              class="ctrl-icon"
+              :src="videoCtrlIconSrc"
+              mode="aspectFit"
+            />
+            <text class="ctrl-text">
+              {{ videoCtrlText }}
+            </text>
+          </view>
+          <view v-if="!isWebinar" class="ctrl-divider"></view>
+        </template>
+
+        <template v-if="type === 'participant' && isOwnerSelf && !isLocal">
+          <view class="ctrl-item" @tap="handleTransferOwner">
+            <image class="ctrl-icon" src="/static/images/room/room_transfer_owner.png" mode="aspectFit" />
+            <text class="ctrl-text">转交房主</text>
+          </view>
+          <view class="ctrl-divider"></view>
+
+          <view class="ctrl-item" @tap="handleAdminToggle">
+            <image class="ctrl-icon" src="/static/images/room/room_set_admin.png" mode="aspectFit" />
+            <text class="ctrl-text">
+              {{ adminToggleText }}
+            </text>
+          </view>
+          <view class="ctrl-divider"></view>
+        </template>
+
+        <view v-if="canKickTarget" class="ctrl-item" @tap="handleKick">
+          <image class="ctrl-icon" src="/static/images/room/room_kick_out.png" mode="aspectFit" />
+          <text class="ctrl-text" style="color:#F2504B;">踢出房间</text>
+        </view>
+      </view>
+
+      <view class="bottom-safe"></view>
+    </view>
+  </view>
+
+    <RoomDialog
+      :model-value="transferDialogVisible"
+      :title="`将房主转交给${transferTargetName}`"
+      cancel-button="取消"
+      confirm-button="确认"
+      :modal="true"
+      @update:model-value="transferDialogVisible = $event"
+      @confirm="confirmTransferOwner"
+    >
+      <text>转交房主后将成为普通成员</text>
+    </RoomDialog>
+
+    <RoomDialog
+      :model-value="kickDialogVisible"
+      title="提示"
+      cancel-button="取消"
+      confirm-button="确认"
+      :modal="true"
+      @update:model-value="kickDialogVisible = $event"
+      @confirm="confirmKick"
+    >
+      <text>{{ `是否将${kickTargetName}移除房间？` }}</text>
+    </RoomDialog>
+  </view>
+</template>
+
+<script setup lang="ts">
+  import { computed, ref, watch } from 'vue';
+  import type { PropType } from 'vue';
+  import { useRoomParticipantState } from '@/uni_modules/tuikit-atomic-x/state';
+  import {
+    DeviceStatus,
+    DeviceType,
+    RoomParticipantRole,
+  } from '@/uni_modules/tuikit-atomic-x/state';
+  import type { RoomParticipant } from '@/uni_modules/tuikit-atomic-x/types';
+  import type { RoomUser } from '@/uni_modules/tuikit-atomic-x/types';
+  import RoomDialog from '../../RoomDialog/index.vue';
+  import { showErrorToast, parseErrorCode } from '../../../utils/errorHandler';
+
+  // 重复邀请错误码
+  const ERR_DUPLICATE_INVITE = 100100;
+
+  const props = defineProps({
+    visible: { type: Boolean, default: false },
+    roomID: { type: String, required: true },
+    type: { type: String as PropType<'participant' | 'audience'>, required: true },
+    participant: { type: Object as PropType<RoomParticipant | null>, default: null },
+    audience: { type: Object as PropType<RoomUser | null>, default: null },
+    isWebinar: { type: Boolean, default: false },
+  });
+
+  const emit = defineEmits<{
+    (e: 'close'): void
+    (e: 'transferred', userID: string): void
+  }>();
+
+  const roomParticipantState = useRoomParticipantState();
+  const { localParticipant, adminList, participantList, audienceList } = roomParticipantState;
+
+  const transferDialogVisible = ref(false);
+  const transferTargetUserID = ref('');
+  const transferTargetName = ref('');
+  const kickDialogVisible = ref(false);
+  const kickTargetUserID = ref('');
+  const kickTargetName = ref('');
+  const INVITE_TIMEOUT = 30;
+
+  const userID = computed(() =>
+    props.type === 'participant' ? props.participant?.userID || '' : props.audience?.userID || '',
+  );
+
+  const currentParticipant = computed<RoomParticipant | null>(() => {
+    if (props.type !== 'participant') return null;
+    const id = userID.value;
+    if (!id) return null;
+    return (participantList.value || []).find((p: RoomParticipant) => p.userID === id) || props.participant;
+  });
+
+  const displayName = computed(() => {
+    if (props.type === 'participant') {
+      const p = currentParticipant.value;
+      if (!p) return '';
+      return p.nameCard || p.userName || p.userID || '';
+    }
+    const u = props.audience;
+    if (!u) return '';
+    return u.userName || u.userID || '';
+  });
+
+  const avatarSrc = computed(() => {
+    const u = props.type === 'participant' ? currentParticipant.value : props.audience;
+    return u?.avatarURL || '/static/images/room/room_default_avatar.png';
+  });
+
+  const isLocal = computed(() => userID.value === localParticipant.value?.userID);
+
+  const isOwnerSelf = computed(() => localParticipant.value?.role === RoomParticipantRole.Owner);
+  const isAdminSelf = computed(() => localParticipant.value?.role === RoomParticipantRole.Admin);
+  const canManage = computed(() => isOwnerSelf.value || isAdminSelf.value);
+
+  // - 房主：可控制所有其他参与者
+  // - 管理员：仅可控制普通成员（不能控制房主/其他管理员）
+  // - 普通成员：不能控制任何人
+  // 操作面板上"静音/视频/踢出"等所有针对目标的操作都需要满足这个条件。
+  const canControlTarget = computed(() => {
+    if (props.type !== 'participant') return false;
+    if (isLocal.value) return false;
+    if (isOwnerSelf.value) return true;
+    if (isAdminSelf.value) {
+      return currentParticipant.value?.role === RoomParticipantRole.GeneralUser;
+    }
+    return false;
+  });
+
+  const isTargetAudienceAdmin = computed(() => {
+    if (props.type !== 'audience') return false;
+    return (adminList.value || []).some((u: RoomUser) => u.userID === userID.value);
+  });
+  const canControlAudienceTarget = computed(() => {
+    if (props.type !== 'audience') return false;
+    if (isLocal.value) return false;
+    if (isOwnerSelf.value) return true;
+    if (isAdminSelf.value) return !isTargetAudienceAdmin.value;
+    return false;
+  });
+
+  const canKickTarget = computed(() =>
+    props.type === 'participant' ? canControlTarget.value : canControlAudienceTarget.value,
+  );
+
+  const canSwitchParticipantRole = computed(() =>
+    props.type === 'participant' ? canControlTarget.value : canControlAudienceTarget.value,
+  );
+
+  const webinarSwitchText = computed(() =>
+    props.type === 'participant' ? '设为观众' : '设为嘉宾',
+  );
+
+  const audioCtrlIconSrc = computed(() =>
+    currentParticipant.value?.microphoneStatus === DeviceStatus.ON
+      ? '/static/images/room/room_unmute_audio.png'
+      : '/static/images/room/room_mic_off.png',
+  );
+  const audioCtrlText = computed(() =>
+    currentParticipant.value?.microphoneStatus === DeviceStatus.ON ? '静音' : '请求开启音频',
+  );
+
+  const videoCtrlIconSrc = computed(() =>
+    currentParticipant.value?.cameraStatus === DeviceStatus.ON
+      ? '/static/images/room/room_camera_on.png'
+      : '/static/images/room/room_camera_off.png',
+  );
+  const videoCtrlText = computed(() =>
+    currentParticipant.value?.cameraStatus === DeviceStatus.ON ? '关闭视频' : '请求开启视频',
+  );
+
+  const adminToggleText = computed(() =>
+    currentParticipant.value?.role === RoomParticipantRole.Admin ? '撤销管理员' : '设为管理员',
+  );
+
+  type BadgeConfig = { icon: string; color: string; text: string };
+  const badgeConfig = computed<BadgeConfig | null>(() => {
+    let role: 'owner' | 'admin' | 'none' = 'none';
+    if (props.type === 'participant') {
+      const r = currentParticipant.value?.role;
+      if (r === RoomParticipantRole.Owner) role = 'owner';
+      else if (r === RoomParticipantRole.Admin) role = 'admin';
+    } else {
+      const isAdminAud = (adminList.value || []).some((u: RoomUser) => u.userID === userID.value);
+      if (isAdminAud) role = 'admin';
+    }
+
+    if (role === 'owner') {
+      return {
+        icon: '/static/images/room/room_owner_icon.png',
+        color: '#1C66E5',
+        text: '房主',
+      };
+    }
+    if (role === 'admin') {
+      return {
+        icon: '/static/images/room/room_administrator_icon.png',
+        color: '#FF7200',
+        text: '管理员',
+      };
+    }
+    return null;
+  });
+
+  async function handleAudioControl() {
+    const p = currentParticipant.value;
+    if (!p) return;
+    onClose();
+    const isOpening = p.microphoneStatus !== DeviceStatus.ON;
+    try {
+      if (isOpening) {
+        await roomParticipantState.inviteToOpenDevice({ userID: p.userID, device: DeviceType.Microphone, timeout: INVITE_TIMEOUT });
+      } else {
+        await roomParticipantState.closeParticipantDevice({ userID: p.userID, device: DeviceType.Microphone });
+      }
+    } catch (e) {
+      if (isOpening && parseErrorCode(e) === ERR_DUPLICATE_INVITE) return;
+      showErrorToast(e, isOpening ? '邀请发送失败' : undefined);
+    }
+  }
+
+  async function handleVideoControl() {
+    const p = currentParticipant.value;
+    if (!p) return;
+    onClose();
+    const isOpening = p.cameraStatus !== DeviceStatus.ON;
+    try {
+      if (isOpening) {
+        await roomParticipantState.inviteToOpenDevice({ userID: p.userID, device: DeviceType.Camera, timeout: INVITE_TIMEOUT });
+      } else {
+        await roomParticipantState.closeParticipantDevice({ userID: p.userID, device: DeviceType.Camera });
+      }
+    } catch (e) {
+      if (isOpening && parseErrorCode(e) === ERR_DUPLICATE_INVITE) return;
+      showErrorToast(e, isOpening ? '邀请发送失败' : undefined);
+    }
+  }
+
+  function handleTransferOwner() {
+    const p = currentParticipant.value;
+    if (!p) return;
+    transferTargetUserID.value = p.userID;
+    transferTargetName.value = displayName.value;
+    onClose();
+    transferDialogVisible.value = true;
+  }
+
+  async function confirmTransferOwner() {
+    const id = transferTargetUserID.value;
+    const name = transferTargetName.value;
+    if (!id) return;
+    try {
+      await roomParticipantState.transferOwner({ userID: id });
+    } catch (e) {
+      showErrorToast(e, '转移房主失败');
+      return;
+    }
+    uni.showToast({ icon: 'none', title: `已将房主转移给 ${name}` });
+    emit('transferred', id);
+  }
+
+  async function handleAdminToggle() {
+    const p = currentParticipant.value;
+    if (!p) return;
+    const isAdmin = p.role === RoomParticipantRole.Admin;
+    const name = displayName.value;
+    onClose();
+    try {
+      if (isAdmin) {
+        await roomParticipantState.revokeAdmin({ userID: p.userID });
+      } else {
+        await roomParticipantState.setAdmin({ userID: p.userID });
+      }
+    } catch (e) {
+      showErrorToast(e);
+      return;
+    }
+    uni.showToast({ icon: 'none', title: isAdmin ? `已撤销 ${name} 的管理员` : `已设置 ${name} 为管理员` });
+  }
+
+  function handleKick() {
+    const id = userID.value;
+    if (!id) return;
+    kickTargetUserID.value = id;
+    kickTargetName.value = displayName.value;
+    onClose();
+    kickDialogVisible.value = true;
+  }
+
+  async function confirmKick() {
+    const id = kickTargetUserID.value;
+    if (!id) return;
+    try {
+      await roomParticipantState.kickUser({ userID: id });
+    } catch (e) {
+      showErrorToast(e, '移出成员失败');
+    }
+  }
+
+  async function handleSetParticipant() {
+    const id = userID.value;
+    if (!id) return;
+    onClose();
+    try {
+      if (props.type === 'participant') {
+        await roomParticipantState.demoteParticipantToAudience({ userID: id });
+      } else {
+        await roomParticipantState.promoteAudienceToParticipant({ userID: id });
+      }
+    } catch (e) {
+      showErrorToast(e);
+    }
+  }
+
+  function onClose() { emit('close'); }
+
+  const targetInRoom = computed(() => {
+    const id = userID.value;
+    if (!id) return false;
+    if (props.type === 'participant') {
+      return (participantList.value || []).some((p: RoomParticipant) => p.userID === id);
+    }
+    return (audienceList.value || []).some((u: RoomUser) => u.userID === id);
+  });
+
+  watch(targetInRoom, (inRoom) => {
+    if (inRoom) return;
+    if (!userID.value) return;
+    if (props.visible) emit('close');
+    if (transferDialogVisible.value) transferDialogVisible.value = false;
+    if (kickDialogVisible.value) kickDialogVisible.value = false;
+  });
+</script>
+
+<style>
+  .mgr-mask {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.4);
+    flex-direction: column;
+    justify-content: flex-end;
+  }
+
+  .mgr-sheet {
+    background-color: #1F2229;
+    border-top-left-radius: 40rpx;
+    border-top-right-radius: 40rpx;
+  }
+
+  .drop-bar {
+    height: 70rpx;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .drop-line {
+    width: 48rpx;
+    height: 48rpx;
+  }
+
+  .user-header {
+    flex-direction: row;
+    align-items: center;
+    padding-left: 32rpx;
+    padding-right: 32rpx;
+  }
+
+  .header-avatar {
+    width: 80rpx;
+    height: 80rpx;
+    border-radius: 40rpx;
+    background-color: #2A2D38;
+  }
+
+  .header-info {
+    flex: 1;
+    margin-left: 24rpx;
+    flex-direction: column;
+    justify-content: center;
+  }
+
+  .header-name-row {
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .header-name {
+    color: #D5E0F2;
+    font-size: 32rpx;
+    font-weight: 500;
+    lines: 1;
+    text-overflow: ellipsis;
+    max-width: 480rpx;
+  }
+
+  .header-me-tag {
+    color: #D5E0F2;
+    font-size: 28rpx;
+    margin-left: 8rpx;
+  }
+
+  .badge-row {
+    flex-direction: row;
+    align-items: center;
+    margin-top: 8rpx;
+  }
+
+  .badge-icon {
+    width: 28rpx;
+    height: 28rpx;
+    margin-right: 4rpx;
+  }
+
+  .badge-text {
+    font-size: 24rpx;
+  }
+
+  .header-gap {
+    height: 24rpx;
+  }
+
+  .ctrl-list {
+    flex-direction: column;
+  }
+
+  .ctrl-item {
+    height: 100rpx;
+    padding-left: 32rpx;
+    padding-right: 32rpx;
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .ctrl-icon {
+    width: 40rpx;
+    height: 40rpx;
+    margin-right: 24rpx;
+  }
+
+  .ctrl-text {
+    color: #FFFFFF;
+    font-size: 32rpx;
+  }
+
+  .ctrl-divider {
+    height: 1rpx;
+    background-color: rgba(217, 222, 232, 0.1);
+    margin-left: 32rpx;
+    margin-right: 32rpx;
+  }
+
+  .bottom-safe {
+    height: 68rpx;
+  }
+</style>

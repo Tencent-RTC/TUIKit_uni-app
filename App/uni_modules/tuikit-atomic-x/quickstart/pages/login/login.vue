@@ -45,12 +45,12 @@ const handleLogin = () => {
     sdkAppID: sdkAppId,
     userID: userId.value,
     userSig: genTestUserSig({
-	  SDKAppID: sdkAppId,
-	  userID: userId.value,
-	  secretKey: secretKey,
-	}).userSig,
+      SDKAppID: sdkAppId,
+      userID: userId.value,
+      secretKey: secretKey,
+    }).userSig,
     success: () => {
-      uni.reLaunch({ url: '/pages/index/index' })
+      uni.reLaunch({ url: '/pages/scenes/chat/conversationList/conversationList' })
     },
     fail: (_: number, msg: string) => {
       isLoading.value = false

@@ -155,12 +155,12 @@
     setAudioReverbType,
     isEarMonitorOpened,
     earMonitorVolume,
-  } = useAudioEffectState(uni.$liveID)
-  const { setSmoothLevel, setWhitenessLevel, setRuddyLevel, whitenessLevel, ruddyLevel, smoothLevel } = useBaseBeautyState(uni.$liveID)
+  } = useAudioEffectState()
+  const { setSmoothLevel, setWhitenessLevel, setRuddyLevel, whitenessLevel, ruddyLevel, smoothLevel } = useBaseBeautyState()
   const { addCoHostListener, removeCoHostListener, acceptHostConnection, rejectHostConnection, exitHostConnection, coHostStatus, invitees } = useCoHostState(uni?.$liveID)
   const { joinLive, createLive, fetchLiveList, liveList, endLive, currentLive, liveListCursor, callExperimentalAPI, updateLiveInfo, updateLiveMetaData } = useLiveListState();
   const { applicants, rejectApplication, connected } = useCoGuestState(uni?.$liveID);
-  const { openLocalCamera, openLocalMicrophone, isFrontCamera, switchCamera, closeLocalMicrophone, closeLocalCamera } = useDeviceState(uni?.$liveID);
+  const { openLocalCamera, openLocalMicrophone, isFrontCamera, switchCamera, closeLocalMicrophone, closeLocalCamera } = useDeviceState();
   const { audienceList, audienceCount } = useLiveAudienceState(uni?.$liveID);
   const { seatList, canvas, lockSeat, } = useLiveSeatState(uni?.$liveID);
 

@@ -1,0 +1,92 @@
+<template>
+  <view class="bottom-btn" @tap="handleTap" :style="dimStyle">
+    <view class="bottom-icon-box">
+      <image
+        class="bottom-icon"
+        :src="cameraIconSrc"
+        mode="aspectFit"
+      />
+      <text class="bottom-text">{{ cameraText }}</text>
+    </view>
+  </view>
+</template>
+
+<script setup lang="ts">
+  import { computed } from 'vue';
+  import { useRoomState } from '@/uni_modules/tuikit-atomic-x/state';
+  import { useRoomParticipantState } from '@/uni_modules/tuikit-atomic-x/state';
+  import { useDeviceState } from '@/uni_modules/tuikit-atomic-x/state';
+  import {
+    RoomParticipantRole,
+    DeviceStatus,
+  } from '@/uni_modules/tuikit-atomic-x/state';
+  import { showErrorToast } from '../../utils/errorHandler';
+
+  const { currentRoom } = useRoomState();
+  const { localParticipant } = useRoomParticipantState();
+  const { openLocalCamera, closeLocalCamera, isFrontCamera } = useDeviceState();
+
+  const cameraOn = computed(() => localParticipant.value?.cameraStatus === DeviceStatus.ON);
+
+  // 全员禁视频时普通用户处于关闭态：按钮置灰
+  const isDimmed = computed(() => {
+    return (
+      currentRoom.value?.isAllCameraDisabled === true &&
+      localParticipant.value?.role === RoomParticipantRole.GeneralUser &&
+      localParticipant.value?.cameraStatus === DeviceStatus.OFF
+    );
+  });
+
+  const dimStyle = computed(() => ({ opacity: isDimmed.value ? 0.5 : 1 }));
+
+  const cameraIconSrc = computed(() =>
+    cameraOn.value
+      ? '/static/images/room/room_camera_on.png'
+      : '/static/images/room/room_camera_off.png',
+  );
+
+  const cameraText = computed(() => (cameraOn.value ? '关闭视频' : '打开视频'));
+
+  async function handleTap() {
+    if (cameraOn.value) {
+      closeLocalCamera();
+    } else {
+      try {
+        await openLocalCamera({ isFront: isFrontCamera.value });
+      } catch (e) {
+        showErrorToast(e);
+      }
+    }
+  }
+</script>
+
+<style>
+  .bottom-btn {
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .bottom-icon-box {
+    width: 104rpx;
+    height: 104rpx;
+    border-radius: 20rpx;
+    background-color: #2A2D38;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .bottom-icon {
+    width: 48rpx;
+    height: 48rpx;
+  }
+
+  .bottom-text {
+    color: #FFFFFF;
+    font-size: 20rpx;
+    margin-top: 6rpx;
+    lines: 1;
+    text-overflow: ellipsis;
+  }
+</style>

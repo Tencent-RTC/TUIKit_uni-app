@@ -1,0 +1,118 @@
+<template>
+  <view class="bottom-btn">
+    <view class="bottom-icon-box" :class="{ 'bottom-icon-box-webinar': isWebinar }" @tap="showParticipantList">
+      <image class="bottom-icon" src="/static/images/room/room_member.png" mode="aspectFit" />
+      <text class="bottom-text">{{ isWebinar ? '成员' : `成员(${participantCount})` }}</text>
+    </view>
+
+    <RoomParticipantList
+      :visible="isParticipantListVisible"
+      :roomID="roomID"
+      :isWebinar="isWebinar"
+      @close="hideParticipantList"
+      @manage="handleManageParticipant"
+      @manageAud="handleManageAudience"
+    />
+
+    <ParticipantAction
+      :visible="isParticipantManagerVisible"
+      :roomID="roomID"
+      :type="participantManagerType"
+      :participant="participantManagerTarget"
+      :audience="audienceManagerTarget"
+      :isWebinar="isWebinar"
+      @close="hideParticipantManager"
+      @transferred="handleOwnerTransferred"
+    />
+  </view>
+</template>
+
+<script setup lang="ts">
+  import { computed, ref } from 'vue';
+  import { useRoomState } from '@/uni_modules/tuikit-atomic-x/state';
+  import { useRoomParticipantState } from '@/uni_modules/tuikit-atomic-x/state';
+  import type { RoomParticipant } from '@/uni_modules/tuikit-atomic-x/types';
+  import type { RoomUser } from '@/uni_modules/tuikit-atomic-x/types';
+  import RoomParticipantList from '../RoomParticipantList/index.nvue';
+  import ParticipantAction from '../RoomParticipantList/ParticipantAction/index.nvue';
+
+  defineProps({
+    roomID: { type: String, default: '' },
+    isWebinar: { type: Boolean, default: false },
+  });
+
+  const { currentRoom } = useRoomState();
+  const { participantList } = useRoomParticipantState();
+
+  const participantCount = computed(() => {
+    const fromRoom = currentRoom.value?.participantCount;
+    if (typeof fromRoom === 'number' && fromRoom > 0) return fromRoom;
+    return participantList.value?.length || 0;
+  });
+
+  const isParticipantListVisible = ref(false);
+  const isParticipantManagerVisible = ref(false);
+  const participantManagerType = ref<'participant' | 'audience'>('participant');
+  const participantManagerTarget = ref<RoomParticipant | null>(null);
+  const audienceManagerTarget = ref<RoomUser | null>(null);
+
+  function showParticipantList() { isParticipantListVisible.value = true; }
+  function hideParticipantList() { isParticipantListVisible.value = false; }
+
+  function handleManageParticipant(p: RoomParticipant) {
+    participantManagerType.value = 'participant';
+    participantManagerTarget.value = p;
+    audienceManagerTarget.value = null;
+    isParticipantManagerVisible.value = true;
+  }
+
+  function handleManageAudience(u: RoomUser) {
+    participantManagerType.value = 'audience';
+    participantManagerTarget.value = null;
+    audienceManagerTarget.value = u;
+    isParticipantManagerVisible.value = true;
+  }
+
+  function hideParticipantManager() { isParticipantManagerVisible.value = false; }
+
+  function handleOwnerTransferred(_userID: string) {
+    hideParticipantManager();
+  }
+</script>
+
+<style>
+  .bottom-btn {
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .bottom-icon-box {
+    width: 104rpx;
+    height: 104rpx;
+    border-radius: 20rpx;
+    background-color: #2A2D38;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .bottom-icon-box-webinar {
+    width: 80rpx;
+    height: 80rpx;
+    border-radius: 16rpx;
+  }
+
+  .bottom-icon {
+    width: 48rpx;
+    height: 48rpx;
+  }
+
+  .bottom-text {
+    color: #FFFFFF;
+    font-size: 20rpx;
+    margin-top: 6rpx;
+    lines: 1;
+    text-overflow: ellipsis;
+  }
+</style>

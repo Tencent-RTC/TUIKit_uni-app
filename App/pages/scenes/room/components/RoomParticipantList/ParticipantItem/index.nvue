@@ -1,0 +1,206 @@
+<template>
+  <view class="member-row" @tap="onPress">
+    <view class="avatar-wrap">
+      <image
+        class="avatar-img"
+        :src="avatarSrc"
+        mode="aspectFill"
+      />
+    </view>
+
+    <view class="user-info">
+      <view class="name-row">
+        <text class="name-text" :numberOfLines="1">{{ displayName }}</text>
+        <text v-if="isLocal" class="me-tag">（我）</text>
+      </view>
+
+      <view v-if="badgeConfig" class="badge-row">
+        <image
+          class="badge-icon"
+          :src="badgeConfig.icon"
+          mode="aspectFit"
+        />
+        <text
+          class="badge-text"
+          :style="{ color: badgeConfig.color }"
+        >{{ badgeConfig.text }}</text>
+      </view>
+    </view>
+
+    <view v-if="type === 'participant'" class="status-icons">
+      <image
+        v-if="participant?.screenShareStatus === DeviceStatus.ON && !isWebinar"
+        class="status-icon"
+        src="/static/images/room/room_screen_share_icon.png"
+        mode="aspectFit"
+      />
+      <image
+        class="status-icon"
+        :src="micIconSrc"
+        mode="aspectFit"
+      />
+      <image
+        v-if="!isWebinar"
+        class="status-icon"
+        :src="cameraIconSrc"
+        mode="aspectFit"
+      />
+    </view>
+  </view>
+</template>
+
+<script setup lang="ts">
+  import { computed } from 'vue';
+  import type { PropType } from 'vue';
+  import type { RoomUser } from '@/uni_modules/tuikit-atomic-x/types';
+  import type { RoomParticipant } from '@/uni_modules/tuikit-atomic-x/types';
+  import { DeviceStatus, RoomParticipantRole } from '@/uni_modules/tuikit-atomic-x/state';
+
+  const props = defineProps({
+    type: { type: String as PropType<'participant' | 'audience'>, required: true },
+    participant: { type: Object as PropType<RoomParticipant | null>, default: null },
+    audience: { type: Object as PropType<RoomUser | null>, default: null },
+    isAdmin: { type: Boolean, default: false },
+    isLocal: { type: Boolean, default: false },
+    canControl: { type: Boolean, default: false },
+    isWebinar: { type: Boolean, default: false },
+  });
+
+  const emit = defineEmits<{ (e: 'press'): void }>();
+
+  const user = computed<RoomParticipant | RoomUser | null>(() =>
+    props.type === 'participant' ? props.participant : props.audience,
+  );
+
+  const displayName = computed(() => {
+    const u = user.value;
+    if (!u) return '';
+    const nameCard = (u as RoomParticipant).nameCard;
+    return nameCard || u.userName || u.userID || '';
+  });
+
+  const avatarSrc = computed(() => user.value?.avatarURL || '/static/images/room/room_default_avatar.png');
+
+  const micIconSrc = computed(() =>
+    props.participant?.microphoneStatus === DeviceStatus.ON
+      ? '/static/images/room/room_user_mic_on.png'
+      : '/static/images/room/room_user_mic_off.png',
+  );
+
+  const cameraIconSrc = computed(() =>
+    props.participant?.cameraStatus === DeviceStatus.ON
+      ? '/static/images/room/room_user_camera_on.png'
+      : '/static/images/room/room_user_camera_off.png',
+  );
+
+  type BadgeConfig = { icon: string; color: string; text: string };
+  const badgeConfig = computed<BadgeConfig | null>(() => {
+    let role: 'owner' | 'admin' | 'none' = 'none';
+    if (props.type === 'participant') {
+      const r = props.participant?.role;
+      if (r === RoomParticipantRole.Owner) role = 'owner';
+      else if (r === RoomParticipantRole.Admin) role = 'admin';
+    } else if (props.isAdmin) {
+      role = 'admin';
+    }
+
+    if (role === 'owner') {
+      return {
+        icon: '/static/images/room/room_owner_icon.png',
+        color: '#1C66E5',
+        text: '房主',
+      };
+    }
+    if (role === 'admin') {
+      return {
+        icon: '/static/images/room/room_administrator_icon.png',
+        color: '#FF7200',
+        text: '管理员',
+      };
+    }
+    return null;
+  });
+
+  function onPress() {
+    if (!props.canControl) return;
+    emit('press');
+  }
+</script>
+
+<style>
+  .member-row {
+    flex-direction: row;
+    align-items: center;
+    height: 100rpx;
+    padding-left: 32rpx;
+    padding-right: 32rpx;
+    margin-bottom: 20rpx;
+  }
+
+  .avatar-wrap {
+    width: 80rpx;
+    height: 80rpx;
+    border-radius: 40rpx;
+    background-color: #2A2D38;
+  }
+
+  .avatar-img {
+    width: 80rpx;
+    height: 80rpx;
+    border-radius: 40rpx;
+  }
+
+  .user-info {
+    flex: 1;
+    margin-left: 24rpx;
+    flex-direction: column;
+    justify-content: center;
+  }
+
+  .name-row {
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .name-text {
+    color: #D5E0F2;
+    font-size: 32rpx;
+    lines: 1;
+    text-overflow: ellipsis;
+    max-width: 380rpx;
+  }
+
+  .me-tag {
+    color: #D5E0F2;
+    font-size: 28rpx;
+    margin-left: 8rpx;
+  }
+
+  .badge-row {
+    flex-direction: row;
+    align-items: center;
+    margin-top: 4rpx;
+  }
+
+  .badge-icon {
+    width: 28rpx;
+    height: 28rpx;
+    margin-right: 4rpx;
+  }
+
+  .badge-text {
+    font-size: 24rpx;
+  }
+
+  .status-icons {
+    flex-direction: row;
+    align-items: center;
+    margin-left: 24rpx;
+  }
+
+  .status-icon {
+    width: 40rpx;
+    height: 40rpx;
+    margin-left: 40rpx;
+  }
+</style>

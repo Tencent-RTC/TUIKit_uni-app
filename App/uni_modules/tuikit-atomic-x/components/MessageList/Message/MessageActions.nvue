@@ -24,6 +24,15 @@
       </view>
       
       <view 
+        v-if="canConvertVoice"
+        class="msg-actions__item"
+        @tap="handleVoiceToText"
+      >
+        <image class="msg-actions__icon" :src="voiceToTextIcon" mode="aspectFit"></image>
+        <text class="msg-actions__text">{{ voiceActionLabel }}</text>
+      </view>
+      
+      <view 
         v-if="canRecall"
         class="msg-actions__item"
         @tap="handleRecall"
@@ -45,6 +54,7 @@ import { useMessageActionState } from '../../../state/MessageActionState'
 import copyIcon from '../assets/msg_copy.png'
 import deleteIcon from '../assets/msg_delete.png'
 import recallIcon from '../assets/msg_recall.png'
+import voiceToTextIcon from '../assets/msg_voice_to_text.png'
 
 // 箭头几何参数（rpx，与 .msg-actions__arrow width/height 保持一致）
 const ARROW_SIZE = 24
@@ -55,6 +65,7 @@ const ARROW_INSET = 16
 
 let deleteMessage;
 let recallMessage;
+let convertVoiceToText;
 let destroyStore;
 
 const props = defineProps({
@@ -84,6 +95,7 @@ onMounted(() => {
   const obj = useMessageActionState({ message: props.message })
   deleteMessage = obj.deleteMessage
   recallMessage = obj.recallMessage
+  convertVoiceToText = obj.convertVoiceToText
   destroyStore = obj.destroyStore
 })
 
@@ -127,6 +139,62 @@ const canRecall = computed(() => {
   }
   
   return false
+})
+
+// 仅 SOUND 类型消息可触发"转文字"操作
+const canConvertVoice = computed(() => {
+  return props.message.messageType === MessageType.SOUND
+})
+
+/**
+ * 语音转文字按钮的 label 与是否处于"隐藏文字"模式
+ *
+ * 判定规则（与 AudioMessage 内部 `asrText && showConvertedText` 展示条件保持一致）：
+ * - 当前消息已有 asrText，且 AudioMessage 当前正在展示该文本 → 按钮显示"隐藏文字"，点击触发隐藏
+ * - 否则 → 按钮显示"转文字"，点击触发转换 / 重新展示已有 asrText
+ *
+ * 可见态来源（按优先级）：
+ * 1. 运行时 Map `uni.__audioConvertVisibleMap__`：当前会话内已挂载的 AudioMessage 写入，最准确
+ * 2. 本地存储 `tuikit_audio_convert_visible_v1`：跨会话/重启 App 持久化的"用户主动隐藏"记录
+ * 3. 默认 true：均无记录时按 AudioMessage 中 `showConvertedText` 默认值
+ */
+const STORAGE_KEY = 'tuikit_audio_convert_visible_v1'
+
+const voiceTextHasContent = computed(() => {
+  const text = props.message && props.message.messageBody && props.message.messageBody.asrText
+  return !!text
+})
+
+const voiceTextVisible = computed(() => {
+  if (!voiceTextHasContent.value) return false
+  const msgID = props.message.msgID
+
+  // 1. 运行时 Map（同会话最准）
+  const map = uni.__audioConvertVisibleMap__
+  if (map && map.has(msgID)) {
+    return map.get(msgID) === true
+  }
+
+  // 2. 本地存储（跨会话持久化"隐藏"记录；仅记录 false，缺省视为 true）
+  try {
+    const raw = uni.getStorageSync(STORAGE_KEY)
+    let store = null
+    if (raw && typeof raw === 'object') {
+      store = raw
+    } else if (typeof raw === 'string' && raw) {
+      store = JSON.parse(raw)
+    }
+    if (store && store[msgID] === false) {
+      return false
+    }
+  } catch (e) {}
+
+  // 3. 默认可见
+  return true
+})
+
+const voiceActionLabel = computed(() => {
+  return voiceTextVisible.value ? '隐藏文字' : '转文字'
 })
 
 /**
@@ -246,6 +314,51 @@ const handleRecall = async () => {
     })
     safeClose()
   }
+}
+
+/**
+ * 语音转文字 / 隐藏文字（toggle）
+ *
+ * 行为：
+ * - 当前未展示 asrText（首次转换 或 已隐藏）：触发转换流程，AudioMessage 进入 loading 态
+ *   * 若已有 asrText（之前转过），调用 Native 一般会立即返回缓存结果，AudioMessage 通过 watch 自动展示
+ * - 当前正展示 asrText：广播 audioConvertHide，AudioMessage 收到后将 showConvertedText 置 false 隐藏
+ *
+ * 失败时广播 audioConvertingError 释放 loading。
+ */
+const handleVoiceToText = () => {
+  const msgID = props.message.msgID
+  // 关闭面板
+  emit('action', { key: voiceTextVisible.value ? 'voiceTextHide' : 'voiceToText', text: voiceActionLabel.value })
+  safeClose()
+
+  // 已展示 → 触发隐藏
+  if (voiceTextVisible.value) {
+    uni.$emit('audioConvertHide', { msgID })
+    return
+  }
+
+  // 未展示 → 触发转换 / 重新展示
+  uni.$emit('audioConvertingStart', { msgID })
+
+  // language 暂用默认 'zh'，后续可由 props / 配置注入
+  const language = 'zh'
+  if (!convertVoiceToText) {
+    uni.$emit('audioConvertingError', { msgID })
+    uni.showToast({ title: '转换失败', icon: 'none' })
+    return
+  }
+  convertVoiceToText(language).catch((err) => {
+    console.error('[MessageActions] convertVoiceToText failed:', err)
+    uni.$emit('audioConvertingError', { msgID })
+    let toastTitle = '转换失败'
+    if (err && err.code === 140008) {
+      toastTitle = '当前 SDKAppID 尚未开通语音转文字（ASR）服务'
+    } else if (err && err.message) {
+      toastTitle = err.message
+    }
+    uni.showToast({ title: toastTitle, icon: 'none' })
+  })
 }
 
 /**

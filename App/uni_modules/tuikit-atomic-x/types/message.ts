@@ -60,13 +60,80 @@ export interface MergedMessageInfo {
 }
 
 /**
+ * 离线推送 extensionInfo
+ *
+ * 各平台扩展字段，全部可选；仅传业务关心的字段即可。
+ */
+export interface OfflinePushExtensionInfo {
+  // 通用
+  ext?: string;
+  disablePush?: boolean;
+
+  // iOS
+  iOSSound?: string;
+  iOSInterruptionLevel?: string;
+  iOSImage?: string;
+  iOSPushType?: number;
+  ignoreIOSBadge?: boolean;
+  enableIOSBackgroundNotification?: boolean;
+
+  // Android
+  AndroidSound?: string;
+  AndroidOPPOChannelID?: string;
+  AndroidFCMChannelID?: string;
+  AndroidXiaoMiChannelID?: string;
+  AndroidVIVOCategory?: string;
+  AndroidHuaWeiCategory?: string;
+  AndroidOPPOCategory?: string;
+  AndroidHonorImportance?: string;
+  AndroidHuaWeiImage?: string;
+  AndroidHonorImage?: string;
+  AndroidFCMImage?: string;
+  AndroidVIVOClassification?: number;
+  AndroidOPPONotifyLevel?: number;
+  AndroidMeizuNotifyType?: number;
+
+  // Harmony
+  HarmonyImage?: string;
+  HarmonyCategory?: string;
+  ignoreHarmonyBadge?: boolean;
+}
+
+/**
  * 离线推送信息
  */
 export interface OfflinePushInfo {
-  title: string;
-  description: string;
-  extensionInfo: Record<string, any>;
+  title?: string;
+  description?: string;
+  extensionInfo?: OfflinePushExtensionInfo;
 }
+
+/**
+ * 离线推送计算上下文
+ *
+ * 由 MessageInput / ToolsPanel 在每次发送消息前构造，
+ * 通过 OfflinePushInfoResolver 回调给业务方，业务方按需返回 push 配置。
+ */
+export interface OfflinePushContext {
+  /** 即将发送的消息类型 */
+  messageType: MessageType;
+  /** 即将发送的 messageBody（已构造完毕，业务方可读取字段做决策） */
+  messageBody: any;
+  /** 当前会话 ID */
+  conversationID: string;
+}
+
+/**
+ * 离线推送信息解析器
+ *
+ * 同步函数：
+ * - 返回 OfflinePushInfo：附带到本次发送
+ * - 返回 null / undefined：不附带（由 SDK 走默认）
+ * - 抛异常：组件兜底为不附带，不阻断 send
+ */
+export type OfflinePushInfoResolver = (
+  ctx: OfflinePushContext
+) => OfflinePushInfo | null | undefined;
 
 /**
  * 合并转发信息

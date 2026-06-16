@@ -14,6 +14,9 @@ import {
   startFloatView, stopFloatView, addFloatViewListener, removeFloatViewListener, startVibrating, stopVibrating, enableMultiDeviceAbility, startForegroundService,
   stopForegroundService, setCallFramework
 } from "@/uni_modules/tuikit-atomic-x";
+import { NetworkQuality } from "./DeviceState";
+
+export { NetworkQuality };
 
 declare const uni: any;
 
@@ -36,17 +39,6 @@ export enum CallEndReason {
   Busy = 5,
   LineBusy = 6,
   Error = 7
-}
-
-// 网络质量枚举
-export enum NetworkQuality {
-  Unknown = 0,
-  Excellent = 1,
-  Good = 2,
-  Poor = 3,
-  Bad = 4,
-  VeryBad = 5,
-  Down = 6
 }
 
 // 通话错误码枚举

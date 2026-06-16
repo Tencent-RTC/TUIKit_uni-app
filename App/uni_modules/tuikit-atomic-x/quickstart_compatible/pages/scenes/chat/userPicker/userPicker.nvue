@@ -6,16 +6,30 @@
 
 <script>
 import UserPicker from '@/uni_modules/tuikit-atomic-x/components/UserPicker/UserPicker.nvue'
+import { UserPickerType } from '@/uni_modules/tuikit-atomic-x/types/userpicker'
 export default {
   components: { UserPicker },
   data() { return { businessType: -1, routeParams: {} } },
   onLoad(options) {
     this.businessType = parseInt(options.businessType || '-1')
     this.routeParams = options
+
+    // 按业务类型设置导航栏标题
+    var titleMap = {}
+    titleMap[UserPickerType.SELECT_GROUP_AT_USER] = '选择提醒的人'
+    var title = titleMap[this.businessType]
+    if (title) {
+      uni.setNavigationBarTitle({ title: title })
+    }
   },
   methods: {
     handleConfirm(selectedUsers) {
-      if (this.businessType === 7 || this.businessType === 10) {
+      // 选择群成员 / 选择 @ 提及成员：通过 uni.$emit 回传，监听方用 uni.$once
+      // Vue2/Vue3 nvue 统一走 uni 全局事件总线（避免 Vue2 nvue 上 navigateTo events 不可用的差异）
+      if (
+        this.businessType === UserPickerType.SELECT_GROUP_MEMBER ||
+        this.businessType === UserPickerType.SELECT_GROUP_AT_USER
+      ) {
         uni.$emit('onSelectGroupMember', { selectedUsers: selectedUsers })
         uni.navigateBack()
       }

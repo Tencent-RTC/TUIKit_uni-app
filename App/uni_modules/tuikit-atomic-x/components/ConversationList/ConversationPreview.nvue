@@ -19,6 +19,8 @@
 
       <view class="conv-preview__footer">
         <view class="conv-preview__message">
+          <text v-if="hasAtAll" class="conv-preview__label conv-preview__label--mention">[@所有人]</text>
+          <text v-if="hasAtMe" class="conv-preview__label conv-preview__label--mention">[有人@我]</text>
           <text v-if="conversation.draft" class="conv-preview__label conv-preview__label--draft">[草稿]</text>
           <text v-else-if="isMuted && unreadCount > 0" class="conv-preview__label conv-preview__label--count">[{{unreadCount}}条]</text>
           
@@ -55,7 +57,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import AvatarComponent from '../Avatar'
-import { ConversationType, ConversationReceiveOption, type ConversationInfo } from '../../types/conversation'
+import { ConversationType, ConversationReceiveOption, GroupAtType, type ConversationInfo } from '../../types/conversation'
 import { MessageType, MessageStatus, type MessageInfo } from '../../types/message'
 import type { ConversationPreviewProps } from '../../types/conversationList'
 import { 
@@ -85,6 +87,28 @@ const isMuted = computed(() => {
   return props.conversation.receiveOption === ConversationReceiveOption.NOT_RECEIVE ||
          props.conversation.receiveOption === ConversationReceiveOption.NOT_NOTIFY
 })
+
+const atFlags = computed(() => {
+  const result = { hasAtAll: false, hasAtMe: false }
+  if (props.conversation.type !== ConversationType.GROUP) return result
+  if (!props.conversation.unreadCount || props.conversation.unreadCount <= 0) return result
+  const list = props.conversation.groupAtInfoList
+  if (!list || list.length === 0) return result
+  for (const info of list) {
+    if (info.atType === GroupAtType.AT_ALL) {
+      result.hasAtAll = true
+    } else if (info.atType === GroupAtType.AT_ME) {
+      result.hasAtMe = true
+    } else if (info.atType === GroupAtType.AT_ALL_AT_ME) {
+      result.hasAtAll = true
+      result.hasAtMe = true
+    }
+  }
+  return result
+})
+
+const hasAtAll = computed(() => atFlags.value.hasAtAll)
+const hasAtMe = computed(() => atFlags.value.hasAtMe)
 
 const messageSegments = computed<MessageSegment[]>(() => {
   if (props.conversation.draft) {
@@ -235,6 +259,12 @@ const formatTime = (timestamp: number): string => {
 
 /* Modifier: draft label */
 .conv-preview__label--draft {
+  font-size: 24rpx;
+  color: #ff4444;
+}
+
+/* Modifier: mention label (@所有人 / 有人@我) */
+.conv-preview__label--mention {
   font-size: 24rpx;
   color: #ff4444;
 }
