@@ -27,8 +27,22 @@ const hooks = new Map<UserPickerType, UserPickerHook>([
   [UserPickerType.MUTE_GROUP_MEMBER, useMuteGroupMember],
   [UserPickerType.UNMUTE_GROUP_MEMBER, useUnmuteGroupMember],
   [UserPickerType.TRANSFER_GROUP_OWNER, useTransferGroupOwner],
+  // 普通选群成员 / @ 提及选人共用 useSelectGroupMember，业务差异通过 routeParams 控制
   [UserPickerType.SELECT_GROUP_MEMBER, useSelectGroupMember],
+  [UserPickerType.SELECT_GROUP_AT_USER, useSelectGroupMember],
 ])
+
+// 类型 → 默认 routeParams（在调用 hook 前 merge 进 routeParams，调用方无需关心开关）
+const typeDefaults: Partial<Record<UserPickerType, Record<string, any>>> = {
+  [UserPickerType.SELECT_GROUP_AT_USER]: {
+    singleSelect: true,
+    enableAtAll: true,
+    enableRemoteSearch: true,
+    excludeSelf: true,
+    maxCount: 1,
+    title: '选择提醒的人',
+  },
+}
 
 /**
  * 创建默认的 Hook 结果
@@ -54,7 +68,9 @@ export function useUserPicker(type: number, routeParams?: any): UserPickerHookRe
     console.warn(`[useUserPicker] Unknown type: ${type}`)
     return createDefaultHookResult()
   }
-  return hook(routeParams)
+  const defaults = typeDefaults[type as UserPickerType] || {}
+  const mergedParams = Object.assign({}, defaults, routeParams || {})
+  return hook(mergedParams)
 }
 
 /**
@@ -71,7 +87,8 @@ export function getTypeName(type: number): string {
     [UserPickerType.MUTE_GROUP_MEMBER]: '禁言群成员',
     [UserPickerType.UNMUTE_GROUP_MEMBER]: '取消禁言群成员',
     [UserPickerType.TRANSFER_GROUP_OWNER]: '转交群主',
-    [UserPickerType.SELECT_GROUP_MEMBER]: '选择群成员'
+    [UserPickerType.SELECT_GROUP_MEMBER]: '选择群成员',
+    [UserPickerType.SELECT_GROUP_AT_USER]: '选择 @ 群成员'
   }
   return typeNames[type] || `未知类型(${type})`
 }

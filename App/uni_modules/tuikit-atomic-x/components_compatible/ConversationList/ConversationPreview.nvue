@@ -19,6 +19,8 @@
 
       <view class="conv-preview__footer">
         <view class="conv-preview__message">
+          <text v-if="hasAtAll" class="conv-preview__label conv-preview__label--mention">[@所有人]</text>
+          <text v-if="hasAtMe" class="conv-preview__label conv-preview__label--mention">[有人@我]</text>
           <text v-if="conversation.draft" class="conv-preview__label conv-preview__label--draft">[草稿]</text>
           <text v-else-if="isMuted && unreadCount > 0" class="conv-preview__label conv-preview__label--count">[{{unreadCount}}条]</text>
           
@@ -56,7 +58,7 @@
 
 <script>
 import AvatarComponent from '../Avatar'
-import { ConversationType, ConversationReceiveOption } from '../../types/conversation'
+import { ConversationType, ConversationReceiveOption, GroupAtType } from '../../types/conversation'
 import { MessageType } from '../../types/message'
 import { 
   getMessageAbstract, 
@@ -90,6 +92,31 @@ export default {
     isMuted() {
       return this.conversation.receiveOption === ConversationReceiveOption.NOT_RECEIVE ||
              this.conversation.receiveOption === ConversationReceiveOption.NOT_NOTIFY
+    },
+    atFlags() {
+      const result = { hasAtAll: false, hasAtMe: false }
+      if (this.conversation.type !== ConversationType.GROUP) return result
+      if (!this.conversation.unreadCount || this.conversation.unreadCount <= 0) return result
+      const list = this.conversation.groupAtInfoList
+      if (!list || list.length === 0) return result
+      for (let i = 0; i < list.length; i++) {
+        const info = list[i]
+        if (info.atType === GroupAtType.AT_ALL) {
+          result.hasAtAll = true
+        } else if (info.atType === GroupAtType.AT_ME) {
+          result.hasAtMe = true
+        } else if (info.atType === GroupAtType.AT_ALL_AT_ME) {
+          result.hasAtAll = true
+          result.hasAtMe = true
+        }
+      }
+      return result
+    },
+    hasAtAll() {
+      return this.atFlags.hasAtAll
+    },
+    hasAtMe() {
+      return this.atFlags.hasAtMe
     },
     messageSegments() {
       if (this.conversation.draft) {
@@ -235,6 +262,12 @@ export default {
 
 /* Modifier: draft label */
 .conv-preview__label--draft {
+  font-size: 24rpx;
+  color: #ff4444;
+}
+
+/* Modifier: mention label (@所有人 / 有人@我) */
+.conv-preview__label--mention {
   font-size: 24rpx;
   color: #ff4444;
 }

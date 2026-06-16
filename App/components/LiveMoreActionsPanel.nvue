@@ -65,7 +65,7 @@
     switchCamera,
     switchMirror,
     localMirrorType
-  } = useDeviceState(uni?.$liveID);
+  } = useDeviceState();
 
   const defaultavatarURL = 'https://web.sdk.qcloud.com/component/TUIKit/assets/avatar_01.png';
 

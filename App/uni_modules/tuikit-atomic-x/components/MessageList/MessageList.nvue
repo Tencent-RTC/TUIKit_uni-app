@@ -40,6 +40,7 @@
             :showNickname="item.showNickname"
             :highlight="item.message?.msgID === currentHighlightID"
             :customCenterChecker="customCenterChecker"
+            :customMessageRender="customMessageRender"
             @reEdit="handleReEdit"
             @onMessageListTap="handleMessageListTap"
             @onMessageTap="handleMessageTap"
@@ -92,6 +93,9 @@ interface Props {
   inputPanelHeight?: number
   // 自定义居中消息判断方法
   customCenterChecker?: CustomCenterChecker | null
+  // 自定义消息渲染：(message, conversationID) => Component | null
+  // 返回组件 → 接管 CUSTOM 消息渲染；返回 null/undefined → 走内置 CustomMessage 默认渲染
+  customMessageRender?: any
 }
 
 interface MessageListExpose {
@@ -109,7 +113,8 @@ const props = withDefaults(defineProps<Props>(), {
   locateMessage: null,
   inputToolbarHeight: 0,
   inputPanelHeight: 0,
-  customCenterChecker: null
+  customCenterChecker: null,
+  customMessageRender: null
 })
 
 const emit = defineEmits<{
@@ -510,11 +515,101 @@ onMounted(() => {
       }, 100));
     })
   }
+  // 监听 AudioMessage "转写文本入场"事件：当本条是最后一条且用户未在浏览历史时，
+  // 跟随滚动到底部，防止幕布展开后底部被输入框遮挡
+  uni.$on('audioConvertStreamGrow', handleAudioConvertStreamGrow)
 })
+
+/**
+ * 处理 AudioMessage 转写文本入场（幕布展开）滚动请求
+ *
+ * 滚动策略——精确测量 + 最小相对滚动：
+ *
+ * 1. 通过 boxRef（AudioMessage 传过来的 audio-convert-box 元素）测量它在屏幕上的位置
+ *    判断 box 是否被输入框遮挡（box.bottom > windowHeight - inputTotalHeight - buffer）
+ * 2. 不被遮挡 → 不滚动
+ * 3. 被遮挡 → 用 scrollToElement 让 list 上滚一个 boxHeight：
+ *    nvue scrollToElement(cell, offset:N) 语义：cell 顶部对齐 list 视口顶部 + 多滚 N px
+ *      - offset:0 让 cell 完全贴顶（list 卷动量 = cellTopInList）
+ *      - offset:N 在贴顶基础上多滚 N px（总卷动 = cellTopInList + N）
+ *    要"仅相对滚动 boxHeight"：
+ *      - 期望最终 cell 顶部停在 list 视口顶部下方 (cellTopInList - boxHeight) 处
+ *      - 即 offset = -(cellTopInList - boxHeight) = boxHeight - cellTopInList
+ *    （offset 可能是负值，nvue 支持，等价"贴顶后回退" → 净滚动 boxHeight）
+ *
+ * 跳过场景：
+ * - 用户在浏览历史（showScrollToBottom=true）：不主动打扰
+ * - boxRef 缺失（未渲染就绪）：忽略
+ * - cell 找不到：忽略
+ *
+ * 时机 380ms：等 360ms 幕布动画拉开后，box 才有真实高度
+ */
+const handleAudioConvertStreamGrow = (data: { msgID: string; boxRef?: any }) => {
+  if (!data || !data.msgID) return
+  if (showScrollToBottom.value) return
+
+  const targetIndex = messageItems.value.findIndex(
+    item => item.type === 'message' && item.message?.msgID === data.msgID
+  )
+  if (targetIndex < 0) return
+  const targetCell = cellRefs[targetIndex]
+  if (!targetCell) return
+  const listEl = messageListRef.value
+  if (!listEl) return
+
+  setTimeout(() => {
+    if (!data.boxRef) return
+    const dom = uni.requireNativePlugin('dom')
+    const inputTotalHeight = (props.inputPanelHeight || 0) + (props.inputToolbarHeight || 0)
+    const buffer = 16
+
+    // 第一步：用 boxRef 测量转写文本框位置，判断是否被遮挡
+    dom.getComponentRect(data.boxRef, (boxResult: any) => {
+      if (!boxResult || !boxResult.result || !boxResult.size) return
+
+      let windowHeight = 0
+      try {
+        windowHeight = uni.getSystemInfoSync().windowHeight || 0
+      } catch (e) {
+        windowHeight = 0
+      }
+      if (!windowHeight) return
+
+      const boxBottom = boxResult.size.bottom || 0
+      const boxHeight = boxResult.size.height || 0
+      const visibleBottom = windowHeight - inputTotalHeight
+
+      // box 已完全可见 → 不滚动
+      if (boxBottom <= visibleBottom - buffer) return
+      if (boxHeight <= 0) return
+
+      // 第二步：测 cell 与 list 的位置算 cellTopInList
+      dom.getComponentRect(targetCell, (cellResult: any) => {
+        if (!cellResult || !cellResult.result || !cellResult.size) return
+        dom.getComponentRect(listEl, (listResult: any) => {
+          if (!listResult || !listResult.result || !listResult.size) return
+
+          const cellTop = cellResult.size.top || 0
+          const listTop = listResult.size.top || 0
+          const cellTopInList = cellTop - listTop
+
+          // 净滚动 boxHeight：offset = boxHeight - cellTopInList
+          // 让 cell 顶部停在 list 视口顶部下方 (cellTopInList - boxHeight) 处
+          const offset = boxHeight - cellTopInList
+          dom.scrollToElement(targetCell, {
+            offset: offset,
+            animated: true
+          })
+        })
+      })
+    })
+  }, 380)
+}
 
 onBeforeUnmount(() => {
   clearAllTimers()
   clearConversationUnreadCount(props.conversationID);
+  uni.$off('audioConvertStreamGrow', handleAudioConvertStreamGrow)
   destroyStore()
 })
 

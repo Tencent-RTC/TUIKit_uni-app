@@ -1,0 +1,103 @@
+<template>
+  <view class="bottom-btn" @tap="handleTap" :style="dimStyle">
+    <view class="bottom-icon-box" :class="{ 'bottom-icon-box-webinar': isWebinar }">
+      <image
+        class="bottom-icon"
+        :src="micIconSrc"
+        mode="aspectFit"
+      />
+      <text class="bottom-text">{{ micText }}</text>
+    </view>
+  </view>
+</template>
+
+<script setup lang="ts">
+  import { computed } from 'vue';
+  import { useRoomState, useDeviceState } from '@/uni_modules/tuikit-atomic-x/state';
+  import { useRoomParticipantState } from '@/uni_modules/tuikit-atomic-x/state';
+  import {
+    RoomParticipantRole,
+    DeviceStatus,
+  } from '@/uni_modules/tuikit-atomic-x/state';
+  import { showErrorToast } from '../../utils/errorHandler';
+
+  defineProps({
+    isWebinar: { type: Boolean, default: false },
+  });
+
+  const { currentRoom } = useRoomState();
+  const roomParticipantState = useRoomParticipantState();
+  const { localParticipant } = roomParticipantState;
+  const { openLocalMicrophone } = useDeviceState();
+
+  const micOn = computed(() => localParticipant.value?.microphoneStatus === DeviceStatus.ON);
+
+  // 全员禁麦时普通用户处于关闭态：按钮置灰
+  const isDimmed = computed(() => {
+    return (
+      currentRoom.value?.isAllMicrophoneDisabled === true &&
+      localParticipant.value?.role === RoomParticipantRole.GeneralUser &&
+      localParticipant.value?.microphoneStatus === DeviceStatus.OFF
+    );
+  });
+
+  const dimStyle = computed(() => ({ opacity: isDimmed.value ? 0.5 : 1 }));
+
+  const micIconSrc = computed(() =>
+    micOn.value
+      ? '/static/images/room/room_mic_on.png'
+      : '/static/images/room/room_mic_off.png',
+  );
+
+  const micText = computed(() => (micOn.value ? '静音' : '解除静音'));
+
+  async function handleTap() {
+    try {
+      if (micOn.value) {
+        await roomParticipantState.muteMicrophone();
+      } else {
+        await openLocalMicrophone();
+        await roomParticipantState.unmuteMicrophone();
+      }
+    } catch (e) {
+      showErrorToast(e);
+    }
+  }
+</script>
+
+<style>
+  .bottom-btn {
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .bottom-icon-box {
+    width: 104rpx;
+    height: 104rpx;
+    border-radius: 20rpx;
+    background-color: #2A2D38;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .bottom-icon-box-webinar {
+    width: 80rpx;
+    height: 80rpx;
+    border-radius: 16rpx;
+  }
+
+  .bottom-icon {
+    width: 48rpx;
+    height: 48rpx;
+  }
+
+  .bottom-text {
+    color: #FFFFFF;
+    font-size: 20rpx;
+    margin-top: 6rpx;
+    lines: 1;
+    text-overflow: ellipsis;
+  }
+</style>

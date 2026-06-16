@@ -1,6 +1,6 @@
 import { computed } from 'vue'
 import { UserPickerType } from '../../../types/userpicker'
-import { type UserPickerHook, type UserPickerHookResult, type User } from './types'
+import { type UserPickerHook, type UserPickerHookResult } from './types'
 
 // Hook 导入
 import { useStartC2CConversation } from './useStartC2CConversation'
@@ -30,8 +30,25 @@ const hooks = new Map<UserPickerType, UserPickerHook>([
   [UserPickerType.MUTE_GROUP_MEMBER, useMuteGroupMember],
   [UserPickerType.UNMUTE_GROUP_MEMBER, useUnmuteGroupMember],
   [UserPickerType.TRANSFER_GROUP_OWNER, useTransferGroupOwner],
+  // 普通选群成员 / @ 提及选人共用 useSelectGroupMember，业务差异通过 routeParams 控制
   [UserPickerType.SELECT_GROUP_MEMBER, useSelectGroupMember],
+  [UserPickerType.SELECT_GROUP_AT_USER, useSelectGroupMember],
 ])
+
+// ============================================================================
+// 类型 → 默认 routeParams（在调用 hook 前 merge 进 routeParams，调用方无需关心开关）
+// ============================================================================
+
+const typeDefaults: Partial<Record<UserPickerType, Record<string, any>>> = {
+  [UserPickerType.SELECT_GROUP_AT_USER]: {
+    singleSelect: true,
+    enableAtAll: true,
+    enableRemoteSearch: true,
+    excludeSelf: true,
+    maxCount: 1,
+    title: '选择提醒的人',
+  },
+}
 
 // ============================================================================
 // 核心 API
@@ -54,21 +71,19 @@ const createDefaultHookResult = (): UserPickerHookResult => ({
 
 /**
  * 使用 UserPicker Hook
- * 根据类型返回对应的 Hook 结果
- * 
- * @param type 选人类型
- * @param routeParams 路由参数
- * @returns UserPickerHookResult
+ * 根据类型返回对应的 Hook 结果；类型默认 routeParams 会在传入用户值之前先 merge
  */
 export function useUserPicker(type: number, routeParams?: any): UserPickerHookResult {
   const hook = hooks.get(type)
-  
+
   if (!hook) {
     console.warn(`[useUserPicker] Unknown type: ${type}`)
     return createDefaultHookResult()
   }
-  
-  return hook(routeParams)
+
+  const defaults = typeDefaults[type as UserPickerType] || {}
+  const mergedParams = { ...defaults, ...(routeParams || {}) }
+  return hook(mergedParams)
 }
 
 // ============================================================================
@@ -89,9 +104,10 @@ export function getTypeName(type: number): string {
     [UserPickerType.MUTE_GROUP_MEMBER]: '禁言群成员',
     [UserPickerType.UNMUTE_GROUP_MEMBER]: '取消禁言群成员',
     [UserPickerType.TRANSFER_GROUP_OWNER]: '转交群主',
-    [UserPickerType.SELECT_GROUP_MEMBER]: '选择群成员'
+    [UserPickerType.SELECT_GROUP_MEMBER]: '选择群成员',
+    [UserPickerType.SELECT_GROUP_AT_USER]: '选择 @ 群成员'
   }
-  
+
   return typeNames[type] || `未知类型(${type})`
 }
 

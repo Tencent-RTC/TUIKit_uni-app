@@ -35,7 +35,7 @@ const homeConfig: HomeConfig = {
       title: '会议',
       icon: '/static/images/index/meeting-icon.png',
       description: '快速会议·邀请入会·会中管控·共享屏幕',
-      route: ''
+      route: '/pages/scenes/room/index'
     },
     {
       id: 'chat',

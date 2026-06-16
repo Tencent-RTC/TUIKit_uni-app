@@ -25,6 +25,14 @@ export interface UserPickerHookResult {
   handleCancel?: () => Promise<void>
   /** 触底加载更多（可选） */
   onReachEnd?: () => Promise<void>
+  /** 单选模式：点击立即返回（默认 false） */
+  singleSelect?: boolean
+  /** 置顶特殊项（如 @所有人） */
+  pinnedTopItems?: { value: User[] }
+  /** 搜索关键词变化回调（hook 自行实现服务端搜索） */
+  onSearchChange?: (keyword: string) => void
+  /** 是否渲染搜索框（默认 true；false 时隐藏搜索栏，强制浏览模式） */
+  enableSearch?: boolean
 }
 
 /**

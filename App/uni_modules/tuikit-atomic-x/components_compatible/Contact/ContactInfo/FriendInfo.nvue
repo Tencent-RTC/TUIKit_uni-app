@@ -204,7 +204,6 @@ export default {
           return;
         }
         reportScene('CHAT_INVOKE_CALL');
-        callStateInstance.setFramework(15);
         var userID = self.currentFriendInfo && self.currentFriendInfo.userID;
         if (!userID) {
           self.isCalling = false;

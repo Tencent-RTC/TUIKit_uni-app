@@ -85,6 +85,43 @@ export const parseTextToSegments = (text: string): MessageSegment[] => {
 }
 
 /**
+ * 安全截取字符串前 N 个"用户感知字符"
+ *
+ * 直接 substring(0, n) 可能切到 surrogate pair 中间（emoji 占 2 个 UTF-16 code unit），
+ * 导致 nvue 渲染整段失败。改用 Array.from 按 code point 切，并对 ZWJ 序列做整体回溯：
+ * - 切点紧邻 ZWJ (U+200D) → 向前回溯到序列起点
+ * - 切点紧邻 variation selector (U+FE0F) 或 skin tone modifier (U+1F3FB-U+1F3FF) → 同上
+ *
+ * @param text 源字符串
+ * @param n 期望保留的字符数（按 code point 计算）
+ * @returns 安全截断后的字符串
+ */
+const safeTruncateText = (text: string, n: number): string => {
+  if (n <= 0) return ''
+  const chars = Array.from(text)
+  if (chars.length <= n) return text
+
+  // 切点：保留前 n 个 code point；如果切点上一个字符是 ZWJ 序列的一部分，回溯到序列起点
+  let cut = n
+  while (cut > 0) {
+    const prev = chars[cut - 1]
+    const next = chars[cut]
+    const cp = next ? next.codePointAt(0) || 0 : 0
+    const prevCp = prev ? prev.codePointAt(0) || 0 : 0
+    // 切点之后是 ZWJ / variation selector / skin tone → 切点前的 emoji 是不完整序列
+    const nextIsCombiner = cp === 0x200D || cp === 0xFE0F || (cp >= 0x1F3FB && cp <= 0x1F3FF)
+    // 切点之前是 ZWJ → 切点前的 emoji 序列被截断
+    const prevIsZwj = prevCp === 0x200D
+    if (nextIsCombiner || prevIsZwj) {
+      cut--
+      continue
+    }
+    break
+  }
+  return chars.slice(0, cut).join('')
+}
+
+/**
  * 截断片段数组，控制总长度并添加省略号
  * @param segments 消息片段数组
  * @param maxLength 最大长度，默认15
@@ -98,7 +135,9 @@ export const truncateSegments = (segments: MessageSegment[], maxLength: number =
     const segment = segments[i]
     
     if (segment.type === 'text') {
-      const textLength = segment.content?.length || 0
+      // 文本长度按 code point 计算（一个 emoji 视为 1 个长度），与前端肉眼感知一致
+      const chars = Array.from(segment.content || '')
+      const textLength = chars.length
       
       if (totalLength + textLength <= maxLength) {
         result.push(segment)
@@ -108,7 +147,7 @@ export const truncateSegments = (segments: MessageSegment[], maxLength: number =
         if (remainingLength > 0) {
           result.push({
             type: 'text',
-            content: segment.content?.substring(0, remainingLength) + '...'
+            content: safeTruncateText(segment.content || '', remainingLength) + '...'
           })
         } else {
           result.push({

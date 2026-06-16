@@ -15,9 +15,6 @@
     <view class="btn btn-primary" @tap="startChat">
       <text class="btn-text">开始聊天</text>
     </view>
-    <view class="btn btn-call" @tap="startCall">
-      <text class="btn-text">发起通话</text>
-    </view>
     <view class="btn btn-outline" @tap="handleLogout">
       <text class="btn-text-dark">退出登录</text>
     </view>
@@ -62,11 +59,6 @@
       startChat() {
         uni.switchTab({
           url: '/pages/scenes/chat/conversationList/conversationList'
-        })
-      },
-      startCall() {
-        uni.navigateTo({
-          url: '/pages/scenes/call/index'
         })
       },
       handleLogout() {
@@ -164,10 +156,6 @@
 
   .btn-primary {
     background: #007AFF;
-  }
-
-  .btn-call {
-    background: #34C759;
   }
 
   .btn-outline {

@@ -1,9 +1,15 @@
 interface SendError extends Error {
-  errCode: number;
+  errCode: number | string;
 }
 
 function resolveSendError(error: SendError): string {
   switch (error.errCode) {
+    // 客户端预校验错误
+    case 'AT_USER_LIST_EXCEED':
+      return '@ 用户数已达上限（30 个）';
+    case 'AT_NOT_SUPPORTED_IN_AVCHATROOM':
+      return '直播群不支持 @ 消息';
+
     // 用户关系相关
     case 20007:
       return '您已被对方拉黑';

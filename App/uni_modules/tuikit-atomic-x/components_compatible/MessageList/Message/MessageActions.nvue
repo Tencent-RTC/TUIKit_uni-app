@@ -9,6 +9,10 @@
         <image class="msg-actions__icon" :src="deleteIconSrc" mode="aspectFit"></image>
         <text class="msg-actions__text">删除</text>
       </view>
+      <view v-if="canConvertVoice" class="msg-actions__item" @tap="handleVoiceToText">
+        <image class="msg-actions__icon" :src="voiceToTextIconSrc" mode="aspectFit"></image>
+        <text class="msg-actions__text">{{ voiceActionLabel }}</text>
+      </view>
       <view v-if="canRecall" class="msg-actions__item" @tap="handleRecall">
         <image class="msg-actions__icon" :src="recallIconSrc" mode="aspectFit"></image>
         <text class="msg-actions__text">撤回</text>
@@ -42,7 +46,8 @@ export default {
       actionState: null,
       copyIconSrc: '/uni_modules/tuikit-atomic-x/static/assets/message-list/msg_copy.png',
       deleteIconSrc: '/uni_modules/tuikit-atomic-x/static/assets/message-list/msg_delete.png',
-      recallIconSrc: '/uni_modules/tuikit-atomic-x/static/assets/message-list/msg_recall.png'
+      recallIconSrc: '/uni_modules/tuikit-atomic-x/static/assets/message-list/msg_recall.png',
+      voiceToTextIconSrc: '/uni_modules/tuikit-atomic-x/static/assets/message-list/msg_voice_to_text.png'
     }
   },
   computed: {
@@ -52,6 +57,43 @@ export default {
       if (this.message.status === MessageStatus.RECALLED || this.message.status === MessageStatus.DELETED) return false
       if (this.message.timestamp) { var diff = Math.floor(Date.now() / 1000) - this.message.timestamp; return diff <= 120 }
       return false
+    },
+    canConvertVoice() { return this.message.messageType === MessageType.SOUND },
+    /**
+     * 语音转文字按钮的 label 与是否处于"隐藏文字"模式
+     * 判定：当前消息已有 asrText 且 AudioMessage 当前展示该文本 → "隐藏文字"，否则 "转文字"
+     * AudioMessage 通过模块级 Map __audioConvertVisibleMap__ 同步当前 showConvertedText 状态，
+     * 默认（未写入 Map）视为可见 true（与 AudioMessage 中 showConvertedText 默认 true 一致）
+     */
+    voiceTextHasContent() {
+      return !!(this.message && this.message.messageBody && this.message.messageBody.asrText)
+    },
+    voiceTextVisible() {
+      if (!this.voiceTextHasContent) return false
+      var msgID = this.message.msgID
+      // 1. 运行时 Map（同会话最准）
+      var map = uni.__audioConvertVisibleMap__
+      if (map && typeof map.has === 'function' && map.has(msgID)) {
+        return map.get(msgID) === true
+      }
+      // 2. 本地存储（跨会话持久化"隐藏"记录；仅记录 false，缺省视为 true）
+      try {
+        var raw = uni.getStorageSync('tuikit_audio_convert_visible_v1')
+        var store = null
+        if (raw && typeof raw === 'object') {
+          store = raw
+        } else if (typeof raw === 'string' && raw) {
+          store = JSON.parse(raw)
+        }
+        if (store && store[msgID] === false) {
+          return false
+        }
+      } catch (e) {}
+      // 3. 默认可见
+      return true
+    },
+    voiceActionLabel() {
+      return this.voiceTextVisible ? '隐藏文字' : '转文字'
     },
     panelStyle() {
       var tp = this.triggerPosition
@@ -172,6 +214,42 @@ export default {
     async handleRecall() {
       try { await this.actionState.recallMessage(); this.safeClose() }
       catch (e) { uni.showToast({ title: '撤回失败', icon: 'none', duration: 2000 }); this.safeClose() }
+    },
+    /**
+     * 语音转文字 / 隐藏文字（toggle，与 Vue3 行为一致）
+     * - 当前未展示 asrText：触发转换流程（若已有缓存 SDK 一般立即返回）
+     * - 当前正展示 asrText：广播 audioConvertHide，AudioMessage 收到后置 showConvertedText=false
+     */
+    handleVoiceToText() {
+      var msgID = this.message.msgID
+      var visible = this.voiceTextVisible
+      this.$emit('action', { key: visible ? 'voiceTextHide' : 'voiceToText', text: this.voiceActionLabel })
+      this.safeClose()
+
+      if (visible) {
+        uni.$emit('audioConvertHide', { msgID: msgID })
+        return
+      }
+
+      uni.$emit('audioConvertingStart', { msgID: msgID })
+
+      var language = 'zh'
+      if (!this.actionState || !this.actionState.convertVoiceToText) {
+        uni.$emit('audioConvertingError', { msgID: msgID })
+        uni.showToast({ title: '转换失败', icon: 'none' })
+        return
+      }
+      this.actionState.convertVoiceToText(language).catch(function(err) {
+        console.error('[MessageActions] convertVoiceToText failed:', err)
+        uni.$emit('audioConvertingError', { msgID: msgID })
+        var toastTitle = '转换失败'
+        if (err && err.code === 140008) {
+          toastTitle = '当前 SDKAppID 尚未开通语音转文字（ASR）服务'
+        } else if (err && err.message) {
+          toastTitle = err.message
+        }
+        uni.showToast({ title: toastTitle, icon: 'none' })
+      })
     }
   }
 }

@@ -7,11 +7,10 @@
  * 业务价值：为直播平台提供差异化的音效体验，增强用户参与度和直播趣味性。
  * 应用场景：变声直播、K歌直播、音效娱乐、专业音效等需要音频处理的场景。
  */
-import { ref, watch } from "vue";
+import { ref } from "vue";
 import {
   callAPI, addListener, removeListener
 } from "@/uni_modules/tuikit-atomic-x";
-import { currentLive } from "./LiveListState";
 import { VolumeOptions } from "./DeviceState";
 import { safeJsonParse } from "../utils/utsUtils";
 
@@ -101,7 +100,7 @@ export type SetVoiceEarMonitorEnableOptions = {
  * @memberof module:AudioEffectState
  * @example
  * import { useAudioEffectState } from '@/uni_modules/tuikit-atomic-x/state/AudioEffectState';
- * const { isEarMonitorOpened } = useAudioEffectState('your_live_id');
+ * const { isEarMonitorOpened } = useAudioEffectState();
  *
  * // 监听耳返开关状态变化
  * watch(isEarMonitorOpened, (newStatus) => {
@@ -120,7 +119,7 @@ const isEarMonitorOpened = ref<boolean>(false);
  * @memberof module:AudioEffectState
  * @example
  * import { useAudioEffectState } from '@/uni_modules/tuikit-atomic-x/state/AudioEffectState';
- * const { earMonitorVolume } = useAudioEffectState('your_live_id');
+ * const { earMonitorVolume } = useAudioEffectState();
  *
  * // 监听耳返音量变化
  * watch(earMonitorVolume, (newVolume) => {
@@ -139,7 +138,7 @@ const earMonitorVolume = ref<number>(100);
  * @memberof module:AudioEffectState
  * @example
  * import { useAudioEffectState } from '@/uni_modules/tuikit-atomic-x/state/AudioEffectState';
- * const { audioChangerType } = useAudioEffectState('your_live_id');
+ * const { audioChangerType } = useAudioEffectState();
  *
  * // 监听变声类型变化
  * watch(audioChangerType, (newType) => {
@@ -158,7 +157,7 @@ const audioChangerType = ref<AudioChangerType>(AudioChangerType.NONE); // 底层
  * @memberof module:AudioEffectState
  * @example
  * import { useAudioEffectState } from '@/uni_modules/tuikit-atomic-x/state/AudioEffectState';
- * const { audioReverbType } = useAudioEffectState('your_live_id');
+ * const { audioReverbType } = useAudioEffectState();
  *
  * // 监听混响类型变化
  * watch(audioReverbType, (newType) => {
@@ -178,7 +177,7 @@ const audioReverbType = ref<AudioReverbType>(AudioReverbType.NONE);
  * @memberof module:AudioEffectState
  * @example
  * import { useAudioEffectState } from '@/uni_modules/tuikit-atomic-x/state/AudioEffectState';
- * const { setAudioChangerType } = useAudioEffectState("your_live_id");
+ * const { setAudioChangerType } = useAudioEffectState();
  * setAudioChangerType({ changerType: 'MAN' });
  */
 function setAudioChangerType(params: SetAudioChangerTypeOptions): void {
@@ -195,7 +194,7 @@ function setAudioChangerType(params: SetAudioChangerTypeOptions): void {
  * @memberof module:AudioEffectState
  * @example
  * import { useAudioEffectState } from '@/uni_modules/tuikit-atomic-x/state/AudioEffectState';
- * const { setAudioReverbType } = useAudioEffectState("your_live_id");
+ * const { setAudioReverbType } = useAudioEffectState();
  * setAudioReverbType({ reverbType: 'KTV' });
  */
 function setAudioReverbType(params: SetAudioReverbTypeOptions): void {
@@ -212,7 +211,7 @@ function setAudioReverbType(params: SetAudioReverbTypeOptions): void {
  * @memberof module:AudioEffectState
  * @example
  * import { useAudioEffectState } from '@/uni_modules/tuikit-atomic-x/state/AudioEffectState';
- * const { setVoiceEarMonitorEnable } = useAudioEffectState("your_live_id");
+ * const { setVoiceEarMonitorEnable } = useAudioEffectState();
  * setVoiceEarMonitorEnable({ enable: true });
  */
 function setVoiceEarMonitorEnable(params: SetVoiceEarMonitorEnableOptions): void {
@@ -229,7 +228,7 @@ function setVoiceEarMonitorEnable(params: SetVoiceEarMonitorEnableOptions): void
  * @memberof module:AudioEffectState
  * @example
  * import { useAudioEffectState } from '@/uni_modules/tuikit-atomic-x/state/AudioEffectState';
- * const { setVoiceEarMonitorVolume } = useAudioEffectState("your_live_id");
+ * const { setVoiceEarMonitorVolume } = useAudioEffectState();
  * setVoiceEarMonitorVolume({ volume: 50 });
  */
 function setVoiceEarMonitorVolume(params: VolumeOptions): void {
@@ -246,16 +245,13 @@ const BINDABLE_DATA_NAMES = [
   "audioReverbType",
 ] as const;
 
-let boundLiveID: string | null = null;
+let isBound = false;
 
-function bindEvent(liveID: string): void {
-  if (boundLiveID === liveID) {
+function bindEvent(): void {
+  if (isBound) {
     return;
   }
-  if (boundLiveID) {
-    unbindEvent(boundLiveID);
-  }
-  boundLiveID = liveID;
+  isBound = true;
 
   BINDABLE_DATA_NAMES.forEach(dataName => {
     addListener({
@@ -275,7 +271,7 @@ function bindEvent(liveID: string): void {
   });
 }
 
-function unbindEvent(liveID: string): void {
+function unbindEvent(): void {
   BINDABLE_DATA_NAMES.forEach(dataName => {
     removeListener({
       type: "state",
@@ -284,25 +280,7 @@ function unbindEvent(liveID: string): void {
       params: {}
     });
   });
-  if (boundLiveID === liveID) {
-    boundLiveID = null;
-  }
-}
-
-let stopWatchingCurrentLive: (() => void) | null = null;
-
-function ensureWatchCurrentLive() {
-  if (stopWatchingCurrentLive) return;
-  stopWatchingCurrentLive = watch(
-    () => currentLive.value,
-    (newVal, oldVal) => {
-      if (oldVal && oldVal.liveID !== '') {
-        if (newVal.liveID === '' && boundLiveID) {
-          unbindEvent(boundLiveID);
-        }
-      }
-    }
-  );
+  isBound = false;
 }
 
 const onAudioEffectStoreChanged: Record<string, (result: any) => void> = {
@@ -320,9 +298,8 @@ const onAudioEffectStoreChanged: Record<string, (result: any) => void> = {
   },
 };
 
-export function useAudioEffectState(liveID: string) {
-  bindEvent(liveID);
-  ensureWatchCurrentLive();
+export function useAudioEffectState() {
+  bindEvent();
 
   return {
     audioChangerType,         // 变声状态
@@ -334,6 +311,7 @@ export function useAudioEffectState(liveID: string) {
     setAudioReverbType,       // 设置混响效果
     setVoiceEarMonitorEnable, // 设置耳返开关
     setVoiceEarMonitorVolume, // 设置耳返音量
+    unbindEvent,
   };
 }
 

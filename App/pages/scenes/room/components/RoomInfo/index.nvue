@@ -1,0 +1,81 @@
+<template>
+  <view class="title-container">
+    <view class="title-tap-area" @tap="handleTitleTap">
+      <view class="title-row">
+        <text class="title-text" :numberOfLines="1">{{ currentRoom?.roomName || roomID }}</text>
+        <image class="title-arrow" src="/static/images/room/room_drop_down.png" mode="aspectFit" />
+      </view>
+      <RoomTimer />
+    </view>
+
+    <view v-if="isInfoVisible" class="info-mask" @tap="handleInfoClose">
+      <view @tap.stop>
+        <DetailSheet :roomID="roomID" @close="handleInfoClose" />
+      </view>
+    </view>
+  </view>
+</template>
+
+<script setup lang="ts">
+  import { ref } from 'vue';
+  import { useRoomState } from '@/uni_modules/tuikit-atomic-x/state';
+  import RoomTimer from './Timer/index.nvue';
+  import DetailSheet from './DetailSheet/index.nvue';
+
+  defineProps({
+    roomID: { type: String, default: '' },
+  });
+
+  const { currentRoom } = useRoomState();
+
+  const isInfoVisible = ref(false);
+
+  function handleTitleTap() { isInfoVisible.value = true; }
+  function handleInfoClose() { isInfoVisible.value = false; }
+</script>
+
+<style>
+  .title-container {
+    width: 320rpx;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .title-tap-area {
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .title-row {
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .title-text {
+    color: #FFFFFF;
+    font-size: 32rpx;
+    font-weight: 500;
+    max-width: 240rpx;
+    lines: 1;
+  }
+
+  .title-arrow {
+    width: 28rpx;
+    height: 28rpx;
+    margin-left: 4rpx;
+  }
+
+  .info-mask {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.4);
+    flex-direction: column;
+    justify-content: flex-end;
+  }
+</style>

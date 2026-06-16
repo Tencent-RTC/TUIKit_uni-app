@@ -59,7 +59,7 @@ export default {
           secretKey: this.secretKey,
         }).userSig,
         success: () => {
-          uni.reLaunch({ url: '/pages/index/index' })
+          uni.reLaunch({ url: '/pages/scenes/chat/conversationList/conversationList' })
         },
         fail: (_, msg) => {
           this.isLoading = false

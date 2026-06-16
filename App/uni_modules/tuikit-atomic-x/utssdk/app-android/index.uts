@@ -1,7 +1,7 @@
 import Context from "android.content.Context";
 import Intent from "android.content.Intent";
 import { CallExperimentalAPIOptions, HybridListenerOptions } from "../interface";
-import { ExperimentalApiInvoker, FloatViewManager, Logger, VibratorFeature, SystemImagePicker } from 'uts.sdk.modules.atomicx.kotlin';
+import { ExperimentalApiInvoker, FloatViewManager, Logger, VibratorFeature, SystemImagePicker, EngineBridge, AlbumPickerManager} from 'uts.sdk.modules.atomicx.kotlin';
 
 // from native aar
 import { TUIRoomDefine, TUIRoomEngine } from 'com.tencent.cloud.tuikit.engine.room';
@@ -12,10 +12,18 @@ import { VideoForegroundService } from 'com.trtc.tuikit.common.foregroundservice
 // HybridBridge
 import { HybridBridge } from 'io.trtc.tuikit.atomicxcore.hybridapi.bridge';
 import { DataReport, InteractionMetrics, AtomicMetrics } from 'io.trtc.tuikit.atomicxcore.impl.common';
+import { V2TIMManager } from 'com.tencent.imsdk.v2';
+import JSONObject from 'org.json.JSONObject';
 DataReport.reportUIPlatform(52);
 DataReport.setFramework(11)
 
 const context: Context = UTSAndroid.getAppContext() as Context;
+
+const MetricsMap: Map<string, number> = new Map([
+  ["ROOM_STATE", 1201],
+  ["ROOM_PARTICIPANT_STATE", 1202],
+  ["ROOM_SCENE", 1205],
+])
 
 // ================= 实验性接口 =================
 export function hybirdCallExperimentalAPI(options: CallExperimentalAPIOptions) {
@@ -146,6 +154,16 @@ export function reportScene(scene: string) {
   }, null)
 }
 
+export function reportMetrics(type: string) {
+  const metrics = MetricsMap.get(type)
+  if (metrics == null) {
+    return
+  }
+  const param = new JSONObject()
+  param.put("UIComponentType", (metrics! as number).toLong())
+  V2TIMManager.getInstance().callExperimentalAPI("reportTUIFeatureUsage", param.toString(), null)
+}
+
 export function setCallFramework(component: number = 17) {
   UTSAndroid.getDispatcher("main").async(function (_) {
     const data = { "api": "setFramework", "params": { "framework": 11, "component": component } }
@@ -236,6 +254,25 @@ export function enableMultiDeviceAbility(enable: Boolean) {
   TUICallEngine.createInstance(context).enableMultiDeviceAbility(enable, callback)
 }
 
+// ================= AlbumPicker: showAlbumPicker / hideAlbumPicker ====================
+
+/**
+ * Show album picker
+ */
+@UTSJS.keepAlive
+export function showAlbumPicker(configJSON: string, themeJSON: string, sessionId: string,
+  onPickConfirm: (jsonStr: string) => void, onMediaProcessing: (jsonStr: string) => void,
+  onMediaProcessed: () => void, onCancel: () => void): void {
+  const activity = UTSAndroid.getUniActivity();
+  if (activity == null) {
+    onCancel();
+    return;
+  }
+
+  AlbumPickerManager.shared.show(configJSON, themeJSON, sessionId,
+    activity!, onPickConfirm, onMediaProcessing, onMediaProcessed, onCancel);
+}
+
 // ================= ImageUploader: pickSingleImageFromAlbum ====================
 
 UTSAndroid.onAppActivityResult((requestCode: Int, resultCode: Int, data?: Intent) => {
@@ -266,4 +303,59 @@ export function fetchLogFileList(): string {
 }
 
 export function shareLog(row: number) {
+}
+
+// ================= Engine Bridge =================
+
+type BridgeObserverCallback = (eventName: string, jsonData: string) => void;
+
+const bridgeObservers = new Map<string, BridgeObserverCallback>();
+let nativeBridgeObserver: EngineBridge.Observer | null = null;
+
+export function invokeEngineBridgeApi(
+  api: string,
+  params: string,
+  callback: (code: number, message: string, data: string) => void
+) {
+  UTSAndroid.getDispatcher("main").async(function (_) {
+    EngineBridge.invoke(api, params, new (class implements EngineBridge.ResultCallback {
+      override onResult(code: Int, message: String, data: String) {
+        callback(code.toInt(), message != null ? (message as string) : "", data != null ? (data as string) : "");
+      }
+    }));
+  }, null)
+}
+
+@UTSJS.keepAlive
+export function addEngineBridgeObserver(listenerID: string, callback: BridgeObserverCallback) {
+  UTSAndroid.getDispatcher("main").async(function (_) {
+    if (nativeBridgeObserver == null) {
+      const observer = new (class implements EngineBridge.Observer {
+        override onEvent(eventName: String, jsonData: String) {
+          const evt = eventName as string;
+          const data = jsonData != null ? (jsonData as string) : "";
+          bridgeObservers.forEach((cb: BridgeObserverCallback, lid: string) => {
+            try {
+              cb(evt, data);
+            } catch (e) {
+              console.error(`EngineBridge observer dispatch error (${lid}):`, e);
+            }
+          });
+        }
+      });
+      nativeBridgeObserver = observer;
+      EngineBridge.addObserver(observer);
+    }
+    bridgeObservers.set(listenerID, callback);
+  }, null)
+}
+
+export function removeEngineBridgeObserver(listenerID: string) {
+  UTSAndroid.getDispatcher("main").async(function (_) {
+    bridgeObservers.delete(listenerID);
+    if (bridgeObservers.size === 0 && nativeBridgeObserver != null) {
+      EngineBridge.removeObserver(nativeBridgeObserver!);
+      nativeBridgeObserver = null;
+    }
+  }, null)
 }

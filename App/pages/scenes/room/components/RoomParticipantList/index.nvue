@@ -1,0 +1,379 @@
+<template>
+  <view v-if="visible || micDialogState.visible || cameraDialogState.visible" class="list-root">
+    <view class="list-mask" v-if="visible" @tap="onClose">
+    <view class="list-sheet" @tap.stop>
+      <view class="drop-bar" @tap="onClose">
+        <image class="drop-line" src="/static/images/room/room_lineImage.png" mode="aspectFit" />
+      </view>
+
+      <view v-if="!isWebinar" class="title-row">
+        <text class="title-text">成员（{{ participantCount }}）</text>
+      </view>
+      <view v-else class="tab-bar">
+        <view class="tab-item" :class="{ 'tab-item-selected': currentTab === 'participant' }" @tap="setTab('participant')">
+          <text class="tab-text" :class="{ 'tab-text-selected': currentTab === 'participant' }">嘉宾（{{ participantCount }}）</text>
+        </view>
+        <view class="tab-item" :class="{ 'tab-item-selected': currentTab === 'audience' }" @tap="setTab('audience')">
+          <text class="tab-text" :class="{ 'tab-text-selected': currentTab === 'audience' }">观众（{{ audienceCount }}）</text>
+        </view>
+      </view>
+
+      <view class="list-gap"></view>
+
+      <list v-if="currentTab === 'participant'" class="list-scroll">
+        <cell v-for="(p, idx) in sortedParticipantList" :key="p.userID">
+          <ParticipantItem
+            type="participant"
+            :participant="p"
+            :is-local="p.userID === localParticipant?.userID"
+            :can-control="canControlParticipant(p)"
+            :is-webinar="isWebinar"
+            @press="emit('manage', p)"
+          />
+          <view v-if="idx < sortedParticipantList.length - 1" class="list-divider"></view>
+        </cell>
+      </list>
+      <list v-else class="list-scroll">
+        <cell v-for="(u, idx) in sortedAudienceList" :key="u.userID">
+          <ParticipantItem
+            type="audience"
+            :audience="u"
+            :is-admin="isAdminUser(u.userID)"
+            :is-local="u.userID === localParticipant?.userID"
+            :can-control="canControlAudience(u)"
+            :is-webinar="isWebinar"
+            @press="emit('manageAud', u)"
+          />
+          <view v-if="idx < sortedAudienceList.length - 1" class="list-divider"></view>
+        </cell>
+      </list>
+
+      <!-- 底部全员禁麦/禁视频（仅标准会议 + 房主/管理员） -->
+      <view v-if="!isWebinar && (isOwner || isAdmin)" class="bottom-row">
+        <view class="bottom-btn" @tap="handleAllMicToggle">
+          <text
+            class="bottom-btn-text"
+            :style="allMicTextStyle"
+          >{{ allMicText }}</text>
+        </view>
+        <view class="bottom-gap"></view>
+        <view class="bottom-btn" @tap="handleAllCameraToggle">
+          <text
+            class="bottom-btn-text"
+            :style="allCameraTextStyle"
+          >{{ allCameraText }}</text>
+        </view>
+      </view>
+
+      <view class="bottom-safe"></view>
+    </view>
+  </view>
+
+    <RoomDialog
+      :model-value="micDialogState.visible"
+      :title="micDialogState.title"
+      cancel-button="取消"
+      :confirm-button="micDialogState.confirmText"
+      :modal="true"
+      @update:model-value="micDialogState.visible = $event"
+      @confirm="confirmAllMicToggle"
+    >
+      <text>{{ micDialogState.content }}</text>
+    </RoomDialog>
+
+    <RoomDialog
+      :model-value="cameraDialogState.visible"
+      :title="cameraDialogState.title"
+      cancel-button="取消"
+      :confirm-button="cameraDialogState.confirmText"
+      :modal="true"
+      @update:model-value="cameraDialogState.visible = $event"
+      @confirm="confirmAllCameraToggle"
+    >
+      <text>{{ cameraDialogState.content }}</text>
+    </RoomDialog>
+  </view>
+</template>
+
+<script setup lang="ts">
+  import { computed, ref } from 'vue';
+  import type { PropType } from 'vue';
+  import { useRoomState } from '@/uni_modules/tuikit-atomic-x/state';
+  import { useRoomParticipantState } from '@/uni_modules/tuikit-atomic-x/state';
+  import {
+    DeviceStatus,
+    DeviceType,
+    RoomParticipantRole,
+  } from '@/uni_modules/tuikit-atomic-x/state';
+  import type { RoomParticipant } from '@/uni_modules/tuikit-atomic-x/types';
+  import type { RoomUser } from '@/uni_modules/tuikit-atomic-x/types';
+  import ParticipantItem from './ParticipantItem/index.nvue';
+  import RoomDialog from '../RoomDialog/index.vue';
+  import { showErrorToast } from '../../utils/errorHandler';
+
+  const props = defineProps({
+    visible: { type: Boolean, default: false },
+    roomID: { type: String, required: true },
+    isWebinar: { type: Boolean, default: false },
+  });
+
+  const emit = defineEmits<{
+    (e: 'close'): void
+    (e: 'manage', participant: RoomParticipant): void
+    (e: 'manageAud', audience: RoomUser): void
+  }>();
+
+  const { currentRoom } = useRoomState();
+  const roomParticipantState = useRoomParticipantState();
+  const { participantList, audienceList, adminList, localParticipant } = roomParticipantState;
+
+  const currentTab = ref<'participant' | 'audience'>('participant');
+  function setTab(t: 'participant' | 'audience') { currentTab.value = t; }
+
+  const participantCount = computed(() => currentRoom.value?.participantCount ?? participantList.value?.length ?? 0);
+  const audienceCount = computed(() => currentRoom.value?.audienceCount ?? audienceList.value?.length ?? 0);
+
+  const isOwner = computed(() => localParticipant.value?.role === RoomParticipantRole.Owner);
+  const isAdmin = computed(() => localParticipant.value?.role === RoomParticipantRole.Admin);
+  const isAllMicDisabled = computed(() => currentRoom.value?.isAllMicrophoneDisabled === true);
+  const isAllCameraDisabled = computed(() => currentRoom.value?.isAllCameraDisabled === true);
+
+  const allMicText = computed(() => (isAllMicDisabled.value ? '解除全体静音' : '全体静音'));
+  const allMicTextStyle = computed(() => ({ color: isAllMicDisabled.value ? '#F2504B' : '#C5CCDC' }));
+  const allCameraText = computed(() => (isAllCameraDisabled.value ? '解除全体禁画' : '全体禁画'));
+  const allCameraTextStyle = computed(() => ({ color: isAllCameraDisabled.value ? '#F2504B' : '#C5CCDC' }));
+
+  function compareBool(a: boolean, b: boolean): number {
+    if (a === b) return 0;
+    return a ? -1 : 1;
+  }
+
+  const sortedParticipantList = computed<RoomParticipant[]>(() => {
+    const localId = localParticipant.value?.userID;
+    const list = (participantList.value || []).slice();
+    list.sort((a, b) => {
+      let r = compareBool(a.userID === localId, b.userID === localId);
+      if (r !== 0) return r;
+      r = compareBool(a.role === RoomParticipantRole.Owner, b.role === RoomParticipantRole.Owner);
+      if (r !== 0) return r;
+      r = compareBool(a.role === RoomParticipantRole.Admin, b.role === RoomParticipantRole.Admin);
+      if (r !== 0) return r;
+      r = compareBool(a.screenShareStatus === DeviceStatus.ON, b.screenShareStatus === DeviceStatus.ON);
+      if (r !== 0) return r;
+      r = compareBool(
+        a.cameraStatus === DeviceStatus.ON && a.microphoneStatus === DeviceStatus.ON,
+        b.cameraStatus === DeviceStatus.ON && b.microphoneStatus === DeviceStatus.ON,
+      );
+      if (r !== 0) return r;
+      r = compareBool(
+        a.cameraStatus === DeviceStatus.ON && a.microphoneStatus !== DeviceStatus.ON,
+        b.cameraStatus === DeviceStatus.ON && b.microphoneStatus !== DeviceStatus.ON,
+      );
+      if (r !== 0) return r;
+      r = compareBool(
+        a.cameraStatus !== DeviceStatus.ON && a.microphoneStatus === DeviceStatus.ON,
+        b.cameraStatus !== DeviceStatus.ON && b.microphoneStatus === DeviceStatus.ON,
+      );
+      if (r !== 0) return r;
+      return (a.userName || '').localeCompare(b.userName || '');
+    });
+    return list;
+  });
+
+  const sortedAudienceList = computed<RoomUser[]>(() => {
+    const localId = localParticipant.value?.userID;
+    const adminIds = new Set((adminList.value || []).map((u: RoomUser) => u.userID));
+    const list = (audienceList.value || []).slice();
+    list.sort((a, b) => {
+      if (a.userID === localId) return -1;
+      if (b.userID === localId) return 1;
+      const r = compareBool(adminIds.has(a.userID), adminIds.has(b.userID));
+      if (r !== 0) return r;
+      return (a.userName || '').localeCompare(b.userName || '');
+    });
+    return list;
+  });
+
+  function isAdminUser(userID: string): boolean {
+    return (adminList.value || []).some((u: RoomUser) => u.userID === userID);
+  }
+
+  function canControlParticipant(p: RoomParticipant): boolean {
+    const me = localParticipant.value;
+    if (!me || p.userID === me.userID) return false;
+    if (me.role === RoomParticipantRole.Owner) return true;
+    if (me.role === RoomParticipantRole.Admin && p.role === RoomParticipantRole.GeneralUser) return true;
+    return false;
+  }
+  function canControlAudience(u: RoomUser): boolean {
+    const me = localParticipant.value;
+    if (!me || u.userID === me.userID) return false;
+    if (me.role === RoomParticipantRole.Owner) return true;
+    if (me.role === RoomParticipantRole.Admin && !isAdminUser(u.userID)) return true;
+    return false;
+  }
+
+  const micDialogState = ref({ visible: false, title: '', content: '', confirmText: '', targetDisable: false });
+  const cameraDialogState = ref({ visible: false, title: '', content: '', confirmText: '', targetDisable: false });
+
+  function handleAllMicToggle() {
+    const targetDisable = !isAllMicDisabled.value;
+    micDialogState.value = {
+      visible: true,
+      title: targetDisable ? '所有及新加入的成员将被静音' : '所有成员将被解除静音',
+      content: targetDisable ? '成员将无法开启麦克风' : '解除后用户可以自由开启麦克风',
+      confirmText: targetDisable ? '全体静音' : '确认解除',
+      targetDisable,
+    };
+  }
+
+  async function confirmAllMicToggle() {
+    const targetDisable = micDialogState.value.targetDisable;
+    try {
+      await roomParticipantState.disableAllDevices({ device: DeviceType.Microphone, disable: targetDisable });
+    } catch (e) {
+      showErrorToast(e);
+    }
+  }
+
+  function handleAllCameraToggle() {
+    const targetDisable = !isAllCameraDisabled.value;
+    cameraDialogState.value = {
+      visible: true,
+      title: targetDisable ? '所有及新加入的成员将被禁止视频' : '所有成员将被解除禁止开启视频',
+      content: targetDisable ? '成员将无法开启视频画面' : '解除后用户可以自由开启视频',
+      confirmText: targetDisable ? '全体禁画' : '确认解除',
+      targetDisable,
+    };
+  }
+
+  async function confirmAllCameraToggle() {
+    const targetDisable = cameraDialogState.value.targetDisable;
+    try {
+      await roomParticipantState.disableAllDevices({ device: DeviceType.Camera, disable: targetDisable });
+    } catch (e) {
+      showErrorToast(e);
+    }
+  }
+
+  function onClose() { emit('close'); }
+</script>
+
+<style>
+  .list-mask {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.4);
+    flex-direction: column;
+    justify-content: flex-end;
+  }
+
+  .list-sheet {
+    background-color: #1F2229;
+    border-top-left-radius: 40rpx;
+    border-top-right-radius: 40rpx;
+    height: 1300rpx;
+  }
+
+  .drop-bar {
+    height: 70rpx;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .drop-line {
+    width: 48rpx;
+    height: 48rpx;
+  }
+
+  .title-row {
+    height: 48rpx;
+    padding-left: 32rpx;
+    padding-right: 32rpx;
+    justify-content: center;
+    flex-direction: column;
+  }
+
+  .title-text {
+    color: #D5E0F2;
+    font-size: 32rpx;
+    font-weight: 500;
+  }
+
+  .tab-bar {
+    margin-left: 32rpx;
+    margin-right: 32rpx;
+    height: 72rpx;
+    background-color: #2A2D38;
+    border-radius: 12rpx;
+    flex-direction: row;
+    padding: 4rpx;
+  }
+
+  .tab-item {
+    flex: 1;
+    border-radius: 10rpx;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .tab-item-selected {
+    background-color: #4A5970;
+  }
+
+  .tab-text {
+    color: #C5CCDC;
+    font-size: 28rpx;
+  }
+
+  .tab-text-selected {
+    color: #FFFFFF;
+    font-weight: 500;
+  }
+
+  .list-gap {
+    height: 30rpx;
+  }
+
+  .list-scroll {
+    flex: 1;
+  }
+
+  .list-divider {
+    height: 1rpx;
+    background-color: #2A2D38;
+    margin-left: 132rpx;
+    margin-right: 32rpx;
+  }
+
+  .bottom-row {
+    flex-direction: row;
+    padding-left: 32rpx;
+    padding-right: 32rpx;
+    padding-top: 24rpx;
+  }
+
+  .bottom-btn {
+    flex: 1;
+    height: 80rpx;
+    background-color: #2A2D38;
+    border-radius: 12rpx;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .bottom-btn-text {
+    font-size: 28rpx;
+  }
+
+  .bottom-gap {
+    width: 18rpx;
+  }
+
+  .bottom-safe {
+    height: 68rpx;
+  }
+</style>

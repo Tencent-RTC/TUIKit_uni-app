@@ -42,6 +42,8 @@ import { MessageMediaFileType } from '../../../../types/message'
 import { useMessageListState } from '../../../../state/MessageListState'
 import { stopGlobalAudioPlayer, RECORDING_PSEUDO_ID } from '../../../../hooks/useAudioPlayer'
 
+const PLACEHOLDER_PREFIX = 'placeholder_video_';
+
 interface Props {
   message: MessageInfo
   conversationID: string
@@ -229,7 +231,8 @@ const checkAndDownloadVideo = async () => {
 watch(
   () => props.message?.msgID,
   (newMsgID) => {
-    if (newMsgID && !videoSnapshotUrl.value) {
+    if (!newMsgID || newMsgID.startsWith(PLACEHOLDER_PREFIX)) return;
+    if (!videoSnapshotUrl.value) {
       checkAndDownloadSnapshot()
     }
     if (newMsgID && !videoUrl.value) {

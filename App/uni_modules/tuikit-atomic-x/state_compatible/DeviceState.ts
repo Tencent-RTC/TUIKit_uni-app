@@ -54,6 +54,29 @@ export enum VideoQuality {
   QUALITY_1080P = 4,
 }
 
+export enum DeviceType {
+  Microphone = 0,
+  Camera = 1,
+  ScreenShare = 2,
+}
+
+export enum NetworkQuality {
+  Unknown = 0,
+  Excellent = 1,
+  Good = 2,
+  Poor = 3,
+  Bad = 4,
+  VeryBad = 5,
+  Down = 6,
+}
+
+export interface NetworkInfo {
+  quality: NetworkQuality;
+  upLoss: number;
+  downLoss: number;
+  delay: number;
+}
+
 export type OpenLocalMicrophoneOptions = {
   success?: () => void;
   fail?: (errCode: number, errMsg: string) => void;

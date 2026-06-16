@@ -262,6 +262,32 @@
       }
     },
     {
+      "path": "pages/scenes/room/index",
+      "style": {
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/scenes/room/join/index",
+      "style": {
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/scenes/room/create/index",
+      "style": {
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/scenes/room/main/index",
+      "style": {
+        "navigationStyle": "custom",
+        "disableScroll": true,
+        "disableSwipeBack": true
+      }
+    },
+    {
       "path": "pages/scenes/live/VoiceAnchor/VoiceAnchor",
       "disableSwipeBack": true,
       "style": {

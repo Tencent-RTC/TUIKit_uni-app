@@ -61,7 +61,8 @@
                 "dSYMs" : false,
                 "privacyDescription" : {
                     "NSCameraUsageDescription" : "应用需要访问您的相机以进行直播",
-                    "NSMicrophoneUsageDescription" : "应用需要访问您的麦克风以进行直播"
+                    "NSMicrophoneUsageDescription" : "应用需要访问您的麦克风以进行直播",
+                    "NSPhotoLibraryUsageDescription" : "应用需要访问您的相册以选择图片和视频"
                 },
                 "UIBackgroundModes" : [ "audio" ]
             },

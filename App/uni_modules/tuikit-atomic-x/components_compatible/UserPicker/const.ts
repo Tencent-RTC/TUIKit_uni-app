@@ -27,7 +27,10 @@ export const USER_PICKER_TYPE = {
   TRANSFER_GROUP_OWNER: 9,
   
   // 选择群成员
-  SELECT_GROUP_MEMBER: 10
+  SELECT_GROUP_MEMBER: 10,
+
+  // 选择 @ 提及的群成员（单选 + @所有人 + 服务端搜索）
+  SELECT_GROUP_AT_USER: 11
 } as const
 
 export type UserPickerType = typeof USER_PICKER_TYPE[keyof typeof USER_PICKER_TYPE]

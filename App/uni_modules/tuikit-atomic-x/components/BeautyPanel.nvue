@@ -12,20 +12,20 @@
             <view style="width: 40rpx; height: 40rpx;" @tap="decreaseValue">
               <text class="btn-text">-</text>
             </view>
-            
+
             <!-- 进度条区域 -->
             <view class="progress-section">
               <!-- 进度条背景 -->
               <view class="progress-bar">
-                <view 
-                  class="progress-fill" 
+                <view
+                  class="progress-fill"
                   :style="{ width: (currentRealValue / 100 * 400) + 'rpx' }"
                 ></view>
               </view>
               <!-- 当前数值显示 - 定位在进度条右侧 -->
               <text class="current-value">{{ currentRealValue }}</text>
             </view>
-            
+
             <!-- 加号按钮 -->
             <view style="width: 40rpx; height: 40rpx;" @tap="increaseValue">
               <text class="btn-text">+</text>
@@ -36,8 +36,8 @@
 
       <!-- 功能标签页 -->
 <!--      <view class="feature-tabs">
-        <view 
-          v-for="(tab, index) in featureTabs" 
+        <view
+          v-for="(tab, index) in featureTabs"
           :key="index"
           class="tab-item"
           :class="{ 'active': activeTabIndex === index }"
@@ -53,8 +53,8 @@
       <!-- 详细选项区域 -->
       <view class="options-section">
         <view class="options-grid">
-          <view 
-            v-for="(option, index) in currentOptions" 
+          <view
+            v-for="(option, index) in currentOptions"
             :key="index"
             class="option-item"
             :class="{ 'selected': selectedOptionIndex === index }"
@@ -75,25 +75,25 @@
 import { ref, computed, watch } from 'vue'
 import { useBaseBeautyState } from '@/uni_modules/tuikit-atomic-x/state/BaseBeautyState'
 
-const { 
-  setSmoothLevel, 
-  setWhitenessLevel, 
-  setRuddyLevel, 
-  whitenessLevel, 
-  ruddyLevel, 
+const {
+  setSmoothLevel,
+  setWhitenessLevel,
+  setRuddyLevel,
+  whitenessLevel,
+  ruddyLevel,
   smoothLevel,
   realUiValues,
   setRealUiValue,
   getRealUiValue,
   resetRealUiValues
-} = useBaseBeautyState(uni.$liveID) 
+} = useBaseBeautyState() 
 
 /**
  * 美颜面板组件
- * 
+ *
  * Props:
  * - modelValue: Boolean - 控制面板显示/隐藏
- * 
+ *
  * Events:
  * - update:modelValue - 更新面板显示状态
  * - adjust-beauty - 调整美颜参数事件
@@ -281,7 +281,7 @@ const increaseValue = () => {
  */
 const updateBeautyValue = (uiValue) => {
   const currentOption = currentOptions.value[selectedOptionIndex.value]
-  
+
   // 保存真实的UI拖动值到全局状态
   switch (currentOption.name) {
     case '美白':
@@ -296,11 +296,11 @@ const updateBeautyValue = (uiValue) => {
     case '关闭':
       return
   }
-  
+
   // 如果UI值超过90，API调用时限制为90
   const limitedUiValue = uiValue > 90 ? 90 : uiValue
   const apiValue = limitedUiValue / 10 // 转换为接口值：0-9
-  
+
   // 调用对应的设置方法，传入转换后的参数值
   switch (currentOption.name) {
     case '美白':
@@ -313,7 +313,7 @@ const updateBeautyValue = (uiValue) => {
       setSmoothLevel({ smoothLevel: apiValue })
       break
   }
-  
+
   emit('adjust-beauty', {
     type: featureTabs.value[activeTabIndex.value].name,
     option: currentOption.name,
@@ -327,7 +327,7 @@ const updateBeautyValue = (uiValue) => {
 const switchTab = (index) => {
   activeTabIndex.value = index
   selectedOptionIndex.value = 0
-  
+
   // 如果是重置标签，触发重置事件
   if (index === 5) {
     emit('reset')
@@ -345,12 +345,12 @@ const switchTab = (index) => {
  */
 const selectOption = (index) => {
   const currentOption = currentOptions.value[index]
-  
+
   // 如果选择"关闭"，重置当前选中的美颜效果
   if (currentOption.name === '关闭') {
     // 获取当前选中的美颜效果（在更新selectedOptionIndex之前）
     const currentSelectedOption = currentOptions.value[selectedOptionIndex.value]
-    
+
     // 根据当前选中的美颜效果来重置对应的参数
     switch (currentSelectedOption?.name) {
       case '美白':
@@ -374,9 +374,9 @@ const selectOption = (index) => {
         break
     }
   }
-  
+
   selectedOptionIndex.value = index
-  
+
   emit('adjust-beauty', {
     type: featureTabs.value[activeTabIndex.value].name,
     option: currentOption.name,

@@ -1,0 +1,43 @@
+<template>
+  <text class="timer-text">{{ timerText }}</text>
+</template>
+
+<script setup lang="ts">
+  import { ref, onMounted, onUnmounted } from 'vue';
+
+  const timerText = ref('00:00');
+  let timerHandle: any = null;
+  let initTimestamp = 0;
+
+  function formatTimer(totalSeconds: number): string {
+    const h = Math.floor(totalSeconds / 3600);
+    const m = Math.floor((totalSeconds / 60) % 60);
+    const s = totalSeconds % 60;
+    const pad = (v: number) => (v < 10 ? `0${v}` : `${v}`);
+    return h > 0 ? `${pad(h)}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`;
+  }
+
+  onMounted(() => {
+    initTimestamp = Date.now();
+    timerText.value = formatTimer(0);
+    timerHandle = setInterval(() => {
+      const seconds = Math.floor((Date.now() - initTimestamp) / 1000);
+      timerText.value = formatTimer(seconds);
+    }, 1000);
+  });
+
+  onUnmounted(() => {
+    if (timerHandle) {
+      clearInterval(timerHandle);
+      timerHandle = null;
+    }
+  });
+</script>
+
+<style>
+  .timer-text {
+    color: #FFFFFF;
+    font-size: 24rpx;
+    margin-top: 6rpx;
+  }
+</style>

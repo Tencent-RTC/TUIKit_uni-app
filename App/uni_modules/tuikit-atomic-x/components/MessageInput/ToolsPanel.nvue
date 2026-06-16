@@ -18,9 +18,13 @@
   import { UserPickerType } from '../../types/userpicker';
   import { useMessageInputState } from '../../state/MessageInputState';
   import { MessageType } from '../../types/message';
+  import type { OfflinePushInfoResolver } from '../../types/message';
+  import { buildOfflinePushInfo } from '../../utils/buildOfflinePushInfo';
   import { chooseFile } from '../../hooks/useFilePicker';
   import { DEFAULT_TOOLS } from './types';
   import type { ToolItem } from './types';
+  import { AlbumPickerMediaFilter } from '../AlbumPicker/AlbumPicker';
+  import { openAlbumPicker } from './AlbumPickerMediaSendManager';
   import {
     useCallState,
     CallErrorCode
@@ -32,39 +36,14 @@
   import { checkCallPermissionWithDialog } from "@/uni_modules/tuikit-atomic-x/utils/callPermission";
   import { reportScene } from '@/uni_modules/tuikit-atomic-x';
 
-  interface ChooseImageSuccessResult {
-    tempFiles: Array<{
-      path: string;
-      size: number;
-    }>;
-  }
-
-  interface ChooseVideoSuccessResult {
-    tempFilePath: string;
-    duration: number;
-    size: number;
-    height: number;
-    width: number;
-  }
-
-  interface ChooseMediaSuccessResult {
-    type: 'image' | 'video' | 'mix';
-    tempFiles: Array<{
-      height: number;
-      width: number;
-      fileType: 'video' | 'image';
-      tempFilePath: string;
-      thumbTempFilePath: string;
-      // seconds
-      duration: number;
-      type: 'video' | 'image';
-      byteSize: number;
-    }>;
-  }
-
   interface ToolsPanelProps {
     conversationID: string;
     toolList?: ToolItem[];
+    /**
+     * 业务方注入：在每次发送消息前回调本函数计算 offlinePushInfo（透传自 MessageInput）
+     * 同步函数；返回 null/undefined 表示不附带；异常时兜底为不附带
+     */
+    setOfflinePushInfo?: OfflinePushInfoResolver;
   }
 
   const {
@@ -109,63 +88,19 @@
     // 内置工具处理
     switch (tool.id) {
       case 'image':
-        uni.chooseImage({
-          count: 9,
-          sourceType: ['camera', 'album'],
-          success: (chooseImageResult: ChooseImageSuccessResult) => {
-            chooseImageResult.tempFiles.forEach(file => {
-              uni.getImageInfo({
-                src: file.path,
-                success: (getImageInfoResult: any) => {
-                  messageInputState?.sendImageMessage({
-                    imagePath: removeUnusedResourcePrefix(getImageInfoResult.path),
-                    imageWidth: getImageInfoResult.width,
-                    imageHeight: getImageInfoResult.height,
-                  });
-                },
-                fail: (err: any) => {
-                  uni.showToast({
-                    title: '获取图片信息失败',
-                    icon: 'none',
-                  });
-                },
-              });
-            });
-          },
-          fail: (err: any) => {
-            if (err.errMsg.includes('mission')) {
-              uni.showToast({
-                title: '请检查相关访问权限',
-                icon: 'none',
-              });
-            }
-          },
+        openAlbumPicker(props.conversationID, {
+          mediaFilter: AlbumPickerMediaFilter.IMAGE_ONLY,
+          maxSelectionCount: 9,
+          itemsPerRow: 3,
+          showsCameraItem: true,
         });
         break;
       case 'video':
-        uni.chooseMedia({
-          count: 1,
-          mediaType: ['video'],
-          success: (chooseMediaResult: ChooseMediaSuccessResult) => {
-            chooseMediaResult.tempFiles.forEach(file => {
-              messageInputState?.sendVideoMessage({
-                videoPath: removeUnusedResourcePrefix(file.tempFilePath),
-                videoSnapshotPath: removeUnusedResourcePrefix(file.thumbTempFilePath),
-                videoSnapshotWidth: file.width,
-                videoSnapshotHeight: file.height,
-                videoDuration: Math.round(file.duration),
-                videoType: file.type,
-              })
-            });
-          },
-          fail: (err: any) => {
-            if (err.errMsg.includes('mission')) {
-              uni.showToast({
-                title: '请检查相关访问权限',
-                icon: 'none',
-              });
-            }
-          },
+        openAlbumPicker(props.conversationID, {
+          mediaFilter: AlbumPickerMediaFilter.IMAGE_AND_VIDEO,
+          maxSelectionCount: 9,
+          itemsPerRow: 3,
+          showsCameraItem: true,
         });
         break;
       case 'file':
@@ -189,10 +124,20 @@
     chooseFile({
       success: ({ filePath, fileName, fileSize }) => {
         if (!messageInputState) return;
-        const message: any = JSON.stringify({
+        const messageBody = { filePath, fileName, fileSize };
+        const offlinePushInfo = buildOfflinePushInfo(props.setOfflinePushInfo, {
           messageType: MessageType.FILE,
-          messageBody: { filePath, fileName, fileSize },
+          messageBody,
+          conversationID: props.conversationID,
         });
+        const messageObj: any = {
+          messageType: MessageType.FILE,
+          messageBody,
+        };
+        if (offlinePushInfo) {
+          messageObj.offlinePushInfo = offlinePushInfo;
+        }
+        const message: any = JSON.stringify(messageObj);
         messageInputState.sendMessage(message).catch((err: any) => {
           console.error('[ToolsPanel] sendFileMessage failed:', err);
           uni.showToast({ title: '文件发送失败', icon: 'none' });
@@ -281,79 +226,82 @@
         }
       })
     } else {
+      // 监听承载页 uni.$emit('onSelectGroupMember') 回传（Vue2/Vue3 nvue 统一方案）
+      uni.$off('onSelectGroupMember')
+      uni.$once('onSelectGroupMember', async (data) => {
+        if (isCalling.value) return;
+        if (isNavigating()) return;
+        if (isCallEnding()) return;
+
+        if (selfInfo.value.status === 1 || selfInfo.value.status === 2) {
+          plus.nativeUI.toast('您正在通话中，无法再次发起通话', {
+            align: 'center',
+            verticalAlign: 'center'
+          });
+          return
+        }
+
+        isCalling.value = true;
+
+        if (mediaType === 1) {
+          openLocalCamera({
+            isFront: true
+          })
+        }
+        openLocalMicrophone({
+          fail: (error) => {
+            if (error === -1104) {
+              setTimeout(() => {
+                openLocalMicrophone();
+              }, 200);
+            }
+          }
+        })
+        const hasPermission = await checkCallPermissionWithDialog(mediaType);
+        if (!hasPermission) {
+          isCalling.value = false;
+          return;
+        }
+        reportScene('CHAT_INVOKE_CALL');
+        const userIDList = data.selectedUsers.map(user => user.userID);
+        if (userIDList.length > 8) {
+          uni.showToast({
+            icon: "none",
+            title: "当前通话最多支持 9 人同时在线",
+          });
+          isCalling.value = false;
+          return;
+        }
+        calls({
+          participantIds: userIDList,
+          mediaType,
+          params: {
+            chatGroupId: props.conversationID.replace('group_', ''),
+          },
+          success: () => {
+            uni.$callSource = 'caller'
+            uni.$lastPage = getCurrentPageFullPath()
+            uni.navigateTo({
+              url: '/uni_modules/tuikit-atomic-x/pages/call?layoutTemplate=Grid',
+              complete: () => { isCalling.value = false; }
+            })
+          },
+          fail: (error) => {
+            if (error === CallErrorCode.PACKAGE_NOT_PURCHASED) {
+              uni.showToast({
+                icon: 'none',
+                title: '您的应用还未开通音视频通话（TUICallKit）能力，您可以去控制台申请免费体验'
+              })
+              console.error('控制台申请免费体验,https://console.cloud.tencent.com/trtc')
+            }
+            isCalling.value = false;
+          }
+        })
+      })
       uni.navigateTo({
         url: `/pages/scenes/chat/userPicker/userPicker?businessType=${UserPickerType.SELECT_GROUP_MEMBER}&conversationID=${props.conversationID}`,
-        events: {
-          onSelectGroupMember: async (data) => {
-            if (isCalling.value) return;
-            if (isNavigating()) return;
-            if (isCallEnding()) return;
-
-            if (selfInfo.value.status === 1 || selfInfo.value.status === 2) {
-              plus.nativeUI.toast('您正在通话中，无法再次发起通话', {
-                align: 'center',
-                verticalAlign: 'center'
-              });
-              return
-            }
-
-            isCalling.value = true;
-
-            if (mediaType === 1) {
-              openLocalCamera({
-                isFront: true
-              })
-            }
-            openLocalMicrophone({
-              fail: (error) => {
-                if (error === -1104) {
-                  setTimeout(() => {
-                    openLocalMicrophone();
-                  }, 200);
-                }
-              }
-            })
-            const hasPermission = await checkCallPermissionWithDialog(mediaType);
-            if (!hasPermission) {
-              isCalling.value = false;
-              return;
-            }
-            reportScene('CHAT_INVOKE_CALL');
-            const userIDList = data.selectedUsers.map(user => user.userID);
-            if (userIDList.length > 8) {
-              uni.showToast({
-                icon: "none",
-                title: "当前通话最多支持 9 人同时在线",
-              });
-              isCalling.value = false;
-              return;
-            }
-            calls({
-              participantIds: userIDList,
-              mediaType,
-              params: {
-                chatGroupId: props.conversationID.replace('group_', ''),
-              },
-              success: () => {
-                uni.$callSource = 'caller'
-                uni.$lastPage = getCurrentPageFullPath()
-                uni.navigateTo({
-                  url: '/uni_modules/tuikit-atomic-x/pages/call?layoutTemplate=Grid',
-                  complete: () => { isCalling.value = false; }
-                })
-              },
-              fail: (error) => {
-                if (error === CallErrorCode.PACKAGE_NOT_PURCHASED) {
-                  uni.showToast({
-                    icon: 'none',
-                    title: '您的应用还未开通音视频通话（TUICallKit）能力，您可以去控制台申请免费体验'
-                  })
-                  console.error('控制台申请免费体验,https://console.cloud.tencent.com/trtc')
-                }
-                isCalling.value = false;
-              }
-            })
-          }
+        fail: () => {
+          uni.$off('onSelectGroupMember')
         }
       })
     }
