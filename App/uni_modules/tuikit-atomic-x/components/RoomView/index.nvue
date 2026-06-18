@@ -45,8 +45,8 @@
   function buildRoomViewIcons(): Record<string, string> {
     return convertIconPaths({
       defaultAvatar: '/static/images/room/room_default_avatar.png',
-      microphoneOn: '/static/images/room/room_mic_on.png',
-      microphoneOff: '/static/images/room/room_mic_off.png',
+      microphoneOn: '/static/images/room/room_video_view_mic_on.png',
+      microphoneOff: '/static/images/room/room_video_view_mic_off.png',
       roleOwner: '/static/images/room/room_video_view_owner.png',
       roleManager: '/static/images/room/room_video_view_admin.png',
       arrowLeft: '/static/images/room/room_arrow_left.png',
