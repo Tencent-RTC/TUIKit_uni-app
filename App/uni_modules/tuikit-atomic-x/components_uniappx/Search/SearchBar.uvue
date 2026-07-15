@@ -1,0 +1,167 @@
+<template>
+  <view class="search-bar">
+    <view class="search-bar__input-wrapper" @click.stop>
+      <image
+        class="search-bar__icon"
+        src="../../static/icon/search.png"
+        mode="aspectFit"
+      />
+      <input
+        ref="inputRef"
+        class="search-bar__input"
+        type="text"
+        :value="modelValue"
+        :placeholder="placeholder"
+        :focus="autoFocus"
+        :disabled="disabled"
+        confirm-type="search"
+        @input="handleInput"
+        @focus="handleFocus"
+        @blur="handleBlur"
+        @confirm="handleConfirm"
+      ></input>
+      <view
+        v-if="modelValue.length > 0"
+        class="search-bar__clear"
+        @click="handleClear"
+      >
+        <image
+          class="search-bar__clear-icon"
+          src="../../static/icon/close.png"
+          mode="aspectFit"
+        />
+      </view>
+    </view>
+
+    <text
+      v-if="showCancel"
+      class="search-bar__cancel"
+      @click="handleCancel"
+    >{{ cancelText }}</text>
+  </view>
+</template>
+
+<script setup lang="uts">
+
+import { ref, watch } from 'vue'
+import type { SearchBarProps, SearchBarEmits } from '../../types/search.uts'
+
+const props = withDefaults(defineProps<SearchBarProps>(), {
+	placeholder: '搜索',
+	modelValue: '',
+	autoFocus: false,
+	showCancel: true,
+	cancelText: '取消',
+	debounceTime: 300,
+	disabled: false
+})
+
+const emit = defineEmits<SearchBarEmits>()
+
+const inputRef = ref<UniInputElement | null>(null)
+
+const handleInput = (e: UniInputEvent): void => {
+	const value: string = e.detail.value
+	emit('update:modelValue', value)
+	// 只更新值，不触发搜索
+	emit('input', value)
+}
+
+const handleFocus = (): void => {
+	emit('focus')
+}
+
+const handleBlur = (): void => {
+	emit('blur')
+}
+
+const handleConfirm = (): void => {
+	// 点击键盘搜索按钮时才触发搜索
+	emit('search', props.modelValue ?? '')
+}
+
+const handleClear = (): void => {
+	emit('update:modelValue', '')
+	emit('clear')
+}
+
+const handleCancel = (): void => {
+	emit('update:modelValue', '')
+	emit('cancel')
+}
+
+defineExpose({
+	focus: (): void => {
+		const refVal: any | null = inputRef.value
+		if (refVal != null) {
+			const refObj: UTSJSONObject = refVal as UTSJSONObject
+			const focusRaw: any | null = refObj['focus']
+			if (typeof focusRaw == 'function') {
+				const focusFn: () => void = focusRaw as () => void
+				focusFn()
+			}
+		}
+	},
+	blur: (): void => {
+		const refVal: any | null = inputRef.value
+		if (refVal != null) {
+			const refObj: UTSJSONObject = refVal as UTSJSONObject
+			const blurRaw: any | null = refObj['blur']
+			if (typeof blurRaw == 'function') {
+				const blurFn: () => void = blurRaw as () => void
+				blurFn()
+			}
+		}
+	}
+})
+</script>
+
+<style>
+.search-bar {
+  flex-direction: row;
+  align-items: center;
+  padding: 20rpx 32rpx 34rpx;
+  background-color: #ffffff;
+}
+
+.search-bar__input-wrapper {
+  flex: 1;
+  flex-direction: row;
+  align-items: center;
+  background-color: #F0F2F7;
+  border-radius: 8rpx;
+  padding: 20rpx 24rpx;
+}
+
+.search-bar__icon {
+  width: 36rpx;
+  height: 36rpx;
+  margin-right: 13rpx;
+}
+
+.search-bar__input {
+  flex: 1;
+  font-weight: 400;
+  font-size: 28rpx;
+  color: rgba(0, 0, 0, 0.9);
+}
+
+.search-bar__clear {
+  padding: 8rpx;
+  margin-left: 8rpx;
+}
+
+.search-bar__clear-icon {
+  width: 28rpx;
+  height: 28rpx;
+}
+
+.search-bar__cancel {
+  font-weight: 400;
+  font-size: 32rpx;
+  line-height: 45rpx;
+  color: rgba(0, 0, 0, 0.9);
+  margin-left: 20rpx;
+  padding: 8rpx 0;
+}
+</style>

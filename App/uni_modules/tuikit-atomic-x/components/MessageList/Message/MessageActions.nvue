@@ -50,6 +50,7 @@
 import { computed, ref, onMounted, onUnmounted, nextTick } from 'vue'
 import { MessageStatus, MessageType } from '../../../types/message'
 import { useMessageActionState } from '../../../state/MessageActionState'
+import { throttle } from '../../../utils/lodash'
 
 import copyIcon from '../assets/msg_copy.png'
 import deleteIcon from '../assets/msg_delete.png'
@@ -63,8 +64,8 @@ const GAP = 20
 // 箭头距离面板左右边缘的最小内边距，避免视觉脱离
 const ARROW_INSET = 16
 
-let deleteMessage;
-let recallMessage;
+let deleteAction;
+let revokeAction;
 let convertVoiceToText;
 let destroyStore;
 
@@ -93,8 +94,8 @@ const panelHeightRpx = ref(0)
 
 onMounted(() => {
   const obj = useMessageActionState({ message: props.message })
-  deleteMessage = obj.deleteMessage
-  recallMessage = obj.recallMessage
+  deleteAction = obj.delete
+  revokeAction = obj.revoke
   convertVoiceToText = obj.convertVoiceToText
   destroyStore = obj.destroyStore
 })
@@ -118,15 +119,15 @@ const safeClose = () => {
 
 const canCopy = computed(() => {
   return props.message.messageType === MessageType.TEXT && 
-         props.message.messageBody?.text
+         props.message.messagePayload?.text
 })
 
 const canRecall = computed(() => {
-  if (!props.message.isSelf) {
+  if (!props.message.isSentBySelf) {
     return false
   }
   
-  if (props.message.status === MessageStatus.RECALLED || 
+  if (props.message.status === MessageStatus.REVOKED || 
       props.message.status === MessageStatus.DELETED) {
     return false
   }
@@ -143,7 +144,7 @@ const canRecall = computed(() => {
 
 // 仅 SOUND 类型消息可触发"转文字"操作
 const canConvertVoice = computed(() => {
-  return props.message.messageType === MessageType.SOUND
+  return props.message.messageType === MessageType.AUDIO
 })
 
 /**
@@ -161,7 +162,7 @@ const canConvertVoice = computed(() => {
 const STORAGE_KEY = 'tuikit_audio_convert_visible_v1'
 
 const voiceTextHasContent = computed(() => {
-  const text = props.message && props.message.messageBody && props.message.messageBody.asrText
+  const text = props.message && props.message.messagePayload && props.message.messagePayload.asrText
   return !!text
 })
 
@@ -214,7 +215,7 @@ const panelStyle = computed(() => {
   } else {
     pos.top = `${tp.y - panelHeightRpx.value - GAP}rpx`
   }
-  if (tp.isSelf) {
+  if (tp.isSentBySelf) {
     pos.right = `${tp.x}rpx`
   } else {
     pos.left = `${tp.x}rpx`
@@ -243,7 +244,7 @@ const arrowStyle = computed(() => {
   const pw = panelWidthRpx.value
   if (pw > 0) {
     let panelFinalLeft
-    if (tp.isSelf) {
+    if (tp.isSentBySelf) {
       // 面板用 right 定位：panelFinalLeft = 750 - right - panelWidth
       panelFinalLeft = 750 - tp.x - pw
     } else {
@@ -271,10 +272,13 @@ const handleMaskTap = () => {
   safeClose()
 }
 
-const handleCopy = () => {
-  if (props.message.messageBody?.text) {
+// 节流窗口：1000ms 足以覆盖 iOS 关闭动画 300ms + 用户连点的反应间隔，避免重复网络请求 / 重复 emit
+const ACTION_THROTTLE_WAIT = 1000
+
+const handleCopy = throttle(() => {
+  if (props.message.messagePayload?.text) {
     uni.setClipboardData({
-      data: props.message.messageBody.text,
+      data: props.message.messagePayload.text,
       success: () => {
         uni.showToast({
           title: '已复制',
@@ -285,11 +289,11 @@ const handleCopy = () => {
   }
   emit('action', { key: 'copy', text: '复制' })
   safeClose()
-}
+}, ACTION_THROTTLE_WAIT, { leading: true, trailing: false })
 
-const handleDelete = async () => {
+const handleDelete = throttle(async () => {
   try {
-    await deleteMessage()
+    await deleteAction()
     safeClose()
   } catch (error) {
     uni.showToast({
@@ -299,14 +303,14 @@ const handleDelete = async () => {
     })
     safeClose()
   }
-}
+}, ACTION_THROTTLE_WAIT, { leading: true, trailing: false })
 
-const handleRecall = async () => {
+const handleRecall = throttle(async () => {
   try {
-    await recallMessage()
+    await revokeAction()
     safeClose()
   } catch (error) {
-    console.warn('recallMessage failed: ', error)
+    console.warn('revoke failed: ', error)
     uni.showToast({
       title: '撤回失败',
       icon: 'none',
@@ -314,7 +318,7 @@ const handleRecall = async () => {
     })
     safeClose()
   }
-}
+}, ACTION_THROTTLE_WAIT, { leading: true, trailing: false })
 
 /**
  * 语音转文字 / 隐藏文字（toggle）
@@ -326,7 +330,7 @@ const handleRecall = async () => {
  *
  * 失败时广播 audioConvertingError 释放 loading。
  */
-const handleVoiceToText = () => {
+const handleVoiceToText = throttle(() => {
   const msgID = props.message.msgID
   // 关闭面板
   emit('action', { key: voiceTextVisible.value ? 'voiceTextHide' : 'voiceToText', text: voiceActionLabel.value })
@@ -359,7 +363,7 @@ const handleVoiceToText = () => {
     }
     uni.showToast({ title: toastTitle, icon: 'none' })
   })
-}
+}, ACTION_THROTTLE_WAIT, { leading: true, trailing: false })
 
 /**
  * 测量真实 panel 尺寸 + 判定上下方向
@@ -407,7 +411,7 @@ const setTriggerPosition = (position) => {
     messageX: position.messageX,
     messageWidth: position.messageWidth,
     messageHeight: position.messageHeight,
-    isSelf: position.isSelf,
+    isSentBySelf: position.isSentBySelf,
   }
   // phase 1: 渲染到屏幕外测量真实尺寸
   phase.value = 'measure'

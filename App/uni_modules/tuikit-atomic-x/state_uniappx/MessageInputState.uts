@@ -1,0 +1,150 @@
+
+import type { HybridCallOptions } from "./hybridCallOptions.uts";
+import { callAPI } from "@/uni_modules/tuikit-atomic-x";
+
+/**
+ * 桥接响应（参照 atomicx HybridResponse data class）
+ */
+type HybridResponse = {
+  api: string | null;
+  code: number;
+  message: string | null;
+  data: any | null;
+};
+
+/**
+ * 桥接响应默认值
+ */
+const DEFAULT_HYBRID_RESPONSE: HybridResponse = {
+  api: null,
+  code: -1,
+  message: null,
+  data: null
+};
+
+/**
+ * 模块级单例缓存
+ */
+const InstanceMap: Map<string, MessageInputState> = new Map<string, MessageInputState>();
+
+class MessageInputState {
+  public readonly instanceId: string;
+  private readonly conversationID: string;
+
+  private constructor(conversationID: string) {
+    this.instanceId = MessageInputState.generateInstanceId(conversationID);
+    this.conversationID = conversationID;
+
+    this.createStore();
+  }
+
+  private createStore(): void {
+    const options: HybridCallOptions = {
+      api: "createStore",
+      params: {
+        createStoreParams: this.instanceId,
+        conversationID: this.conversationID,
+      },
+    };
+
+    callAPI(JSON.stringify(options), (response: string) => {
+      try {
+        const result = JSON.parse<HybridResponse>(response) ?? DEFAULT_HYBRID_RESPONSE;
+        if (result.code !== 0) {
+          const msg = result.message ?? 'unknown';
+          console.error(`[${this.instanceId}][createStore] Failed: ${msg}`);
+        }
+      } catch (error: any) {
+        const errMsg = error instanceof Error ? (error as Error).message : `${error}`;
+        console.error(`[${this.instanceId}][createStore] Parse error: ${errMsg}`);
+      }
+    });
+  }
+
+  private static generateInstanceId(conversationID: string): string {
+    return JSON.stringify({
+      storeName: "MessageInput",
+      conversationID,
+    });
+  }
+
+  public static getInstance(conversationID: string = ""): MessageInputState {
+    const instanceId = MessageInputState.generateInstanceId(conversationID);
+    if (!InstanceMap.has(instanceId)) {
+      InstanceMap.set(instanceId, new MessageInputState(conversationID));
+    }
+    return InstanceMap.get(instanceId) as MessageInputState;
+  }
+
+  sendMessage = (
+    payload: any,
+    option?: any | null
+  ): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      const params: any = {
+        createStoreParams: this.instanceId,
+        payload: JSON.stringify(payload),
+        ...(option != null ? { option: JSON.stringify(option) } : {}),
+      }
+
+      const options: HybridCallOptions = {
+        api: 'sendMessage',
+        params,
+      };
+
+      callAPI(JSON.stringify(options), (result: string) => {
+        try {
+          const data = JSON.parse<HybridResponse>(result) ?? DEFAULT_HYBRID_RESPONSE;
+          if (data.code == 0) {
+            resolve();
+          } else {
+            const msg = data.message ?? 'sendMessage failed';
+            reject(new Error(msg));
+          }
+        } catch (error: any) {
+          const errMsg = error instanceof Error ? (error as Error).message : `${error}`;
+          reject(new Error(errMsg));
+        }
+      });
+    });
+  };
+
+  destroyStore = (): Promise<void> => {
+    // 幂等：实例已被销毁过，直接 resolve
+    if (!InstanceMap.has(this.instanceId)) {
+      return Promise.resolve();
+    }
+    InstanceMap.delete(this.instanceId);
+
+    return new Promise((resolve) => {
+      const hybridCallOptions: HybridCallOptions = {
+        api: 'destroyStore',
+        params: {
+          createStoreParams: this.instanceId,
+        },
+      };
+
+      callAPI(JSON.stringify(hybridCallOptions), () => {});
+    });
+  };
+}
+
+export type UseMessageInputStateOptions = {
+  conversationID?: string;
+};
+
+export type UseMessageInputStateReturn = MessageInputState | null;
+
+export function useMessageInputState(options: UseMessageInputStateOptions = {}): UseMessageInputStateReturn {
+  const { conversationID = "" } = options;
+
+  if (conversationID.length == 0) {
+    console.error('conversationID is required');
+    return null;
+  }
+
+  return MessageInputState.getInstance(conversationID);
+}
+
+export { MessageInputState };
+export default useMessageInputState;

@@ -1,0 +1,81 @@
+import { computed } from 'vue'
+import { type UserPickerHookResult, type User, toMap } from './types'
+import { useContactState } from '../../../state/ContactState'
+
+export function useCreateGroup(_routeParams?: any): UserPickerHookResult {
+	// ======================== 数据源 ========================
+	const { friendList, destroyStore } = useContactState('createGroup')
+
+	// ======================== 响应式状态 ========================
+
+	/** 用户列表：好友列表 */
+	const userList = computed<User[]>((): User[] => {
+		return (friendList.value ?? []).map((item: any): User => {
+			const itemObj: UTSJSONObject = toMap(item)
+			const idRaw: any | null = itemObj['userID']
+			const remarkRaw: any | null = itemObj['friendRemark']
+			const nickRaw: any | null = itemObj['nickname']
+			const avatarRaw: any | null = itemObj['avatarURL']
+			const id: string = typeof idRaw == 'string' ? idRaw as string : ''
+			const remark: string = typeof remarkRaw == 'string' ? remarkRaw as string : ''
+			const nick: string = typeof nickRaw == 'string' ? nickRaw as string : ''
+			const avatar: string = typeof avatarRaw == 'string' ? avatarRaw as string : ''
+			return {
+				userID: id,
+				nickname: remark.length > 0 ? remark : nick.length > 0 ? nick : id,
+				avatarURL: avatar
+			}
+		})
+	})
+
+	/** 锁定项 */
+	const lockedItems = computed<string[]>((): string[] => [])
+
+	/** 是否有更多数据（好友列表不分页） */
+	const hasMore = computed((): boolean => false)
+
+	// ======================== 方法 ========================
+
+	/** 确认选择，跳转到创建群聊页面 */
+	const handleConfirm = async (selectedUsers: any[]): Promise<void> => {
+		if (selectedUsers.length == 0) {
+			uni.showToast({
+				title: '请至少选择一个群成员',
+				icon: 'none'
+			})
+			return
+		}
+
+		const idArr: string[] = []
+		for (let i: number = 0; i < selectedUsers.length; i++) {
+			const u: UTSJSONObject = toMap(selectedUsers[i])
+			const uid: any | null = u['userID']
+			if (typeof uid == 'string') idArr.push(uid as string)
+		}
+		const selectedUserData = JSON.stringify(idArr)
+		uni.setStorageSync('selectedUserData', selectedUserData)
+
+		uni.navigateTo({
+			url: `/pages/scenes/chat/createGroup/createGroup`
+		})
+	}
+
+	/** 处理取消操作 */
+	const handleCancel = async (): Promise<void> => {
+		try {
+			await destroyStore()
+		} catch (error: any) {
+			console.error('[useCreateGroup] handleCancel failed:', `${error}`)
+		}
+	}
+
+	return {
+		userList,
+		lockedItems,
+		maxCount: 500,
+		title: '选择群成员',
+		hasMore,
+		handleConfirm,
+		handleCancel
+	}
+}

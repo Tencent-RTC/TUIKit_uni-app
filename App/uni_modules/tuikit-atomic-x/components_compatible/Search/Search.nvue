@@ -29,10 +29,10 @@
       :groupList="filteredGroupList"
       :groupMemberList="groupMemberList"
       :messageResults="filteredMessageResults"
-      :hasMoreUser="hasMoreUserList"
-      :hasMoreFriend="hasMoreFriendList"
-      :hasMoreGroup="hasMoreGroupList"
-      :hasMoreGroupMember="hasMoreGroupMemberList"
+      :hasMoreUser="hasMoreFriends"
+      :hasMoreFriend="hasMoreFriends"
+      :hasMoreGroup="hasMoreGroups"
+      :hasMoreGroupMember="hasMoreGroupMembers"
       :hasMoreMessage="hasMoreMessageResults"
       :searchHistory="searchHistory"
       :Avatar="Avatar"
@@ -47,7 +47,7 @@
 
 <script>
 import { useSearchState } from '../../state/SearchState'
-import { SearchType, KeywordListMatchType, SearchTabValue } from '../../types/search'
+import { SearchType, KeywordListMatchMode, SearchTabValue } from '../../types/search'
 import AvatarComponent from '../Avatar'
 import DefaultSearchBar from './SearchBar.nvue'
 import DefaultSearchResults from './SearchResults.nvue'
@@ -73,12 +73,12 @@ export default {
     isConversationSearch() { return !!this.conversationID },
     showTab() { return !this.isConversationSearch && this.keyword.trim() && !this.showPresearch },
     tabList() { return [{ label: '全部', value: SearchTabValue.All }, { label: '用户', value: SearchTabValue.Friend }, { label: '群聊', value: SearchTabValue.Group }, { label: '消息', value: SearchTabValue.Message }] },
-    filteredUserList() { if (this.isConversationSearch || !this.searchState) return []; return (this.currentTab === SearchTabValue.All || this.currentTab === SearchTabValue.Friend) ? this.searchState.userList.value : [] },
+    filteredUserList() { if (this.isConversationSearch || !this.searchState) return []; return [] },
     filteredFriendList() { if (this.isConversationSearch || !this.searchState) return []; return (this.currentTab === SearchTabValue.All || this.currentTab === SearchTabValue.Friend) ? this.searchState.friendList.value : [] },
     filteredGroupList() { if (this.isConversationSearch || !this.searchState) return []; return (this.currentTab === SearchTabValue.All || this.currentTab === SearchTabValue.Group) ? this.searchState.groupList.value : [] },
     filteredMessageResults() { if (!this.searchState) return []; return (this.currentTab === SearchTabValue.All || this.currentTab === SearchTabValue.Message) ? this.searchState.messageResults.value : [] },
-    hasMoreUserList() { return this.searchState ? this.searchState.hasMoreUserList.value : false }, hasMoreFriendList() { return this.searchState ? this.searchState.hasMoreFriendList.value : false },
-    hasMoreGroupList() { return this.searchState ? this.searchState.hasMoreGroupList.value : false }, hasMoreGroupMemberList() { return this.searchState ? this.searchState.hasMoreGroupMemberList.value : false },
+    hasMoreFriends() { return this.searchState ? this.searchState.hasMoreFriends.value : false }, hasMoreFriends() { return this.searchState ? this.searchState.hasMoreFriends.value : false },
+    hasMoreGroups() { return this.searchState ? this.searchState.hasMoreGroups.value : false }, hasMoreGroupMembers() { return this.searchState ? this.searchState.hasMoreGroupMembers.value : false },
     hasMoreMessageResults() { return this.searchState ? this.searchState.hasMoreMessageResults.value : false },
     groupMemberList() { return this.searchState ? this.searchState.groupMemberList.value : {} },
   },
@@ -124,13 +124,12 @@ export default {
       if (!this.searchState) return
       if (!searchKeyword.trim()) { this.showPresearch = true; this.searchState.clearSearchResults(); return }
       this.showPresearch = false; this.isLoading = true
-      var searchType = SearchType.Friend.or(SearchType.Group).or(SearchType.Message)
-      if (this.isCloudSearch) searchType = SearchType.User.or(SearchType.Group).or(SearchType.Message)
-      if (this.isConversationSearch) searchType = SearchType.Message
-      else if (this.currentTab === SearchTabValue.Message) searchType = SearchType.Message
-      else if (this.currentTab === SearchTabValue.Friend) searchType = this.isCloudSearch ? SearchType.User : SearchType.Friend
-      else if (this.currentTab === SearchTabValue.Group) searchType = SearchType.Group
-      var option = { keywordListMatchType: KeywordListMatchType.OR, isCloudSearch: this.isCloudSearch, searchType: searchType, searchCount: 20, userFilter: this.userFilter, messageFilter: this.messageFilter }
+      var searchScope = [SearchType.FRIEND, SearchType.GROUP, SearchType.MESSAGE]
+      if (this.isConversationSearch) searchScope = [SearchType.MESSAGE]
+      else if (this.currentTab === SearchTabValue.Message) searchScope = [SearchType.MESSAGE]
+      else if (this.currentTab === SearchTabValue.Friend) searchScope = [SearchType.FRIEND]
+      else if (this.currentTab === SearchTabValue.Group) searchScope = [SearchType.GROUP]
+      var option = { keywordListMatchMode: KeywordListMatchMode.OR, searchScope: searchScope, pageSize: 20, userFilter: this.userFilter, messageFilter: this.messageFilter }
       if (this.isConversationSearch) option.messageFilter = Object.assign({}, option.messageFilter, { conversationID: this.conversationID })
       this.$emit('search', searchKeyword, option)
       var self = this

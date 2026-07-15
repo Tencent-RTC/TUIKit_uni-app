@@ -2,7 +2,7 @@ import { type UserPickerHookResult, type User } from './types'
 import { useGroupMemberState } from '../../../state/GroupMemberState'
 import useLoginState from '../../../state/LoginState'
 import { useSearchState } from '../../../state/SearchState'
-import { SearchType, KeywordListMatchType } from '../../../types/search'
+import { SearchType, KeywordListMatchMode } from '../../../types/search'
 import { AT_ALL_TAG } from '../../../utils/mention'
 import { makeReactive } from '../../../utils/reactiveCompat'
 
@@ -35,13 +35,13 @@ export function useSelectGroupMember(routeParams?: any): UserPickerHookResult {
 
   // ======================== 数据源：群成员浏览 ========================
   const groupMemberState: any = groupID ? useGroupMemberState({ groupID }) : null
-  const allMembers: any = groupMemberState ? groupMemberState.groupMemberList : makeReactive({ value: [] })
-  const hasMoreGroupMembers: any = groupMemberState ? groupMemberState.hasMoreGroupMembers : makeReactive({ value: false })
+  const allMembers: any = groupMemberState ? groupMemberState.memberList : makeReactive({ value: [] })
+  const hasMoreMembers: any = groupMemberState ? groupMemberState.hasMoreMembers : makeReactive({ value: false })
 
   // 首屏拉取（仅 enableRemoteSearch 场景下需要主动拉）
   if (enableRemoteSearch && groupMemberState && (allMembers.value || []).length === 0) {
-    groupMemberState.fetchGroupMemberList().catch((err: any) => {
-      console.error('[useSelectGroupMember] fetchGroupMemberList failed:', err)
+    groupMemberState.loadMembers().catch((err: any) => {
+      console.error('[useSelectGroupMember] loadMembers failed:', err)
     })
   }
 
@@ -66,8 +66,8 @@ export function useSelectGroupMember(routeParams?: any): UserPickerHookResult {
           }
           searchState
             .search([trimmed], {
-              keywordListMatchType: KeywordListMatchType.OR,
-              searchType: SearchType.GroupMember,
+              keywordListMatchMode: KeywordListMatchMode.OR,
+              searchType: SearchType.GROUP_MEMBER,
               searchCount: 100,
               groupMemberFilter: { groupIDList: [groupID] },
             })
@@ -118,7 +118,7 @@ export function useSelectGroupMember(routeParams?: any): UserPickerHookResult {
   }
 
   const lockedItems = { get value(): string[] { return [] } }
-  const hasMore = { get value(): boolean { return !!hasMoreGroupMembers.value } }
+  const hasMore = { get value(): boolean { return !!hasMoreMembers.value } }
 
   // ======================== 行为 ========================
   const cleanup = (): void => {
@@ -150,11 +150,11 @@ export function useSelectGroupMember(routeParams?: any): UserPickerHookResult {
     const isSearching = enableRemoteSearch && (searchKeywordRef.value || '').trim().length > 0
     if (isSearching) return
     if (!groupMemberState) return
-    if (!hasMoreGroupMembers.value) return
+    if (!hasMoreMembers.value) return
     try {
-      await groupMemberState.fetchMoreGroupMemberList()
+      await groupMemberState.loadMoreMembers()
     } catch (err) {
-      console.error('[useSelectGroupMember] fetchMoreGroupMemberList failed:', err)
+      console.error('[useSelectGroupMember] loadMoreMembers failed:', err)
     }
   }
 

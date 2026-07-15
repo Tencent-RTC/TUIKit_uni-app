@@ -1,5 +1,5 @@
 <template>
-  <view class="merger-message" :class="'merger-message-' + (message.isSelf ? 'out' : 'in')" @tap="handleTap">
+  <view class="merger-message" :class="'merger-message-' + (message.isSentBySelf ? 'out' : 'in')" @tap="handleTap">
     <view class="merger-highlight"><view class="merger-container">
       <text class="merger-title">{{ mergerTitle }}</text>
       <view class="merger-abstract-list">
@@ -15,7 +15,7 @@ export default {
   name: 'MergerMessage',
   props: { message: { type: Object, required: true } },
   computed: {
-    mergedMessage() { return this.message.messageBody && this.message.messageBody.mergedMessage },
+    mergedMessage() { return this.message.messagePayload && this.message.messagePayload },
     mergerTitle() { return (this.mergedMessage && this.mergedMessage.title) || '聊天记录' },
     abstractList() { var a = (this.mergedMessage && this.mergedMessage.abstractList) || []; return a.slice(0, 4) }
   },

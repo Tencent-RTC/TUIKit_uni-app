@@ -1,0 +1,5 @@
+
+export type ContactInfoType =
+  | 'addFriend'      // 添加好友详情
+  | 'newContact'     // 新的联系人详情（好友申请）
+  | 'friend'         // 好友详情

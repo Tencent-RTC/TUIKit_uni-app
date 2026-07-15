@@ -1,0 +1,187 @@
+
+import { ref } from 'vue'
+import type { Ref } from 'vue'
+
+// ==================== 类型定义 ====================
+
+/** Hook 入参 */
+export type UseAudioPlayerOptions = {
+  messageId: string
+  onComplete?: () => void
+  onError?: (error: any) => void
+}
+
+/** Hook 返回值 */
+export type UseAudioPlayerReturn = {
+  isPlaying: Ref<boolean>
+  play: (url: string) => void
+  stop: () => void
+}
+
+/** 内部 audioPlayerStart 事件 payload */
+type AudioPlayerStartPayload = {
+  messageId: string
+}
+
+// ==================== 全局状态 ====================
+
+/**
+ * 全局唯一 innerAudioContext 实例
+ * 每次新 play 前如果 globalMessageId 不同，先 stop 旧的避免多实例并发播放
+ */
+let globalPlayer: InnerAudioContext | null = null
+let globalMessageId: string = ''
+
+/**
+ * Hook 实例的响应式 isPlaying 引用集合
+ * 用于在 play/stop 切换时同步更新所有 AudioMessage 组件的波形动画状态
+ */
+const playerStates: Map<string, Ref<boolean>> = new Map()
+
+/**
+ * 录音中伪 messageId
+ * MessageInput 录音前 emit audioPlayerStart { messageId: RECORDING_PSEUDO_ID }
+ * AudioMessage 收到后判断 data.messageId !== props.message.msgID → 停止自己
+ */
+export const RECORDING_PSEUDO_ID: string = '__atomicx_recording__'
+
+// ==================== Hook ====================
+
+/**
+ * 创建语音消息播放器 Hook
+ *
+ * @param options.messageId 消息唯一标识，用于全局单例管理
+ * @param options.onComplete 播放完成回调
+ * @param options.onError 播放错误回调
+ * @returns { isPlaying, play, stop }
+ */
+export const useAudioPlayer = (options: UseAudioPlayerOptions): UseAudioPlayerReturn => {
+  const isPlaying: Ref<boolean> = ref(false)
+  playerStates.set(options.messageId, isPlaying)
+
+  /**
+   * 内部: 销毁当前 player 实例
+   */
+  const destroyPlayer = (): void => {
+    if (globalPlayer != null) {
+      const player: InnerAudioContext = globalPlayer as InnerAudioContext
+      try {
+        player.stop()
+        player.destroy()
+      } catch (e: any) {
+        console.warn(`[useAudioPlayer] destroy player failed: ${e}`)
+      }
+      globalPlayer = null
+    }
+  }
+
+  /**
+   * 停止当前 hook 实例对应的播放
+   */
+  const stop = (): void => {
+    if (isPlaying.value) {
+      isPlaying.value = false
+    }
+    // 只有当前全局在播的是自己才销毁
+    if (globalMessageId == options.messageId) {
+      destroyPlayer()
+      globalMessageId = ''
+    }
+  }
+
+  /**
+   * 播放指定 url 的音频
+   * 内部按 messageId 做全局单例：不同 messageId 时先 stop 旧的再 play 自己的
+   *
+   * @param url 音频地址（本地路径或远端 URL）
+   */
+  const play = (url: string): void => {
+    if (url == null || url.length == 0) return
+
+    // 如果当前全局播放的不是自己，先停掉旧的
+    if (globalPlayer != null && globalMessageId !== options.messageId) {
+      // 通知其他 AudioMessage 组件停止自己
+      uni.$emit('audioPlayerStart', { messageId: options.messageId } as AudioPlayerStartPayload)
+      destroyPlayer()
+    }
+
+    // 如果自己已经在播（重复点击）→ 走 stop 路径
+    if (globalPlayer != null && globalMessageId == options.messageId) {
+      stop()
+      return
+    }
+
+    // 通知所有其他 AudioMessage 组件停止自己
+    uni.$emit('audioPlayerStart', { messageId: options.messageId } as AudioPlayerStartPayload)
+
+    // 创建新 player
+    const player: InnerAudioContext = uni.createInnerAudioContext()
+    globalPlayer = player
+    globalMessageId = options.messageId
+    isPlaying.value = true
+
+    player.src = url
+    player.onEnded(() => {
+      isPlaying.value = false
+      if (globalMessageId == options.messageId) {
+        globalMessageId = ''
+      }
+      try {
+        player.destroy()
+      } catch (e: any) {
+        // ignore
+      }
+      if (globalPlayer == player) {
+        globalPlayer = null
+      }
+      if (options.onComplete != null) {
+        options.onComplete()
+      }
+    })
+    player.onError((err: any) => {
+      isPlaying.value = false
+      if (globalMessageId == options.messageId) {
+        globalMessageId = ''
+      }
+      try {
+        player.destroy()
+      } catch (e: any) {
+        // ignore
+      }
+      if (globalPlayer == player) {
+        globalPlayer = null
+      }
+      if (options.onError != null) {
+        options.onError(err)
+      }
+    })
+    player.play()
+  }
+
+  return { isPlaying, play, stop }
+}
+
+// ==================== 全局工具 ====================
+
+/**
+ * 停止全局音频播放器
+ * 用于：MessageInput 录音前停止所有正在播放的语音消息
+ */
+export const stopGlobalAudioPlayer = (): void => {
+  if (globalPlayer == null) return
+  const player: InnerAudioContext = globalPlayer as InnerAudioContext
+  try {
+    player.stop()
+    player.destroy()
+  } catch (e: any) {
+    console.warn(`[useAudioPlayer] stopGlobalAudioPlayer failed: ${e}`)
+  }
+  globalPlayer = null
+  globalMessageId = ''
+  // 重置所有 hook 实例的 isPlaying 状态
+  playerStates.forEach((stateRef: Ref<boolean>) => {
+    if (stateRef.value) {
+      stateRef.value = false
+    }
+  })
+}

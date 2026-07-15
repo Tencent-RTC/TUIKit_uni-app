@@ -1,0 +1,9 @@
+
+const en: Map<string, string> = new Map()
+en.set('take_photo', 'Take Photo')
+en.set('choose_from_album', 'Choose from Album')
+en.set('cancel', 'Cancel')
+en.set('done', 'Done')
+en.set('crop_failed', 'Crop failed')
+
+export { en }

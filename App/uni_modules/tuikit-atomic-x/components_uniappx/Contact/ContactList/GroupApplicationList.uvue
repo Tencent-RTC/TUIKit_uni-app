@@ -1,0 +1,256 @@
+<template>
+  <view class="group-notification-list">
+    <scroll-view class="list-scroll" :show-scrollbar="false" scroll-y="true">
+      <view v-if="showEmpty" key="empty">
+        <view class="placeholder">
+          <component :is="resolvedPlaceholderEmptyList" text="暂无新的入群申请" />
+        </view>
+      </view>
+
+      <template v-else>
+        <view v-for="item in pendingApplicationList" :key="resolveStr(item, 'applicationID', '')">
+          <view class="application-item" @click="handleItemClick(item)">
+            <component
+              :is="resolvedAvatar"
+              :src="resolveStr(item, 'fromUserAvatarURL', '')"
+              :name="resolveStr(item, 'fromUserNickname', resolveStr(item, 'fromUser', ''))"
+              :size="96"
+              shape="square"
+              defaultAvatarType="user"
+              :pureMode="true"
+            />
+            <view class="item-content">
+              <view class="item-info">
+                <text class="item-name" :numberOfLines="1">{{ resolveStr(item, 'fromUserNickname', resolveStr(item, 'fromUser', '')) }}</text>
+                <view class="item-desc-row">
+                  <text class="item-desc-label">验证信息：</text>
+                  <text class="item-desc" :numberOfLines="1">{{ resolveStr(item, 'requestMsg', '无') }}</text>
+                </view>
+                <text class="item-group-name" :numberOfLines="1">申请加入 {{ resolveStr(item, 'groupName', resolveStr(item, 'groupID', '')) }}</text>
+              </view>
+              <view class="item-actions">
+                <view class="action-btn action-btn--accept" @click.stop="handleAccept(item)">
+                  <text class="action-btn-text action-btn-text--accept">同意</text>
+                </view>
+                <view class="action-btn action-btn--reject" @click.stop="handleReject(item)">
+                  <text class="action-btn-text action-btn-text--reject">拒绝</text>
+                </view>
+              </view>
+            </view>
+          </view>
+        </view>
+      </template>
+    </scroll-view>
+  </view>
+</template>
+
+<script setup lang="uts">
+
+import { ref, computed, onBeforeUnmount, onMounted } from 'vue'
+import AvatarComponent from '../../Avatar/Avatar.uvue'
+import DefaultEmptyList from '../placeholders/EmptyList.uvue'
+import DefaultLoading from '../placeholders/Loading.uvue'
+import { useGroupState } from '../../../state/GroupState'
+import { showToast } from '../../../utils/toast'
+
+type Props = {
+  Avatar?: any
+  PlaceholderEmptyList?: any
+  PlaceholderLoading?: any
+}
+
+type Emits = {
+  itemClick: any
+  accept: any
+  reject: any
+}
+
+const props = withDefaults(defineProps<Props>(), {
+})
+
+const resolvedAvatar = computed<any>((): any => props.Avatar ?? AvatarComponent)
+const resolvedPlaceholderLoading = computed<any>((): any => props.PlaceholderLoading ?? DefaultLoading)
+const resolvedPlaceholderEmptyList = computed<any>((): any => props.PlaceholderEmptyList ?? DefaultEmptyList)
+
+const emit = defineEmits<Emits>()
+
+const {
+  unreadApplicationCount,
+  clearApplicationUnreadCount,
+  applicationList,
+  acceptApplication,
+  refuseApplication
+} = useGroupState()
+
+const resolveStr = (item: any, key: string, fallback: string): string => {
+  if (item == null) return fallback
+  const v: any | null = (item as UTSJSONObject)[key]
+  if (typeof v == 'string' && (v as string).length > 0) return v as string
+  return fallback
+}
+
+const isLoading = ref<boolean>(false)
+
+const pendingApplicationList = computed<any[]>(() => {
+  return applicationList.value
+    .filter((item: any, _index: number): boolean => {
+      const info = item as UTSJSONObject
+      const handledRaw: any | null = info['handledStatus']
+      return handledRaw == 0
+    })
+    .map((item: any): any => item as any)
+})
+
+const showEmpty = computed<boolean>((): boolean => pendingApplicationList.value.length == 0)
+
+const handleItemClick = (item: any): void => {
+  emit('itemClick', item)
+}
+
+const handleAccept = async (item: any): Promise<void> => {
+  try {
+    await acceptApplication(item)
+    showToast({ message: '已同意', type: 'success' })
+    emit('accept', item)
+  } catch (error: any) {
+    showToast({ message: error.message ?? '操作失败', type: 'error' })
+  }
+}
+
+const handleReject = async (item: any): Promise<void> => {
+  try {
+    await refuseApplication(item)
+    showToast({ message: '已拒绝', type: 'success' })
+    emit('reject', item)
+  } catch (error: any) {
+    showToast({ message: error.message ?? '操作失败', type: 'error' })
+  }
+}
+
+const handleClearUnreadCount = (): void => {
+  if (unreadApplicationCount.value > 0) {
+    clearApplicationUnreadCount()
+  }
+}
+
+onMounted((): void => {
+  handleClearUnreadCount()
+})
+
+onBeforeUnmount((): void => {
+  handleClearUnreadCount()
+})
+</script>
+
+<style>
+.group-notification-list {
+  flex: 1;
+  background-color: #F2F3F5;
+}
+
+.list-scroll {
+  flex: 1;
+}
+
+.placeholder {
+  padding-top: 100rpx;
+  padding-bottom: 100rpx;
+  justify-content: center;
+  align-items: center;
+}
+
+.application-item {
+  flex-direction: row;
+  align-items: center;
+  padding: 24rpx 32rpx;
+  background-color: #FFFFFF;
+  margin-bottom: 2rpx;
+}
+
+.item-content {
+  flex: 1;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  margin-left: 24rpx;
+}
+
+.item-info {
+  flex: 1;
+  flex-direction: column;
+}
+
+.item-name {
+  font-size: 36rpx;
+  font-weight: 400;
+  line-height: 48rpx;
+  color: #111111;
+  lines: 1;
+  text-overflow: ellipsis;
+}
+
+.item-desc-row {
+  flex-direction: row;
+  align-items: center;
+}
+
+.item-desc-label {
+  font-size: 24rpx;
+  font-weight: 400;
+  line-height: 36rpx;
+  color: #888888;
+}
+
+.item-desc {
+  flex: 1;
+  font-size: 24rpx;
+  font-weight: 400;
+  line-height: 36rpx;
+  color: #888888;
+  lines: 1;
+  text-overflow: ellipsis;
+}
+
+.item-group-name {
+  font-size: 24rpx;
+  font-weight: 400;
+  line-height: 36rpx;
+  color: #666666;
+  lines: 1;
+  text-overflow: ellipsis;
+}
+
+.item-actions {
+  flex-direction: row;
+  align-items: center;
+}
+
+.action-btn {
+  padding: 16rpx 24rpx;
+  border-radius: 100rpx;
+  margin-left: 10rpx;
+}
+
+.action-btn--accept {
+  background-color: #1C66E5;
+}
+
+.action-btn--reject {
+  background-color: #FFFFFF;
+  border:1rpx solid #E6E9F0;
+}
+
+.action-btn-text {
+  font-size: 26rpx;
+  font-weight: 400;
+  line-height: 32rpx;
+}
+
+.action-btn-text--accept {
+  color: #FFFFFF;
+}
+
+.action-btn-text--reject {
+  color: rgba(0, 0, 0, 0.9);
+}
+</style>

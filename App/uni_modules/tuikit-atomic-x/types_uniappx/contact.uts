@@ -1,0 +1,173 @@
+
+import type { GroupApplicationInfo } from './group'
+
+// ==================== 枚举 ====================
+
+/**
+ * 联系人在线状态（对齐 ContactOnlineStatus，整数枚举）
+ */
+export enum ContactOnlineStatus {
+  UNKNOWN = 0,
+  ONLINE = 1,
+  OFFLINE = 2,
+}
+
+/**
+ * 消息接收选项（对齐 ConversationListStore.ReceiveMessageOpt，整数枚举）
+ *
+ * 注：此枚举对应原生 ReceiveMessageOpt（5 值），
+ * 在 ConversationListStore.setReceiveMessageOpt 中使用
+ */
+export enum ReceiveMessageOpt {
+  /** 正常接收消息 (V2TIM_RECEIVE_MESSAGE) */
+  RECEIVE = 0,
+  /** 不接收消息 (V2TIM_NOT_RECEIVE_MESSAGE) */
+  NOT_RECEIVE = 1,
+  /** 接收消息但不提醒 (V2TIM_RECEIVE_NOT_NOTIFY_MESSAGE) */
+  NOT_NOTIFY = 2,
+  /** 接收消息但不提醒，除了@消息 (V2TIM_RECEIVE_NOT_NOTIFY_MESSAGE_EXCEPT_AT) */
+  NOT_NOTIFY_EXCEPT_MENTION = 3,
+  /** 不接收消息，除了@消息 (V2TIM_NOT_RECEIVE_MESSAGE_EXCEPT_AT) */
+  NOT_RECEIVE_EXCEPT_MENTION = 4,
+}
+
+/**
+ * 好友申请类型（对齐 V2TIMFriendApplication 常量）
+ */
+export enum FriendApplicationType {
+  /** 收到的申请 */
+  RECEIVED = 1,
+  /** 发出的申请 */
+  SENT = 2,
+  /** 双向 */
+  BOTH = 3,
+}
+
+// ==================== 接口 ====================
+
+export interface ContactInfo {
+  userID: string
+  avatarURL?: string
+  nickname?: string
+  /** 个性签名（旧名 signature，底层字段为 aboutMe） */
+  aboutMe?: string
+  /** 在线状态 */
+  onlineStatus?: ContactOnlineStatus
+  /** 是否在黑名单 */
+  isInBlacklist?: boolean
+  /** 是否是好友 */
+  isFriend?: boolean
+  /** 好友备注（统一使用 friendRemark；废弃 remark） */
+  friendRemark?: string
+}
+
+/**
+ * 好友申请信息（对齐 FriendApplicationInfo）
+ *
+ * 注：底层无独立 applicationID 字段，identifier 使用 userID
+ */
+export interface FriendApplicationInfo {
+  /** 申请人 userID（同时充当申请的唯一标识） */
+  userID: string
+  avatarURL?: string
+  /** 标题/名称 */
+  title?: string
+  /** 来源 */
+  source?: string
+  /** 申请类型 */
+  type: FriendApplicationType
+  /** 添加附言 */
+  addWording?: string
+  /** 原生侧 V2TIMFriendApplication 引用，前端不直接使用 */
+  rawApplication?: any
+}
+
+// ==================== 兼容类型重导出 ====================
+
+/**
+ * 群申请类型 / 处理状态 / 处理结果
+ * 已迁移到 group.ts；此处通过 re-export 保持向后兼容引用
+ */
+export type {
+  GroupApplicationInfo
+}
+
+export {
+  GroupApplicationType,
+  GroupApplicationHandledStatus,
+  GroupApplicationHandledResult,
+} from './group'
+
+// ==================== UI 组件衍生类型 ====================
+
+/** 通讯录入口类型 */
+export type EntryType = 'newContact' | 'groupNotification' | 'myGroups' | 'blacklist'
+
+/** 通讯录入口项 */
+export type EntryItem = {
+  type: EntryType,
+  label: string,
+  icon: string,
+  visible: boolean,
+  badge?: number,
+}
+
+/** 联系人列表组件属性 */
+export interface ContactListProps {
+  Avatar?: any
+  PlaceholderEmptyList?: any
+  PlaceholderLoading?: any
+  showNewContact?: boolean
+  showGroupNotification?: boolean
+  showMyGroups?: boolean
+  showBlacklist?: boolean
+}
+
+export type ContactListEmits = {
+  contactSelect: ContactInfo
+  entryClick: EntryType
+}
+
+/** 搜索到的用户信息（UI 用，搜索域真实类型见 search.ts） */
+export interface SearchUserInfo {
+  userID: string
+  nickname?: string
+  avatarURL?: string
+  isFriend?: boolean
+}
+
+/** 搜索到的群信息（UI 用，搜索域真实类型见 search.ts） */
+export interface SearchGroupInfo {
+  groupID: string
+  groupName?: string
+  avatarURL?: string
+  type?: string
+  memberCount?: number
+  isJoined?: boolean
+}
+
+/** 添加好友组件属性 */
+export interface AddFriendProps {
+  Avatar?: any
+}
+
+/**
+ * 添加好友组件事件
+ */
+export type AddFriendEmits = {
+  userSelect: SearchUserInfo
+  search: string
+}
+
+/** 添加群聊组件属性 */
+export interface AddGroupProps {
+  Avatar?: any
+}
+
+/**
+ * 添加群聊组件事件
+ */
+export type AddGroupEmits = {
+  groupSelect: SearchGroupInfo
+  search: string
+}

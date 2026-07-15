@@ -59,14 +59,14 @@
           <component 
             :is="Avatar"
             :src="item.friend.avatarURL || ''"
-            :name="(item.friend && item.friend.remark) || item.friend.nickname || item.friend.userID"
+            :name="(item.friend && item.friend.friendRemark) || item.friend.nickname || item.friend.userID"
             :size="80"
             shape="square"
             defaultAvatarType="user"
             pureMode
           />
           <view class="contact-list__friend-info">
-            <text class="contact-list__friend-name" :numberOfLines="1">{{ (item.friend && item.friend.remark) || item.friend.nickname || item.friend.userID }}</text>
+            <text class="contact-list__friend-name" :numberOfLines="1">{{ (item.friend && item.friend.friendRemark) || item.friend.nickname || item.friend.userID }}</text>
           </view>
         </view>
       </cell>
@@ -122,7 +122,7 @@ export default {
     entryList() {
       return [
         { type: 'newContact', label: '新的联系人', icon: iconNewContacts, visible: this.showNewContact, badge: this.contactState.friendApplicationUnreadCount.value },
-        { type: 'groupNotification', label: '群聊通知', icon: iconGroupNotifications, visible: this.showGroupNotification, badge: this.groupState.groupApplicationUnreadCount.value },
+        { type: 'groupNotification', label: '群聊通知', icon: iconGroupNotifications, visible: this.showGroupNotification, badge: this.groupState.unreadApplicationCount.value },
         { type: 'myGroups', label: '我的群聊', icon: iconGroups, visible: this.showMyGroups },
         { type: 'blacklist', label: '黑名单', icon: iconBlacklist, visible: this.showBlacklist },
       ]
@@ -130,7 +130,7 @@ export default {
     visibleEntryList() { return this.entryList.filter(function(i) { return i.visible }) },
     sidebarTopPx() { var c = this.visibleEntryList.length; return c * (96 / 750) * uni.getSystemInfoSync().screenWidth },
     groupedFriendList() {
-      var r = sortByFirstChar(this.friendList, function(item) { return item.remark || item.nickname || item.userID || '' })
+      var r = sortByFirstChar(this.friendList, function(item) { return item.friendRemark || item.nickname || item.userID || '' })
       var letters = Object.keys(r.groupedList).sort(function(a, b) { if (a === '#') return 1; if (b === '#') return -1; return a.localeCompare(b) })
       return letters.map(function(l) { return { letter: l, friends: r.groupedList[l] } })
     },
@@ -148,7 +148,7 @@ export default {
     indexLetters() { return this.groupedFriendList.map(function(g) { return g.letter }) },
   },
   watch: { indexLetters: { handler: function(l) { if (l.length > 0 && !this.activeLetter) this.activeLetter = l[0] }, immediate: true } },
-  mounted() { this.groupState.fetchGroupApplicationList() },
+  mounted() { this.groupState.loadApplications() },
   beforeDestroy() { this.contactState.destroyStore() },
   beforeUnmount() { this.contactState.destroyStore() },
   methods: {

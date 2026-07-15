@@ -1,0 +1,178 @@
+
+const isIos: boolean = uni.getSystemInfoSync().platform == 'ios'
+
+function judgeIosPermissionPush(): boolean {
+  return true
+}
+
+function judgeIosPermissionLocation(): boolean {
+  // iOS 定位权限同样由系统首次使用 CLLocationManager 时自动弹原生授权弹窗
+  return true
+}
+
+function judgeIosPermissionRecord(): boolean {
+  // iOS 麦克风权限：业务方在发起通话前会通过 callPermission.uts 主动请求
+  return true
+}
+
+function judgeIosPermissionCamera(): boolean {
+  // iOS 摄像头权限：业务方在发起视频通话前会通过 callPermission.uts 主动请求
+  return true
+}
+
+function judgeIosPermissionPhotoLibrary(): boolean {
+  return true
+}
+
+function judgeIosPermissionContact(): boolean {
+  return true
+}
+
+function judgeIosPermissionCalendar(): boolean {
+  return true
+}
+
+function judgeIosPermissionMemo(): boolean {
+  return true
+}
+
+/**
+ * 请求 Android 单个系统权限
+ * @param permissionID 完整的 Android 权限字符串（如 'android.permission.RECORD_AUDIO'）
+ * @returns Promise<number> 0=已授权 / -1=拒绝 / -2=不再询问
+ *
+ *   requestSystemPermission(
+ *     context: Activity,
+ *     requestPermission: Array<string>,
+ *     success: (allRight: boolean, grantedList: Array<string>) => void,
+ *     fail: (doNotAskAgain: boolean, grantedList: Array<string>) => void,
+ *     shallUnCheck?: boolean
+ *   ): void
+ * 这里 Promise 包装外层接口，callPermission.uts 仍按 `code == 0` 判定授权。
+ */
+function requestAndroidPermission(permissionID: string): Promise<number> {
+  return new Promise<number>((resolve, reject): void => {
+    try {
+      const activity = UTSAndroid.getUniActivity()
+      if (activity == null) {
+        reject(new Error('UTSAndroid.getUniActivity() returned null'))
+        return
+      }
+      UTSAndroid.requestSystemPermission(
+        activity,
+        // requestPermission: Array<string>（单权限数组）
+        [permissionID] as Array<string>,
+        // success: 全部授权时 allRight=true
+        (allRight: boolean, _grantedList: Array<string>): void => {
+          resolve(allRight ? 0 : -1)
+        },
+        // fail: doNotAskAgain=true → -2（不再询问），否则 -1
+        (doNotAskAgain: boolean, _grantedList: Array<string>): void => {
+          resolve(doNotAskAgain ? -2 : -1)
+        }
+      )
+    } catch (e: any) {
+      console.log(`申请权限错误：${e}`)
+      reject(e)
+    }
+  })
+}
+
+// ============ 统一权限分发（保持原 API 形态）============
+
+/**
+ * 使用一个方法，根据参数判断权限（iOS 端）
+ * @param permissionID 权限名称（location / camera / photoLibrary / record / push / contact / calendar / memo）
+ */
+function judgeIosPermission(permissionID: string): boolean {
+  if (permissionID == 'location') {
+    return judgeIosPermissionLocation()
+  }
+  if (permissionID == 'camera') {
+    return judgeIosPermissionCamera()
+  }
+  if (permissionID == 'photoLibrary') {
+    return judgeIosPermissionPhotoLibrary()
+  }
+  if (permissionID == 'record') {
+    return judgeIosPermissionRecord()
+  }
+  if (permissionID == 'push') {
+    return judgeIosPermissionPush()
+  }
+  if (permissionID == 'contact') {
+    return judgeIosPermissionContact()
+  }
+  if (permissionID == 'calendar') {
+    return judgeIosPermissionCalendar()
+  }
+  if (permissionID == 'memo') {
+    return judgeIosPermissionMemo()
+  }
+  return false
+}
+
+// ============ 跳转到应用权限页面（跨平台）============
+
+/**
+ * 跳转到应用的权限设置页（跨平台，统一用 uni.openAppAuthorizeSetting）
+ * - iOS: 跳转到系统设置中的应用设置页
+ * - Android: 跳转到应用详情页（ACTION_APPLICATION_DETAILS_SETTINGS）
+ */
+function gotoAppPermissionSetting(): void {
+  const openAuth: (opts: any) => void = (uni.openAppAuthorizeSetting as (opts: any) => void)
+  openAuth({
+    success: (): void => {
+      console.log('[permission] openAppAuthorizeSetting success')
+    },
+    fail: (err: any): void => {
+      const errMsg: string = (err as UTSJSONObject)['errMsg'] as string
+      console.log(`[permission] openAppAuthorizeSetting failed: ${errMsg}`)
+    },
+    complete: (): void => {
+      console.log('[permission] openAppAuthorizeSetting complete')
+    }
+  })
+}
+
+// ============ 系统位置服务是否开启（跨平台）============
+
+/**
+ * 检查系统的位置服务是否开启
+ * - iOS: CLLocationManager.locationServicesEnabled() — UTS 无等价 API，返回 true
+ * - Android: LocationManager.isProviderEnabled(GPS_PROVIDER) — UTS 无等价 API，
+ *   通过 uni.getSystemInfoSync().locationEnabled 兜底
+ */
+function checkSystemEnableLocation(): boolean {
+  if (isIos) {
+    return true
+  }
+  // Android 端尝试读取系统定位开关（uni.getSystemInfoSync 部分版本暴露 locationEnabled）
+  try {
+    const sysInfo: UTSJSONObject = uni.getSystemInfoSync() as UTSJSONObject
+    const locEnabled: any | null = sysInfo['locationEnabled']
+    if (locEnabled != null && typeof locEnabled == 'boolean') {
+      const enabled: boolean = locEnabled as boolean
+      console.log(`系统定位开启:${enabled}`)
+      return enabled
+    }
+  } catch (e: any) {
+    console.log(`checkSystemEnableLocation error: ${e}`)
+  }
+  // 兜底：假设开启（业务方在定位失败时会收到系统回调）
+  return true
+}
+
+type PermissionDefault = {
+  judgeIosPermission: (permissionID: string) => boolean;
+  requestAndroidPermission: (permissionID: string) => Promise<number>;
+  checkSystemEnableLocation: () => boolean;
+  gotoAppPermissionSetting: () => void;
+}
+const permissionDefault: PermissionDefault = {
+  judgeIosPermission: (permissionID: string): boolean => judgeIosPermission(permissionID),
+  requestAndroidPermission: (permissionID: string): Promise<number> => requestAndroidPermission(permissionID),
+  checkSystemEnableLocation: (): boolean => checkSystemEnableLocation(),
+  gotoAppPermissionSetting: (): void => { gotoAppPermissionSetting() },
+}
+export default permissionDefault

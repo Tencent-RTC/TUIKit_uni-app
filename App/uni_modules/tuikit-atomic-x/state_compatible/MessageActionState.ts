@@ -1,17 +1,17 @@
 /**
- * 消息操作状态管理
+ * 消息操作状态管理 (Vue2 适配版)
  * @module MessageActionState
  */
-// No reactive imports needed for MessageActionState
+import { makeReactive } from "../utils/reactiveCompat";
 import type { MessageInfo } from '../types/message'
+import type { GroupMember } from '../types/group';
+import { MediaQuality } from '../types/message';
 // @ts-ignore
 import { callAPI, addListener, removeListener } from "../utils/tuikitBridge";
 import { safeJsonParse } from '../utils/utsUtils';
 
+declare const getApp: any;
 
-/**
- * 获取全局 InstanceMap
- */
 function getGlobalInstanceMap(): Map<string, MessageActionState> {
   try {
     const app = getApp();
@@ -29,41 +29,48 @@ function getGlobalInstanceMap(): Map<string, MessageActionState> {
 
 const InstanceMap = getGlobalInstanceMap();
 
-/**
- * 消息操作状态管理类
- */
 class MessageActionState {
-  /** Store 实例ID */
   public readonly instanceId: string;
-  /** 消息 */
   public readonly message: MessageInfo;
 
-  /**
-   * 私有构造函数，使用 getInstance 获取实例
-   * @param message 消息对象
-   */
+  /** 已读成员列表 */
+  public readonly readMemberList: { value: GroupMember[] };
+  public readonly hasMoreReadMembers: { value: boolean };
+
+  /** 未读成员列表 */
+  public readonly unreadMemberList: { value: GroupMember[] };
+  public readonly hasMoreUnreadMembers: { value: boolean };
+
+  /** 表情回应用户列表 */
+  public readonly reactionUserList: { value: GroupMember[] };
+  public readonly hasMoreReactionUsers: { value: boolean };
+
   private constructor(message: MessageInfo) {
-    console.log(`[MessageActionState] Constructor called, message.msgID: ${message.msgID}`);
     this.instanceId = MessageActionState.generateInstanceId(message);
     this.message = message;
-    // 初始化 Store
+
+    this.readMemberList = makeReactive({ value: [] });
+    this.hasMoreReadMembers = makeReactive({ value: false });
+    this.unreadMemberList = makeReactive({ value: [] });
+    this.hasMoreUnreadMembers = makeReactive({ value: false });
+    this.reactionUserList = makeReactive({ value: [] });
+    this.hasMoreReactionUsers = makeReactive({ value: false });
+
     this.createStore();
   }
 
   private createStore() {
-    const options = {
+    callAPI(JSON.stringify({
       api: "createStore",
       params: {
         createStoreParams: this.instanceId,
+        message: JSON.stringify(this.message)
       }
-    };
-    
-    callAPI(JSON.stringify(options), (response: string) => {
+    }), (response: string) => {
       try {
         const result = safeJsonParse<any>(response, {});
-        
         if (result.code === 0) {
-          // console.log(`[${this.instanceId}][createStore] Success`);
+          this.bindEvent();
         } else {
           console.error(`[${this.instanceId}][createStore] Failed:`, result.message);
         }
@@ -73,21 +80,13 @@ class MessageActionState {
     });
   }
 
-  /**
-   * 生成完整的实例 ID
-   * @param message 消息对象
-   */
   private static generateInstanceId(message: MessageInfo): string {
     return JSON.stringify({
       storeName: "MessageAction",
-      message: message
+      message,
     });
   }
 
-  /**
-   * 获取实例（单例模式）
-   * @param message 消息对象，默认为空对象
-   */
   public static getInstance(message: MessageInfo): MessageActionState {
     const instanceId = MessageActionState.generateInstanceId(message);
     if (!InstanceMap.has(instanceId)) {
@@ -96,142 +95,222 @@ class MessageActionState {
     return InstanceMap.get(instanceId)!;
   }
 
-  /**
-   * 删除消息
-   * @returns Promise<void>
-   */
-  deleteMessage = async(): Promise<void> => {
-    return new Promise((resolve, reject) => {
-      const options = {
-        api: 'deleteMessage',
-        params: {
-          createStoreParams: this.instanceId,
-        }
-      }
-      callAPI(JSON.stringify(options), (data: string) => {
+  private bindEvent(): void {
+    const listeners: Array<{ name: string; key: string; transform?: (v: any) => any }> = [
+      { name: 'readMemberList', key: 'readMemberList' },
+      { name: 'hasMoreReadMembers', key: 'hasMoreReadMembers' },
+      { name: 'unreadMemberList', key: 'unreadMemberList' },
+      { name: 'hasMoreUnreadMembers', key: 'hasMoreUnreadMembers' },
+      { name: 'reactionUserList', key: 'reactionUserList' },
+      { name: 'hasMoreReactionUsers', key: 'hasMoreReactionUsers' },
+    ];
+
+    listeners.forEach(({ name }) => {
+      addListener({
+        type: "", store: "MessageAction", name,
+        params: { createStoreParams: this.instanceId }
+      }, (data: string) => {
         try {
-          const result = safeJsonParse(data, {}) as any;
-          if (result.code === 0) {
-            resolve()
-          } else {
-            reject(new Error(result.message || 'deleteMessage failed'))
+          const result = safeJsonParse<any>(data, {});
+          switch (name) {
+            case 'readMemberList': {
+              const list = safeJsonParse<GroupMember[]>(result.readMemberList, []);
+              if (Array.isArray(list)) this.readMemberList.value = list;
+              break;
+            }
+            case 'hasMoreReadMembers':
+              this.hasMoreReadMembers.value = Boolean(result.hasMoreReadMembers);
+              break;
+            case 'unreadMemberList': {
+              const list = safeJsonParse<GroupMember[]>(result.unreadMemberList, []);
+              if (Array.isArray(list)) this.unreadMemberList.value = list;
+              break;
+            }
+            case 'hasMoreUnreadMembers':
+              this.hasMoreUnreadMembers.value = Boolean(result.hasMoreUnreadMembers);
+              break;
+            case 'reactionUserList': {
+              const list = safeJsonParse<GroupMember[]>(result.reactionUserList, []);
+              if (Array.isArray(list)) this.reactionUserList.value = list;
+              break;
+            }
+            case 'hasMoreReactionUsers':
+              this.hasMoreReactionUsers.value = Boolean(result.hasMoreReactionUsers);
+              break;
           }
         } catch (error) {
-          reject(error)
+          console.error(`[${this.instanceId}][${name} listener] Error:`, error);
         }
-      })
-    })
+      });
+    });
   }
 
-  /**
-   * 撤回消息
-   * @returns Promise<void>
-   */
-  recallMessage = async(): Promise<void> => {
-    return new Promise((resolve, reject) => {
-      const options = {
-        api: 'recallMessage',
-        params: {
-          createStoreParams: this.instanceId,
-        }
-      }
+  // ==================== 新版 API ====================
 
-      callAPI(JSON.stringify(options), (data: string) => {
+  /** 删除消息（替代旧 deleteMessage） */
+  delete = (): Promise<void> => this.callSimpleApi('delete');
+
+  /** 撤回消息（替代旧 recallMessage） */
+  revoke = (): Promise<void> => this.callSimpleApi('revoke');
+
+  /** Pin 消息 */
+  pin = (isPinned: boolean): Promise<void> => this.callApiWithParams('pin', { isPinned });
+
+  /** 加载已读成员 */
+  loadReadMembers = (): Promise<void> => this.callSimpleApi('loadReadMembers');
+  loadUnreadMembers = (): Promise<void> => this.callSimpleApi('loadUnreadMembers');
+  loadMoreMembers = (): Promise<void> => this.callSimpleApi('loadMoreMembers');
+
+  /** 添加表情回应 */
+  addReaction = (reactionID: string): Promise<void> =>
+    this.callApiWithParams('addReaction', { reactionID });
+
+  /** 移除表情回应 */
+  removeReaction = (reactionID: string): Promise<void> =>
+    this.callApiWithParams('removeReaction', { reactionID });
+
+  /** 加载表情回应用户 */
+  loadReactionUsers = (reactionID: string): Promise<void> =>
+    this.callApiWithParams('loadReactionUsers', { reactionID });
+
+  loadMoreReactionUsers = (reactionID: string): Promise<void> =>
+    this.callApiWithParams('loadMoreReactionUsers', { reactionID });
+
+  /** 设置消息扩展 */
+  setExtensions = (extensions: Record<string, string>): Promise<void> =>
+    this.callApiWithParams('setExtensions', { extensions: JSON.stringify(extensions) });
+
+  /** 删除消息扩展 */
+  deleteExtensions = (keys: string[]): Promise<void> =>
+    this.callApiWithParams('deleteExtensions', { keys: JSON.stringify(keys) });
+
+  /** 翻译文本（对齐底层 translateText(sourceTextList, sourceLanguage, targetLanguage)） */
+  translateText = (
+    sourceTextList: string[],
+    sourceLanguage: string | undefined,
+    targetLanguage: string
+  ): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      const params: any = { createStoreParams: this.instanceId, sourceTextList, targetLanguage };
+      if (sourceLanguage !== undefined) params.sourceLanguage = sourceLanguage;
+      callAPI(JSON.stringify({ api: 'translateText', params }), (response: string) => {
         try {
-          const result = safeJsonParse(data, {}) as any;
+          const result = safeJsonParse<any>(response, {});
           if (result.code === 0) {
-            resolve()
+            resolve();
           } else {
-            reject(new Error(result.message || 'recallMessage failed'))
+            reject(new Error(result.message || 'translateText failed'));
           }
-        } catch (error) {
-          reject(error)
-        }
-      })
-    })
+        } catch (error) { reject(error); }
+      });
+    });
   }
 
-  /**
-   * 语音转文字
-   *
-   * 透传到底层 Native Store 已实现的 convertVoiceToText 接口，
-   * 触发当前 SOUND 类型消息的语音转文本。
-   *
-   * 注意：转换结果由 SDK 异步更新到 message.messageBody.asrText，
-   * 通过 MessageList 的响应式数据流刷新到 AudioMessage 组件，
-   * 本接口的 Promise 仅表示 "调用是否成功触发"，无需等待返回文本。
-   *
-   * @param language 转换语言，如 'zh' / 'en'，由 Native 侧定义并校验
-   * @returns Promise<void> 调用是否成功
-   */
-  convertVoiceToText = async(language: string): Promise<void> => {
+  /** 下载媒体（替代旧 MessageList.downloadMessageResource） */
+  downloadMedia = (quality?: MediaQuality): Promise<void> => {
+    const params: any = {};
+    if (quality !== undefined) params.quality = quality;
+    return this.callApiWithParams('downloadMedia', params);
+  }
+
+  /** 下载合并消息列表 */
+  downloadMergedMessageList = (): Promise<MessageInfo[]> => {
     return new Promise((resolve, reject) => {
-      const options = {
+      callAPI(JSON.stringify({
+        api: 'downloadMergedMessageList',
+        params: { createStoreParams: this.instanceId }
+      }), (response: string) => {
+        try {
+          const result = safeJsonParse<any>(response, {});
+          if (result.code === 0) {
+            const list = (result.data && result.data.data && result.data.data.messageList) || [];
+            resolve(list);
+          } else {
+            reject(new Error(result.message || 'downloadMergedMessageList failed'));
+          }
+        } catch (error) { reject(error); }
+      });
+    });
+  }
+
+  /** 语音转文字 */
+  convertVoiceToText = (language: string): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      callAPI(JSON.stringify({
         api: 'convertVoiceToText',
-        params: {
-          createStoreParams: this.instanceId,
-          language: language,
-        }
-      }
-
-      callAPI(JSON.stringify(options), (data: string) => {
+        params: { createStoreParams: this.instanceId, language }
+      }), (data: string) => {
         try {
           const result = safeJsonParse(data, {}) as any;
           if (result.code === 0) {
-            resolve()
+            resolve();
           } else {
-            const err = new Error(result.message || 'convertVoiceToText failed') as Error & { code?: number }
-            err.code = result.code
-            reject(err)
+            const err = new Error(result.message || 'convertVoiceToText failed') as Error & { code?: number };
+            err.code = result.code;
+            reject(err);
           }
-        } catch (error) {
-          reject(error)
-        }
-      })
-    })
+        } catch (error) { reject(error); }
+      });
+    });
   }
 
-  /**
-   * 移除事件监听
-   */
+  // ==================== 内部工具 ====================
+
+  private callSimpleApi(api: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+      callAPI(JSON.stringify({
+        api,
+        params: { createStoreParams: this.instanceId }
+      }), (response: string) => {
+        try {
+          const result = safeJsonParse<any>(response, {});
+          if (result.code === 0) {
+            resolve();
+          } else {
+            reject(new Error(result.message || `${api} failed`));
+          }
+        } catch (error) { reject(error); }
+      });
+    });
+  }
+
+  private callApiWithParams(api: string, extraParams: Record<string, any>): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const params: Record<string, any> = { createStoreParams: this.instanceId };
+      for (const k in extraParams) { params[k] = extraParams[k]; }
+      callAPI(JSON.stringify({ api, params }), (response: string) => {
+        try {
+          const result = safeJsonParse<any>(response, {});
+          if (result.code === 0) {
+            resolve();
+          } else {
+            reject(new Error(result.message || `${api} failed`));
+          }
+        } catch (error) { reject(error); }
+      });
+    });
+  }
+
   private unbindEvent(): void {
-    // MessageAction 暂时没有需要解绑的事件
-    console.log(`[${this.instanceId}][unbindEvent] No events to unbind for MessageAction`);
+    ["readMemberList", "hasMoreReadMembers", "unreadMemberList", "hasMoreUnreadMembers", "reactionUserList", "hasMoreReactionUsers"].forEach(name => {
+      removeListener({
+        type: "", store: "MessageAction", name,
+        params: { createStoreParams: this.instanceId }
+      });
+    });
   }
 
-  /**
-   * 重置数据
-   */
-  private resetData(): void {
-    // MessageAction 暂时没有需要重置的数据
-    console.log(`[${this.instanceId}][resetData] No data to reset for MessageAction`);
-  }
-
-  /**
-   * 销毁 Store
-   */
   destroyStore = (): void => {
+    // 幂等：实例已被销毁过，直接 return
+    if (!InstanceMap.has(this.instanceId)) return;
     this.unbindEvent();
-    this.resetData();
     InstanceMap.delete(this.instanceId);
-
-    const options = {
+    callAPI(JSON.stringify({
       api: "destroyStore",
-      params: {
-        createStoreParams: this.instanceId
-      }
-    };
-
-    callAPI(JSON.stringify(options), (response: string) => {
+      params: { createStoreParams: this.instanceId }
+    }), (response: string) => {
       try {
-        const result = safeJsonParse(response, {}) as any;
-        console.log(`[${this.instanceId}][destroyStore] Response:`, result);
-
-        if (result.code === 0) {
-          console.log(`[${this.instanceId}][destroyStore] Success`);
-        } else {
-          console.error(`[${this.instanceId}][destroyStore] Failed:`, result.message);
-        }
+        safeJsonParse(response, {});
       } catch (error) {
         console.error(`[${this.instanceId}][destroyStore] Parse error:`, error);
       }
@@ -239,24 +318,13 @@ class MessageActionState {
   }
 }
 
-/**
- * useMessageActionState 参数选项
- */
 export interface UseMessageActionStateOptions {
-  /** 消息对象 */
   message: MessageInfo;
 }
 
-/**
- * 导出消息操作状态管理 Hook
- * @param options 配置选项
- */
 export function useMessageActionState(options: UseMessageActionStateOptions) {
   const { message } = options;
-  
   return MessageActionState.getInstance(message);
 }
 
-export {
-  MessageActionState,
-}
+export { MessageActionState };

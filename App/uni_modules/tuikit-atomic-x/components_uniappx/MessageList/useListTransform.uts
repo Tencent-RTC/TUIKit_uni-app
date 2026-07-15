@@ -1,0 +1,126 @@
+import { ref, watch, nextTick } from 'vue'
+
+export type UseListTransformOptions = {
+	getInputPanelHeight: () => number
+	getInputToolbarHeight: () => number
+	getLastMessageBottom: () => Promise<number>
+	getMessageCount: () => number
+	listRef: any
+	threshold?: number
+}
+
+type UseListTransformReturn = {
+	needSmartTransform: any
+	currentTranslateY: any
+	onPanelHeightChange: (isOpening: boolean) => Promise<void>
+	onNewMessage: () => Promise<void>
+	resetState: () => void
+}
+
+/**
+ * 消息列表智能 Transform Hook（uvue 版）
+ *
+ */
+export function useListTransform(options: UseListTransformOptions): UseListTransformReturn {
+	const {
+		getInputPanelHeight,
+		getInputToolbarHeight,
+		getLastMessageBottom,
+		getMessageCount,
+		listRef,
+		threshold = 10
+	} = options
+
+	// 是否需要智能计算
+	const needSmartTransform = ref<boolean>(false)
+	// 当前已应用的 translateY 值（消费方用 :style="{ transform: 'translateY(-' + currentTranslateY + 'px)' }" 绑定）
+	const currentTranslateY = ref<number>(0)
+
+	/**
+	 * 计算需要上移的距离
+	 */
+	const calcTranslateY = (originalBottom: number): number => {
+		const systemInfo = uni.getSystemInfoSync()
+		const screenHeight: number = systemInfo.screenHeight
+		const panelHeight: number = getInputPanelHeight()
+		const toolbarHeight: number = getInputToolbarHeight()
+
+		const availableSpace: number = screenHeight - originalBottom - toolbarHeight
+
+		if (panelHeight > availableSpace) {
+			return panelHeight - availableSpace
+		}
+		return 0
+	}
+
+	/**
+	 * 还原原始位置
+	 */
+	const restoreOriginalBottom = (currentBottom: number): number => {
+		return currentBottom + currentTranslateY.value
+	}
+
+	/**
+	 * 执行 transform 动画
+	 */
+	const applyTransform = (translateY: number): void => {
+		currentTranslateY.value = translateY
+	}
+
+	/**
+	 * 重置所有状态
+	 */
+	const resetState = (): void => {
+		needSmartTransform.value = false
+		currentTranslateY.value = 0
+		applyTransform(0)
+	}
+
+	/**
+	 * 处理面板高度变化
+	 */
+	const onPanelHeightChange = async (isOpening: boolean): Promise<void> => {
+		const panelHeight: number = getInputPanelHeight()
+
+		if (panelHeight == 0) {
+			resetState()
+			return
+		}
+
+		if (isOpening) {
+			needSmartTransform.value = getMessageCount() < threshold
+		}
+
+		if (needSmartTransform.value) {
+			const currentBottom: number = await getLastMessageBottom()
+			const originalBottom: number = restoreOriginalBottom(currentBottom)
+			const translateY: number = calcTranslateY(originalBottom)
+			applyTransform(translateY)
+		} else {
+			applyTransform(panelHeight)
+		}
+	}
+
+	/**
+	 * 处理新消息到达
+	 */
+	const onNewMessage = async (): Promise<void> => {
+		if (!needSmartTransform.value) return
+		if (getInputPanelHeight() == 0) return
+
+		await new Promise<void>((resolve) => { setTimeout((): void => resolve(), 150) })
+
+		const currentBottom: number = await getLastMessageBottom()
+		const originalBottom: number = restoreOriginalBottom(currentBottom)
+		const translateY: number = calcTranslateY(originalBottom)
+		applyTransform(translateY)
+	}
+
+	return {
+		needSmartTransform,
+		currentTranslateY,
+		onPanelHeightChange,
+		onNewMessage,
+		resetState
+	}
+}

@@ -37,7 +37,7 @@ export default {
   },
   data() { var gs = useGroupState(); return { groupState: gs, isLoading: false } },
   computed: {
-    pendingApplicationList() { return (this.groupState.groupApplicationList.value || []).filter(function(item) { return item.handledStatus === 0 }) },
+    pendingApplicationList() { return (this.groupState.applicationList.value || []).filter(function(item) { return item.handledStatus === 0 }) },
   },
   mounted() { this.handleClearUnreadCount() },
   beforeDestroy() { this.handleClearUnreadCount() },
@@ -46,13 +46,13 @@ export default {
     handleItemClick(item) { this.$emit('itemClick', item) },
     handleAccept(item) {
       var self = this
-      this.groupState.acceptGroupApplication(item).then(function() { showToast({ message: '已同意', type: 'success' }); self.$emit('accept', item) }).catch(function(err) { showToast({ message: err.message || '操作失败', type: 'error' }) })
+      this.groupState.acceptApplication(item).then(function() { showToast({ message: '已同意', type: 'success' }); self.$emit('accept', item) }).catch(function(err) { showToast({ message: err.message || '操作失败', type: 'error' }) })
     },
     handleReject(item) {
       var self = this
-      this.groupState.refuseGroupApplication(item).then(function() { showToast({ message: '已拒绝', type: 'success' }); self.$emit('reject', item) }).catch(function(err) { showToast({ message: err.message || '操作失败', type: 'error' }) })
+      this.groupState.refuseApplication(item).then(function() { showToast({ message: '已拒绝', type: 'success' }); self.$emit('reject', item) }).catch(function(err) { showToast({ message: err.message || '操作失败', type: 'error' }) })
     },
-    handleClearUnreadCount() { if (this.groupState.groupApplicationUnreadCount.value > 0) this.groupState.clearGroupApplicationUnreadCount() },
+    handleClearUnreadCount() { if (this.groupState.unreadApplicationCount.value > 0) this.groupState.clearApplicationUnreadCount() },
   },
 }
 </script>

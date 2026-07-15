@@ -43,12 +43,12 @@ export interface CallMessageData {
  * 判断消息是否为通话消息
  */
 export function isCallMessage(message: MessageInfo): boolean {
-  const customMessage = (message.messageBody && message.messageBody.customMessage)
-  if (!(customMessage && customMessage.data)) {
+  const customMessage = message.messagePayload as any
+  if (!(customMessage && customMessage.customData)) {
     return false
   }
 
-  const dataContent = safeJsonParse<any>(customMessage.data as string, null)
+  const dataContent = safeJsonParse<any>(customMessage.customData as string, null)
   return dataContent && dataContent.businessID === 1
 }
 
@@ -68,12 +68,12 @@ export function isGroupCallMessage(message: MessageInfo, conversationID: string)
  * 解析通话消息内容
  */
 export function parseCallMessageData(message: MessageInfo): CallMessageData | null {
-  const customMessage = (message.messageBody && message.messageBody.customMessage)
-  if (!(customMessage && customMessage.data)) {
+  const customMessage = message.messagePayload as any
+  if (!(customMessage && customMessage.customData)) {
     return null
   }
 
-  const dataContent = safeJsonParse<any>(customMessage.data as string, null)
+  const dataContent = safeJsonParse<any>(customMessage.customData as string, null)
   if (!dataContent || dataContent.businessID !== 1) {
     return null
   }
@@ -162,7 +162,7 @@ function substringByLength(str: string, maxLength = 12): string {
  * 获取消息发送者显示名称
  */
 export function getMessageSenderName(message: MessageInfo, maxLength = 12): string {
-  const sender = message.sender
+  const sender = message.from
   const name = sender.friendRemark || sender.nameCard || sender.nickname || sender.userID
   return substringByLength(name, maxLength)
 }
@@ -181,7 +181,7 @@ export function getCallMessageText(message: MessageInfo, showSenderName = true):
 
   const { actionType, callInfo, groupID } = data
   const objectData = callInfo
-  const isSelfInviter = message.isSelf
+  const isSelfInviter = message.isSentBySelf
   const senderName = showSenderName ? getMessageSenderName(message) : ''
 
   switch (actionType) {

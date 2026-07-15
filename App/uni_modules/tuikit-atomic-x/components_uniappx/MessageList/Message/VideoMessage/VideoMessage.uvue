@@ -1,0 +1,341 @@
+<template>
+  <view 
+    class="video-message"
+    :style="videoContainerStyle"
+    @touchstart="handleTouchStart"
+  >
+    <view class="video-highlight">
+      <view class="video-cover">
+        <image
+          class="cover-image"
+          :src="videoSnapshotUrl"
+          mode="aspectFill"
+          @load="handleSizeLoad"
+          @error="handleCoverError"
+        />
+        
+        <view class="play-button" @tap="handlePlayTap">
+          <image
+            v-if="!isDownloadingVideo"
+            src="../../../../static/icon/play.png"
+            class="icon-image"
+            mode="aspectFill"
+          />
+          <text v-else class="download-percent">{{ downloadProgress }}%</text>
+        </view>
+        
+        <!-- 下载进度条 -->
+        <view v-if="isDownloadingVideo" class="progress-bar">
+          <view class="progress-bar__track">
+            <view class="progress-bar__fill" :style="{ width: downloadProgress + '%' }"></view>
+          </view>
+        </view>
+      </view>
+    </view>
+  </view>
+</template>
+
+<script setup lang="uts">
+import { ref, computed, watch, nextTick } from 'vue'
+import { MediaQuality } from '../../../../types/message'
+import { useMessageActionState } from '../../../../state/MessageActionState'
+import { useMessageListState } from '../../../../state/MessageListState'
+import { stopGlobalAudioPlayer, RECORDING_PSEUDO_ID } from '../../../../hooks/useAudioPlayer'
+
+const PLACEHOLDER_PREFIX = 'placeholder_video_';
+
+type Props = {
+  message: any | null
+  conversationID: string}
+
+const props = defineProps<Props>()
+
+const actualSize = ref({ width: 0, height: 0 })
+const coverError = ref(false)
+const isDownloadingSnapshot = ref(false)
+const isDownloadingVideo = ref(false)
+
+// 长按判定阈值，与 Message.nvue 中保持一致
+const LONG_PRESS_THRESHOLD = 350
+const touchStartTime = ref(0)
+
+const videoSnapshotUrl = computed((): string => {
+  const messageObj: UTSJSONObject = props.message as UTSJSONObject
+  const body: UTSJSONObject = messageObj['messagePayload'] as UTSJSONObject
+  if (body == null) return ''
+  const p: any | null = body['videoSnapshotPath']
+  let url: string = typeof p == 'string' ? (p as string) : ''
+    // Add file:// prefix for local paths on iOS (paths starting with /)
+  if (url.length > 0 && url.startsWith('/') && !url.startsWith('file://')) {
+    url = 'file://' + url
+  }
+  return url
+})
+
+const videoUrl = computed((): string => {
+  const messageObj: UTSJSONObject = props.message as UTSJSONObject
+  const body: UTSJSONObject = messageObj['messagePayload'] as UTSJSONObject
+  if (body == null) return ''
+  const p: any | null = body['videoPath']
+  let url: string = typeof p == 'string' ? (p as string) : ''
+  if (url.length > 0 && url.startsWith('/') && !url.startsWith('file://')) {
+    url = 'file://' + url
+  }
+  return url
+})
+
+const videoSnapshotWidth = computed((): number => {
+  const messageObj: UTSJSONObject = props.message as UTSJSONObject
+  const body: UTSJSONObject = messageObj['messagePayload'] as UTSJSONObject
+  if (body == null) return 0
+  const w: any | null = body['videoSnapshotWidth']
+  return typeof w == 'number' ? (w as number) : 0
+})
+
+const videoSnapshotHeight = computed((): number => {
+  const messageObj: UTSJSONObject = props.message as UTSJSONObject
+  const body: UTSJSONObject = messageObj['messagePayload'] as UTSJSONObject
+  if (body == null) return 0
+  const h: any | null = body['videoSnapshotHeight']
+  return typeof h == 'number' ? (h as number) : 0
+})
+
+// 下载进度
+const downloadProgress = computed((): number => {
+  const messageObj: UTSJSONObject = props.message as UTSJSONObject
+  const v: any | null = messageObj['progress']
+  return typeof v == 'number' ? (v as number) : 0
+})
+
+const MAX_WIDTH = 400
+const MAX_HEIGHT = 300
+const MIN_WIDTH = 200
+const MIN_HEIGHT = 150
+
+const videoContainerStyle = computed(() => {
+  const width: number = (actualSize.value.width ?? videoSnapshotWidth.value ?? 400) as number
+  const height: number = (actualSize.value.height ?? videoSnapshotHeight.value ?? 400) as number
+
+  if (width == 200 && height == 200) {
+    return {
+      width: `${MIN_WIDTH}rpx`,
+      height: `${MIN_HEIGHT}rpx`
+    }
+  }
+
+  let displayWidth: number = width
+  let displayHeight: number = height
+  
+  if (displayWidth > MAX_WIDTH) {
+    displayHeight = (displayHeight * MAX_WIDTH) / displayWidth
+    displayWidth = MAX_WIDTH
+  }
+  
+  if (displayHeight > MAX_HEIGHT) {
+    displayWidth = (displayWidth * MAX_HEIGHT) / displayHeight
+    displayHeight = MAX_HEIGHT
+  }
+  
+  if (displayWidth < MIN_WIDTH) {
+    displayHeight = (displayHeight * MIN_WIDTH) / displayWidth
+    displayWidth = MIN_WIDTH
+  }
+  
+  if (displayHeight < MIN_HEIGHT) {
+    displayWidth = (displayWidth * MIN_HEIGHT) / displayHeight
+    displayHeight = MIN_HEIGHT
+  }
+  
+  return {
+    width: `${displayWidth}rpx`,
+    height: `${displayHeight}rpx`
+  }
+})
+
+const handleSizeLoad = (e: UniImageLoadEvent): void => {
+  const w: number = typeof e.detail.width == 'number' ? e.detail.width : 0
+  const h: number = typeof e.detail.height == 'number' ? e.detail.height : 0
+  actualSize.value = {
+    width: w,
+    height: h
+  }
+}
+
+const handleCoverError = () => {
+  coverError.value = true
+}
+
+const handleTouchStart = (e: any) => {
+  touchStartTime.value = Date.now()
+}
+
+const checkAndDownloadVideo = async () => {
+  const messageObj: UTSJSONObject = props.message as UTSJSONObject
+  const idRaw: any | null = messageObj['msgID']
+  if (typeof idRaw !== 'string' || (idRaw as string).length == 0) {
+    uni.showToast({ title: '视频地址无效', icon: 'none' });
+    return;
+  }
+  if (isDownloadingVideo.value) {
+    uni.showToast({ title: '正在加载视频资源...', icon: 'none' });
+    return;
+  }
+  isDownloadingVideo.value = true;
+  try {
+    const msgForAction: UTSJSONObject = props.message as UTSJSONObject
+    await useMessageActionState({ message: msgForAction }).downloadMedia(MediaQuality.ORIGINAL);
+  } catch (error: any) {
+    console.error('[VideoMessage] downloadMedia video failed:', error);
+    uni.showToast({ title: '视频下载失败', icon: 'none' });
+  } finally {
+    isDownloadingVideo.value = false;
+  }
+}
+
+const handlePlayTap = async () => {
+  // 长按判定：触摸持续时间超过阈值视为长按，交由父级 Message.nvue 处理消息操作菜单
+  // 注意：判定后必须复位 touchStartTime，否则下一次"未收到 touchstart 直接 tap"
+  // （nvue 部分场景事件丢失）会用旧时间戳算出极大 duration，导致正常点击被误判为长按
+  const startTime = touchStartTime.value
+  touchStartTime.value = 0
+  if (startTime > 0 && Date.now() - startTime >= LONG_PRESS_THRESHOLD) {
+    return
+  }
+
+  const url: string = videoUrl.value
+
+  // 如果视频已下载，直接播放
+  if (url.length > 0) {
+    // 播放视频前先停掉所有正在播放的语音消息：
+    // 1. 销毁全局 innerAudioContext 实例（语音不再发声）
+    // 2. 广播 audioPlayerStart 让 AudioMessage 组件认为"有新音源开始"，主动重置 UI 与停止波形动画
+    //    （AudioMessage 监听 audioPlayerStart，与录音/其他语音播放打断逻辑一致）
+    stopGlobalAudioPlayer()
+    uni.$emit('audioPlayerStart', { messageId: RECORDING_PSEUDO_ID })
+
+    uni.navigateTo({
+      url: `/pages/scenes/chat/videoPlayer/videoPlayer?url=${encodeURIComponent(url)}`
+    });
+    return;
+  }
+  
+  // 视频未下载，触发下载
+  if (url.length == 0 && !isDownloadingVideo.value) {
+    await checkAndDownloadVideo();
+  }
+}
+
+// 检查并下载视频封面资源
+const extractMsgID = (msg: any): string | null => {
+  if (msg == null) return null
+  const idRaw: any | null = (msg as UTSJSONObject)['msgID']
+  return typeof idRaw == 'string' && (idRaw as string).length > 0 ? (idRaw as string) : null
+}
+
+const checkAndDownloadSnapshot = async () => {
+  // 确保 message 有数据且 videoSnapshotUrl 为空时才下载
+  const msgID = extractMsgID(props.message as any)
+  if (msgID != null && videoSnapshotUrl.value == null && isDownloadingSnapshot.value == false) {
+    isDownloadingSnapshot.value = true
+    try {
+      const msgForAction: UTSJSONObject = props.message as UTSJSONObject
+      await useMessageActionState({ message: msgForAction }).downloadMedia(MediaQuality.THUMBNAIL)
+    } catch (error: any) {
+      console.error('[VideoMessage] downloadMedia snapshot failed:', error)
+      coverError.value = true
+    } finally {
+      isDownloadingSnapshot.value = false
+    }
+  }
+}
+
+// 监听 message 变化，当有数据且资源为空时下载
+watch(
+  (): string | null => extractMsgID(props.message as any),
+  (newMsgID: string | null): void => {
+    if (newMsgID == null || newMsgID.length == 0 || newMsgID.startsWith(PLACEHOLDER_PREFIX)) return
+    if (videoSnapshotUrl.value == null) {
+      checkAndDownloadSnapshot()
+    }
+    if (videoUrl.value == null) {
+      checkAndDownloadVideo()
+    }
+  },
+  { immediate: true }
+)
+
+watch(
+  (): string | null => videoSnapshotUrl.value,
+  (newUrl: string | null, oldUrl: string | null): void => {
+    if (newUrl != null && oldUrl == null && coverError.value) {
+      coverError.value = false
+    }
+  }
+)
+
+</script>
+
+<style>
+.video-message {
+  position: relative;
+  border-radius: 12rpx;
+  overflow: hidden;
+  max-height: 300px;
+}
+
+.video-highlight {
+  flex: 1;
+}
+
+.video-cover {
+  flex: 1;
+  position: relative;
+}
+
+.cover-image {
+  flex: 1;
+  border-radius: 20rpx;
+}
+
+.play-button {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: 20rpx;
+  background-color: rgba(0, 0, 0, 0.3);
+}
+
+.icon-image {
+  width: 80rpx;
+  height: 80rpx;
+}
+
+.download-percent {
+  font-size: 32rpx;
+  color: #FFFFFF;
+  font-weight: 600;
+}
+
+.progress-bar {
+  position: absolute;
+  left: 20rpx;
+  right: 20rpx;
+  bottom: 20rpx;
+}
+
+.progress-bar__track {
+  height: 6rpx;
+  border-radius: 3rpx;
+  background-color: rgba(255, 255, 255, 0.3);
+}
+
+.progress-bar__fill {
+  height: 6rpx;
+  border-radius: 3rpx;
+  background-color: #FFFFFF;
+}
+</style>

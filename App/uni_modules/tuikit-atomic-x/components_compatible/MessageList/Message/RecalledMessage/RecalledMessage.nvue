@@ -10,19 +10,22 @@ import { MessageType } from '../../../../types/message'
 
 export default {
   name: 'RecalledMessage',
-  props: { message: { type: Object, required: true } },
+  props: {
+    message: { type: Object, required: true },
+    conversationID: { type: String, default: '' }
+  },
   computed: {
     recalledText() {
-      var sender = this.message.sender
+      var sender = this.message.from
       var name = sender.nameCard || sender.friendRemark || sender.nickname || sender.userID
-      return this.message.isSelf ? '你撤回了一条消息' : name + ' 撤回了一条消息'
+      return this.message.isSentBySelf ? '你撤回了一条消息' : name + ' 撤回了一条消息'
     },
-    canReEdit() { return this.message.isSelf && this.message.messageType === MessageType.TEXT }
+    canReEdit() { return this.message.isSentBySelf && this.message.messageType === MessageType.TEXT }
   },
   methods: {
     handleReEdit() {
-      var text = ''; try { text = (this.message.messageBody && this.message.messageBody.text) || '' } catch (e) {}
-      this.$emit('reEdit', { message: this.message, text: text })
+      var text = ''; try { text = (this.message.messagePayload && this.message.messagePayload.text) || '' } catch (e) {}
+      uni.$emit('atomicx-reEdit', { conversationID: this.conversationID, text: text })
     }
   }
 }

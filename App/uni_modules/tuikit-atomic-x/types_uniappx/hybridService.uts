@@ -1,0 +1,14 @@
+/** HybridResponseData 最内层：data 包装 */
+type HybridResponseDataInner<T = unknown> = {
+  data?: T,
+}
+
+/** 桥接响应通用包装（带泛型） */
+interface HybridResponseData<T = unknown> {
+  code: number,
+  api?: string,
+  message?: string,
+  data?: HybridResponseDataInner<T>,
+}
+
+export type { HybridResponseData }

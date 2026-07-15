@@ -1,14 +1,14 @@
 <template>
-  <view class="audio-message-wrapper" :class="{ 'audio-message-wrapper--self': message.isSelf }">
+  <view class="audio-message-wrapper" :class="{ 'audio-message-wrapper--self': message.isSentBySelf }">
     <view 
       class="audio-message" 
-      :class="'content-'+ (message.isSelf ? 'out' : 'in')" 
+      :class="'content-'+ (message.isSentBySelf ? 'out' : 'in')" 
       :style="{ width: audioWidth + 'rpx' }"
       @touchstart="handleTouchStart"
       @tap="handlePlayTap"
     >
       <view class="audio-highlight">
-        <view class="audio-wave-container" :class="'wave-'+ (message.isSelf ? 'out' : 'in')">
+        <view class="audio-wave-container" :class="'wave-'+ (message.isSentBySelf ? 'out' : 'in')">
           <view class="audio-wave-clip" :style="{ width: '12rpx', opacity: waveOpacity[0] }">
             <image
               src="../../../../static/icon/audio.png"
@@ -52,7 +52,8 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import type { MessageInfo } from '../../../../types/message'
-import { MessageMediaFileType } from '../../../../types/message'
+import { MediaQuality } from '../../../../types/message'
+import { useMessageActionState } from '../../../../state/MessageActionState'
 import { useMessageListState } from '../../../../state/MessageListState'
 import { useAudioPlayer, stopGlobalAudioPlayer } from '../../../../hooks/useAudioPlayer'
 import { useCallState } from '../../../../state/CallState'
@@ -68,10 +69,7 @@ interface Props {
 const props = defineProps<Props>()
 
 // 获取消息列表状态，用于下载资源
-const { downloadMessageResource } = useMessageListState({
-  conversationID: props.conversationID
-})
-
+// downloadMessageResource 已迁到 MessageActionState.downloadMedia
 // 下载状态
 const isDownloading = ref(false)
 // 等待播放标记（下载完成后自动播放）
@@ -92,12 +90,12 @@ const LONG_PRESS_THRESHOLD = 350
 const touchStartTime = ref(0)
 
 // 语音转文字状态
-// - asrText：直接读 message.messageBody.asrText（SDK 转换完成后会更新整条 message，由 MessageList 响应式驱动）
+// - asrText：直接读 message.messagePayload.asrText（SDK 转换完成后会更新整条 message，由 MessageList 响应式驱动）
 // - isConverting：本地 loading，由 MessageActions 广播 audioConvertingStart 事件触发，asrText 出现或 audioConvertingError 释放
 // - showConvertedText：当前是否展示文本；初值从本地存储恢复，"隐藏文字"会置 false 并持久化
 // 文本直接全量渲染 asrText，配合 css "幕布拉开" 入场动画完成视觉过渡（不再用打字机效果）
 const asrText = computed<string>(() => {
-  return ((props.message as any)?.messageBody?.asrText) || ''
+  return ((props.message as any)?.messagePayload?.asrText) || ''
 })
 const isConverting = ref(false)
 // 转写文本框（loading 与 result 共用一个 view，由 isConverting 切换内层 text）
@@ -122,11 +120,11 @@ const convertBoxVisible = computed(() => {
 })
 
 // origin 区分发送方：
-// - 接收（isSelf=false）：从语音条左下角对应的左上角拉开
-// - 发送（isSelf=true）：从语音条右下角对应的右上角拉开
+// - 接收（isSentBySelf=false）：从语音条左下角对应的左上角拉开
+// - 发送（isSentBySelf=true）：从语音条右下角对应的右上角拉开
 //   语义上文本框总是从"贴气泡尾部的角"出现，符合用户视觉惯性
 const curtainOrigin = computed(() => {
-  return (props.message as any)?.isSelf ? '100% 0' : '0 0'
+  return (props.message as any)?.isSentBySelf ? '100% 0' : '0 0'
 })
 // inline style 仅在 result 态（非 loading）输出 transform/opacity
 // loading 态不参与幕布动画，避免 "正在转换..." 也被 scale 缩放
@@ -474,11 +472,11 @@ const stopWaveAnimation = () => {
 
 const soundUrl = computed(() => {
   // 直接返回原始路径，play 时会自动处理私有目录文件的复制和 URL 转换
-  return props.message.messageBody?.soundPath || ''
+  return props.message.messagePayload?.audioPath || ''
 })
 
 const soundDuration = computed(() => {
-  return props.message.messageBody?.soundDuration || 0
+  return props.message.messagePayload?.audioDuration || 0
 })
 
 const audioWidth = computed(() => {
@@ -566,7 +564,7 @@ const preDownloadSound = async () => {
   
   isDownloading.value = true
   try {
-    await downloadMessageResource(props.message, MessageMediaFileType.SOUND)
+    await useMessageActionState({ message: props.message }).downloadMedia(MediaQuality.ORIGINAL)
     // 下载完成后，如果有等待播放的标记，自动播放
     if (pendingPlay.value && soundUrl.value) {
       pendingPlay.value = false
@@ -635,7 +633,7 @@ const handlePlay = async () => {
 onMounted(() => {
   // 订阅事件（放在生命周期内，避免 SSR/预渲染时 uni 未就绪）
   uni.$on('audioPlayerStart', handleGlobalAudioStart)
-  // 转文字事件订阅（开始/失败/隐藏；成功结果通过 SDK 更新 message.messageBody.asrText）
+  // 转文字事件订阅（开始/失败/隐藏；成功结果通过 SDK 更新 message.messagePayload.asrText）
   uni.$on('audioConvertingStart', handleConvertingStart)
   uni.$on('audioConvertingError', handleConvertingError)
   uni.$on('audioConvertHide', handleConvertHide)

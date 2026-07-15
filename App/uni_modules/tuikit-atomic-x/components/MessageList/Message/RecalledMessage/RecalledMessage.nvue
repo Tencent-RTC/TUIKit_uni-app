@@ -18,17 +18,14 @@ import { MessageType } from '../../../../types/message'
 
 interface Props {
   message: MessageInfo
+  conversationID: string
 }
 
 const props = defineProps<Props>()
 
-const emit = defineEmits<{
-  reEdit: [data: { message: MessageInfo; text: string }]
-}>()
-
 const recalledText = computed(() => {
-  const isSelf = props.message.isSelf
-  const sender = props.message.sender
+  const isSelf = props.message.isSentBySelf
+  const sender = props.message.from
   const displayName = sender.nameCard || sender.friendRemark || sender.nickname || sender.userID
   
   if (isSelf) {
@@ -39,7 +36,7 @@ const recalledText = computed(() => {
 })
 
 const canReEdit = computed(() => {
-  if (!props.message.isSelf) {
+  if (!props.message.isSentBySelf) {
     return false
   }
   
@@ -56,7 +53,7 @@ const canReEdit = computed(() => {
 
 const getOriginalText = () => {
   try {
-    return props.message.messageBody?.text || ''
+    return props.message.messagePayload?.text || ''
   } catch (e) {
     console.error('获取撤回消息内容失败:', e)
     return ''
@@ -65,9 +62,9 @@ const getOriginalText = () => {
 
 const handleReEdit = () => {
   const originalText = getOriginalText()
-  
-  emit('reEdit', {
-    message: props.message,
+
+  uni.$emit('atomicx-reEdit', {
+    conversationID: props.conversationID,
     text: originalText
   })
 }

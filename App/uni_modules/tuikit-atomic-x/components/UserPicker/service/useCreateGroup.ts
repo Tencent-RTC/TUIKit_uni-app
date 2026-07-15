@@ -21,7 +21,7 @@ export function useCreateGroup(_routeParams?: any): UserPickerHookResult {
   const userList = computed<User[]>(() => {
     return (friendList.value || []).map((contact: ContactInfo) => ({
       userID: contact.userID,
-      nickname: contact?.remark || contact?.nickname || contact.userID,
+      nickname: contact?.friendRemark || contact?.nickname || contact.userID,
       avatarURL: contact.avatarURL || ''  // 确保 avatarURL 有默认值
     }))
   })

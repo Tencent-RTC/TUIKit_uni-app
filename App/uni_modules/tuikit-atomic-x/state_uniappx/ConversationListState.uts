@@ -1,0 +1,641 @@
+
+import { ref, type Ref } from "vue";
+import type { HybridListenerOptions } from "@/uni_modules/tuikit-atomic-x";
+import type { HybridCallOptions } from "./hybridCallOptions.uts";
+import { callAPI, addListener, removeListener } from "@/uni_modules/tuikit-atomic-x";
+import type { ConversationInfo, ConversationLoadOption, ConversationMarkTypeValue } from "../types/conversation";
+import { ReceiveMessageOpt } from "../types/contact";
+
+/**
+ * 桥接响应（参照 atomicx HybridResponse data class）
+ */
+type HybridResponse = {
+  api: string | null;
+  code: number;
+  message: string | null;
+  data: any | null;
+};
+
+type GetConversationInfoInner = {
+  conversationInfo: any | null;
+};
+type GetConversationInfoData = {
+  data: GetConversationInfoInner | null;
+};
+
+/**
+ * 桥接响应默认值（JSON.parse 失败兜底）
+ * code = -1 表示本地异常
+ */
+const DEFAULT_HYBRID_RESPONSE: HybridResponse = {
+  api: null,
+  code: -1,
+  message: null,
+  data: null
+};
+
+/**
+ * conversationList 监听 payload
+ * 形状：{ conversationList: ConversationInfo[] }
+ *   Gson 'Expected a string but was BEGIN_ARRAY' 运行时异常
+ */
+type ConversationListPayload = {
+  conversationList: ConversationInfo[] | null;
+};
+
+/**
+ * totalUnreadCount 监听 payload
+ */
+type TotalUnreadCountPayload = {
+  totalUnreadCount: number | null;
+};
+
+/**
+ * hasMoreConversations 监听 payload（新版字段名，多 s）
+ */
+type HasMoreConversationsPayload = {
+  hasMoreConversations: boolean | null;
+};
+
+/**
+ * 模块级单例缓存
+ */
+const InstanceMap: Map<string, ConversationListState> = new Map<string, ConversationListState>();
+
+/**
+ * 会话列表状态管理类
+ */
+class ConversationListState {
+  /** Store 实例ID */
+  readonly instanceId: string;
+  /** 会话分组（构造时绑定，作为 createStore 透传参数；外部不可见） */
+  readonly conversationGroup: string | null;
+
+  readonly conversationList: Ref<any[]>;
+
+  /** 总未读数 */
+  readonly totalUnreadCount: Ref<number>;
+
+  /** 是否有更多会话（新版字段名 hasMoreConversations） */
+  readonly hasMoreConversations: Ref<boolean>;
+
+  /**
+   * 私有构造函数，使用 getInstance 获取实例
+   */
+  private constructor(instanceId: string, conversationGroup: string | null = null) {
+    this.instanceId = instanceId;
+    this.conversationGroup = conversationGroup ?? null;
+    this.conversationList = ref<any[]>([] as any[]);
+    this.totalUnreadCount = ref<number>(0);
+    this.hasMoreConversations = ref<boolean>(false);
+
+    this.createStore();
+  }
+
+  /** 兼容旧字段名 hasMoreConversation */
+  get hasMoreConversation(): Ref<boolean> {
+    return this.hasMoreConversations;
+  }
+
+  static getInstance(instanceId: string, conversationGroup: string | null = null): ConversationListState {
+    if (!InstanceMap.has(instanceId)) {
+      InstanceMap.set(instanceId, new ConversationListState(instanceId, conversationGroup));
+    }
+    return InstanceMap.get(instanceId) as ConversationListState;
+  }
+
+  private createStore(): void {
+    callAPI(JSON.stringify({
+      api: "createStore",
+      params: {
+        createStoreParams: this.instanceId,
+        ...(this.conversationGroup != null && this.conversationGroup.length > 0
+          ? { conversationGroup: this.conversationGroup }
+          : {})
+      }
+    }), (response: string) => {
+      try {
+        const result = JSON.parse<HybridResponse>(response) ?? DEFAULT_HYBRID_RESPONSE;
+        if (result.code == 0) {
+          this.bindEvent();
+          this.loadConversationsWithOption(JSON.stringify({ count: 100 })).catch((error: any | null): void => {
+            const errMsg = error instanceof Error ? (error as Error).message : `${error}`;
+            console.error(`[${this.instanceId}][createStore] loadConversations failed: ${errMsg}`);
+          });
+        } else {
+          const msg = result.message ?? '';
+          console.error(`[${this.instanceId}][createStore] Failed: ${msg}`);
+        }
+      } catch (error: any) {
+        const errMsg = error instanceof Error ? (error as Error).message : `${error}`;
+        console.error(`[${this.instanceId}][createStore] Parse error: ${errMsg}`);
+      }
+    });
+  }
+
+  private bindEvent(): void {
+    // 监听会话列表变化
+    const listOptions: HybridListenerOptions = {
+      type: "",
+      store: "ConversationList",
+      name: "conversationList",
+      params: {
+        createStoreParams: this.instanceId
+      }
+    };
+    addListener(listOptions, (data: string) => {
+      try {
+        const result = JSON.parse<UTSJSONObject>(data);
+        if (result != null) {
+          const list = result["conversationList"] as any[] | null;
+          if (list != null) {
+            this.conversationList.value = list;
+          }
+        }
+      } catch (error: any) {
+        const errMsg = error instanceof Error ? (error as Error).message : `${error}`;
+        console.error(`[${this.instanceId}][conversationList listener] Error: ${errMsg}`);
+      }
+    });
+
+    // 监听总未读数变化
+    const unreadOptions: HybridListenerOptions = {
+      type: "",
+      store: "ConversationList",
+      name: "totalUnreadCount",
+      params: {
+        createStoreParams: this.instanceId
+      }
+    };
+    addListener(unreadOptions, (data: string) => {
+      try {
+        const result = JSON.parse<TotalUnreadCountPayload>(data);
+        if (result != null && result.totalUnreadCount != null) {
+          this.totalUnreadCount.value = result.totalUnreadCount;
+        }
+      } catch (error: any) {
+        const errMsg = error instanceof Error ? (error as Error).message : `${error}`;
+        console.error(`[${this.instanceId}][totalUnreadCount listener] Error: ${errMsg}`);
+      }
+    });
+
+    // 监听是否有更多会话（新版字段名 hasMoreConversations）
+    const hasMoreOptions: HybridListenerOptions = {
+      type: "",
+      store: "ConversationList",
+      name: "hasMoreConversations",
+      params: {
+        createStoreParams: this.instanceId
+      }
+    };
+    addListener(hasMoreOptions, (data: string) => {
+      try {
+        const result = JSON.parse<HasMoreConversationsPayload>(data);
+        if (result != null && result.hasMoreConversations != null) {
+          this.hasMoreConversations.value = result.hasMoreConversations;
+        }
+      } catch (error: any) {
+        const errMsg = error instanceof Error ? (error as Error).message : `${error}`;
+        console.error(`[${this.instanceId}][hasMoreConversations listener] Error: ${errMsg}`);
+      }
+    });
+  }
+
+  // ============================================================================
+  // Actions
+  // ============================================================================
+
+  loadConversations(optionStr: string | null = null): Promise<void> {
+    return this.loadConversationsWithOption(optionStr);
+  }
+
+  /**
+   * 拉取会话列表（直接传 count 数字，简化调用）
+   */
+  loadConversationsWithCount(count: number): Promise<void> {
+    const optionStr: string = JSON.stringify({ count: count });
+    return this.loadConversationsWithOption(optionStr);
+  }
+
+  /**
+   * 拉取会话列表（底层实现，统一处理所有重载）
+   *
+   * @param optionStr ConversationLoadOption 的 JSON 字符串，为 null 时使用默认
+   */
+  private loadConversationsWithOption(optionStr: string | null): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+      const finalOptionStr: string = optionStr ?? JSON.stringify({ count: 20 });
+
+      callAPI(JSON.stringify({
+        api: "loadConversations",
+        params: {
+          createStoreParams: this.instanceId,
+          option: finalOptionStr
+        }
+      }), (response: string) => {
+        try {
+          const result = JSON.parse<HybridResponse>(response) ?? DEFAULT_HYBRID_RESPONSE;
+          if (result.code == 0) {
+            resolve();
+          } else {
+            const msg = result.message ?? 'Failed to load conversations';
+            console.error(`[${this.instanceId}][loadConversations] Failed: ${msg}`);
+            reject(new Error(msg));
+          }
+        } catch (error: any) {
+          const errMsg = error instanceof Error ? (error as Error).message : `${error}`;
+          console.error(`[${this.instanceId}][loadConversations] Parse error: ${errMsg}`);
+          reject(new Error(errMsg));
+        }
+      });
+    });
+  }
+
+  /**
+   * 加载更多会话（新版 API 名 loadMoreConversations）
+   */
+  loadMoreConversations(): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+      callAPI(JSON.stringify({
+        api: "loadMoreConversations",
+        params: {
+          createStoreParams: this.instanceId
+        }
+      }), (response: string) => {
+        try {
+          const result = JSON.parse<HybridResponse>(response) ?? DEFAULT_HYBRID_RESPONSE;
+          if (result.code == 0) {
+            resolve();
+          } else {
+            const msg = result.message ?? 'Failed to load more conversations';
+            console.error(`[${this.instanceId}][loadMoreConversations] Failed: ${msg}`);
+            reject(new Error(msg));
+          }
+        } catch (error: any) {
+          const errMsg = error instanceof Error ? (error as Error).message : `${error}`;
+          console.error(`[${this.instanceId}][loadMoreConversations] Parse error: ${errMsg}`);
+          reject(new Error(errMsg));
+        }
+      });
+    });
+  }
+
+  /**
+   * 获取会话信息（新版 API 名 getConversationInfo）
+   *
+   * 响应字段：`conversationInfo: ConversationInfo`（Gson 走 Map 路径，返回实际是 UTSJSONObject）
+   */
+  getConversationInfo(conversationID: string): Promise<any> {
+    return new Promise<any>((resolve, reject) => {
+      callAPI(JSON.stringify({
+        api: "getConversationInfo",
+        params: {
+          createStoreParams: this.instanceId,
+          conversationID: conversationID
+        }
+      }), (response: string) => {
+        try {
+          const result = JSON.parse<HybridResponse>(response);
+          if (result == null || result.code == -1) {
+            reject(new Error('Failed to parse getConversationInfo response'));
+            return;
+          }
+          if (result.code == 0) {
+            const parsed = JSON.parse<GetConversationInfoData>(JSON.stringify(result.data));
+            const info = parsed?.data?.conversationInfo ?? null;
+            if (info != null) {
+              resolve(info);
+              return;
+            }
+            reject(new Error('conversationInfo missing in response'));
+          } else {
+            const msg = result.message ?? 'Failed to get conversation info';
+            console.error(`[${this.instanceId}][getConversationInfo] Failed: ${msg}`);
+            reject(new Error(msg));
+          }
+        } catch (error: any) {
+          const errMsg = error instanceof Error ? (error as Error).message : `${error}`;
+          console.error(`[${this.instanceId}][getConversationInfo] Parse error: ${errMsg}`);
+          reject(new Error(errMsg));
+        }
+      });
+    });
+  }
+
+  /**
+   * 置顶会话
+   */
+  pinConversation(conversationID: string, pin: boolean): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+      callAPI(JSON.stringify({
+        api: "pinConversation",
+        params: {
+          createStoreParams: this.instanceId,
+          conversationID: conversationID,
+          pin: pin
+        }
+      }), (response: string) => {
+        try {
+          const result = JSON.parse<HybridResponse>(response) ?? DEFAULT_HYBRID_RESPONSE;
+          if (result.code == 0) {
+            resolve();
+          } else {
+            const msg = result.message ?? 'Failed to pin conversation';
+            console.error(`[${this.instanceId}][pinConversation] Failed: ${msg}`);
+            reject(new Error(msg));
+          }
+        } catch (error: any) {
+          const errMsg = error instanceof Error ? (error as Error).message : `${error}`;
+          console.error(`[${this.instanceId}][pinConversation] Parse error: ${errMsg}`);
+          reject(new Error(errMsg));
+        }
+      });
+    });
+  }
+
+  setReceiveMessageOpt(conversationID: string, opt: number): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+      callAPI(JSON.stringify({
+        api: "setReceiveMessageOpt",
+        params: {
+          createStoreParams: this.instanceId,
+          conversationID: conversationID,
+          opt: opt
+        }
+      }), (response: string) => {
+        try {
+          const result = JSON.parse<HybridResponse>(response) ?? DEFAULT_HYBRID_RESPONSE;
+          if (result.code == 0) {
+            resolve();
+          } else {
+            const msg = result.message ?? 'Failed to set receive message opt';
+            console.error(`[${this.instanceId}][setReceiveMessageOpt] Failed: ${msg}`);
+            reject(new Error(msg));
+          }
+        } catch (error: any) {
+          const errMsg = error instanceof Error ? (error as Error).message : `${error}`;
+          console.error(`[${this.instanceId}][setReceiveMessageOpt] Parse error: ${errMsg}`);
+          reject(new Error(errMsg));
+        }
+      });
+    });
+  }
+
+  /**
+   * 删除会话
+   */
+  deleteConversation(conversationID: string): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+      callAPI(JSON.stringify({
+        api: "deleteConversation",
+        params: {
+          createStoreParams: this.instanceId,
+          conversationID: conversationID
+        }
+      }), (response: string) => {
+        try {
+          const result = JSON.parse<HybridResponse>(response) ?? DEFAULT_HYBRID_RESPONSE;
+          if (result.code == 0) {
+            resolve();
+          } else {
+            const msg = result.message ?? 'Failed to delete conversation';
+            console.error(`[${this.instanceId}][deleteConversation] Failed: ${msg}`);
+            reject(new Error(msg));
+          }
+        } catch (error: any) {
+          const errMsg = error instanceof Error ? (error as Error).message : `${error}`;
+          console.error(`[${this.instanceId}][deleteConversation] Parse error: ${errMsg}`);
+          reject(new Error(errMsg));
+        }
+      });
+    });
+  }
+
+  /**
+   * 设置会话草稿
+   */
+  setConversationDraft(conversationID: string, draft: string | null = null): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+      callAPI(JSON.stringify({
+        api: "setConversationDraft",
+        params: {
+          createStoreParams: this.instanceId,
+          conversationID: conversationID,
+          draft: draft
+        }
+      }), (response: string) => {
+        try {
+          const result = JSON.parse<HybridResponse>(response) ?? DEFAULT_HYBRID_RESPONSE;
+          if (result.code == 0) {
+            resolve();
+          } else {
+            const msg = result.message ?? 'Failed to set conversation draft';
+            console.error(`[${this.instanceId}][setConversationDraft] Failed: ${msg}`);
+            reject(new Error(msg));
+          }
+        } catch (error: any) {
+          const errMsg = error instanceof Error ? (error as Error).message : `${error}`;
+          console.error(`[${this.instanceId}][setConversationDraft] Parse error: ${errMsg}`);
+          reject(new Error(errMsg));
+        }
+      });
+    });
+  }
+
+  /**
+   * 清空会话消息
+   */
+  clearConversationMessages(conversationID: string): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+      callAPI(JSON.stringify({
+        api: "clearConversationMessages",
+        params: {
+          createStoreParams: this.instanceId,
+          conversationID: conversationID
+        }
+      }), (response: string) => {
+        try {
+          const result = JSON.parse<HybridResponse>(response) ?? DEFAULT_HYBRID_RESPONSE;
+          if (result.code == 0) {
+            resolve();
+          } else {
+            const msg = result.message ?? 'Failed to clear conversation messages';
+            console.error(`[${this.instanceId}][clearConversationMessages] Failed: ${msg}`);
+            reject(new Error(msg));
+          }
+        } catch (error: any) {
+          const errMsg = error instanceof Error ? (error as Error).message : `${error}`;
+          console.error(`[${this.instanceId}][clearConversationMessages] Parse error: ${errMsg}`);
+          reject(new Error(errMsg));
+        }
+      });
+    });
+  }
+
+  /**
+   * 清空会话未读数
+   */
+  clearConversationUnreadCount(conversationID: string): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+      callAPI(JSON.stringify({
+        api: "clearConversationUnreadCount",
+        params: {
+          createStoreParams: this.instanceId,
+          conversationID: conversationID
+        }
+      }), (response: string) => {
+        try {
+          const result = JSON.parse<HybridResponse>(response) ?? DEFAULT_HYBRID_RESPONSE;
+          if (result.code == 0) {
+            resolve();
+          } else {
+            const msg = result.message ?? 'Failed to clear unread count';
+            console.error(`[${this.instanceId}][clearConversationUnreadCount] Failed: ${msg}`);
+            reject(new Error(msg));
+          }
+        } catch (error: any) {
+          const errMsg = error instanceof Error ? (error as Error).message : `${error}`;
+          console.error(`[${this.instanceId}][clearConversationUnreadCount] Parse error: ${errMsg}`);
+          reject(new Error(errMsg));
+        }
+      });
+    });
+  }
+
+  /**
+   * 标记会话
+   */
+  markConversation(conversationIDList: string[], markType: ConversationMarkTypeValue, enable: boolean): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+      callAPI(JSON.stringify({
+        api: "markConversation",
+        params: {
+          createStoreParams: this.instanceId,
+          conversationIDList: conversationIDList,
+          markType: markType,
+          enable: enable
+        }
+      }), (response: string) => {
+        try {
+          const result = JSON.parse<HybridResponse>(response) ?? DEFAULT_HYBRID_RESPONSE;
+          if (result.code == 0) {
+            resolve();
+          } else {
+            const msg = result.message ?? 'Failed to mark conversation';
+            console.error(`[${this.instanceId}][markConversation] Failed: ${msg}`);
+            reject(new Error(msg));
+          }
+        } catch (error: any) {
+          const errMsg = error instanceof Error ? (error as Error).message : `${error}`;
+          console.error(`[${this.instanceId}][markConversation] Parse error: ${errMsg}`);
+          reject(new Error(errMsg));
+        }
+      });
+    });
+  }
+
+  // ============================================================================
+  // 销毁
+  // ============================================================================
+
+  /**
+   * 移除事件监听
+   */
+  private unbindEvent(): void {
+    const dataNames: string[] = ["conversationList", "totalUnreadCount", "hasMoreConversations"];
+
+    dataNames.forEach((name: string) => {
+      const options: HybridListenerOptions = {
+        type: "",
+        store: "ConversationList",
+        name: name,
+        params: {
+          createStoreParams: this.instanceId
+        }
+      };
+      removeListener(options);
+    });
+  }
+
+  /**
+   * 重置数据
+   */
+  private resetData(): void {
+    this.conversationList.value = [] as any[];
+    this.totalUnreadCount.value = 0;
+    this.hasMoreConversations.value = false;
+  }
+
+  /**
+   * 销毁 Store
+   */
+  destroyStore(): void {
+    // 幂等：实例已被销毁过，直接 return
+    if (!InstanceMap.has(this.instanceId)) {
+      return;
+    }
+    this.unbindEvent();
+    this.resetData();
+    InstanceMap.delete(this.instanceId);
+
+    callAPI(JSON.stringify({
+      api: "destroyStore",
+      params: {
+        createStoreParams: this.instanceId
+      }
+    }), (response: string) => {
+      try {
+        const result = JSON.parse<HybridResponse>(response) ?? DEFAULT_HYBRID_RESPONSE;
+        console.log(`[${this.instanceId}][destroyStore] Response: ${JSON.stringify(result)}`);
+      } catch (error: any) {
+        const errMsg = error instanceof Error ? (error as Error).message : `${error}`;
+        console.error(`[${this.instanceId}][destroyStore] Parse error: ${errMsg}`);
+      }
+    });
+  }
+}
+
+export type UseConversationListStateOptions = {
+  /** 实例 ID（多实例场景使用，与 conversationGroup 配合） */
+  instanceId?: string;
+  /** 会话分组名（可选；按分组过滤会话列表） */
+  conversationGroup?: string;
+};
+
+/**
+ * 会话列表状态管理 Hook
+ *
+ * @param optionsOrInstanceId 配置选项；为兼容旧调用，可直接传 instanceId 字符串
+ */
+export function useConversationListState(
+  optionsOrInstanceId: UseConversationListStateOptions | string | null = null
+): ConversationListState {
+  let conversationGroup: string | null = null;
+  let instanceIdSeed: string | null = null;
+
+  if (optionsOrInstanceId != null) {
+    const raw = optionsOrInstanceId;
+    if (typeof raw == 'string') {
+      instanceIdSeed = raw;
+    } else {
+      const opts = raw as UseConversationListStateOptions;
+      instanceIdSeed = opts.instanceId ?? null;
+      conversationGroup = opts.conversationGroup ?? null;
+    }
+  }
+
+  const idObject = new UTSJSONObject();
+  idObject["storeName"] = "ConversationList";
+  if (instanceIdSeed != null && instanceIdSeed.length > 0) {
+    idObject["instanceId"] = instanceIdSeed;
+  }
+  if (conversationGroup != null && conversationGroup.length > 0) {
+    idObject["conversationGroup"] = conversationGroup;
+  }
+
+  const instanceId: string = JSON.stringify(idObject);
+  return ConversationListState.getInstance(instanceId, conversationGroup);
+}
+
+export { ConversationListState };
+export default useConversationListState;

@@ -1,0 +1,86 @@
+<template>
+  <view class="search-page" :style="{ paddingTop: statusBarHeight + 'px' }">
+    <Search
+      ref="searchRef"
+      :conversationID="conversationID"
+      :initialKeyword="initialKeyword"
+      :initialOption="initialOption"
+      :placeholder="'搜索聊天记录'"
+      :showCancel="true"
+      :debounceTime="300"
+      @search="handleSearch"
+      @cancel="handleCancel"
+      @resultItemClick="handleResultItemClick"
+    />
+  </view>
+</template>
+
+<script setup lang="uts">
+
+import { ref } from 'vue'
+import { onLoad } from '@dcloudio/uni-app'
+import Search from '@/uni_modules/tuikit-atomic-x/components/Search/Search.uvue'
+import { setPageData, LOCATE_MESSAGE } from '@/pages/utils/pageDataStore'
+
+const searchRef = ref<any | null>(null)
+const conversationID = ref<string>('')
+const initialKeyword = ref<string>('')
+const initialOption = ref<UTSJSONObject>({} as UTSJSONObject)
+
+const systemInfo = uni.getSystemInfoSync()
+const statusBarHeight = ref<number>(
+  typeof systemInfo.statusBarHeight === 'number' ? systemInfo.statusBarHeight : 0
+)
+
+onLoad((options: OnLoadOptions): void => {
+  const opt = options as UTSJSONObject
+  const cid = opt['conversationID']
+  if (typeof cid === 'string') {
+    conversationID.value = cid
+  }
+  const kw: any | null = opt['keyword']
+  if (kw != null && typeof kw === 'string' && kw.length > 0) {
+    initialKeyword.value = decodeURIComponent(`${kw}`) ?? ''
+  }
+  const op = opt['option']
+  if (typeof op === 'string' && op.length > 0) {
+    try {
+      const parsed = JSON.parse<UTSJSONObject>(op)
+      if (parsed != null) {
+        initialOption.value = parsed
+      }
+    } catch (e: any) {
+      console.error(`[SearchInConversation] Parse option failed: ${e}`)
+    }
+  }
+})
+
+const handleSearch = (keyword: string, _option: any): void => {
+  console.log(`[SearchInConversation] Search: ${keyword}`)
+}
+
+const handleCancel = (): void => {
+  uni.navigateBack()
+}
+
+const handleResultItemClick = (type: string, data: any | null): void => {
+  if (type === 'message') {
+    // 单条消息：data 是 MessageInfo
+    const targetConversationID = conversationID.value
+
+    // 通过模块级单例传递完整的消息对象
+    setPageData(LOCATE_MESSAGE, data)
+
+    uni.navigateTo({
+      url: `/pages/scenes/chat/chat/index?conversationID=${targetConversationID}`
+    })
+  }
+}
+</script>
+
+<style>
+.search-page {
+  flex: 1;
+  background-color: #ffffff;
+}
+</style>

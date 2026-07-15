@@ -9,8 +9,9 @@
 </template>
 
 <script>
-import { MessageMediaFileType } from '../../../../types/message'
+import { MediaQuality } from '../../../../types/message'
 import { useMessageListState } from '../../../../state/MessageListState'
+import { useMessageActionState } from '../../../../state/MessageActionState'
 
 // 长按判定阈值，与 Message.nvue 中保持一致
 var LONG_PRESS_THRESHOLD = 350
@@ -27,13 +28,13 @@ export default {
   },
   computed: {
     imageUrl() {
-      var body = this.message.messageBody
+      var body = this.message.messagePayload
       var url = (body && (body.originalImagePath || body.largeImagePath || body.thumbImagePath)) || ''
       if (url && url.startsWith('/') && !url.startsWith('file://')) url = 'file://' + url
       return url
     },
-    imageWidth() { return (this.message.messageBody && this.message.messageBody.originalImageWidth) || 0 },
-    imageHeight() { return (this.message.messageBody && this.message.messageBody.originalImageHeight) || 0 },
+    imageWidth() { return (this.message.messagePayload && this.message.messagePayload.originalImageWidth) || 0 },
+    imageHeight() { return (this.message.messagePayload && this.message.messagePayload.originalImageHeight) || 0 },
     imageContainerStyle() {
       var w = this.actualSize.width || this.imageWidth || 200
       var h = this.actualSize.height || this.imageHeight || 200
@@ -62,12 +63,17 @@ export default {
       var startTime = this.touchStartTime
       this.touchStartTime = 0
       if (startTime > 0 && Date.now() - startTime >= LONG_PRESS_THRESHOLD) return
-      if (this.loadingState === 'loaded') uni.previewImage({ urls: [this.imageUrl] })
+      if (this.loadingState === 'loaded') {
+        const { originalImageURL, originalImagePath } = this.message.messagePayload
+        uni.previewImage({
+          urls: [originalImageURL || originalImagePath],
+        });
+      }
     },
     async checkAndDownloadResource() {
       if (this.message && this.message.msgID && !this.imageUrl) {
         this.loadingState = 'loading'
-        try { await this.msgState.downloadMessageResource(this.message, MessageMediaFileType.ORIGINAL_IMAGE) }
+        try { await useMessageActionState({ message: this.message }).downloadMedia(MediaQuality.ORIGINAL) }
         catch (e) { this.loadingState = 'error' }
       }
     }

@@ -14,7 +14,7 @@
         <view class="user-info__avatar-wrapper">
           <Avatar
             :src="avatarURL"
-            :name="remark || nickname || userID || ''"
+            :name="friendRemark || nickname || userID || ''"
             :size="96"
             :shape="'square'"
             :defaultAvatarType="'user'"
@@ -37,7 +37,7 @@
       <SettingRowNavigate
         v-if="isFriend"
         label="备注名"
-        :value="remark || ''"
+        :value="friendRemark || ''"
         @click="handleRemarkClick"
       />
 
@@ -61,7 +61,7 @@
 
       <SettingRowToggle
         label="加入黑名单"
-        :modelValue="isInBlacklist || false"
+        :modelValue="isInBlacklist"
         @change="handleBlacklistChange"
       />
 
@@ -86,7 +86,7 @@
     <TextInputPopup
       v-model:visible="showRemarkPopup"
       title="修改备注"
-      :value="remark || ''"
+      :value="friendRemark || ''"
       placeholder="请输入备注名"
       :maxLength="15"
       :maxByteLength="50"
@@ -115,9 +115,10 @@ import CustomNavbar from '../CustomNavbar/CustomNavbar.nvue';
 import { Avatar } from '../Avatar';
 import { useContactState } from '../../state/ContactState';
 import { useConversationListState } from '../../state/ConversationListState';
-import { ReceiveMessageOpt } from '../../types/group';
+import { ReceiveMessageOpt } from '../../types/contact';
 import { throttle } from '../../utils/lodash';
 import type { ContactInfo } from '../../types/contact';
+import type { ConversationInfo } from '../../types/conversation';
 
 interface Props {
   conversationID: string;
@@ -133,41 +134,50 @@ const userID = computed(() =>
 
 // 使用 ContactState
 const {
-  setUserRemark,
-  setReceiveMessageOpt,
+  friendList,
+  blackList,
+  setFriendRemark,
   addToBlacklist,
   removeFromBlacklist,
   deleteFriend,
-  fetchUserInfo,
+  getContactInfo,
 } = useContactState('c2cSetting');
 
-// 使用 ConversationListState 获取置顶状态
+// 使用 ConversationListState 获取置顶状态 + 设置消息接收选项
 const {
-  conversationList,
   pinConversation,
-  fetchConversationInfo,
+  getConversationInfo,
+  setReceiveMessageOpt,
 } = useConversationListState('c2cSetting');
 
 // 用户信息
 const userInfo = ref<ContactInfo | null>(null);
+const currentConversation = ref<ConversationInfo | null>(null);
 
 // 计算属性 - 用户信息
 const nickname = computed(() => userInfo.value?.nickname || '');
 const avatarURL = computed(() => userInfo.value?.avatarURL || '');
-const signature = computed(() => userInfo.value?.signature || '');
-const remark = computed(() => userInfo.value?.remark || '');
+const signature = computed(() => userInfo.value?.aboutMe || '');
+// friendRemark 仅在 V2TIMFriendInfo（friendList）上有值，V2TIMUserFullInfo（getContactInfo）路径不会带；
+// 优先从 friendList 取，再 fallback 到 userInfo
+const friendRemark = computed(() => {
+  const fromFriend = friendList.value.find(f => f.userID === userID.value)?.friendRemark;
+  return fromFriend || userInfo.value?.friendRemark || '';
+});
 const isFriend = computed(() => userInfo.value?.isFriend ?? false);
-const isInBlacklist = computed(() => userInfo.value?.isInBlacklist ?? false);
-const isNotDisturb = computed(() => 
-  userInfo.value?.receiveMessageOpt !== undefined && 
-  userInfo.value.receiveMessageOpt !== ReceiveMessageOpt.Receive
-);
+const isInBlacklist = computed(() => {
+  const isInBlacklist = blackList.value.find(f => f.userID === userID.value);
+  return !!isInBlacklist || userInfo.value?.isInBlacklist;
+});
+const isNotDisturb = computed(() => {
+  const opt = currentConversation.value?.receiveOption;
+  // 数据未加载时默认关闭免打扰，避免误显示为开启
+  if (opt === undefined) return false;
+  return opt !== ReceiveMessageOpt.RECEIVE;
+});
 
 // 计算属性 - 置顶状态（从 ConversationListState 获取）
-const isPinned = computed(() => {
-  const currentConversation = conversationList.value.find(conv => conv.conversationID === props.conversationID);
-  return currentConversation?.isPinned ?? false;
-});
+const isPinned = computed(() => currentConversation.value?.isPinned ?? false);
 
 // 状态栏高度
 const statusBarHeight = ref(44);
@@ -186,19 +196,32 @@ const navTitle = computed(() => {
 
 // 头像文字
 const avatarText = computed(() => {
-  return (remark.value || nickname.value || userID.value || '').substring(0, 1);
+  return (friendRemark.value || nickname.value || userID.value || '').substring(0, 1);
 });
 
 // 获取用户信息
 const fetchPeerUserInfo = async () => {
   if (!userID.value) return;
   try {
-    const list = await fetchUserInfo([userID.value]);
+    const list = await getContactInfo([userID.value]);
     if (list && list.length > 0) {
       userInfo.value = list[0];
     }
   } catch (error) {
     console.error('[C2CChatSetting] fetchPeerUserInfo failed:', error);
+  }
+};
+
+// 获取会话信息
+const fetchConversationInfo = async () => {
+  if (!props.conversationID) return;
+  try {
+    const info = await getConversationInfo(props.conversationID);
+    if (info) {
+      currentConversation.value = info;
+    }
+  } catch (error) {
+    console.error('[C2CChatSetting] fetchConversationInfo failed:', error);
   }
 };
 
@@ -211,7 +234,7 @@ onBeforeMount(async () => {
   // 获取用户信息和会话信息
   await Promise.all([
     fetchPeerUserInfo(),
-    fetchConversationInfo(props.conversationID),
+    fetchConversationInfo(),
   ]);
 });
 
@@ -229,13 +252,9 @@ const handleRemarkClick = () => {
 const handleRemarkConfirm = async (newRemark: string) => {
   if (!userID.value) return;
   try {
-    await setUserRemark(userID.value, newRemark);
-    // 更新本地状态
-    if (userInfo.value) {
-      userInfo.value.remark = newRemark;
-    }
+    await setFriendRemark(userID.value, newRemark);
   } catch (error) {
-    console.error('[C2CChatSetting] setUserRemark failed:', error);
+    console.error('[C2CChatSetting] setFriendRemark failed:', error);
   }
 };
 
@@ -243,21 +262,24 @@ const handleRemarkConfirm = async (newRemark: string) => {
 const handleNotDisturbChange = throttle(async (value: boolean) => {
   if (!userID.value) return;
   try {
-    const opt = value ? ReceiveMessageOpt.NotNotify : ReceiveMessageOpt.Receive;
-    await setReceiveMessageOpt(userID.value, opt);
-    // 更新本地状态
-    if (userInfo.value) {
-      userInfo.value.receiveMessageOpt = value ? ReceiveMessageOpt.NotNotify : ReceiveMessageOpt.Receive;
-    }
+    const opt = value ? ReceiveMessageOpt.NOT_NOTIFY : ReceiveMessageOpt.RECEIVE;
+    await setReceiveMessageOpt(`c2c_${userID.value}`, opt);
+    fetchConversationInfo();
   } catch (error) {
     console.error('[C2CChatSetting] setReceiveMessageOpt failed:', error);
   }
 }, 1000, { leading: true, trailing: true });
 
 // 切换置顶
-const handlePinnedChange = (value: boolean) => {
-  pinConversation(props.conversationID, value);
-};
+const handlePinnedChange = throttle(async (value: boolean) => {
+  if (!props.conversationID) return;
+  try {
+    await pinConversation(props.conversationID, value);
+    fetchConversationInfo();
+  } catch (error) {
+    console.error('[C2CChatSetting] pinConversation failed:', error);
+  }
+}, 1000, { leading: true, trailing: true });
 
 // 切换黑名单
 const handleBlacklistChange = async (value: boolean) => {

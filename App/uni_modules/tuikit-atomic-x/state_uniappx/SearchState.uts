@@ -1,0 +1,422 @@
+
+import { ref, type Ref } from "vue";
+import type { HybridListenerOptions } from "@/uni_modules/tuikit-atomic-x";
+import type { HybridCallOptions } from "./hybridCallOptions.uts";
+import { callAPI, addListener, removeListener } from "@/uni_modules/tuikit-atomic-x";
+
+/**
+ * 桥接响应（参照 atomicx HybridResponse data class）
+ */
+type HybridResponse = {
+  api: string | null;
+  code: number;
+  message: string | null;
+  data: any | null;
+};
+
+/**
+ * 桥接响应默认值（JSON.parse 失败兜底）
+ */
+const DEFAULT_HYBRID_RESPONSE: HybridResponse = {
+  api: null,
+  code: -1,
+  message: null,
+  data: null
+};
+
+type DataPayload = UTSJSONObject;
+
+/**
+ * 模块级单例缓存
+ */
+const InstanceMap: Map<string, SearchState> = new Map<string, SearchState>();
+
+/**
+ * 默认 instanceId
+ */
+const DEFAULT_INSTANCE_ID = "default_search_store";
+
+/**
+ * 搜索状态管理类
+ */
+class SearchState {
+  private static readonly STORE_NAME = "Search";
+
+  /** 可绑定的数据字段（对齐 SearchDispatcher） */
+  private static readonly BINDABLE_DATA_NAMES: string[] = [
+    "userList",
+    "userTotalCount",
+    "hasMoreUsers",
+    "friendList",
+    "friendTotalCount",
+    "hasMoreFriends",
+    "groupList",
+    "groupTotalCount",
+    "hasMoreGroups",
+    "groupMemberList",
+    "groupMemberTotalCount",
+    "hasMoreGroupMembers",
+    "messageResults",
+    "messageResultTotalCount",
+    "hasMoreMessageResults",
+  ];
+
+  public readonly instanceId: string;
+
+  // 用户（陌生人 / 全量 IM 账号）
+  public readonly userList: Ref<any[]>;
+  public readonly userTotalCount: Ref<number>;
+  public readonly hasMoreUsers: Ref<boolean>;
+
+  // 好友
+  public readonly friendList: Ref<any[]>;
+  public readonly friendTotalCount: Ref<number>;
+  /** 旧字段 hasMoreFriendList */
+  public readonly hasMoreFriends: Ref<boolean>;
+
+  // 群组
+  public readonly groupList: Ref<any[]>;
+  public readonly groupTotalCount: Ref<number>;
+  /** 旧字段 hasMoreGroupList */
+  public readonly hasMoreGroups: Ref<boolean>;
+
+  // 群成员
+  public readonly groupMemberList: Ref<UTSJSONObject>;
+  public readonly groupMemberTotalCount: Ref<number>;
+  /** 旧字段 hasMoreGroupMemberList */
+  public readonly hasMoreGroupMembers: Ref<boolean>;
+
+  // 消息
+  public readonly messageResults: Ref<any[]>;
+  public readonly messageResultTotalCount: Ref<number>;
+  public readonly hasMoreMessageResults: Ref<boolean>;
+
+  private constructor(instanceId: string = DEFAULT_INSTANCE_ID) {
+    this.instanceId = SearchState.generateInstanceId(instanceId);
+
+    this.userList = ref<any[]>([]);
+    this.userTotalCount = ref<number>(0);
+    this.hasMoreUsers = ref<boolean>(false);
+
+    this.friendList = ref<any[]>([]);
+    this.friendTotalCount = ref<number>(0);
+    this.hasMoreFriends = ref<boolean>(false);
+
+    this.groupList = ref<any[]>([]);
+    this.groupTotalCount = ref<number>(0);
+    this.hasMoreGroups = ref<boolean>(false);
+
+    this.groupMemberList = ref<UTSJSONObject>(new UTSJSONObject());
+    this.groupMemberTotalCount = ref<number>(0);
+    this.hasMoreGroupMembers = ref<boolean>(false);
+
+    this.messageResults = ref<any[]>([]);
+    this.messageResultTotalCount = ref<number>(0);
+    this.hasMoreMessageResults = ref<boolean>(false);
+
+    this.createStore();
+  }
+
+  private static generateInstanceId(baseInstanceId: string): string {
+    return JSON.stringify({
+      storeName: SearchState.STORE_NAME,
+      instanceId: baseInstanceId,
+    });
+  }
+
+  private createStore(): void {
+    const options: HybridCallOptions = {
+      api: "createStore",
+      params: {
+        createStoreParams: this.instanceId,
+      },
+    };
+
+    callAPI(JSON.stringify(options), (response: string) => {
+      try {
+        const result = JSON.parse<HybridResponse>(response) ?? DEFAULT_HYBRID_RESPONSE;
+        if (result.code == 0) {
+          this.bindEvent();
+        } else {
+          const msg = result.message ?? 'unknown';
+          console.error(`[${this.instanceId}][createStore] Failed: ${msg}`);
+        }
+      } catch (error: any) {
+        const errMsg = error instanceof Error ? (error as Error).message : `${error}`;
+        console.error(`[${this.instanceId}][createStore] Parse error: ${errMsg}`);
+      }
+    });
+  }
+
+  public static getInstance(instanceId: string = DEFAULT_INSTANCE_ID): SearchState {
+    const fullInstanceId = SearchState.generateInstanceId(instanceId);
+    if (!InstanceMap.has(fullInstanceId)) {
+      InstanceMap.set(fullInstanceId, new SearchState(instanceId));
+    }
+    return InstanceMap.get(fullInstanceId) as SearchState;
+  }
+
+  private bindEvent(): void {
+    const storeName = SearchState.STORE_NAME;
+
+    const dataHandlers: Map<string, (result: any) => void> = new Map();
+    dataHandlers.set("userList", (r: any): void => {
+      const rObj: UTSJSONObject = r as UTSJSONObject
+      const rawList: any | null = rObj['userList']
+      if (rawList != null) {
+        this.userList.value = rawList as any[]
+      }
+    });
+    dataHandlers.set("userTotalCount", (r: any): void => {
+      const rObj: UTSJSONObject = r as UTSJSONObject
+      const raw: any | null = rObj['userTotalCount'] ?? null
+      this.userTotalCount.value = typeof raw == 'number' ? raw as number : 0
+    });
+    dataHandlers.set("hasMoreUsers", (r: any): void => {
+      const rObj: UTSJSONObject = r as UTSJSONObject
+      this.hasMoreUsers.value = rObj['hasMoreUsers'] == true;
+    });
+    dataHandlers.set("friendList", (r: any): void => {
+      const rObj: UTSJSONObject = r as UTSJSONObject
+      const rawList: any | null = rObj['friendList']
+      if (rawList != null) {
+        this.friendList.value = rawList as any[]
+      }
+    });
+    dataHandlers.set("friendTotalCount", (r: any): void => {
+      const rObj: UTSJSONObject = r as UTSJSONObject
+      const raw: any | null = rObj['friendTotalCount'] ?? null
+      this.friendTotalCount.value = typeof raw == 'number' ? raw as number : 0
+    });
+    dataHandlers.set("hasMoreFriends", (r: any): void => {
+      const rObj: UTSJSONObject = r as UTSJSONObject
+      this.hasMoreFriends.value = rObj['hasMoreFriends'] == true;
+    });
+    dataHandlers.set("groupList", (r: any): void => {
+      const rObj: UTSJSONObject = r as UTSJSONObject
+      const rawList: any | null = rObj['groupList']
+      if (rawList != null) {
+        this.groupList.value = rawList as any[]
+      }
+    });
+    dataHandlers.set("groupTotalCount", (r: any): void => {
+      const rObj: UTSJSONObject = r as UTSJSONObject
+      const raw: any | null = rObj['groupTotalCount'] ?? null
+      this.groupTotalCount.value = typeof raw == 'number' ? raw as number : 0
+    });
+    dataHandlers.set("hasMoreGroups", (r: any): void => {
+      const rObj: UTSJSONObject = r as UTSJSONObject
+      this.hasMoreGroups.value = rObj['hasMoreGroups'] == true;
+    });
+    dataHandlers.set("groupMemberList", (r: any): void => {
+      const rObj: UTSJSONObject = r as UTSJSONObject
+      const rawList: any | null = rObj['groupMemberList']
+      if (rawList != null) {
+        this.groupMemberList.value = (rawList ?? new UTSJSONObject()) as UTSJSONObject
+      }
+    });
+    dataHandlers.set("groupMemberTotalCount", (r: any): void => {
+      const rObj: UTSJSONObject = r as UTSJSONObject
+      const raw: any | null = rObj['groupMemberTotalCount'] ?? null
+      this.groupMemberTotalCount.value = typeof raw == 'number' ? raw as number : 0
+    });
+    dataHandlers.set("hasMoreGroupMembers", (r: any): void => {
+      const rObj: UTSJSONObject = r as UTSJSONObject
+      this.hasMoreGroupMembers.value = rObj['hasMoreGroupMembers'] == true;
+    });
+    dataHandlers.set("messageResults", (r: any): void => {
+      const rObj: UTSJSONObject = r as UTSJSONObject
+      const rawList: any | null = rObj['messageResults']
+      if (rawList != null) {
+        this.messageResults.value = rawList as any[]
+      }
+    });
+    dataHandlers.set("messageResultTotalCount", (r: any): void => {
+      const rObj: UTSJSONObject = r as UTSJSONObject
+      const raw: any | null = rObj['messageResultTotalCount'] ?? null
+      this.messageResultTotalCount.value = typeof raw == 'number' ? raw as number : 0
+    });
+    dataHandlers.set("hasMoreMessageResults", (r: any): void => {
+      const rObj: UTSJSONObject = r as UTSJSONObject
+      this.hasMoreMessageResults.value = rObj['hasMoreMessageResults'] == true;
+    });
+
+    SearchState.BINDABLE_DATA_NAMES.forEach((dataName: string) => {
+      const makeOptions = (name: string): HybridListenerOptions => {
+        const opts: HybridListenerOptions = {
+          type: "",
+          store: storeName,
+          name: name,
+          params: {
+            createStoreParams: this.instanceId,
+          },
+        };
+        return opts;
+      };
+      addListener(makeOptions(dataName), (data: string) => {
+        try {
+          const result = JSON.parse<DataPayload>(data);
+          if (result != null) {
+            const handler = dataHandlers.get(dataName);
+            if (handler != null) {
+              handler(result);
+            }
+          }
+        } catch (error: any) {
+          const errMsg = error instanceof Error ? (error as Error).message : `${error}`;
+          console.error(`[${this.instanceId}][${dataName} listener] Error: ${errMsg}`);
+        }
+      });
+    });
+  }
+
+  // ============================================================================
+  // Actions
+  // ============================================================================
+
+  search = async (keywordList: string[], option?: any): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      const options: HybridCallOptions = {
+        api: "search",
+        params: {
+          createStoreParams: this.instanceId,
+          keywordList: JSON.stringify(keywordList),
+          option: option != null ? JSON.stringify(option) : '',
+        },
+      };
+
+      callAPI(JSON.stringify(options), (response: string) => {
+        try {
+          const result = JSON.parse<HybridResponse>(response) ?? DEFAULT_HYBRID_RESPONSE;
+          if (result.code == 0) {
+            resolve();
+          } else {
+            const msg = result.message ?? 'Failed to search';
+            console.error(`[${this.instanceId}][search] Failed: ${msg}`);
+            reject(new Error(msg));
+          }
+        } catch (error: any) {
+          const errMsg = error instanceof Error ? (error as Error).message : `${error}`;
+          console.error(`[${this.instanceId}][search] Parse error: ${errMsg}`);
+          reject(error);
+        }
+      });
+    });
+  };
+
+  /**
+   * 搜索更多
+   *
+   *   内部 typeof == 'number' 分流，原样传给 SDK 桥接（SDK 端是原生 number）。
+   *
+   * @param searchType 搜索类型（任意值：整数枚举 / 数字字面量）
+   */
+  searchMore = async (searchType: any): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      if (typeof searchType !== 'number') {
+        reject(new Error('searchMore: searchType must be a number (0=FRIEND, 1=GROUP, 2=GROUP_MEMBER, 3=MESSAGE)'))
+        return
+      }
+      const options: HybridCallOptions = {
+        api: "searchMore",
+        params: {
+          createStoreParams: this.instanceId,
+          searchType: searchType,
+        },
+      };
+
+      callAPI(JSON.stringify(options), (response: string) => {
+        try {
+          const result = JSON.parse<HybridResponse>(response) ?? DEFAULT_HYBRID_RESPONSE;
+          if (result.code == 0) {
+            resolve();
+          } else {
+            const msg = result.message ?? 'Failed to search more';
+            console.error(`[${this.instanceId}][searchMore] Failed: ${msg}`);
+            reject(new Error(msg));
+          }
+        } catch (error: any) {
+          const errMsg = error instanceof Error ? (error as Error).message : `${error}`;
+          console.error(`[${this.instanceId}][searchMore] Parse error: ${errMsg}`);
+          reject(error);
+        }
+      });
+    });
+  };
+
+  clearSearchResults = (): void => {
+    this.userList.value = [];
+    this.userTotalCount.value = 0;
+    this.hasMoreUsers.value = false;
+
+    this.friendList.value = [];
+    this.friendTotalCount.value = 0;
+    this.hasMoreFriends.value = false;
+
+    this.groupList.value = [];
+    this.groupTotalCount.value = 0;
+    this.hasMoreGroups.value = false;
+
+    this.groupMemberList.value = new UTSJSONObject();
+    this.groupMemberTotalCount.value = 0;
+    this.hasMoreGroupMembers.value = false;
+
+    this.messageResults.value = [];
+    this.messageResultTotalCount.value = 0;
+    this.hasMoreMessageResults.value = false;
+  };
+
+  // ============================================================================
+  // 销毁
+  // ============================================================================
+
+  private unbindEvent(): void {
+    SearchState.BINDABLE_DATA_NAMES.forEach((dataName: string) => {
+      const makeOptions = (name: string): HybridListenerOptions => {
+        const opts: HybridListenerOptions = {
+          type: "",
+          store: SearchState.STORE_NAME,
+          name: name,
+          params: {
+            createStoreParams: this.instanceId,
+          },
+        };
+        return opts;
+      };
+      removeListener(makeOptions(dataName));
+    });
+  }
+
+  destroyStore = (): void => {
+    // 幂等：实例已被销毁过，直接 return
+    if (!InstanceMap.has(this.instanceId)) return;
+    this.unbindEvent();
+    this.clearSearchResults();
+    InstanceMap.delete(this.instanceId);
+
+    const options: HybridCallOptions = {
+      api: "destroyStore",
+      params: {
+        createStoreParams: this.instanceId,
+      },
+    };
+
+    callAPI(JSON.stringify(options), () => {});
+  };
+}
+
+export type UseSearchStateOptions = {
+  instanceId?: string;
+};
+
+/**
+ * useSearchState 返回类型
+ */
+export type UseSearchStateReturn = SearchState;
+
+export function useSearchState(instanceId: string = DEFAULT_INSTANCE_ID): UseSearchStateReturn {
+  return SearchState.getInstance(instanceId);
+}
+
+export { SearchState };
+export default useSearchState;

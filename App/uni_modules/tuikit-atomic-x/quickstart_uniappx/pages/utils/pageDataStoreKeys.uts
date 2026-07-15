@@ -1,0 +1,14 @@
+
+/** 搜索结果跳到 chat 页面并定位到对应消息（MessageInfo） */
+export const LOCATE_MESSAGE = 'locateMessage'
+
+/** 跳到 contactInfo 页面（userInfo / friendInfo / applicationInfo） */
+export const INFO_DATA = 'infoData'
+
+/** 跳到 setRemark 页面（userID + friendRemark） */
+export const REMARK_DATA = 'remarkData'
+
+/** 跳到 applicationVerify 页面（userInfo / groupInfo） */
+export const VERIFY_DATA = 'verifyData'
+
+export type PageDataKey = 'locateMessage' | 'infoData' | 'remarkData' | 'verifyData'

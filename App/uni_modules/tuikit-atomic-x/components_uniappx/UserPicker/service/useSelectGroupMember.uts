@@ -1,0 +1,280 @@
+import { ref, computed, watch } from 'vue'
+import type { Ref } from 'vue'
+import { type UserPickerHookResult, type User, toMap } from './types'
+import { useGroupMemberState, type UseGroupMemberStateOptions } from '../../../state/GroupMemberState'
+import { useSearchState } from '../../../state/SearchState'
+import { useLoginState, type UserProfileParam } from '../../../state/LoginState'
+import { AT_ALL_TAG } from '../../../utils/mention'
+import type { GroupMember } from '../../../types/group'
+
+/**
+ * 错误对象类型
+ */
+type SearchError = {
+	code?: number
+	message?: string
+}
+
+const SEARCH_DEBOUNCE_MS = 300
+const SEARCH_INSTANCE_ID = 'groupMemberPicker_search'
+
+/**
+ * 选择群成员 Hook（uvue 版）
+ *
+ */
+export function useSelectGroupMember(routeParams?: any): UserPickerHookResult {
+	const rp: UTSJSONObject = toMap(routeParams ?? null)
+	const conversationID: string = (rp['conversationID'] as string) ?? ''
+	const groupID: string = conversationID.startsWith('group_')
+		? conversationID.replace('group_', '')
+		: ''
+	const excludeSelf: boolean = ((rp['excludeSelf'] as boolean | null) ?? true) as boolean
+	const maxCount: number = ((rp['maxCount'] as number | null) ?? 500) as number
+	const title: string = ((rp['title'] as string | null) ?? '选择群成员') as string
+	const singleSelect: boolean = ((rp['singleSelect'] as boolean | null) ?? false) as boolean
+	const enableAtAll: boolean = ((rp['enableAtAll'] as boolean | null) ?? false) as boolean
+	const enableRemoteSearch: boolean = ((rp['enableRemoteSearch'] as boolean | null) ?? false) as boolean
+
+	// ======================== 数据源 ========================
+	const memberOpts: UseGroupMemberStateOptions = { groupID: groupID } as UseGroupMemberStateOptions
+	const groupMemberState = groupID.length > 0 ? useGroupMemberState(memberOpts) : null
+	const allMembers: Ref<any[]> = groupMemberState != null
+		? groupMemberState.memberList
+		: ref<any[]>([])
+	const hasMoreMembers: Ref<boolean> = groupMemberState != null
+		? groupMemberState.hasMoreMembers
+		: ref<boolean>(false)
+
+	// 首屏拉取
+	if (enableRemoteSearch && groupMemberState != null && allMembers.value.length == 0) {
+		groupMemberState.loadMembers(null).catch((err: any | null): void => {
+			console.error('[useSelectGroupMember] loadMembers failed:', `${err}`)
+		})
+	}
+
+	const { loginUserInfo, getLoginUserInfo } = useLoginState()
+	const resolveMyUserID = (): string => {
+		const a: UserProfileParam | null = getLoginUserInfo()
+		const b: UserProfileParam | null = loginUserInfo.value
+		const info: UserProfileParam | null = a != null ? a : b
+		if (info == null) return ''
+		// userID 是 optional（string | null），null 兜底成空字符串
+		return info.userID ?? ''
+	}
+
+	const loginTick = ref<number>(0)
+	watch(loginUserInfo, (): void => {
+		loginTick.value = loginTick.value + 1
+	}, { immediate: true })
+
+	const profileMap = ref<Map<string, UTSJSONObject>>(new Map<string, UTSJSONObject>())
+	const fetchingSet = ref<Set<string>>(new Set<string>())
+
+	watch((): any[] => allMembers.value, (newList: any[] | null): void => {
+		if (newList == null || groupMemberState == null) return
+		const idArr: string[] = []
+		for (let i: number = 0; i < newList.length; i++) {
+			const m: any = newList[i] as any
+			const mObj: UTSJSONObject = toMap(m ?? null)
+			const uidRaw: any | null = mObj['userID']
+			const uid: string = typeof uidRaw == 'string' ? uidRaw as string : ''
+			if (uid.length > 0 && !profileMap.value.has(uid) && !fetchingSet.value.has(uid)) {
+				idArr.push(uid)
+			}
+		}
+		if (idArr.length == 0) return
+		for (let i: number = 0; i < idArr.length; i++) {
+			fetchingSet.value.add(idArr[i])
+		}
+		;(async (): Promise<void> => {
+			try {
+				const list: any[] = await groupMemberState.getMemberInfo(idArr)
+				for (let i: number = 0; i < list.length; i++) {
+					const info: any | null = list[i] as any
+					if (info == null) continue
+					const infoObj: UTSJSONObject = toMap(info ?? null)
+					const uidRaw: any | null = infoObj['userID']
+					const uid: string = typeof uidRaw == 'string' ? uidRaw as string : ''
+					if (uid.length > 0) {
+						const newMap: Map<string, UTSJSONObject> = new Map<string, UTSJSONObject>(profileMap.value)
+						newMap.set(uid, infoObj)
+						profileMap.value = newMap
+					}
+				}
+			} catch (e: any) {
+				console.warn('[useSelectGroupMember] fetch profiles failed:', `${e}`)
+			} finally {
+				for (let i: number = 0; i < idArr.length; i++) {
+					fetchingSet.value.delete(idArr[i])
+				}
+			}
+		})()
+	}, { immediate: true })
+
+	// ======================== 服务端搜索 ========================
+	const searchState = enableRemoteSearch ? useSearchState(SEARCH_INSTANCE_ID) : null
+	const searchKeyword = ref<string>('')
+	const isSearching = computed((): boolean => enableRemoteSearch && searchKeyword.value.trim().length > 0)
+	const searchResultList = computed<GroupMember[]>((): GroupMember[] => {
+		if (searchState == null) return []
+		const map: UTSJSONObject = searchState.groupMemberList.value ?? new UTSJSONObject()
+		const listRaw: any | null = map[groupID]
+		const list: any[] = (listRaw != null && Array.isArray(listRaw)) ? (listRaw as any[]) : []
+		return list as GroupMember[]
+	})
+
+	let searchDebounceTimer: number | null = null
+
+	const onSearchChange = enableRemoteSearch
+		? (kw: string): void => {
+			searchKeyword.value = kw
+			if (searchDebounceTimer != null) {
+				const t: number | null = searchDebounceTimer
+				clearTimeout(t as number)
+			}
+			searchDebounceTimer = setTimeout((): void => {
+				const trimmed = kw.trim()
+				if (trimmed.length == 0) {
+					searchState?.clearSearchResults()
+					return
+				}
+			searchState?.search([trimmed], {
+				keywordListMatchMode: 0,
+				searchScope: [2],
+				pageSize: 100,
+				groupMemberFilter: { groupIDList: [groupID] }
+			}).catch((err: any | null): void => {
+					const errObj: UTSJSONObject = toMap(err ?? null)
+					const errCode: any | null = errObj['code']
+					console.error('[useSelectGroupMember] search failed:', `${typeof errCode == 'number' ? errCode as number : 0}`)
+					const e: UTSJSONObject = toMap(err ?? null)
+					let toastTitle = '搜索失败'
+					const eCode: any | null = e['code']
+					if (typeof eCode == 'number' && (eCode as number) == 7013) {
+						toastTitle = '当前套餐不支持群成员搜索，可升级为旗舰版/企业版后使用'
+					} else {
+						const eMsg: any | null = e['message']
+						if (typeof eMsg == 'string') {
+							toastTitle = eMsg as string
+						}
+					}
+					uni.showToast({ title: toastTitle, icon: 'none' })
+				})
+			}, SEARCH_DEBOUNCE_MS)
+		}
+		: null as ((kw: string) => void) | null
+
+	// ======================== userList ========================
+	const userList = computed<User[]>((): User[] => {
+		const source = isSearching.value ? searchResultList.value : (allMembers.value ?? [])
+		const me: string = resolveMyUserID()
+		//   （computed 理论自动追踪 loginUserInfo.value 依赖，但 UTS 实际可能漏触发）
+		//   这里把 loginTick.value 拼到 me 末尾（空字符串不改变值），既满足 lint 又保留依赖追踪
+		const meEffective: string = me + (loginTick.value >= 0 ? '' : '')
+		//   self 留在列表里。改成总是 filter，filter 内部 me 为空时不做排除（保留兼容性）。
+		//   这样 myUserID 后续更新时，userList computed 会自动重算（computed 追踪 loginUserInfo.value 依赖）。
+		const filtered = excludeSelf
+			? source.filter((m: any): boolean => {
+				// me 未就绪时不排除任何人（避免空字符串把空 userID 的成员误排）
+				if (meEffective.length == 0) return true
+				const mObj: UTSJSONObject = toMap(m)
+				const mUID: any | null = mObj['userID']
+				const mUIDStr: string = typeof mUID == 'string' ? mUID as string
+					: typeof mUID == 'number' ? `${mUID}`
+					: ''
+				if (mUIDStr.length == 0) return true
+				// 严格匹配 + 备用：互为子串也算（应对 SDK 返回格式不一致，比如 login 是 "123" 但 SDK 是 "user_123"）
+				const isMatch: boolean = mUIDStr === meEffective
+					|| mUIDStr.indexOf(meEffective) >= 0
+					|| meEffective.indexOf(mUIDStr) >= 0
+				if (isMatch) return false
+				return true
+			})
+			: source
+		return filtered.map((item: any): User => {
+			const m: UTSJSONObject = toMap(item)
+			const uid: string = (m['userID'] as string) ?? ''
+			const profile: UTSJSONObject | null = profileMap.value.get(uid) ?? null
+			const profileNameCard: string = profile != null && typeof (profile['nameCard'] as any) == 'string' ? (profile['nameCard'] as string) : ''
+			const profileNickname: string = profile != null && typeof (profile['nickname'] as any) == 'string' ? (profile['nickname'] as string) : ''
+			const profileAvatarURL: string = profile != null && typeof (profile['avatarURL'] as any) == 'string' ? (profile['avatarURL'] as string) : ''
+			const topNickname: string = (m['nameCard'] as string) ?? (m['nickname'] as string) ?? (m['displayName'] as string) ?? ''
+			let nestedNickname: string = ''
+			const profileRaw: any | null = m['userProfile']
+			if (profileRaw != null) {
+				const profObj: UTSJSONObject = toMap(profileRaw)
+				nestedNickname = (profObj['nameCard'] as string) ?? (profObj['nickname'] as string) ?? (profObj['userID'] as string) ?? ''
+			}
+			const finalNickname: string = profileNameCard.length > 0 ? profileNameCard
+				: profileNickname.length > 0 ? profileNickname
+				: topNickname.length > 0 ? topNickname
+				: nestedNickname.length > 0 ? nestedNickname
+				: uid
+			const finalAvatarURL: string = profileAvatarURL.length > 0 ? profileAvatarURL : ((m['avatarURL'] as string) ?? '')
+			return {
+				userID: uid,
+				nickname: finalNickname,
+				avatarURL: finalAvatarURL
+			}
+		})
+	})
+
+	const pinnedTopItems = computed<User[]>((): User[] => {
+		if (!enableAtAll) return []
+		return [{ userID: AT_ALL_TAG, nickname: '所有人', avatarURL: '' }]
+	})
+
+	const lockedItems = computed<string[]>((): string[] => [])
+	const hasMore = computed<boolean>((): boolean => hasMoreMembers.value)
+
+	const cleanup = (): void => {
+		if (searchDebounceTimer != null) {
+			const t: number | null = searchDebounceTimer
+			clearTimeout(t as number)
+			searchDebounceTimer = null
+		}
+		if (searchState != null) {
+			try { searchState.destroyStore() } catch (e: any) {
+				console.error('[useSelectGroupMember] destroyStore failed:', `${e}`)
+			}
+		}
+		if (groupMemberState != null) {
+			try { groupMemberState.destroyStore() } catch (e: any) {
+				console.error('[useSelectGroupMember] destroyStore (groupMember) failed:', `${e}`)
+			}
+		}
+	}
+
+	const handleConfirm = async (_selectedUsers: any[]): Promise<void> => {
+		cleanup()
+	}
+
+	const handleCancel = async (): Promise<void> => {
+		cleanup()
+	}
+
+	const onReachEnd = async (): Promise<void> => {
+		if (isSearching.value) return
+		if (groupMemberState == null) return
+		if (!hasMoreMembers.value) return
+		try {
+			await groupMemberState.loadMoreMembers()
+		} catch (err: any) {
+			console.error('[useSelectGroupMember] loadMoreMembers failed:', `${err}`)
+		}
+	}
+
+	return {
+		userList,
+		lockedItems,
+		maxCount,
+		title,
+		hasMore,
+		handleConfirm,
+		handleCancel,
+		onReachEnd,
+		singleSelect,
+		pinnedTopItems,
+		onSearchChange
+	}
+}

@@ -1,10 +1,12 @@
 import { MessageType, MessageStatus } from '../../types/message';
-import type { MessageInfo } from '../../types/message';
+import type { MessageInfo, SendMessagePayload, SendMessageOption, OfflinePushInfoResolver } from '../../types/message';
+import { ConversationType } from '../../types/conversation';
 import type { AlbumPickerConfig, AlbumMedia } from '../AlbumPicker/AlbumPicker';
 import { AlbumMediaType, AlbumPicker } from '../AlbumPicker/AlbumPicker';
 import { useMessageInputState } from '../../state/MessageInputState';
 import { useMessageListState } from '../../state/MessageListState';
 import { useLoginState } from '../../state/LoginState';
+import { buildOfflinePushInfo } from '../../utils/buildOfflinePushInfo';
 
 const TAG = '[AlbumPickerMediaSendManager]';
 const PLACEHOLDER_PREFIX = 'placeholder_video_';
@@ -24,6 +26,8 @@ interface PickerSession {
   conversationID: string;
   sentMediaIds: Set<number>;
   mediaStates: Map<number, MediaState>;
+  /** 业务方注入的离线推送配置（透传自 ToolsPanel 的 setOfflinePushInfo） */
+  setOfflinePushInfo?: OfflinePushInfoResolver;
 }
 
 function getPickerSessions(): Set<PickerSession> {
@@ -39,7 +43,11 @@ function getPickerSessions(): Set<PickerSession> {
   return new Set<PickerSession>();
 }
 
-export function openAlbumPicker(conversationID: string, config: AlbumPickerConfig): void {
+export function openAlbumPicker(
+  conversationID: string,
+  config: AlbumPickerConfig,
+  options?: { setOfflinePushInfo?: OfflinePushInfoResolver }
+): void {
   console.log(TAG, 'openAlbumPicker, conversationID:', conversationID);
   const pickerSessions = getPickerSessions();
 
@@ -49,6 +57,7 @@ export function openAlbumPicker(conversationID: string, config: AlbumPickerConfi
     conversationID,
     sentMediaIds: new Set<number>(),
     mediaStates: new Map<number, MediaState>(),
+    setOfflinePushInfo: options?.setOfflinePushInfo,
   };
   pickerSessions.add(session);
 
@@ -100,7 +109,7 @@ function handleMediaProcessing(
   if (albumMedia.mediaType === AlbumMediaType.IMAGE) {
     if (progress >= 1.0 && albumMedia.mediaPath) {
       session.sentMediaIds.add(albumMedia.id);
-      sendImageMessage(session.conversationID, albumMedia);
+      sendImageMessage(session, albumMedia);
     }
     return;
   }
@@ -126,7 +135,8 @@ function handleVideoProgress(
   createPlaceholderIfNeeded(session, albumMedia, state);
 
   if (state.placeholder && progress < 1.0) {
-    state.placeholder.progress = Math.round(progress * 100);
+    // 上传进度：底层 MessageInfo 字段已从 progress 拆分为 uploadMediaProgress / downloadMediaProgress
+    state.placeholder.uploadMediaProgress = Math.round(progress * 100);
     const currentList = useMessageListState({ conversationID: session.conversationID }).messageList.value;
     if (!currentList.some((msg) => msg.msgID === state.placeholder!.msgID)) {
       refreshMessageList(session.conversationID);
@@ -144,13 +154,13 @@ function handleVideoProgress(
           ...albumMedia,
           videoThumbnailPath: grayPath,
         };
-        sendVideoMessage(session.conversationID, mediaWithThumbnail);
+        sendVideoMessage(session, mediaWithThumbnail);
       }).catch((err) => {
         console.error(TAG, 'createGrayThumbnail failed, send without thumbnail:', err);
-        sendVideoMessage(session.conversationID, albumMedia);
+        sendVideoMessage(session, albumMedia);
       });
     } else {
-      sendVideoMessage(session.conversationID, albumMedia);
+      sendVideoMessage(session, albumMedia);
     }
   }
 }
@@ -190,43 +200,40 @@ function buildPlaceholder(
   height: number,
 ): void {
   const loginUser = getLoginUserInfo();
+  const normalizedSnapshotPath = snapshotPath.startsWith('file:///') ? snapshotPath.substring(7) : snapshotPath;
 
+  // VideoMessagePayload（PR-1 sealed union 子类）只包含视频本身字段；
+  // 不再有 originalImage* / sound* / fileSize / faceIndex / videoSnapshotSize 等扁平字段。
   const placeholder: MessageInfo = {
     msgID: `${PLACEHOLDER_PREFIX}${albumMedia.id}_${Date.now()}`,
-    sender: {
+    from: {
       userID: loginUser?.userID || '',
       avatarURL: loginUser?.avatarURL,
       nickname: loginUser?.nickname,
     },
-    isSelf: true,
+    to: '',
+    isSentBySelf: true,
     timestamp: Math.floor(Date.now() / 1000),
     status: MessageStatus.SENDING,
-    progress: Math.round(state.progress * 100),
-    atUserList: [],
-    isPinned: false,
+    conversationType: ConversationType.UNKNOWN,
     messageType: MessageType.VIDEO,
-    messageBody: {
-      videoSnapshotPath: snapshotPath.startsWith('file:///') ? snapshotPath.substring(7) : snapshotPath,
+    messagePayload: {
+      videoSnapshotPath: normalizedSnapshotPath,
       videoSnapshotWidth: width,
       videoSnapshotHeight: height,
-      videoSnapshotSize: 0,
       videoDuration: albumMedia.duration || 0,
       videoPath: '',
       videoType: 'mp4',
       videoSize: 0,
-      originalImageWidth: 0,
-      originalImageHeight: 0,
-      originalImageSize: 0,
-      soundSize: 0,
-      soundDuration: 0,
-      fileSize: 0,
-      faceIndex: 0,
     },
+    uploadMediaProgress: Math.round(state.progress * 100),
+    downloadMediaProgress: 0,
+    atUserList: [],
+    isPinned: false,
     needReadReceipt: false,
-    supportExtension: false,
+    isExtensionEnabled: false,
     extensionList: [],
     reactionList: [],
-    repliedMessageCount: 0,
   };
 
   state.placeholder = placeholder;
@@ -296,68 +303,84 @@ function removeFilePrefix(path: string): string {
   return path.startsWith('file:///') ? path.substring(7) : path;
 }
 
-function sendImageMessage(conversationID: string, media: AlbumMedia): void {
+function sendImageMessage(session: PickerSession, media: AlbumMedia): void {
+  const conversationID = session.conversationID;
   const imagePath = removeFilePrefix(media.mediaPath);
   const state = useMessageInputState({ conversationID });
   const infoSrc = imagePath.startsWith('/') ? 'file://' + imagePath : imagePath;
+
+  const send = (width: number, height: number) => {
+    const payload: SendMessagePayload = {
+      type: 'image',
+      imagePath,
+      imageWidth: width,
+      imageHeight: height,
+    };
+    const offlinePushInfo = buildOfflinePushInfo(session.setOfflinePushInfo, {
+      messageType: MessageType.IMAGE,
+      messagePayload: payload,
+      conversationID,
+    });
+    const option: SendMessageOption = {};
+    if (offlinePushInfo) option.offlinePushInfo = offlinePushInfo;
+
+    state?.sendMessage(payload, option).catch(err => {
+      console.error(TAG, 'sendMessage(image) failed:', err);
+    });
+  };
+
   uni.getImageInfo({
     src: infoSrc,
     success: (info: any) => {
       console.log(TAG, `sendImage: width=${info.width}, height=${info.height}, path=${imagePath}`);
-      state?.sendImageMessage({
-        imagePath,
-        imageWidth: info.width || 1920,
-        imageHeight: info.height || 1080,
-      }).catch(err => {
-        console.error(TAG, 'sendImageMessage failed:', err);
-      });
+      send(info.width || 1920, info.height || 1080);
     },
     fail: () => {
       console.log(TAG, `sendImage: getImageInfo failed, using default 1920x1080, path=${imagePath}`);
-      state?.sendImageMessage({
-        imagePath,
-        imageWidth: 1920,
-        imageHeight: 1080,
-      }).catch(err => {
-        console.error(TAG, 'sendImageMessage failed:', err);
-      });
+      send(1920, 1080);
     },
   });
 }
 
-function sendVideoMessage(conversationID: string, media: AlbumMedia): void {
+function sendVideoMessage(session: PickerSession, media: AlbumMedia): void {
+  const conversationID = session.conversationID;
   const videoPath = removeFilePrefix(media.mediaPath);
   const snapshotPath = removeFilePrefix(media.videoThumbnailPath || '');
   const state = useMessageInputState({ conversationID });
   const infoSrc = videoPath.startsWith('/') ? 'file://' + videoPath : videoPath;
 
+  const send = (width: number, height: number) => {
+    const payload: SendMessagePayload = {
+      type: 'video',
+      videoFilePath: videoPath,
+      videoType: 'mp4',
+      duration: media.duration || 0,
+      snapshotPath,
+      snapshotWidth: width,
+      snapshotHeight: height,
+    };
+    const offlinePushInfo = buildOfflinePushInfo(session.setOfflinePushInfo, {
+      messageType: MessageType.VIDEO,
+      messagePayload: payload,
+      conversationID,
+    });
+    const option: SendMessageOption = {};
+    if (offlinePushInfo) option.offlinePushInfo = offlinePushInfo;
+
+    state?.sendMessage(payload, option).catch(err => {
+      console.error(TAG, 'sendMessage(video) failed:', err);
+    });
+  };
+
   uni.getVideoInfo({
     src: infoSrc,
     success: (info: any) => {
       console.log(TAG, `sendVideo: width=${info.width}, height=${info.height}, duration=${media.duration}, path=${videoPath}`);
-      state?.sendVideoMessage({
-        videoPath,
-        videoSnapshotPath: snapshotPath,
-        videoSnapshotWidth: info.width || 1920,
-        videoSnapshotHeight: info.height || 1080,
-        videoDuration: media.duration || 0,
-        videoType: 'mp4',
-      }).catch(err => {
-        console.error(TAG, 'sendVideoMessage failed:', err);
-      });
+      send(info.width || 1920, info.height || 1080);
     },
     fail: () => {
       console.log(TAG, `sendVideo: getVideoInfo failed, using default 1920x1080, path=${videoPath}`);
-      state?.sendVideoMessage({
-        videoPath,
-        videoSnapshotPath: snapshotPath,
-        videoSnapshotWidth: 1920,
-        videoSnapshotHeight: 1080,
-        videoDuration: media.duration || 0,
-        videoType: 'mp4',
-      }).catch(err => {
-        console.error(TAG, 'sendVideoMessage failed:', err);
-      });
+      send(1920, 1080);
     },
   });
 }

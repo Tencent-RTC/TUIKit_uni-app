@@ -90,7 +90,7 @@
 import { computed } from 'vue'
 import type { Component } from 'vue'
 import AvatarComponent from '../../Avatar'
-import { emojiUrlMap, emojiBaseUrl } from '../../../constants/emoji'
+import { parseTextToSegments, truncateSegments, type MessageSegment } from '../../ConversationList/utils'
 
 interface MediaInfo {
   duration?: number
@@ -233,71 +233,62 @@ function splitByKeyword(text: string, keyword: string): TextSegment[] {
   return segments.length > 0 ? segments : [{ type: 'text', text, highlight: false }]
 }
 
-function parseTextWithEmoji(text: string, highlight: boolean): Segment[] {
-  const segments: Segment[] = []
-  const emojiRegex = /\[TUIEmoji_[^\]]+\]/g
-  let lastIndex = 0
-  let match: RegExpExecArray | null
-
-  while ((match = emojiRegex.exec(text)) !== null) {
-    if (match.index > lastIndex) {
-      segments.push({ type: 'text', text: text.substring(lastIndex, match.index), highlight })
-    }
-
-    const emojiKey = match[0]
-    const emojiFileName = emojiUrlMap[emojiKey]
-    if (emojiFileName) {
-      segments.push({ type: 'emoji', src: emojiBaseUrl + emojiFileName })
-    } else {
-      segments.push({ type: 'text', text: emojiKey, highlight })
-    }
-
-    lastIndex = emojiRegex.lastIndex
-  }
-
-  if (lastIndex < text.length) {
-    segments.push({ type: 'text', text: text.substring(lastIndex), highlight })
-  }
-
-  return segments
-}
-
 const MAX_SUBTITLE_LENGTH = 30
 
-function truncateText(text: string, maxLength: number): string {
-  if (!text || text.length <= maxLength) return text
-  return text.slice(0, maxLength) + '...'
+/**
+ * 在已解析的 segments 上叠加关键词高亮（emoji segment 透传，text segment 按 keyword 拆分）
+ */
+function applyKeywordHighlight(segments: MessageSegment[], keyword: string): Segment[] {
+  if (!keyword) {
+    return segments.map<Segment>((seg) => {
+      if (seg.type === 'emoji') {
+        return { type: 'emoji', src: seg.src || '' }
+      }
+      return { type: 'text', text: seg.content || '', highlight: false }
+    })
+  }
+
+  const result: Segment[] = []
+  const lowerKeyword = keyword.toLowerCase()
+
+  for (const seg of segments) {
+    if (seg.type === 'emoji') {
+      result.push({ type: 'emoji', src: seg.src || '' })
+      continue
+    }
+    const text = seg.content || ''
+    if (!text) continue
+
+    const lowerText = text.toLowerCase()
+    let lastIndex = 0
+    let index = lowerText.indexOf(lowerKeyword)
+    while (index !== -1) {
+      if (index > lastIndex) {
+        result.push({ type: 'text', text: text.slice(lastIndex, index), highlight: false })
+      }
+      result.push({ type: 'text', text: text.slice(index, index + keyword.length), highlight: true })
+      lastIndex = index + keyword.length
+      index = lowerText.indexOf(lowerKeyword, lastIndex)
+    }
+    if (lastIndex < text.length) {
+      result.push({ type: 'text', text: text.slice(lastIndex), highlight: false })
+    }
+  }
+
+  return result
 }
 
+/**
+ * 构建副标题分段：
+ * 1) 先按 [TUIEmoji_xxx] 解析为 text/emoji segments（防止 emoji key 被截断）
+ * 2) 按"用户感知字符"截断（emoji 视为 1 字符，文本按 code point 计；ZWJ 序列整体回溯）
+ * 3) 在截断后的 text segment 上叠加关键词高亮
+ */
 function buildSubtitleSegments(text: string, keyword: string): Segment[] {
   if (!text) return []
-  
-  const truncatedText = truncateText(text, MAX_SUBTITLE_LENGTH)
-
-  if (!keyword) {
-    return parseTextWithEmoji(truncatedText, false)
-  }
-
-  const segments: Segment[] = []
-  const lowerText = truncatedText.toLowerCase()
-  const lowerKeyword = keyword.toLowerCase()
-  let lastIndex = 0
-  let index = lowerText.indexOf(lowerKeyword)
-
-  while (index !== -1) {
-    if (index > lastIndex) {
-      segments.push(...parseTextWithEmoji(truncatedText.slice(lastIndex, index), false))
-    }
-    segments.push({ type: 'text', text: truncatedText.slice(index, index + keyword.length), highlight: true })
-    lastIndex = index + keyword.length
-    index = lowerText.indexOf(lowerKeyword, lastIndex)
-  }
-
-  if (lastIndex < truncatedText.length) {
-    segments.push(...parseTextWithEmoji(truncatedText.slice(lastIndex), false))
-  }
-
-  return segments.length > 0 ? segments : parseTextWithEmoji(truncatedText, false)
+  const parsed = parseTextToSegments(text)
+  const truncated = truncateSegments(parsed, MAX_SUBTITLE_LENGTH)
+  return applyKeywordHighlight(truncated, keyword)
 }
 
 const titleSegments = computed(() => splitByKeyword(props.title, props.keyword))

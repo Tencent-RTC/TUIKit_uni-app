@@ -2,7 +2,6 @@ import { computed, watch } from 'vue'
 import { type UserPickerHookResult, type User } from './types'
 import { useContactState } from '../../../state/ContactState'
 import { useGroupMemberState } from '../../../state/GroupMemberState'
-import { type ContactInfo } from '../../../types/contact'
 
 declare const uni: any
 
@@ -19,11 +18,11 @@ export function useInviteGroupMember(routeParams?: any): UserPickerHookResult {
   
   // ======================== 数据源 ========================
   const { friendList, destroyStore: destroyContactListStore } = useContactState('inviteGroupMember')
-  const { groupMemberList: allMembers, hasMoreGroupMembers, addGroupMember, fetchMoreGroupMemberList } = useGroupMemberState({ groupID });
+  const { memberList: allMembers, hasMoreMembers, addMember, loadMoreMembers } = useGroupMemberState({ groupID });
 
   watch(() => allMembers.value.length, async () =>{
-    if (hasMoreGroupMembers.value) {
-      await fetchMoreGroupMemberList();
+    if (hasMoreMembers.value) {
+      await loadMoreMembers();
     }
   }, {
     immediate: true,
@@ -39,7 +38,7 @@ export function useInviteGroupMember(routeParams?: any): UserPickerHookResult {
       .filter((contact) => !existingMemberIDs.has(contact.userID))
       .map((contact) => ({
         userID: contact.userID,
-        nickname: contact.remark || contact.nickname || contact.userID,
+        nickname: contact.friendRemark || contact.nickname || contact.userID,
         avatarURL: contact.avatarURL || ''
       }))
   });
@@ -48,7 +47,7 @@ export function useInviteGroupMember(routeParams?: any): UserPickerHookResult {
   const lockedItems = computed<string[]>(() => [])
 
   /** 是否有更多数据 */
-  const hasMore = computed(() => hasMoreGroupMembers.value)
+  const hasMore = computed(() => hasMoreMembers.value)
 
   // ======================== 方法 ========================
 
@@ -60,8 +59,9 @@ export function useInviteGroupMember(routeParams?: any): UserPickerHookResult {
     }
     
     try {
-      await addGroupMember(selectedUsers.map(u => u.userID))
+      await addMember(selectedUsers.map(u => u.userID))
       uni.showToast({ title: '添加成功', icon: 'success' });
+      uni.$emit('onGroupMemberChanged', { type: 'add', groupID })
       setTimeout(() => {
         uni.navigateBack()
       }, 300);
@@ -82,9 +82,9 @@ export function useInviteGroupMember(routeParams?: any): UserPickerHookResult {
 
   /** 触底加载更多群成员 */
   const onReachEnd = async (): Promise<void> => {
-    if (!hasMoreGroupMembers.value) return
+    if (!hasMoreMembers.value) return
     try {
-      await fetchMoreGroupMemberList()
+      await loadMoreMembers()
     } catch (error) {
       console.error('[useInviteGroupMember] onReachEnd failed:', error)
     }

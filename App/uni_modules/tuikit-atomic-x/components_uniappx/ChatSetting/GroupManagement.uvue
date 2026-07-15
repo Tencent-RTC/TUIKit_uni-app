@@ -1,0 +1,463 @@
+<template>
+  <view class="group-management">
+    <!-- 导航栏 -->
+    <view class="navbar" :style="{ paddingTop: statusBarHeight + 'px' }">
+      <view class="navbar__content">
+        <view class="navbar__back" @tap="handleBack">
+          <image class="navbar__back-icon" :src="arrowLeftIcon" />
+        </view>
+        <text class="navbar__title">群管理</text>
+        <view class="navbar__placeholder"></view>
+      </view>
+    </view>
+
+    <!-- 内容区域 -->
+    <scroll-view class="content" scroll-y="true">
+      <!-- 群管理员区 -->
+      <view class="member-section">
+        <view class="member-section__header" @tap="handleMemberListClick">
+          <text class="member-section__label">群管理员</text>
+          <view class="member-section__right">
+            <text class="member-section__count">{{ adminAndOwnerMembers.length }}人</text>
+            <image class="member-section__arrow" :src="arrowRightIcon" />
+          </view>
+        </view>
+        <MemberAvatarList
+          :members="adminAndOwnerMembers"
+          :maxDisplay="5"
+          :showAddButton="canPromoteAdmin"
+          :showRemoveButton="canDemoteAdmin"
+          :showName="true"
+          @add="handlePromoteAdmin"
+          @remove="handleDemoteAdmin"
+          @member-click="handleMemberClick"
+        />
+      </view>
+
+      <!-- 分隔区 -->
+      <view class="section-gap"></view>
+
+      <!-- 全员禁言 -->
+      <view class="mute-all-section">
+        <SettingRowToggle
+          label="全员禁言"
+          :modelValue="isAllMuted"
+          :disabled="!canMuteAllMembers"
+          @change="handleMuteAllChange"
+        />
+      </view>
+      <text class="mute-all-section__desc">开启后，只允许群主和管理员发言</text>
+
+      <!-- 单独禁言人员 -->
+      <view v-if="canMuteMember && !isAllMuted" class="mute-member-section">
+        <view class="mute-member-section__header">
+          <text class="mute-member-section__label">单独禁言</text>
+        </view>
+        <MemberAvatarList
+          :members="mutedMembers"
+          :maxDisplay="500"
+          :showAddButton="true"
+          :showRemoveButton="mutedMembers.length > 0"
+          :showName="true"
+          @add="handleAddMuteMember"
+          @remove="handleRemoveMuteMember"
+          @member-click="handleMutedMemberClick"
+        />
+      </view>
+    </scroll-view>
+  </view>
+</template>
+
+<script setup lang="uts">
+
+import { ref, computed, onMounted, onUnmounted } from 'vue'
+import MemberAvatarList from './components/MemberAvatarList.uvue'
+import SettingRowToggle from './components/SettingRowToggle.uvue'
+import { useGroupMemberState } from '../../state/GroupMemberState'
+import { useGroupState } from '../../state/GroupState'
+import { GroupMemberRole, GroupMemberFilterRole, GroupType, type GroupInfo } from '../../types/group'
+import { hasPermission, GroupPermission } from './utils/groupPermission.uts'
+import arrowRightIcon from './assets/nvue_arrow-right.png'
+import arrowLeftIcon from './assets/nvue_arrow-left.png'
+
+type Props = {
+	conversationID: string
+}
+
+const props = defineProps<Props>()
+
+// 获取 groupID
+const groupID: string = props.conversationID.startsWith('group_') ? props.conversationID.replace('group_', '') : ''
+
+const {
+	memberList: allMembers,
+	muteMember,
+	loadMembers: fetchAllMembers,
+} = useGroupMemberState({
+	groupID: groupID,
+})
+
+// 获取群状态（含 muteAllMembers，从 GroupMember 迁来）
+const { getGroupInfo, muteAllMembers } = useGroupState()
+
+// 群信息（通过 getGroupInfo 获取）
+const groupInfo = ref<any | null>(null)
+
+// 从群信息中提取的计算属性
+const toGroupType = (v: any | null): GroupType => {
+  if (v != null && typeof v == 'string') {
+    if (v == 'Work') return GroupType.WORK
+    if (v == 'Public') return GroupType.PUBLIC
+    if (v == 'Meeting') return GroupType.MEETING
+    if (v == 'AVChatRoom') return GroupType.AV_CHAT_ROOM
+    if (v == 'Community') return GroupType.COMMUNITY
+  }
+  return GroupType.WORK
+}
+const groupType = computed((): GroupType => {
+	const gi = groupInfo.value
+	if (gi == null) return GroupType.WORK
+	const giObj: UTSJSONObject = gi as UTSJSONObject
+	const v: any | null = giObj['groupType']
+	return toGroupType(v)
+})
+const isAllMuted = computed((): boolean => {
+	const gi = groupInfo.value
+	if (gi == null) return false
+	const giObj: UTSJSONObject = gi as UTSJSONObject
+	return giObj['isAllMuted'] == true
+})
+const toMemberRole = (n: number): GroupMemberRole => {
+  if (n == 0) return GroupMemberRole.UNDEFINED
+  if (n == 200) return GroupMemberRole.MEMBER
+  if (n == 300) return GroupMemberRole.ADMIN
+  if (n == 400) return GroupMemberRole.OWNER
+  return GroupMemberRole.MEMBER
+}
+const selfRole = computed((): GroupMemberRole => {
+	const gi = groupInfo.value
+	if (gi == null) return GroupMemberRole.MEMBER
+	const giObj: UTSJSONObject = gi as UTSJSONObject
+	const v: any | null = giObj['selfRole']
+	const n: number = typeof v == 'number' ? v as number : 200
+	return toMemberRole(n)
+})
+const memberCount = computed((): number => {
+	const gi = groupInfo.value
+	if (gi == null) return 0
+	const giObj: UTSJSONObject = gi as UTSJSONObject
+	const v: any | null = giObj['memberCount']
+	return typeof v == 'number' ? v as number : 0
+})
+
+// 状态栏高度
+const statusBarHeight = ref<number>(44)
+
+// ============================================================================
+// 权限计算属性
+// ============================================================================
+const memberRoleValue = (role: GroupMemberRole): number => {
+  if (role == GroupMemberRole.UNDEFINED) return 0
+  if (role == GroupMemberRole.MEMBER) return 200
+  if (role == GroupMemberRole.ADMIN) return 300
+  if (role == GroupMemberRole.OWNER) return 400
+  return 200
+}
+
+const canPromoteAdmin = computed((): boolean => {
+	return memberRoleValue(selfRole.value) == 400
+})
+
+// 是否可删除成员
+const canDemoteAdmin = computed((): boolean => {
+	return memberRoleValue(selfRole.value) == 400
+})
+
+// 是否可禁言成员
+const toFilterRole = (role: GroupMemberRole): GroupMemberFilterRole => {
+  if (role == GroupMemberRole.UNDEFINED) return GroupMemberFilterRole.ALL
+  if (role == GroupMemberRole.MEMBER) return GroupMemberFilterRole.MEMBER
+  if (role == GroupMemberRole.ADMIN) return GroupMemberFilterRole.ADMIN
+  if (role == GroupMemberRole.OWNER) return GroupMemberFilterRole.OWNER
+  return GroupMemberFilterRole.ALL
+}
+const canMuteMember = computed((): boolean => {
+	return hasPermission(groupType.value, toFilterRole(selfRole.value), GroupPermission.MUTE_MEMBER)
+})
+
+// 是否可全员禁言
+const canMuteAllMembers = computed((): boolean => {
+	return hasPermission(groupType.value, toFilterRole(selfRole.value), GroupPermission.MUTE_ALL_MEMBERS)
+})
+
+// ============================================================================
+// 显示相关计算属性
+// ============================================================================
+
+const adminAndOwnerMembers = computed((): any[] => {
+	// 群主和管理员列表（去重）
+	const seenUserIDs: Set<string> = new Set()
+	const out: any[] = []
+	for (let i: number = 0; i < allMembers.value.length; i++) {
+		const m: any = allMembers.value[i] as any
+		if (m == null) continue
+		const mObj: UTSJSONObject = m as UTSJSONObject
+		const uidRaw: any | null = mObj['userID']
+		const uid: string = typeof uidRaw === 'string' ? uidRaw as string : ''
+		if (uid.length === 0 || seenUserIDs.has(uid)) continue
+		const roleRaw: any | null = mObj['role']
+		const r: number = typeof roleRaw === 'number' ? roleRaw as number : 0
+		if (r == 400 || r == 300) {
+			seenUserIDs.add(uid)
+			out.push(m)
+		}
+	}
+	return out
+})
+
+// 已禁言的成员列表
+const mutedMembers = computed((): any[] => {
+	const now: number = Date.now() / 1000
+	return (allMembers.value ?? []).filter((member: any): boolean => {
+		const mObj: UTSJSONObject = member as UTSJSONObject
+		const muteRaw: any | null = mObj['muteUntil']
+		const muteNum: number = typeof muteRaw === 'number' ? muteRaw as number : 0
+		return muteNum > now
+	})
+})
+
+// ============================================================================
+// 生命周期
+// ============================================================================
+
+// 获取群信息
+async function loadGroupInfo(): Promise<void> {
+	if (groupID.length == 0) return
+	try {
+		const info = await getGroupInfo(groupID)
+		if (info != null) {
+			groupInfo.value = info
+		}
+	} catch (error: any) {
+		console.error('[GroupManagement] Failed to fetch group info:', `${error}`)
+	}
+}
+
+onMounted((): void => {
+	const systemInfo = uni.getSystemInfoSync()
+	const sb = systemInfo.statusBarHeight
+	statusBarHeight.value = typeof sb == 'number' ? sb : 44
+
+	loadGroupInfo()
+	fetchAllMembers([0])
+})
+
+// ============================================================================
+// 事件处理
+// ============================================================================
+
+// 返回
+const handleBack = (): void => {
+	uni.navigateBack()
+}
+
+// 点击群成员列表
+const handleMemberListClick = (): void => {
+	uni.navigateTo({
+		url: `/pages/scenes/chat/groupMemberList/index?conversationID=${props.conversationID}&hideMember=true`,
+	})
+}
+
+// 添加成员
+const handlePromoteAdmin = (): void => {
+	uni.navigateTo({
+		url: `/pages/scenes/chat/userPicker/userPicker?businessType=${5}&conversationID=${props.conversationID}`,
+	})
+}
+
+// 删除成员
+const handleDemoteAdmin = (): void => {
+	uni.navigateTo({
+		url: `/pages/scenes/chat/userPicker/userPicker?businessType=${6}&conversationID=${props.conversationID}`,
+	})
+}
+
+// 点击成员
+const handleMemberClick = (member: any): void => {
+	// TODO: 跳转到成员详情页面
+	const mObj: UTSJSONObject = member as UTSJSONObject
+	const _uidRaw: any | null = mObj['userID']
+}
+
+// 切换全员禁言
+const handleMuteAllChange = (value: boolean): void => {
+	muteAllMembers(groupID, value).then((): void => {
+		loadGroupInfo()
+	})
+}
+
+// 添加禁言人员
+const handleAddMuteMember = (): void => {
+	uni.navigateTo({
+		url: `/pages/scenes/chat/userPicker/userPicker?businessType=${7}&conversationID=${props.conversationID}`,
+	})
+}
+
+// 移除禁言人员
+const handleRemoveMuteMember = (): void => {
+	uni.navigateTo({
+		url: `/pages/scenes/chat/userPicker/userPicker?businessType=${8}&conversationID=${props.conversationID}`,
+	})
+}
+
+// 点击已禁言成员
+const handleMutedMemberClick = (member: any): void => {
+	// TODO: 显示操作菜单（查看详情、解除禁言）
+	const mObj: UTSJSONObject = member as UTSJSONObject
+	const _uidRaw: any | null = mObj['userID']
+}
+</script>
+
+<style scoped>
+.group-management {
+  flex: 1;
+  background-color: #F0F2F7;
+}
+
+/* 导航栏 */
+.navbar {
+  background-color: #FFFFFF;
+  border-bottom-width: 1rpx;
+  border-bottom-style: solid;
+  border-bottom-color: #E5E5E5;
+}
+
+.navbar__content {
+  height: 88rpx;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 32rpx;
+}
+
+.navbar__back {
+  width: 60rpx;
+  height: 60rpx;
+  justify-content: center;
+  align-items: center;
+}
+
+.navbar__back-icon {
+  width: 54rpx;
+  height: 54rpx;
+}
+
+.navbar__title {
+  font-size: 36rpx;
+  font-weight: 500;
+  color: #333333;
+}
+
+.navbar__placeholder {
+  width: 60rpx;
+}
+
+/* 内容区域 */
+.content {
+  flex: 1;
+}
+
+/* 分隔区 */
+.section-gap {
+  height: 20rpx;
+  background-color: #F0F2F7;
+}
+
+/* 群成员区 */
+.member-section {
+  background-color: #FFFFFF;
+}
+
+.member-section__header {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24rpx 32rpx 0;
+}
+
+.member-section__label {
+  font-size: 32rpx;
+  color: rgba(0, 0, 0, 0.5);
+}
+
+.member-section__right {
+  flex-direction: row;
+  align-items: center;
+}
+
+.member-section__count {
+  font-size: 28rpx;
+  color: rgba(0, 0, 0, 0.55);
+}
+
+.member-section__arrow {
+  width: 28rpx;
+  height: 28rpx;
+}
+
+/* 全员禁言区 */
+.mute-all-section {
+  background-color: #FFFFFF;
+}
+
+.mute-all-section__row {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.mute-all-section__label {
+  font-size: 28rpx;
+  color: #333333;
+}
+
+.mute-all-section__switch {
+  transform: scale(0.8);
+}
+
+.mute-all-section__desc {
+  padding: 8rpx 32rpx 32rpx 32rpx;
+  font-size: 28rpx;
+  background-color: #F0F2F7;
+  color: rgba(0, 0, 0, 0.4);
+}
+
+/* 单独禁言人员区 */
+.mute-member-section {
+  background-color: #FFFFFF;
+}
+
+.mute-member-section__header {
+  padding: 24rpx 32rpx 0;
+}
+
+.mute-member-section__label {
+  font-size: 32rpx;
+  color: rgba(0, 0, 0, 0.55);
+}
+
+.mute-member-section__empty {
+  padding: 40rpx 32rpx;
+  align-items: center;
+}
+
+.mute-member-section__empty-text {
+  font-size: 26rpx;
+  color: #999999;
+}
+
+/* 底部安全区 */
+.safe-area-bottom {
+  height: 68rpx;
+}
+</style>

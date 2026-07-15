@@ -1,0 +1,230 @@
+<template>
+  <view class="conversation-actions">
+    <view
+      v-for="action in actionList"
+      :key="action.key"
+      class="conversation-actions__action"
+      :style="getActionStyle(action)"
+      @tap.stop="handleActionTap(action)"
+    >
+      <text
+        class="conversation-actions__action-text"
+        :style="getTextStyle(action)"
+      >
+        {{ action.text }}
+      </text>
+    </view>
+  </view>
+</template>
+
+<script setup lang="uts">
+import { computed } from 'vue'
+import {
+  ReceiveMessageOpt,
+  type ActionItem
+} from './types'
+
+const props = withDefaults(defineProps<{
+  /** 会话信息（UTSJSONObject 形态，script 内 objString/objNumber/objBool 下标访问） */
+  conversation?: any
+  /** 自定义操作列表（优先级高于 isSupportXxx） */
+  actions?: ActionItem[]
+  /** 是否支持置顶功能 */
+  isSupportPin?: boolean
+  /** 是否支持免打扰功能 */
+  isSupportMute?: boolean
+  /** 是否支持删除功能 */
+  isSupportDelete?: boolean
+}>(), {
+  isSupportPin: true,
+  isSupportMute: true,
+  isSupportDelete: true
+})
+
+const emit = defineEmits<{
+  (e: 'conversationPin', conversationID: string, isPinned: boolean): void
+  (e: 'conversationMute', conversationID: string, isMuted: boolean): void
+  (e: 'conversationDelete', conversationID: string): void
+}>()
+
+function objString(obj: any | null, key: string, fallback: string = ''): string {
+  if (obj == null) {
+    return fallback
+  }
+  const v = (obj as UTSJSONObject)[key]
+  return typeof v == 'string' ? (v as string) : fallback
+}
+
+function objBool(obj: any | null, key: string): boolean {
+  if (obj == null) {
+    return false
+  }
+  const v = (obj as UTSJSONObject)[key]
+  return v == true
+}
+
+function objReceiveOptEnum(obj: any | null): ReceiveMessageOpt {
+  if (obj == null) {
+    return ReceiveMessageOpt.RECEIVE
+  }
+  const v = (obj as UTSJSONObject)['receiveOption']
+  if (typeof v !== 'number') {
+    return ReceiveMessageOpt.RECEIVE
+  }
+  const n = v as number
+  if (n == 1) {
+    return ReceiveMessageOpt.NOT_RECEIVE
+  }
+  if (n == 2) {
+    return ReceiveMessageOpt.NOT_NOTIFY
+  }
+  if (n == 3) {
+    return ReceiveMessageOpt.NOT_NOTIFY_EXCEPT_MENTION
+  }
+  if (n == 4) {
+    return ReceiveMessageOpt.NOT_RECEIVE_EXCEPT_MENTION
+  }
+  return ReceiveMessageOpt.RECEIVE
+}
+
+// 模板禁止访问对象 prop 成员，拆为 computed
+const convIsPinned = computed<boolean>((): boolean => {
+  return objBool(props.conversation, 'isPinned')
+})
+
+const convConversationID = computed<string>((): string => {
+  return objString(props.conversation, 'conversationID', '')
+})
+
+const isMuted = computed<boolean>((): boolean => {
+  const opt = objReceiveOptEnum(props.conversation)
+  return opt == ReceiveMessageOpt.NOT_RECEIVE
+    || opt == ReceiveMessageOpt.NOT_NOTIFY
+})
+
+const getDefaultText = (key: string): string => {
+  if (key == 'pin') {
+    return convIsPinned.value ? '取消置顶' : '置顶'
+  }
+  if (key == 'mute') {
+    return isMuted.value ? '取消免打扰' : '免打扰'
+  }
+  if (key == 'delete') {
+    return '删除'
+  }
+  return key
+}
+
+const actionList = computed<ActionItem[]>((): ActionItem[] => {
+  const customActions = props.actions
+  if (customActions != null && customActions.length > 0) {
+    const result: ActionItem[] = []
+    for (let i = 0; i < customActions.length; i++) {
+      const a = customActions[i] as ActionItem
+      const merged: ActionItem = {
+        key: a.key,
+        text: a.text != null ? a.text : getDefaultText(a.key)
+      }
+      if (a.backgroundColor != null) {
+        merged.backgroundColor = a.backgroundColor
+      }
+      if (a.color != null) {
+        merged.color = a.color
+      }
+      if (a.onClick != null) {
+        merged.onClick = a.onClick
+      }
+      result.push(merged)
+    }
+    return result
+  }
+
+  const actions: ActionItem[] = []
+
+  if (props.isSupportMute == true) {
+    actions.push({
+      key: 'mute',
+      text: isMuted.value ? '取消免打扰' : '免打扰'
+    } as ActionItem)
+  }
+
+  if (props.isSupportPin == true) {
+    actions.push({
+      key: 'pin',
+      text: convIsPinned.value ? '取消置顶' : '置顶'
+    } as ActionItem)
+  }
+
+  if (props.isSupportDelete == true) {
+    actions.push({
+      key: 'delete',
+      text: '删除'
+    } as ActionItem)
+  }
+
+  return actions
+})
+
+const getDefaultBackgroundColor = (key: string): string => {
+  if (key == 'pin') {
+    return '#FF7200'
+  }
+  if (key == 'mute') {
+    return '#1C66E5'
+  }
+  if (key == 'delete') {
+    return '#E54545'
+  }
+  return '#999999'
+}
+
+const getActionStyle = (action: ActionItem): string => {
+  const bg = action.backgroundColor
+  const finalBg = bg != null && bg.length > 0 ? bg : getDefaultBackgroundColor(action.key)
+  return `background-color: ${finalBg};`
+}
+
+const getTextStyle = (action: ActionItem): string => {
+  const c = action.color
+  const finalColor = c != null && c.length > 0 ? c : '#ffffff'
+  return `color: ${finalColor};`
+}
+
+const handleActionTap = (action: ActionItem): void => {
+  const conversationID = convConversationID.value
+
+  // 如果是自定义 action 且有 onClick 回调，则调用回调
+  if (action.onClick != null) {
+    action.onClick(conversationID)
+    return
+  }
+
+  // 处理内置 action
+  if (action.key == 'pin') {
+    emit('conversationPin', conversationID, !convIsPinned.value)
+  } else if (action.key == 'mute') {
+    emit('conversationMute', conversationID, !isMuted.value)
+  } else if (action.key == 'delete') {
+    emit('conversationDelete', conversationID)
+  }
+}
+</script>
+
+<style>
+.conversation-actions {
+  flex-direction: row;
+  flex: 1;
+}
+
+.conversation-actions__action {
+  width: 160rpx;
+  justify-content: center;
+  align-items: center;
+}
+
+.conversation-actions__action-text {
+  font-size: 28rpx;
+  line-height: 39rpx;
+  font-weight: 400;
+}
+</style>

@@ -1,0 +1,432 @@
+<template>
+  <view class="tools-panel">
+    <scroll-view class="tools-scroll" scroll-y="true">
+      <view class="tools-grid">
+        
+        <view
+          v-for="(tool, index) in displayToolList"
+          :key="tool.id"
+          class="tool-item"
+          :class="{ 'last-in-row': (index + 1) % 4 == 0 }"
+        >
+          <view class="tool-icon-wrapper" @tap="onToolItemTap(tool)">
+            <image class="tool-icon" :src="tool.icon" mode="aspectFit"></image>
+          </view>
+          <text class="tool-name">{{ tool.name }}</text>
+        </view>
+      </view>
+    </scroll-view>
+  </view>
+</template>
+
+<script setup lang="uts">
+
+import { computed, ref } from 'vue'
+import { UserPickerType } from '../../types/userpicker'
+import { useMessageInputState } from '../../state/MessageInputState'
+import { MessageType } from '../../types/message'
+import type { OfflinePushContext, OfflinePushInfoResolver, SendMessagePayload, SendMessageOption } from '../../types/message'
+import { buildOfflinePushInfo } from '../../utils/buildOfflinePushInfo'
+import { DEFAULT_TOOLS, type ToolItem } from './types.uts'
+import { AlbumPickerMediaFilter } from '../AlbumPicker/AlbumPicker.uts'
+import { openAlbumPicker } from './AlbumPickerMediaSendManager.uts'
+import {
+	useCallState,
+	CallErrorCode
+} from '@/uni_modules/tuikit-atomic-x/state/CallState'
+import {
+	useDeviceState
+} from "@/uni_modules/tuikit-atomic-x/state/DeviceState"
+import { getCurrentPageFullPath, isNavigating, isCallEnding } from "../../server/callService"
+import { checkCallPermissionWithDialog } from "@/uni_modules/tuikit-atomic-x/utils/callPermission"
+import { reportScene } from '@/uni_modules/tuikit-atomic-x'
+import { setCallSource, setCallLastPage } from '@/uni_modules/tuikit-atomic-x/utils/callContextStore.uts'
+import { toMap } from '@/uni_modules/tuikit-atomic-x/utils/toMap.uts'
+
+type ToolsPanelProps = {
+	conversationID: string
+	toolList?: any[]
+	setOfflinePushInfo?: any
+}
+
+const {
+	calls,
+	selfInfo,
+	setCallFramework
+} = useCallState()
+const {
+	openLocalCamera,
+	openLocalMicrophone,
+} = useDeviceState()
+const props = withDefaults(defineProps<ToolsPanelProps>(), {
+	conversationID: ''
+})
+
+const messageInputState = useMessageInputState({
+	conversationID: props.conversationID
+})
+
+const displayToolList = computed((): ToolItem[] => {
+	if (props.toolList != null && props.toolList.length > 0) {
+		return props.toolList as ToolItem[]
+	}
+	return DEFAULT_TOOLS
+})
+
+const isC2CConversation = computed((): boolean => props.conversationID.startsWith('c2c_'))
+
+const removeUnusedResourcePrefix = (path: string): string => {
+	return path.startsWith('file:///') ? path.substring(7) : path
+}
+
+const isCalling = ref<boolean>(false)
+
+/**
+ * 发起语音/视频通话
+ * 同步处理 C2C（直接调起通话）和群聊（先选成员再调起通话）两种场景。
+ *
+ *   也不 hoisted，handleToolClick 体内 case 'voiceCall' / 'videoCall' 块 forward
+ *   reference 时找不到 startCall
+ */
+async function startCall(mediaType: number): Promise<void> {
+	setCallFramework(15)
+	if (isCalling.value) {
+		console.log('[ToolsPanel] call skipped: isCalling is true')
+		return
+	}
+	if (isNavigating()) {
+		console.log('[ToolsPanel] call skipped: navigation in progress')
+		return
+	}
+	if (isCallEnding()) {
+		console.log('[ToolsPanel] call skipped: previous call end still processing')
+		return
+	}
+
+	const getPeerUserID = (): string => {
+		return isC2CConversation.value ? props.conversationID.replace('c2c_', '') : ''
+	}
+	if (isC2CConversation.value) {
+		if (selfInfo.value.status == 1 || selfInfo.value.status == 2) {
+			uni.showToast({ title: '您正在通话中，无法再次发起通话', icon: 'none' })
+			return
+		}
+
+		isCalling.value = true
+
+		if (mediaType == 1) {
+			openLocalCamera({
+				isFront: true
+			})
+		}
+		openLocalMicrophone({
+			fail: (error: any): void => {
+				if (error == -1104) {
+					setTimeout((): void => {
+						openLocalMicrophone(null)
+					}, 200)
+				}
+			}
+		})
+		const hasPermission: boolean = await checkCallPermissionWithDialog(mediaType)
+		if (!hasPermission) {
+			isCalling.value = false
+			return
+		}
+		reportScene('CHAT_INVOKE_CALL')
+		calls({
+			participantIds: [getPeerUserID()],
+			mediaType,
+			success: (): void => {
+				setCallSource('caller')
+				setCallLastPage(getCurrentPageFullPath())
+				uni.navigateTo({
+					url: '/uni_modules/tuikit-atomic-x/pages/call?layoutTemplate=Float',
+					complete: (): void => { isCalling.value = false }
+				})
+			},
+			fail: (error: any): void => {
+				if (error == CallErrorCode.PACKAGE_NOT_PURCHASED) {
+					uni.showToast({
+						icon: 'none',
+						title: '您的应用还未开通音视频通话（TUICallKit）能力，您可以去控制台申请免费体验'
+					})
+					console.error('控制台申请免费体验,https://console.cloud.tencent.com/trtc')
+				}
+				isCalling.value = false
+			}
+		})
+	} else {
+		uni.$off('onSelectGroupMember')
+		uni.$once('onSelectGroupMember', async (data: any): Promise<void> => {
+			if (isCalling.value) return
+			if (isNavigating()) return
+			if (isCallEnding()) return
+
+			if (selfInfo.value.status == 1 || selfInfo.value.status == 2) {
+				uni.showToast({ title: '您正在通话中，无法再次发起通话', icon: 'none' })
+				return
+			}
+
+			isCalling.value = true
+
+			if (mediaType == 1) {
+				openLocalCamera({
+					isFront: true
+				})
+			}
+			openLocalMicrophone({
+				fail: (error: any): void => {
+					if (error == -1104) {
+						setTimeout((): void => {
+							openLocalMicrophone(null)
+						}, 200)
+					}
+				}
+			})
+			const hasPermission: boolean = await checkCallPermissionWithDialog(mediaType)
+			if (!hasPermission) {
+				isCalling.value = false
+				return
+			}
+			reportScene('CHAT_INVOKE_CALL')
+			const dataObj: UTSJSONObject = toMap(data)
+			const selectedUsers: any | null = dataObj['selectedUsers']
+			const userIDList: string[] = ((selectedUsers as any[] | null) ?? []).map((user: any): string => {
+				const u: UTSJSONObject = toMap(user)
+				return (u['userID'] as string) ?? ''
+			})
+			if (userIDList.length > 8) {
+				uni.showToast({
+					icon: 'none',
+					title: '当前通话最多支持 9 人同时在线'
+				})
+				isCalling.value = false
+				return
+			}
+			calls({
+				participantIds: userIDList,
+				mediaType,
+				params: {
+					chatGroupId: props.conversationID.replace('group_', '')
+				},
+				success: (): void => {
+					setCallSource('caller')
+					setCallLastPage(getCurrentPageFullPath())
+					uni.navigateTo({
+						url: '/uni_modules/tuikit-atomic-x/pages/call?layoutTemplate=Grid',
+						complete: (): void => { isCalling.value = false }
+					})
+				},
+				fail: (error: any): void => {
+					if (error == CallErrorCode.PACKAGE_NOT_PURCHASED) {
+						uni.showToast({
+							icon: 'none',
+							title: '您的应用还未开通音视频通话（TUICallKit）能力，您可以去控制台申请免费体验'
+						})
+						console.error('控制台申请免费体验,https://console.cloud.tencent.com/trtc')
+					}
+					isCalling.value = false
+				}
+			})
+		})
+		uni.navigateTo({
+			url: `/pages/scenes/chat/userPicker/userPicker?businessType=${10}&conversationID=${props.conversationID}`,
+			fail: (): void => {
+				uni.$off('onSelectGroupMember')
+			}
+		})
+	}
+}
+
+/**
+ * 调起系统文件选择器并发送文件消息
+ */
+const chooseAndSendFile = (): void => {
+	uni.chooseFile({
+		count: 1,
+		type: 'all',
+		success: (res: any): void => {
+			let resObj: UTSJSONObject = new UTSJSONObject()
+			try {
+				const resStr: string = JSON.stringify(res) ?? ''
+				if (resStr.length > 2 && resStr !== '{}') {  // 长度 > 2 排除 "{}" 和 ""
+					const parsed: UTSJSONObject | null = JSON.parse<UTSJSONObject>(resStr)
+					if (parsed != null) {
+						resObj = parsed
+					}
+				}
+			} catch (e: any) {
+				console.error('[ToolsPanel] chooseFile parse failed:', `${e}`)
+			}
+			const tempFilesRaw: any | null = resObj['tempFiles']
+			if (tempFilesRaw == null) {
+				// 用户取消 / 无选择（uni.chooseFile 取消通常走 fail，但部分平台可能走空 success）
+				return
+			}
+			const tempFilesArr: UTSArray<any> = tempFilesRaw as UTSArray<any>
+			const firstFileRaw: any = tempFilesArr[0] as any
+			if (firstFileRaw == null) {
+				return
+			}
+			const firstFileObj: UTSJSONObject = toMap(firstFileRaw ?? null)
+			const filePathRaw: any | null = firstFileObj['path']
+			const fileNameRaw: any | null = firstFileObj['name']
+			const fileSizeRaw: any | null = firstFileObj['size']
+			const filePath: string = typeof filePathRaw == 'string' ? (filePathRaw as string) : ''
+			const fileName: string = typeof fileNameRaw == 'string' ? (fileNameRaw as string) : ''
+			const fileSize: number = typeof fileSizeRaw == 'number' ? (fileSizeRaw as number) : 0
+			if (filePath.length == 0) {
+				// 路径为空视为无效选择
+				return
+			}
+
+			if (messageInputState == null) return
+			const messageBody: UTSJSONObject = { filePath, fileName, fileSize }
+			const pushCtx: OfflinePushContext = {
+				messageType: MessageType.FILE,
+				messagePayload: messageBody,
+				conversationID: props.conversationID
+			}
+			const offlinePushInfo = buildOfflinePushInfo(props.setOfflinePushInfo as OfflinePushInfoResolver | null, pushCtx)
+			const payload: SendMessagePayload = {
+				type: 'file',
+				filePath,
+				fileName,
+				fileSize
+			}
+			const option: SendMessageOption = {}
+			if (offlinePushInfo != null) option.offlinePushInfo = offlinePushInfo
+
+			messageInputState.sendMessage(payload, option).catch((err: any | null): void => {
+				console.error('[ToolsPanel] sendMessage(file) failed:', `${err}`)
+				uni.showToast({ title: '文件发送失败', icon: 'none' })
+			})
+		},
+		fail: (err: any): void => {
+			const errObj: UTSJSONObject = toMap(err ?? null)
+			const errMsgRaw: any | null = errObj['errMsg']
+			const errCodeRaw: any | null = errObj['errCode']
+			const errMsg: string = typeof errMsgRaw == 'string' ? (errMsgRaw as string).toLowerCase() : ''
+			const errCode: number = typeof errCodeRaw == 'number' ? (errCodeRaw as number) : 0
+			const isCancel: boolean =
+				errCode == 0 ||
+				errMsg.indexOf('cancel') >= 0 ||
+				errMsg.indexOf('用户取消') >= 0 ||
+				errMsg.indexOf('取消') >= 0
+			if (isCancel) {
+				return
+			}
+			console.error('[ToolsPanel] chooseFile failed:', `${errMsg}`)
+			uni.showToast({ title: '文件选择失败', icon: 'none' })
+		}
+	})
+}
+
+const handleToolClick = (tool: ToolItem): void => {
+	if (typeof tool.callback == 'function') {
+		(tool.callback as () => void)()
+		return
+	}
+
+	const toolID: string = tool.id
+
+	switch (toolID) {
+		case 'image': {
+			const pickerOpts: UTSJSONObject = new UTSJSONObject()
+			pickerOpts['setOfflinePushInfo'] = props.setOfflinePushInfo
+			openAlbumPicker(props.conversationID, {
+				mediaFilter: AlbumPickerMediaFilter.IMAGE_ONLY,
+				maxSelectionCount: 9,
+				itemsPerRow: 3,
+				showsCameraItem: true
+			}, pickerOpts)
+			break
+		}
+		case 'video': {
+			const pickerOptsV: UTSJSONObject = new UTSJSONObject()
+			pickerOptsV['setOfflinePushInfo'] = props.setOfflinePushInfo
+			openAlbumPicker(props.conversationID, {
+				mediaFilter: AlbumPickerMediaFilter.IMAGE_AND_VIDEO,
+				maxSelectionCount: 9,
+				itemsPerRow: 3,
+				showsCameraItem: true
+			}, pickerOptsV)
+			break
+		}
+		case 'file':
+			chooseAndSendFile()
+			break
+		case 'voiceCall':
+			startCall(0)
+			break
+		case 'videoCall':
+			startCall(1)
+			break
+		default:
+			console.log('Tool clicked:', tool)
+	}
+}
+
+// 模板 handler 转发层（与 MessageInput.uvue onFaceTap/onMoreTap 同模式）
+//   handleToolClick 在前定义（line 330），onToolItemTap 在后定义（line 380+）
+const onToolItemTap = (tool: ToolItem): void => {
+	handleToolClick(tool)
+}
+
+</script>
+
+<style scoped>
+.tools-panel {
+  flex: 1;
+  background-color: #FFF;
+  border-top-width: 1rpx;
+  border-top-style: solid;
+  border-top-color: #F0F2F7;
+}
+
+.tools-scroll {
+  flex: 1;
+  padding: 20rpx 48rpx;
+}
+
+.tools-grid {
+  flex-direction: row;
+  flex-wrap: wrap;
+}
+
+.tool-item {
+  align-items: center;
+  margin-bottom: 38rpx;
+  margin-right: 45rpx;
+}
+
+.tool-item.last-in-row {
+  margin-right: 0;
+}
+
+.tool-icon-wrapper {
+  width: 128rpx;
+  height: 128rpx;
+  background-color: #F9FAFC;
+  border-radius: 28rpx;
+  justify-content: center;
+  align-items: center;
+  margin-bottom: 8rpx;
+}
+
+.tool-icon-wrapper:active {
+  background-color: #F0F2F7;
+}
+
+.tool-icon {
+  width: 52rpx;
+  height: 42rpx;
+}
+
+.tool-name {
+  font-size: 24rpx;
+  color: rgba(0, 0, 0, 0.40);
+  text-align: center;
+}
+</style>

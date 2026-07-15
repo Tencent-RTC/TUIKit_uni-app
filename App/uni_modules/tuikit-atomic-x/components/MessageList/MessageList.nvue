@@ -41,7 +41,6 @@
             :highlight="item.message?.msgID === currentHighlightID"
             :customCenterChecker="customCenterChecker"
             :customMessageRender="customMessageRender"
-            @reEdit="handleReEdit"
             @onMessageListTap="handleMessageListTap"
             @onMessageTap="handleMessageTap"
           />
@@ -71,7 +70,7 @@ import MessageTimeDivider from './MessageTimeDivider/MessageTimeDivider.nvue'
 import { useMessageListState } from '../../state/MessageListState'
 import { useConversationListState } from '../../state/ConversationListState'
 import { useListTransform } from './useListTransform'
-import { MessageStatus, MessageType, MessageListType, MessageFetchDirection } from '../../types/message'
+import { MessageStatus, MessageType, MessageListType, MessageLoadDirection } from '../../types/message'
 import { rpxToPx } from '../../utils/unitUtils'
 import type { MessageInfo } from '../../types/message'
 import type { CustomCenterChecker } from '../../utils/callMessageUtils'
@@ -118,7 +117,6 @@ const props = withDefaults(defineProps<Props>(), {
 })
 
 const emit = defineEmits<{
-  reEdit: [data: any]
   onMessageListTap: []
   onMessageTap: [message: MessageInfo]
 }>()
@@ -133,6 +131,10 @@ const cellRefs: any[] = []
 const isFirstLoad = ref(true)
 const currentHighlightID = ref('')
 const pendingScrollMessage = ref<MessageInfo | null>(null)
+
+// 首屏 cell 就绪计数：替代盲等 100ms，等所有 cell 真就绪再 scrollToBottom + 放开 opacity
+// 配合 800ms 保底超时，避免单 cell 卡住导致白屏永久
+const readyCellCount = ref(0)
 
 const timers = new Set<number>()
 
@@ -152,24 +154,26 @@ const clearAllTimers = () => {
 }
 
 const setCellRef = (el: any, index: number) => {
-  if (el) {
+  if (el && cellRefs[index] !== el) {
+    // 仅在首次绑定/不同实例时才计数；nvue 第二轮 cell ref 重新绑定（同实例）不算新就绪
+    const isNew = !cellRefs[index]
     cellRefs[index] = el
+    if (isNew) readyCellCount.value++
   }
 }
 
-const { messageList, fetchMessageList, fetchMoreMessageList, hasMoreOlderMessage, hasMoreNewerMessage, destroyStore } = useMessageListState({
+const { messageList, loadMessages, loadOlderMessages, loadNewerMessages, hasOlderMessages, hasNewerMessages, destroyStore } = useMessageListState({
   conversationID: props.conversationID,
-  messageListType: props.messageListType
 })
 
 const { clearConversationUnreadCount } = useConversationListState();
 
 const loadMoreOlderMessage = () => {
-  return fetchMoreMessageList(MessageFetchDirection.OLDER)
+  return loadOlderMessages()
 }
 
 const loadMoreNewerMessage = () => {
-  return fetchMoreMessageList(MessageFetchDirection.NEWER)
+  return loadNewerMessages()
 }
 
 const isMessageInList = (messageID: string): boolean => {
@@ -183,9 +187,9 @@ const locateToMessage = async (message: MessageInfo) => {
   if (!message || !message.msgID) return
   
   try {
-    await fetchMessageList({
-      message: message,
-      direction: MessageFetchDirection.BOTH,
+    await loadMessages({
+      cursor: message,
+      direction: MessageLoadDirection.BOTH,
       pageCount: 20
     })
   } catch (error) {
@@ -218,8 +222,8 @@ const messageItems = computed<MessageItem[]>(() => {
   filteredMessages.forEach((message, index) => {
     const prevMessage = index > 0 ? filteredMessages[index - 1] : null
     
-    const isCenterMessage = message.status === MessageStatus.RECALLED || 
-      message.messageType === MessageType.SYSTEM
+    const isCenterMessage = message.status === MessageStatus.REVOKED || 
+      message.messageType === MessageType.TIPS
     
     const showTimeDivider = index === 0 || 
       (prevMessage && message.timestamp && prevMessage.timestamp &&
@@ -237,7 +241,7 @@ const messageItems = computed<MessageItem[]>(() => {
       items.push({
         key: `message-${message.msgID}`,
         type: 'message',
-        message: message,
+        message,
         showAvatar: false,
         showNickname: false
       })
@@ -247,9 +251,9 @@ const messageItems = computed<MessageItem[]>(() => {
     items.push({
       key: `message-${message.msgID}`,
       type: 'message',
-      message: message,
+      message,
       showAvatar: true,
-      showNickname: props.conversationID.startsWith('group_') && !message.isSelf
+      showNickname: props.conversationID.startsWith('group_') && !message.isSentBySelf
     })
   })
   
@@ -273,7 +277,7 @@ const onRefresh = async (e: any) => {
 
   refreshing.value = true;
   
-  if (!hasMoreOlderMessage.value) {
+  if (!hasOlderMessages.value) {
     refreshText.value = '没有更多历史消息';
     const timer = addTimer(setTimeout(() => {
       refreshing.value = false;
@@ -307,7 +311,7 @@ const onRefresh = async (e: any) => {
 }
 
 const onLoadMore = async () => {
-  if (!hasMoreNewerMessage.value) return
+  if (!hasNewerMessages.value) return
   
   try {
     await loadMoreNewerMessage()
@@ -329,7 +333,6 @@ const scrollToBottom = (animated = true) => {
       animated: animated
     })
   }
-  
   showScrollToBottom.value = false
 }
 
@@ -401,10 +404,6 @@ const handleScroll = (e: any) => {
   }
 }
 
-const handleReEdit = (data: any) => {
-  emit('reEdit', data)
-}
-
 const handleMessageListTap = () => {
   emit('onMessageListTap')
 }
@@ -418,21 +417,48 @@ watch(messageList, (newMessages, oldMessages) => {
   
   if (isFirstLoad.value && newMessages.length > 0) {
     nextTick(() => {
-      const timer1 = addTimer(setTimeout(async () => {
+      // 首屏滚动+放开 opacity 的统一收尾函数（幂等）
+      let __finished = false
+      const __finalize = () => {
+        if (__finished) return
+        __finished = true
         const locateMsg = props.locateMessage
-        
         if (locateMsg && locateMsg.msgID) {
-          await scrollToMessage(locateMsg, false)
+          scrollToMessage(locateMsg, false)
         } else {
           scrollToBottom(false)
         }
-        
-        const timer2 = addTimer(setTimeout(() => {
+        // 让 scrollToElement 的 native 调用先执行，再放开 opacity
+        nextTick(() => {
           isFirstLoad.value = false
-          clearTimer(timer2);
-        }, 50));
-        clearTimer(timer1);
-      }, 100));
+        })
+      }
+
+      // 主路径：等所有 cell ref 就绪后立即收尾
+      // 先同步检查一次（cell 可能在 nextTick 之前就全 ready）；不满足再挂 watch
+      // 注：不能用 watch 的 immediate，因为同步触发时 stopHandle 还未被赋值，调用会抛错
+      let __stopReady: (() => void) | null = null
+      const __checkAndFinalize = (count: number) => {
+        if (count >= messageItems.value.length) {
+          if (__stopReady) __stopReady()
+          __finalize()
+          return true
+        }
+        return false
+      }
+
+      if (!__checkAndFinalize(readyCellCount.value)) {
+        __stopReady = watch(readyCellCount, (count) => {
+          __checkAndFinalize(count)
+        })
+      }
+
+      // 保底：800ms 超时强制收尾，避免某条 cell 卡住导致永久白屏
+      const __fallbackTimer = addTimer(setTimeout(() => {
+        if (__stopReady) __stopReady()
+        __finalize()
+        clearTimer(__fallbackTimer)
+      }, 800))
     })
     return
   }
@@ -456,7 +482,7 @@ watch(messageList, (newMessages, oldMessages) => {
   
   if (hasNewMessage) {
     const lastMessage = newMessages[newMessages.length - 1]
-    const isMyMessage = lastMessage.isSelf
+    const isMyMessage = lastMessage.isSentBySelf
     
     if (!isMyMessage) {
       clearConversationUnreadCount(props.conversationID)
@@ -496,23 +522,46 @@ onBeforeMount(() => {
 });
 
 onMounted(() => {
+  // mount 时 messageList 已有缓存数据：watch immediate=false 不会触发，需手动启动收尾流程
+  // 走和 watch 内首屏分支一致的 cell-ready 信号 + 800ms 保底
   if (messageList.value && messageList.value.length > 0) {
     nextTick(() => {
-      const timer1 = addTimer(setTimeout(async () => {
+      let __finished = false
+      const __finalize = () => {
+        if (__finished) return
+        __finished = true
         const locateMsg = props.locateMessage
-        
         if (locateMsg && locateMsg.msgID) {
-          await scrollToMessage(locateMsg, false)
+          scrollToMessage(locateMsg, false)
         } else {
           scrollToBottom(false)
         }
-        
-        const timer2 = addTimer(setTimeout(() => {
+        nextTick(() => {
           isFirstLoad.value = false
-          clearTimer(timer2);
-        }, 50));
-        clearTimer(timer1);
-      }, 100));
+        })
+      }
+
+      let __stopReady: (() => void) | null = null
+      const __checkAndFinalize = (count: number) => {
+        if (count >= messageItems.value.length) {
+          if (__stopReady) __stopReady()
+          __finalize()
+          return true
+        }
+        return false
+      }
+
+      if (!__checkAndFinalize(readyCellCount.value)) {
+        __stopReady = watch(readyCellCount, (count) => {
+          __checkAndFinalize(count)
+        })
+      }
+
+      const __fallbackTimer = addTimer(setTimeout(() => {
+        if (__stopReady) __stopReady()
+        __finalize()
+        clearTimer(__fallbackTimer)
+      }, 800))
     })
   }
   // 监听 AudioMessage "转写文本入场"事件：当本条是最后一条且用户未在浏览历史时，

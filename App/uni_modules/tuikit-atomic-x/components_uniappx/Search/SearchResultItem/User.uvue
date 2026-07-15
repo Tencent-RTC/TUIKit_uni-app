@@ -1,0 +1,142 @@
+<template>
+  <ResultItem
+    :avatarURL="avatarURL"
+    :title="displayName"
+    :titleSuffix="titleSuffix"
+    :subtitle="subtitle"
+    :keyword="keyword"
+    :Avatar="Avatar"
+    defaultAvatarType="user"
+  />
+</template>
+
+<script setup lang="uts">
+/**
+ * SearchResultItem/User - 搜索结果项用户（uvue 版）
+ *
+ */
+import { computed } from 'vue'
+import AvatarComponent from '../../Avatar'
+import ResultItem from './ResultItem.uvue'
+import type { SearchResultItemUserProps } from '../../../types/search.uts'
+import { UserProfile, Gender } from '../../../types/userProfile'
+import type { GroupMember } from '../../../types/group'
+
+const props = withDefaults(defineProps<SearchResultItemUserProps>(), {
+	keyword: '',
+	Avatar: (): any => AvatarComponent
+})
+
+/**
+ * 获取用户基础信息
+ */
+const getUserProfile = computed((): any | null => {
+	if (props.type == 'friend') {
+		const friend = props.user as any
+		const friendObj: UTSJSONObject = (friend ?? new UTSJSONObject()) as UTSJSONObject
+		const userInfoRaw: any | null = friendObj['userInfo']
+		return userInfoRaw as any | null
+	}
+	if (props.type == 'user') {
+		return props.user as any
+	}
+	return null
+})
+
+/**
+ * 头像URL
+ */
+const avatarURL = computed((): string => {
+	if (props.type == 'friend') {
+		const friend = props.user as any
+		const friendObj: UTSJSONObject = (friend ?? new UTSJSONObject()) as UTSJSONObject
+		const userInfoRaw: any | null = friendObj['userInfo']
+		if (userInfoRaw == null) return ''
+		const userInfoObj: UTSJSONObject = userInfoRaw as UTSJSONObject
+		const avatarRaw: any | null = userInfoObj['avatarURL']
+		return typeof avatarRaw == 'string' ? (avatarRaw as string) : ''
+	}
+	const userObj: UTSJSONObject = (props.user ?? new UTSJSONObject()) as UTSJSONObject
+	const avatarRaw: any | null = userObj['avatarURL']
+	return typeof avatarRaw == 'string' ? (avatarRaw as string) : ''
+})
+
+/**
+ * 显示名称
+ */
+const displayName = computed((): string => {
+	const userObj: UTSJSONObject = (props.user ?? new UTSJSONObject()) as UTSJSONObject
+	if (props.type == 'friend') {
+		const remarkRaw: any | null = userObj['friendRemark']
+		const remark: string = typeof remarkRaw == 'string' ? (remarkRaw as string) : ''
+		if (remark.length > 0) return remark
+		const userInfoRaw: any | null = userObj['userInfo']
+		if (userInfoRaw != null) {
+			const userInfoObj: UTSJSONObject = userInfoRaw as UTSJSONObject
+			const nicknameRaw: any | null = userInfoObj['nickname']
+			const nickname: string = typeof nicknameRaw == 'string' ? (nicknameRaw as string) : ''
+			if (nickname.length > 0) return nickname
+		}
+		const userIDRaw: any | null = userObj['userID']
+		const userID: string = typeof userIDRaw == 'string' ? (userIDRaw as string) : ''
+		return userID.length > 0 ? userID : '未知用户'
+	}
+	if (props.type == 'groupMember') {
+		const fields: string[] = ['nameCard', 'friendRemark', 'nickname', 'userID']
+		for (let i = 0; i < fields.length; i++) {
+			const v: any | null = userObj[fields[i]]
+			if (typeof v == 'string' && (v as string).length > 0) {
+				return v as string
+			}
+		}
+		return '未知用户'
+	}
+	// type == 'user'
+	const nicknameRaw: any | null = userObj['nickname']
+	const nickname: string = typeof nicknameRaw == 'string' ? (nicknameRaw as string) : ''
+	if (nickname.length > 0) return nickname
+	const userIDRaw: any | null = userObj['userID']
+	const userID: string = typeof userIDRaw == 'string' ? (userIDRaw as string) : ''
+	return userID.length > 0 ? userID : '未知用户'
+})
+
+/**
+ * 标题后缀（显示 userID）
+ */
+const titleSuffix = computed((): string => {
+	const userObj: UTSJSONObject = (props.user ?? new UTSJSONObject()) as UTSJSONObject
+	const userIDRaw: any | null = userObj['userID']
+	const userID: string = typeof userIDRaw == 'string' ? (userIDRaw as string) : ''
+	return userID.length > 0 ? `(${userID})` : ''
+})
+
+/**
+ * 副标题
+ */
+const subtitle = computed((): string => {
+	const parts: string[] = []
+	const profile = getUserProfile.value
+
+	if (profile != null) {
+		const profileObj: UTSJSONObject = (profile ?? new UTSJSONObject()) as UTSJSONObject
+		const genderRaw: any | null = profileObj['gender']
+		if (genderRaw == Gender.MALE as any) {
+			parts.push('男')
+		} else if (genderRaw == Gender.FEMALE as any) {
+			parts.push('女')
+		}
+		// 年龄
+		const birthdayRaw: any | null = profileObj['birthday']
+		if (birthdayRaw != null) {
+			const birthday: number = typeof birthdayRaw == 'number' ? (birthdayRaw as number) : 0
+			const birthYear = new Date(birthday * 1000).getFullYear()
+			const age = new Date().getFullYear() - birthYear
+			if (age > 0 && age < 150) {
+				parts.push(`${age}岁`)
+			}
+		}
+	}
+
+	return parts.join(' ')
+})
+</script>

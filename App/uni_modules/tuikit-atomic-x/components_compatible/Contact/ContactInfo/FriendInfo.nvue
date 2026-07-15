@@ -14,7 +14,7 @@
         <view class="friend-info__row" @tap="handleRemarkEdit">
           <text class="friend-info__label">备注名</text>
           <view class="friend-info__row-value">
-            <text class="friend-info__value" :numberOfLines="1">{{ (currentFriendInfo && currentFriendInfo.remark) || '未设置' }}</text>
+            <text class="friend-info__value" :numberOfLines="1">{{ (currentFriendInfo && currentFriendInfo.friendRemark) || '未设置' }}</text>
             <image class="friend-info__arrow" src="/uni_modules/tuikit-atomic-x/static/icon/arrow-right.png" />
           </view>
         </view>
@@ -106,7 +106,7 @@ export default {
     },
   },
   watch: {
-    'friendInfo.userID': { handler() { if (this.conversationID) { this.fetchPeerUserInfo(); this.convState.fetchConversationInfo(this.conversationID) } }, immediate: true },
+    'friendInfo.userID': { handler() { if (this.conversationID) { this.fetchPeerUserInfo(); this.convState.getConversationInfo(this.conversationID) } }, immediate: true },
   },
   mounted() { this.fetchPeerUserInfo() },
   onShow() { this.fetchPeerUserInfo() },
@@ -114,7 +114,7 @@ export default {
     fetchPeerUserInfo() {
       if (!(this.friendInfo && this.friendInfo.userID)) return
       var self = this
-      this.contactState.fetchUserInfo([this.friendInfo.userID]).then(function(list) {
+      this.contactState.getContactInfo([this.friendInfo.userID]).then(function(list) {
         if (list && list.length > 0) self.fetchedUserInfo = list[0]
       }).catch(function(err) { console.error('[FriendInfo] fetchPeerUserInfo failed:', err) })
     },
@@ -122,7 +122,8 @@ export default {
     handleMuteChange(e) {
       var value = e.detail.value; if (!this.conversationID) return
       var self = this
-      this.convState.muteConversation(this.conversationID, value).then(function() { self.$emit('muteChange', value) }).catch(function(err) { showToast({ message: err.message || '设置失败', type: 'error' }) })
+      var opt = value ? ConversationReceiveOption.NOT_NOTIFY : ConversationReceiveOption.RECEIVE
+      this.convState.setReceiveMessageOpt(this.conversationID, opt).then(function() { self.$emit('muteChange', value) }).catch(function(err) { showToast({ message: err.message || '设置失败', type: 'error' }) })
     },
     handlePinChange(e) {
       var value = e.detail.value; if (!this.conversationID) return

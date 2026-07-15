@@ -1,0 +1,214 @@
+import { getChinesePinyinFirstLetter } from './getChinesePinyinFirstLetter.uts'
+
+/**
+ * 通用关系链排序工具（uvue 版）
+ *
+ *   iOS 上 UTSJSONObject.keys / .get 不可靠（与顶层 utils/sortByFirstChar.uts 同因），
+ *   消费方应优先用返回的 groups: Array 字段
+ */
+
+/** 分组项（iOS 兼容：Array 形态，不依赖 UTSJSONObject.keys） */
+type GroupItem<T> = {
+	letter: string
+	friends: T[]
+}
+
+/** sortByFirstChar 返回值 */
+type SortByFirstCharResult<T> = {
+	sortedList: T[]
+	groupedList: UTSJSONObject
+	groups: GroupItem<T>[]
+}
+
+// 获取字符串的首字母或首字符
+function getFirstChar(str: string): string {
+	if (str.length == 0) return ''
+
+	const firstChar: string = str.charAt(0)
+
+	if (/\d/.test(firstChar)) {
+		return '0'
+	}
+
+	if (/[a-zA-Z]/.test(firstChar)) {
+		return firstChar.toUpperCase()
+	}
+
+	if (/[\u4e00-\u9fa5]/.test(firstChar)) {
+		return getChinesePinyinFirstLetter(firstChar)
+	}
+
+	return 'ZZ'
+}
+
+// 排序优先级
+function getSortPriority(char: string): number {
+	if (/[A-Z]/.test(char)) return 1
+	if (char == '0') return 2
+	return 3
+}
+
+// 获取分组键
+function getGroupKey(firstChar: string): string {
+	if (/[A-Z]/.test(firstChar)) {
+		if (firstChar.length > 1) {
+			const multiCharMap: UTSJSONObject = new UTSJSONObject()
+			multiCharMap.set('PF', 'F')
+			multiCharMap.set('DZ', 'D')
+			multiCharMap.set('QJ', 'Q')
+			multiCharMap.set('YL', 'Y')
+			multiCharMap.set('SC', 'S')
+			multiCharMap.set('NM', 'N')
+			multiCharMap.set('QG', 'Q')
+			multiCharMap.set('QC', 'Q')
+			multiCharMap.set('YG', 'Y')
+			multiCharMap.set('KH', 'K')
+			multiCharMap.set('ZC', 'Z')
+			multiCharMap.set('QJG', 'Q')
+			multiCharMap.set('TD', 'T')
+			multiCharMap.set('YD', 'Y')
+			multiCharMap.set('NE', 'N')
+			multiCharMap.set('YJ', 'Y')
+			multiCharMap.set('CZ', 'C')
+			multiCharMap.set('PB', 'P')
+			multiCharMap.set('YS', 'Y')
+			multiCharMap.set('SQ', 'S')
+			multiCharMap.set('TC', 'T')
+			multiCharMap.set('KG', 'K')
+			const mapped = multiCharMap.get(firstChar)
+			return typeof mapped == 'string' ? mapped : firstChar.charAt(0)
+		}
+		return firstChar
+	}
+	return '#'
+}
+
+function startsWithEnglishLetter(str: string): boolean {
+	return /^[a-zA-Z]/.test(str)
+}
+
+function sortItems<T>(
+	itemList: T[],
+	getDisplayName: (item: T) => string
+): T[] {
+	return [...itemList].sort((a: T, b: T): number => {
+		const nameA: string = getDisplayName(a)
+		const nameB: string = getDisplayName(b)
+
+		const firstCharA: string = getFirstChar(nameA)
+		const firstCharB: string = getFirstChar(nameB)
+
+		const priorityA: number = getSortPriority(firstCharA)
+		const priorityB: number = getSortPriority(firstCharB)
+
+		if (priorityA !== priorityB) {
+			return priorityA - priorityB
+		}
+
+		if (firstCharA !== firstCharB) {
+			return firstCharA < firstCharB ? -1 : firstCharA > firstCharB ? 1 : 0
+		}
+
+		const isEnglishA: boolean = startsWithEnglishLetter(nameA)
+		const isEnglishB: boolean = startsWithEnglishLetter(nameB)
+
+		if (isEnglishA !== isEnglishB) {
+			return isEnglishA ? -1 : 1
+		}
+
+		return nameA < nameB ? -1 : nameA > nameB ? 1 : 0
+	})
+}
+
+/**
+ * iOS 兼容的分组实现（与顶层 utils/sortByFirstChar.uts 一致）：
+ *   - 同步写 UTSJSONObject（保留向后兼容）
+ *   - 同步写 Array<GroupItem>（iOS 可靠）
+ *   - 内部排序不依赖 .keys / .values（iOS 上不可靠）
+ */
+function buildGroupArray<T>(
+	sortedList: T[],
+	getDisplayName: (item: T) => string,
+	groupedList: UTSJSONObject,
+	groups: GroupItem<T>[]
+): void {
+	const safeList: T[] = Array.from(sortedList) as T[]
+
+	let curLetter: string = ''
+	let curFriends: T[] = []
+
+	const flush = (): void => {
+		if (curLetter.length > 0 && curFriends.length > 0) {
+			groups.push({ letter: curLetter, friends: curFriends })
+			appendToJSONObject(groupedList, curLetter, curFriends)
+		}
+	}
+
+	for (let i = 0; i < safeList.length; i++) {
+		const item: T = safeList[i] as T
+		const name: string = getDisplayName(item)
+		if (name.length == 0) continue
+		const groupKey: string = getGroupKey(getFirstChar(name))
+
+		if (groupKey != curLetter) {
+			flush()
+			curLetter = groupKey
+			curFriends = [item]
+		} else {
+			curFriends.push(item)
+		}
+	}
+	flush()
+
+	// 排序：A-Z 字母组在前，# 排在最后
+	groups.sort((a: GroupItem<T>, b: GroupItem<T>): number => {
+		if (a.letter == '#') return 1
+		if (b.letter == '#') return -1
+		return a.letter < b.letter ? -1 : a.letter > b.letter ? 1 : 0
+	})
+
+	// 组内排序
+	for (let i = 0; i < groups.length; i++) {
+		const grp = groups[i]
+		grp.friends.sort((a: T, b: T): number => {
+			const nameA: string = getDisplayName(a)
+			const nameB: string = getDisplayName(b)
+			const isEnglishA: boolean = startsWithEnglishLetter(nameA)
+			const isEnglishB: boolean = startsWithEnglishLetter(nameB)
+			if (isEnglishA !== isEnglishB) {
+				return isEnglishA ? -1 : 1
+			}
+			return nameA < nameB ? -1 : nameA > nameB ? 1 : 0
+		})
+	}
+}
+
+function appendToJSONObject<T>(groupedList: UTSJSONObject, letter: string, friends: T[]): void {
+	const existing: any | null = groupedList.get(letter)
+	if (existing == null) {
+		groupedList.set(letter, friends as any)
+	} else {
+		const arr: T[] = existing as T[]
+		for (let k = 0; k < friends.length; k++) {
+			arr.push(friends[k])
+		}
+	}
+}
+
+export function sortByFirstChar<T>(
+	list: T[],
+	getDisplayName: (item: T) => string,
+	enableGroup: boolean = true
+): SortByFirstCharResult<T> {
+	const sortedList: T[] = sortItems(list, getDisplayName)
+	const groupedList: UTSJSONObject = new UTSJSONObject()
+	const groups: GroupItem<T>[] = []
+	if (enableGroup) {
+		buildGroupArray(sortedList, getDisplayName, groupedList, groups)
+	}
+	return {
+		sortedList,
+		groupedList,
+		groups
+	}
+}

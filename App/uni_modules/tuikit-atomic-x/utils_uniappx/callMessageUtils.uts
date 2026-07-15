@@ -1,0 +1,298 @@
+
+import { MessageType } from "../components/ConversationList/types";
+
+export type CallSignalData = {
+  cmd?: string | null;
+  inviter?: string | null;
+  message?: string | null;
+  room_id?: number | null;
+  str_room_id?: string | null;
+  /** 通话结束时长（秒）— 旧版协议字段，部分老消息可能有 */
+  call_end?: number | null;
+};
+
+/** 通话信令数据（最小子集，含新版所需的 actionType/groupID/inviter 等） */
+export type CallMessageData = {
+  call_type: number; // 1=语音, 2=视频
+  businessID: string | number | null;
+  // 新版扩展字段
+  actionType?: number | null;
+  inviter?: string | null;
+  inviteeList?: string[] | null;
+  groupID?: string | null;
+  timeout?: number | null;
+  inviteID?: string | null;
+  line_busy?: string | null;
+  data?: CallSignalData | null;
+};
+
+function safeMessageAsJSONObject(message: any): UTSJSONObject {
+  if (message == null) return new UTSJSONObject()
+  return new UTSJSONObject()
+}
+
+function getCustomData(message: any): string | null {
+  if (message == null) return null
+  const msgObj: UTSJSONObject = safeMessageAsJSONObject(message)
+  const payloadRaw: any | null = msgObj['messagePayload']
+  if (payloadRaw == null) return null
+  const payload: UTSJSONObject = payloadRaw as UTSJSONObject
+  // 新版 MessageBody：自定义消息数据在 customMessage.customData
+  const customRaw: any | null = payload['customMessage']
+  if (customRaw != null) {
+    const custom: UTSJSONObject = customRaw as UTSJSONObject
+    const direct: any | null = custom['customData']
+    if (typeof direct == 'string' && (direct as string).length > 0) {
+      return direct as string
+    }
+  }
+  // 兜底：MessagePayload 顶层 data 字段（流式/旧版承载）
+  const topDataRaw: any | null = payload['data']
+  if (typeof topDataRaw == 'string' && (topDataRaw as string).length > 0) {
+    return topDataRaw as string
+  }
+  return null
+}
+
+/**
+ * 判断消息是否为通话消息
+ * @param message 消息对象
+ */
+export function isCallMessage(message: any): boolean {
+  if (message == null) return false
+  const msgObj: UTSJSONObject = safeMessageAsJSONObject(message)
+  const mt: any | null = msgObj['messageType']
+  if (mt !== MessageType.CUSTOM) {
+    return false;
+  }
+  const data = parseCallMessageData(message);
+  if (data == null) {
+    return false;
+  }
+  return data.call_type == 1 || data.call_type == 2;
+}
+
+/**
+ * 解析通话信令数据，失败返回 null
+ * @param message 消息对象
+ */
+export function parseCallMessageData(message: any): CallMessageData | null {
+  const raw = getCustomData(message);
+  if (raw == null || raw.length == 0) {
+    return null;
+  }
+  try {
+    const result = JSON.parse<CallMessageData>(raw);
+    return result;
+  } catch (error: any) {
+    const errMsg = error instanceof Error ? (error as Error).message : `${error}`;
+    console.warn(`[callMessageUtils] parse error: ${errMsg}`);
+    return null;
+  }
+}
+
+/**
+ * 判断是否为视频通话
+ * @param callData 通话信令数据
+ */
+export function isVideoCall(callData: CallMessageData | null): boolean {
+  if (callData == null) {
+    return false;
+  }
+  // 通过 call_type 判断
+  if (callData.call_type == 2) {
+    return true;
+  }
+  // 通过 cmd 判断
+  const cmd = callData.data?.cmd;
+  if (cmd == 'videoCall' || cmd == 'switchToVideo') {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * 判断是否是群组内的通话消息
+ * 群组内的通话消息需要居中显示，不带头像和气泡
+ */
+export function isGroupCallMessage(message: any, conversationID: string): boolean {
+  if (!isCallMessage(message)) {
+    return false;
+  }
+  // 检查是否是群聊会话
+  const cid: string = typeof conversationID == 'string' ? conversationID : '';
+  return cid.startsWith('group_');
+}
+
+/**
+ * 格式化通话时长（秒 → HH:MM:SS / MM:SS）
+ */
+export function formatCallDuration(seconds: number): string {
+  if (seconds == null || seconds <= 0) {
+    return '00:00';
+  }
+  const total: number = Math.floor(seconds);
+  const hours: number = Math.floor(total / 3600);
+  const minutes: number = Math.floor((total % 3600) / 60);
+  const secs: number = total % 60;
+
+  const hh: string = hours.toString().padStart(2, '0');
+  const mm: string = minutes.toString().padStart(2, '0');
+  const ss: string = secs.toString().padStart(2, '0');
+
+  if (hours > 0) {
+    return `${hh}:${mm}:${ss}`;
+  }
+  return `${mm}:${ss}`;
+}
+
+/**
+ * 获取消息发送者显示名称（截断到 maxLength 字符）
+ */
+export function getMessageSenderName(message: any, maxLength: number = 12): string {
+  if (message == null) return ''
+  const msgObj: UTSJSONObject = safeMessageAsJSONObject(message)
+  const senderRaw: any | null = msgObj['from']
+  if (senderRaw == null) return ''
+  const sender: UTSJSONObject = senderRaw as UTSJSONObject
+  const friendRemark: any | null = sender['friendRemark']
+  if (typeof friendRemark == 'string' && (friendRemark as string).length > 0) {
+    return substringByLength(friendRemark as string, maxLength);
+  }
+  const nameCard: any | null = sender['nameCard']
+  if (typeof nameCard == 'string' && (nameCard as string).length > 0) {
+    return substringByLength(nameCard as string, maxLength);
+  }
+  const nickname: any | null = sender['nickname']
+  if (typeof nickname == 'string' && (nickname as string).length > 0) {
+    return substringByLength(nickname as string, maxLength);
+  }
+  const userID: any | null = sender['userID']
+  return substringByLength(userID != null ? `${userID}` : '', maxLength);
+}
+
+/**
+ * 截取字符串前 maxLength 字符，超出加省略号
+ */
+function substringByLength(str: string, maxLength: number = 12): string {
+  if (str.length <= maxLength) {
+    return str;
+  }
+  return `${str.substring(0, maxLength)}...`;
+}
+
+/**
+ * 生成通话消息上屏文本
+ *
+ * @param message 消息信息
+ * @param showSenderName 是否显示发送者名称（用于群聊场景，默认为 true）
+ * @returns 上屏显示的文本
+ */
+export function getCallMessageText(message: any, showSenderName: boolean = true): string {
+  const data = parseCallMessageData(message);
+  if (data == null) {
+    return '通话消息';
+  }
+
+  const actionType: number = typeof data.actionType == 'number' ? data.actionType : 0;
+  const objectData: CallMessageData = data;
+  let isSelfInviter: boolean = false
+  if (message != null) {
+    const msgObj: UTSJSONObject = safeMessageAsJSONObject(message)
+    // 兼容内部版 isSelf / SDK 版 isSentBySelf
+    const selfVal: any | null = msgObj['isSelf']
+    const sentBySelfVal: any | null = msgObj['isSentBySelf']
+    isSelfInviter = selfVal == true || sentBySelfVal == true
+  }
+  const senderName: string = showSenderName ? getMessageSenderName(message) : '';
+  const groupID: string | null = data.groupID ?? null;
+
+  if (actionType == 1) {
+    // 发起/挂断
+    const cmd = objectData.data?.cmd ?? null;
+    if (cmd == 'audioCall' || cmd == 'videoCall') {
+      if (groupID != null && groupID.length > 0 && senderName.length > 0) {
+        return `${senderName} 发起通话`;
+      }
+      return '发起通话';
+    }
+    if (cmd == 'hangup') {
+      if (groupID != null && groupID.length > 0) {
+        return '通话结束';
+      }
+      const callEnd: number = typeof objectData.data?.call_end == 'number' ? (objectData.data?.call_end as number) : 0;
+      return `${formatCallDuration(callEnd)} 通话时长`;
+    }
+    if (cmd == 'switchToAudio') {
+      return '切换为语音通话';
+    }
+    if (cmd == 'switchToVideo') {
+      return '切换为视频通话';
+    }
+    return '发起通话';
+  }
+
+  if (actionType == 2) {
+    // 取消
+    if (groupID != null && groupID.length > 0 && senderName.length > 0) {
+      return `${senderName} 已取消`;
+    }
+    if (isSelfInviter) {
+      return '已取消';
+    }
+    return '对方已取消';
+  }
+
+  if (actionType == 3) {
+    // 接听
+    const cmd = objectData.data?.cmd ?? null;
+    if (cmd == 'switchToAudio') {
+      return '切换为语音通话';
+    }
+    if (cmd == 'switchToVideo') {
+      return '切换为视频通话';
+    }
+    if (groupID != null && groupID.length > 0 && senderName.length > 0) {
+      return `${senderName} 已接听`;
+    }
+    return '已接听';
+  }
+
+  if (actionType == 4) {
+    // 拒绝
+    if (groupID != null && groupID.length > 0 && senderName.length > 0) {
+      return `${senderName} 已拒绝`;
+    }
+    // 检查忙线状态
+    if (objectData.line_busy == 'line_busy' || objectData.data?.message == 'lineBusy') {
+      if (isSelfInviter) {
+        return '对方忙线';
+      }
+      return '忙线未接听';
+    }
+    if (isSelfInviter) {
+      return '对方已拒绝';
+    }
+    return '已拒绝';
+  }
+
+  if (actionType == 5) {
+    // 超时无应答
+    const cmd = objectData.data?.cmd ?? null;
+    if (cmd == 'switchToAudio') {
+      return '切换为语音通话';
+    }
+    if (cmd == 'switchToVideo') {
+      return '切换为视频通话';
+    }
+    if (groupID != null && groupID.length > 0 && senderName.length > 0) {
+      return `${senderName} 无应答`;
+    }
+    if (isSelfInviter) {
+      return '对方无应答';
+    }
+    return '未接听';
+  }
+
+  return '通话消息';
+}

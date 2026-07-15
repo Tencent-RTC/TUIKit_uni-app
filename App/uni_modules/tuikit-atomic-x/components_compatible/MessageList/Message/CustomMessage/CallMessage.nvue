@@ -1,8 +1,8 @@
 <template>
   <view v-if="isGroupCall" class="group-call-message"><text class="group-call-text">{{ callText }}</text></view>
-  <view v-else :class="['call-message', 'call-msg__content--'+ (message.isSelf ? 'out' : 'in')]">
+  <view v-else :class="['call-message', 'call-msg__content--'+ (message.isSentBySelf ? 'out' : 'in')]">
     <text class="call-text">{{ callText }}</text>
-    <image :class="['call-icon--'+ (isVideo ? 'video' : 'voice'), 'call-icon--'+ (message.isSelf ? 'out' : 'in')]" :src="isVideo ? videoIconSrc : voiceIconSrc" />
+    <image :class="['call-icon--'+ (isVideo ? 'video' : 'voice'), 'call-icon--'+ (message.isSentBySelf ? 'out' : 'in')]" :src="isVideo ? videoIconSrc : voiceIconSrc" />
   </view>
 </template>
 

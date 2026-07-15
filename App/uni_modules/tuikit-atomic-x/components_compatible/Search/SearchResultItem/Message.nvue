@@ -19,9 +19,9 @@ export default {
       var msgs = (this.messageResult && this.messageResult.messageList)
       return (msgs && msgs.length > 0) ? msgs[0] : undefined
     },
-    avatarURL() { return this.isMessageMode ? ((this.message && this.message.sender) ? this.message.sender.avatarURL : '') || '' : ((this.messageResult && this.messageResult.conversationAvatarURL) || '') },
+    avatarURL() { return this.isMessageMode ? ((this.message && this.message.from) ? this.message.from.avatarURL : '') || '' : ((this.messageResult && this.messageResult.conversationAvatarURL) || '') },
     title() {
-      if (this.isMessageMode) return (this.message && this.message.sender && this.message.sender.friendRemark) || (this.message && this.message.sender && this.message.sender.nameCard) || (this.message && this.message.sender && this.message.sender.nickname) || (this.message && this.message.sender && this.message.sender.userID) || ''
+      if (this.isMessageMode) return (this.message && this.message.from && this.message.from.friendRemark) || (this.message && this.message.from && this.message.from.nameCard) || (this.message && this.message.from && this.message.from.nickname) || (this.message && this.message.from && this.message.from.userID) || ''
       return (this.messageResult && this.messageResult.conversationShowName) || ''
     },
     mediaType() {
@@ -31,12 +31,12 @@ export default {
     },
     mediaSrc() {
       var msg = this.currentMessage; if (!msg) return ''
-      var body = msg.messageBody
+      var body = msg.messagePayload
       switch (msg.messageType) { case 2: return (body && body.thumbImagePath) || (body && body.originalImagePath) || ''; case 3: return (body && body.videoSnapshotPath) || ''; default: return '' }
     },
     mediaInfo() {
       var msg = this.currentMessage; if (!msg) return {}
-      var body = msg.messageBody
+      var body = msg.messagePayload
       switch (msg.messageType) {
         case 3: return { duration: (body && body.videoDuration) || 0 }
         case 4: return { duration: (body && body.soundDuration) || 0 }
@@ -55,7 +55,7 @@ export default {
   methods: {
     getMessageDisplayText(message) {
       if (!message) return ''
-      switch (message.messageType) { case 1: return (message.messageBody && message.messageBody.text) || ''; case 2: case 3: case 4: case 5: case 6: return ''; case 7: return '[系统消息]'; case 8: return '[自定义消息]'; case 9: return '[聊天记录]'; default: return '[未知消息]' }
+      switch (message.messageType) { case 1: return (message.messagePayload && message.messagePayload.text) || ''; case 2: case 3: case 4: case 5: case 6: return ''; case 7: return '[系统消息]'; case 8: return '[自定义消息]'; case 9: return '[聊天记录]'; default: return '[未知消息]' }
     },
   },
 }

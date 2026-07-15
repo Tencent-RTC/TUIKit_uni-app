@@ -1,0 +1,251 @@
+/**
+ * sortByFirstChar 返回类型
+ * 改用 Map<string, T[]> 替代 { [key: string]: T[] }（UTS 不支持 index signature）
+ *
+ *   iOS 上 reactive proxy 元素 push 进 Map 后 Map.keys/Map.get 不可靠
+ *   —— 消费方应优先用 groups: Array 字段（纯 Array 实现，iOS 可靠）
+ */
+type GroupItem<T> = {
+  letter: string
+  friends: T[]
+}
+type SortByFirstCharResult<T> = {
+  sortedList: T[]
+  groupedList: Map<string, T[]>
+  groups: GroupItem<T>[]
+}
+
+import { getChinesePinyinFirstLetter } from './getChinesePinyinFirstLetter';
+
+function strCompare(a: string, b: string): number {
+  if (a < b) return -1
+  if (a > b) return 1
+  return 0
+}
+
+/**
+ * 通用关系链排序工具类
+ * 数字和特殊字符归到 # 组中
+ * 支持多种数据类型的排序
+ */
+
+// 获取字符串的首字母或首字符，用于排序
+function getFirstChar(str: string): string {
+  if (str.length == 0) return '';
+
+  const firstChar = str.charAt(0);
+
+  // 数字
+  if (/\d/.test(firstChar)) {
+    return '0'; // 数字统一用 '0' 表示
+  }
+
+  // 英文字母
+  if (/[a-zA-Z]/.test(firstChar)) {
+    return firstChar.toUpperCase();
+  }
+
+  // 中文字符
+  if (/[\u4e00-\u9fa5]/.test(firstChar)) {
+    const pinyin = getChinesePinyinFirstLetter(firstChar);
+    return pinyin.charAt(0);
+  }
+
+  // 其他特殊字符
+  return 'ZZ'; // 特殊字符标识
+}
+
+// 排序优先级：字母 > 汉字按拼音首字母 > 数字 > 特殊字符
+function getSortPriority(char: string): number {
+  if (/[A-Z]/.test(char)) return 1; // 字母（包括汉字的拼音首字母）
+  if (char == '0') return 2; // 数字
+  return 3; // 其他特殊字符
+}
+
+// 获取分组键，用于显示
+function getGroupKey(firstChar: string): string {
+  if (/[A-Z]/.test(firstChar)) return firstChar; // 字母组（包括汉字按拼音首字母分组）
+  return '#'; // 数字和特殊字符都归到 # 组
+}
+
+// 判断字符串是否以英文字母开头
+function startsWithEnglishLetter(str: string): boolean {
+  return /^[a-zA-Z]/.test(str);
+}
+
+// 排序
+function sortItems<T>(
+  itemList: T[],
+  getDisplayName: (item: T) => string,
+): T[] {
+  // iOS 上 itemList 可能是 Vue 3 reactive proxy 包装的 UTSArray
+  //   spread `[...arr]` 不会展开 proxy 内部 target，sort 拿到空数组 → 返回空
+  //   —— 用 Array.from 强制展开成普通 UTSArray
+  const list: T[] = Array.from(itemList ?? ([] as T[])) as T[]
+  return list.sort((a, b) => {
+    const nameA = getDisplayName(a);
+    const nameB = getDisplayName(b);
+
+    const firstCharA = getFirstChar(nameA);
+    const firstCharB = getFirstChar(nameB);
+
+    const priorityA = getSortPriority(firstCharA);
+    const priorityB = getSortPriority(firstCharB);
+
+    if (priorityA !== priorityB) {
+      return priorityA - priorityB;
+    }
+
+    // 同优先级内按字符排序
+    if (firstCharA !== firstCharB) {
+      return strCompare(firstCharA, firstCharB);
+    }
+
+    // 首字符相同时，在同一个字母分组内，先英文字母后汉字
+    const isEnglishA = startsWithEnglishLetter(nameA);
+    const isEnglishB = startsWithEnglishLetter(nameB);
+
+    if (isEnglishA !== isEnglishB) {
+      return isEnglishA ? -1 : 1; // 英文字母排在前面
+    }
+
+    // 同类型（都是英文或都是汉字）时，按完整名称排序
+    return strCompare(nameA, nameB);
+  });
+}
+
+// 分组排序（已废弃，iOS 上 Map 操作不可靠，保留仅为向后兼容 Map 形返回）
+//   实际分组逻辑用 buildGroupArray 纯 Array 实现
+function groupItems<T>(
+  sortedList: T[],
+  getDisplayName: (item: T) => string,
+): Map<string, T[]> {
+  return new Map<string, T[]>();
+}
+
+/**
+ * 首字母排序
+ * @param list 要排序的数据列表
+ * @param getDisplayName 获取显示名称的函数
+ * @param enableGroup 是否启用分组
+ * @returns 排序后的结果
+ *   - sortedList: 排序后的一维数组
+ *   - groupedList: Map 形态分组（iOS 不可靠，保留向后兼容）
+ *   - groups: Array 形态分组（iOS 可靠，消费方应优先用）
+ */
+export function sortByFirstChar<T>(
+  list: T[],
+  getDisplayName: (item: T) => string,
+  enableGroup: boolean = true,
+): SortByFirstCharResult<T> {
+  const sortedList = sortItems(list, getDisplayName);
+  const groupedList: Map<string, T[]> = new Map();
+  const groups: GroupItem<T>[] = [];
+  if (enableGroup !== false) {
+    // iOS 兼容：reactive proxy + Map.get/keys 不可靠，统一用纯 Array 实现
+    buildGroupArray(sortedList, getDisplayName, groupedList, groups);
+
+    // 兼容旧版 groupedList: Map 形态（保留以防需要 Map 的旧调用方）
+    const keysArr: Array<string> = Array.from(groupedList.keys) as Array<string>
+    for (let i = 0; i < keysArr.length; i++) {
+      const groupKey: string = keysArr[i]
+      const groupItemsArr: T[] | null = groupedList.get(groupKey)
+      if (groupItemsArr == null) continue
+      groupItemsArr.sort((a: T, b: T): number => {
+        const nameA = getDisplayName(a);
+        const nameB = getDisplayName(b);
+        const isEnglishA = startsWithEnglishLetter(nameA);
+        const isEnglishB = startsWithEnglishLetter(nameB);
+        if (isEnglishA !== isEnglishB) {
+          return isEnglishA ? -1 : 1;
+        }
+        return strCompare(nameA, nameB);
+      });
+    }
+  }
+  return {
+    sortedList,
+    groupedList,
+    groups,
+  };
+}
+
+/**
+ * iOS 兼容的分组实现：
+ *   1. 同步写 Map（保留向后兼容，外部 groupedList 仍可用）
+ *   2. 同步写 Array<GroupItem>（iOS 可靠，外部 groups 应优先用）
+ *   3. 内部排序用 Array.forEach + UTS 数组下标访问（不依赖 Map.values/keys）
+ */
+function buildGroupArray<T>(
+  sortedList: T[],
+  getDisplayName: (item: T) => string,
+  groupedList: Map<string, T[]>,
+  groups: GroupItem<T>[],
+): void {
+  const safeList: T[] = Array.from(sortedList ?? ([] as T[])) as T[]
+
+  // 用 Array 实现：当前 letter 指针 + 当前 group 数组
+  let curLetter: string = ''
+  let curFriends: T[] = []
+
+  for (let i = 0; i < safeList.length; i++) {
+    const item: T = safeList[i] as T
+    const name: string = getDisplayName(item)
+    if (name.length == 0) continue
+    const firstChar = getFirstChar(name)
+    const groupKey = getGroupKey(firstChar)
+
+    if (groupKey != curLetter) {
+      if (curLetter.length > 0 && curFriends.length > 0) {
+        const entry: GroupItem<T> = { letter: curLetter, friends: curFriends }
+        groups.push(entry)
+        appendToMap(groupedList, curLetter, curFriends)
+      }
+      curLetter = groupKey
+      curFriends = [item]
+    } else {
+      curFriends.push(item)
+    }
+  }
+
+  // 收尾最后一个分组
+  if (curLetter.length > 0 && curFriends.length > 0) {
+    const entry: GroupItem<T> = { letter: curLetter, friends: curFriends }
+    groups.push(entry)
+    appendToMap(groupedList, curLetter, curFriends)
+  }
+
+  // 排序：A-Z 字母组在前，# 排在最后
+  groups.sort((a: GroupItem<T>, b: GroupItem<T>): number => {
+    if (a.letter == '#') return 1
+    if (b.letter == '#') return -1
+    return a.letter < b.letter ? -1 : a.letter > b.letter ? 1 : 0
+  })
+
+  // 组内排序：英文字母在前，汉字在后；同类型按名称
+  for (let i = 0; i < groups.length; i++) {
+    const grp = groups[i]
+    grp.friends.sort((a: T, b: T): number => {
+      const nameA = getDisplayName(a)
+      const nameB = getDisplayName(b)
+      const isEnglishA = startsWithEnglishLetter(nameA)
+      const isEnglishB = startsWithEnglishLetter(nameB)
+      if (isEnglishA !== isEnglishB) {
+        return isEnglishA ? -1 : 1
+      }
+      return strCompare(nameA, nameB)
+    })
+  }
+}
+
+// 兼容旧版 groupedList: Map 形态（向后兼容旧调用方）
+function appendToMap<T>(groupedList: Map<string, T[]>, letter: string, friends: T[]): void {
+  const mapExisting: T[] | null = groupedList.get(letter)
+  if (mapExisting == null) {
+    groupedList.set(letter, friends)
+  } else {
+    for (let k = 0; k < friends.length; k++) {
+      mapExisting.push(friends[k])
+    }
+  }
+}

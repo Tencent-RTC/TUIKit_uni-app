@@ -1,0 +1,19 @@
+// SearchResultItem 组件导出
+import User from './User.uvue'
+import Group from './Group.uvue'
+import Message from './Message.uvue'
+import Conversation from './Conversation.uvue'
+
+export {
+  User,
+  Group,
+  Message,
+  Conversation
+}
+
+export default {
+  User,
+  Group,
+  Message,
+  Conversation
+}

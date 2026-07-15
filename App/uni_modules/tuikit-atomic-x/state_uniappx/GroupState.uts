@@ -1,0 +1,764 @@
+
+import { ref, type Ref } from "vue";
+import type { HybridListenerOptions } from "@/uni_modules/tuikit-atomic-x";
+import type { HybridCallOptions } from "./hybridCallOptions.uts";
+import { callAPI, addListener, removeListener } from "@/uni_modules/tuikit-atomic-x";
+import { GroupType, GroupJoinOption, GroupInviteOption } from "../types/group";
+
+/**
+ * 桥接响应（参照 atomicx HybridResponse data class）
+ */
+type HybridResponse = {
+  api: string | null;
+  code: number;
+  message: string | null;
+  data: any | null;
+};
+
+/**
+ * 桥接响应默认值（JSON.parse 失败兜底）
+ */
+const DEFAULT_HYBRID_RESPONSE: HybridResponse = {
+  api: null,
+  code: -1,
+  message: null,
+  data: null
+};
+
+/**
+ * 模块级单例缓存
+ */
+const InstanceMap: Map<string, GroupState> = new Map<string, GroupState>();
+
+/**
+ * Group 状态管理类
+ *
+ *   class 直接暴露全部公共方法，useGroupState 返回类型用 GroupState 类
+ */
+class GroupState {
+  /** Store 名称常量 */
+  private static readonly STORE_NAME = "Group";
+
+  /** 可绑定的数据字段（对齐 GroupDispatcher） */
+  private static readonly BINDABLE_DATA_NAMES: string[] = [
+    "joinedGroupList",
+    "applicationList",
+    "unreadApplicationCount",
+  ];
+
+  /** Store 实例ID */
+  readonly instanceId: string;
+
+  /**
+   * 已加入的群列表
+   */
+  readonly joinedGroupList: Ref<any[]>;
+  /** 入群申请列表 */
+  readonly applicationList: Ref<any[]>;
+  /** 入群申请未读数 */
+  readonly unreadApplicationCount: Ref<number>;
+
+  /** 群事件订阅者列表 */
+  private groupEventHandlers: Set<(event: any) => void> = new Set();
+
+  private constructor() {
+    this.instanceId = GroupState.generateInstanceId();
+    this.joinedGroupList = ref<any[]>([] as any[]);
+    this.applicationList = ref<any[]>([] as any[]);
+    this.unreadApplicationCount = ref<number>(0);
+
+    this.createStore();
+  }
+
+  private static generateInstanceId(): string {
+    return JSON.stringify({
+      storeName: "Group",
+    });
+  }
+
+  static getInstance(): GroupState {
+    const instanceId = GroupState.generateInstanceId();
+    if (!InstanceMap.has(instanceId)) {
+      InstanceMap.set(instanceId, new GroupState());
+    }
+    return InstanceMap.get(instanceId) as GroupState;
+  }
+
+  private createStore(): void {
+    const options: HybridCallOptions = {
+      api: "createStore",
+      params: {
+        createStoreParams: this.instanceId,
+      },
+    };
+
+    callAPI(JSON.stringify(options), (response: string) => {
+      try {
+        const result = JSON.parse<HybridResponse>(response) ?? DEFAULT_HYBRID_RESPONSE;
+        if (result.code == 0) {
+          this.bindEvent();
+        } else {
+          const msg = result.message ?? 'unknown'
+          console.error(`[${this.instanceId}][createStore] Failed: ${msg}`);
+        }
+      } catch (error: any) {
+        const errMsg = error instanceof Error ? (error as Error).message : `${error}`
+        console.error(`[${this.instanceId}][createStore] Parse error: ${errMsg}`);
+      }
+    });
+  }
+
+  private bindEvent(): void {
+    const storeName = GroupState.STORE_NAME;
+
+    const dataHandlers: Map<string, (result: any) => void> = new Map();
+    dataHandlers.set("joinedGroupList", (r: any) => {
+      const rObj: UTSJSONObject = r as UTSJSONObject
+      const list: any | null = rObj['joinedGroupList']
+      if (list != null) {
+        this.joinedGroupList.value = list as any[];
+      }
+    });
+    dataHandlers.set("applicationList", (r: any) => {
+      const rObj: UTSJSONObject = r as UTSJSONObject
+      const list: any | null = rObj['applicationList']
+      if (list != null) {
+        this.applicationList.value = list as any[];
+      }
+    });
+    dataHandlers.set("unreadApplicationCount", (r: any) => {
+      const rObj: UTSJSONObject = r as UTSJSONObject
+      const v: any | null = rObj['unreadApplicationCount']
+      if (typeof v == 'number') {
+        this.unreadApplicationCount.value = v as number
+      }
+    });
+
+    GroupState.BINDABLE_DATA_NAMES.forEach((dataName) => {
+      const listenerOptions: HybridListenerOptions = {
+        type: "",
+        store: storeName,
+        name: dataName,
+        params: {
+          createStoreParams: this.instanceId,
+        },
+      };
+      addListener(listenerOptions, (data: string) => {
+        try {
+          const result = JSON.parse<UTSJSONObject>(data);
+          if (result != null) {
+            const handler = dataHandlers.get(dataName);
+            if (handler != null) {
+              handler(result);
+            }
+          }
+        } catch (error: any) {
+          const errMsg = error instanceof Error ? (error as Error).message : `${error}`
+          console.error(`[${this.instanceId}][${dataName} listener] Error: ${errMsg}`);
+        }
+      });
+    });
+
+    // 订阅 groupEvent（流式事件）
+    const eventListenerOptions: HybridListenerOptions = {
+      type: "",
+      store: storeName,
+      name: "groupEvent",
+      params: {
+        createStoreParams: this.instanceId,
+      },
+    };
+    addListener(eventListenerOptions, (data: string) => {
+      try {
+        const result: UTSJSONObject = JSON.parse<UTSJSONObject>(data) ?? new UTSJSONObject()
+        this.groupEventHandlers.forEach((h) => {
+          try { h(result); } catch (e: any) {
+            const errMsg = e instanceof Error ? (e as Error).message : `${e}`
+            console.error(`[groupEvent handler] Error: ${errMsg}`)
+          }
+        });
+      } catch (error: any) {
+        const errMsg = error instanceof Error ? (error as Error).message : `${error}`
+        console.error(`[${this.instanceId}][groupEvent listener] Error: ${errMsg}`);
+      }
+    });
+  }
+
+  private unbindEvent(): void {
+    const storeName = GroupState.STORE_NAME;
+    const dataNames = [...GroupState.BINDABLE_DATA_NAMES, "groupEvent"];
+
+    dataNames.forEach((dataName) => {
+      const options: HybridListenerOptions = {
+        type: "",
+        store: storeName,
+        name: dataName,
+        params: { createStoreParams: this.instanceId },
+      };
+      removeListener(options);
+    });
+    this.groupEventHandlers.clear();
+  }
+
+  // ============================================================================
+  // Actions
+  // ============================================================================
+
+  /**
+   * 获取群信息（旧名 fetchGroupInfo）
+   *
+   * 注意：参数从 `groupIDList: string[]` 改为 `groupID: string` 单个；
+   * 如需获取多个群信息，请循环调用
+   */
+  
+  getGroupInfo = (groupID: string): Promise<any> => {
+    return new Promise((resolve, reject) => {
+      const options: HybridCallOptions = {
+        api: "getGroupInfo",
+        params: {
+          createStoreParams: this.instanceId,
+          groupID,
+        },
+      };
+
+      callAPI(JSON.stringify(options), (response: string) => {
+        try {
+          const result = JSON.parse<HybridResponse>(response) ?? DEFAULT_HYBRID_RESPONSE;
+          if (result.code == 0) {
+            const dataObj: UTSJSONObject = (result.data ?? {}) as UTSJSONObject
+            const inner: any | null = dataObj['data']
+            const innerObj: UTSJSONObject = ((inner != null ? inner : {}) as UTSJSONObject)
+            const info: any | null = innerObj['groupInfo']
+            if (info != null) {
+              resolve(info);
+            } else {
+              reject(new Error('groupInfo missing in response'));
+            }
+          } else {
+            const msg = result.message ?? 'Failed to get group info'
+            console.error(`[${this.instanceId}][getGroupInfo] Failed: ${msg}`);
+            reject(this.buildRejectError(msg, result.code));
+          }
+        } catch (error: any) {
+          reject(error);
+        }
+      });
+    });
+  };
+
+  /**
+   * 拉取已加入的群列表（旧名 fetchJoinedGroupList）
+   */
+  loadJoinedGroups = (): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      const options: HybridCallOptions = {
+        api: "loadJoinedGroups",
+        params: {
+          createStoreParams: this.instanceId,
+        },
+      };
+
+      callAPI(JSON.stringify(options), (response: string) => {
+        try {
+          const result = JSON.parse<HybridResponse>(response) ?? DEFAULT_HYBRID_RESPONSE;
+          if (result.code == 0) {
+            resolve();
+          } else {
+            const msg = result.message ?? 'Failed to load joined groups'
+            console.error(`[${this.instanceId}][loadJoinedGroups] Failed: ${msg}`);
+            reject(this.buildRejectError(msg, result.code));
+          }
+        } catch (error: any) {
+          reject(error);
+        }
+      });
+    });
+  };
+
+  /**
+   * 拉取入群申请列表（旧名 fetchGroupApplicationList）
+   */
+  loadApplications = (): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      const options: HybridCallOptions = {
+        api: "loadApplications",
+        params: {
+          createStoreParams: this.instanceId,
+        },
+      };
+
+      callAPI(JSON.stringify(options), (response: string) => {
+        try {
+          const result = JSON.parse<HybridResponse>(response) ?? DEFAULT_HYBRID_RESPONSE;
+          if (result.code == 0) {
+            resolve();
+          } else {
+            const msg = result.message ?? 'Failed to load applications'
+            console.error(`[${this.instanceId}][loadApplications] Failed: ${msg}`);
+            reject(this.buildRejectError(msg, result.code));
+          }
+        } catch (error: any) {
+          reject(error);
+        }
+      });
+    });
+  };
+
+  /**
+   * 拉取群属性（旧名 fetchGroupAttributes）
+   */
+  loadGroupAttributes = (groupID: string, keys: string[] | null): Promise<UTSJSONObject> => {
+    return new Promise((resolve, reject) => {
+      const options: HybridCallOptions = {
+        api: "loadGroupAttributes",
+        params: {
+          createStoreParams: this.instanceId,
+          groupID,
+          keys: keys ?? null,
+        },
+      };
+
+      callAPI(JSON.stringify(options), (response: string) => {
+        try {
+          const result = JSON.parse<HybridResponse>(response) ?? DEFAULT_HYBRID_RESPONSE;
+          if (result.code == 0) {
+            const parsed: UTSJSONObject = JSON.parse<UTSJSONObject>(JSON.stringify(result.data ?? {})) ?? new UTSJSONObject()
+            resolve(parsed)
+          } else {
+            const msg = result.message ?? 'Failed to load group attributes'
+            console.error(`[${this.instanceId}][loadGroupAttributes] Failed: ${msg}`);
+            reject(this.buildRejectError(msg, result.code));
+          }
+        } catch (error: any) {
+          reject(error);
+        }
+      });
+    });
+  };
+
+  /**
+   * 创建群组
+   *   内部 JSON.stringify 序列化原对象传给 SDK 桥接（不构造新 UTSJSONObject，不拷贝断链）。
+   */
+  createGroup = (params: any): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const options: HybridCallOptions = {
+        api: "createGroup",
+        params: {
+          createStoreParams: this.instanceId,
+          params: JSON.stringify(params),
+        },
+      };
+
+      callAPI(JSON.stringify(options), (response: string) => {
+        try {
+          const result = JSON.parse<HybridResponse>(response) ?? DEFAULT_HYBRID_RESPONSE;
+          if (result.code == 0) {
+            const dataObj: UTSJSONObject = (result.data ?? {}) as UTSJSONObject
+            const inner: any | null = dataObj['data']
+            const innerObj: UTSJSONObject = ((inner != null ? inner : {}) as UTSJSONObject)
+            const groupID: any | null = innerObj['groupID']
+            resolve(typeof groupID == 'string' ? (groupID as string) : '');
+          } else {
+            const msg = result.message ?? 'Failed to create group'
+            console.error(`[${this.instanceId}][createGroup] Failed: ${msg}`);
+            reject(this.buildRejectError(msg, result.code));
+          }
+        } catch (error: any) {
+          reject(error);
+        }
+      });
+    });
+  };
+
+  /**
+   * 加入群组
+   */
+  joinGroup = (groupID: string, message: string | null): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      const options: HybridCallOptions = {
+        api: "joinGroup",
+        params: {
+          createStoreParams: this.instanceId,
+          groupID,
+          message: message != null && message.length > 0 ? message : '',
+        },
+      };
+
+      callAPI(JSON.stringify(options), (response: string) => {
+        try {
+          const result = JSON.parse<HybridResponse>(response) ?? DEFAULT_HYBRID_RESPONSE;
+          if (result.code == 0) {
+            resolve();
+          } else {
+            const msg = result.message ?? 'Failed to join group'
+            console.error(`[${this.instanceId}][joinGroup] Failed: ${msg}`);
+            reject(this.buildRejectError(msg, result.code));
+          }
+        } catch (error: any) {
+          reject(error);
+        }
+      });
+    });
+  };
+
+  /**
+   * 退出群组
+   */
+  quitGroup = (groupID: string): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      const options: HybridCallOptions = {
+        api: "quitGroup",
+        params: {
+          createStoreParams: this.instanceId,
+          groupID,
+        },
+      };
+
+      callAPI(JSON.stringify(options), (response: string) => {
+        try {
+          const result = JSON.parse<HybridResponse>(response) ?? DEFAULT_HYBRID_RESPONSE;
+          if (result.code == 0) {
+            resolve();
+          } else {
+            const msg = result.message ?? 'Failed to quit group'
+            console.error(`[${this.instanceId}][quitGroup] Failed: ${msg}`);
+            reject(this.buildRejectError(msg, result.code));
+          }
+        } catch (error: any) {
+          reject(error);
+        }
+      });
+    });
+  };
+
+  /**
+   * 解散群组
+   */
+  dismissGroup = (groupID: string): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      const options: HybridCallOptions = {
+        api: "dismissGroup",
+        params: {
+          createStoreParams: this.instanceId,
+          groupID,
+        },
+      };
+
+      callAPI(JSON.stringify(options), (response: string) => {
+        try {
+          const result = JSON.parse<HybridResponse>(response) ?? DEFAULT_HYBRID_RESPONSE;
+          if (result.code == 0) {
+            resolve();
+          } else {
+            const msg = result.message ?? 'Failed to dismiss group'
+            console.error(`[${this.instanceId}][dismissGroup] Failed: ${msg}`);
+            reject(this.buildRejectError(msg, result.code));
+          }
+        } catch (error: any) {
+          reject(error);
+        }
+      });
+    });
+  };
+
+  /**
+   * 同意入群申请（旧名 acceptGroupApplication）
+   *   内部 JSON.stringify 序列化原对象传给 SDK 桥接。
+   */
+  acceptApplication = (application: any): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      const options: HybridCallOptions = {
+        api: "acceptApplication",
+        params: {
+          createStoreParams: this.instanceId,
+          info: JSON.stringify(application),
+        },
+      };
+
+      callAPI(JSON.stringify(options), (response: string) => {
+        try {
+          const result = JSON.parse<HybridResponse>(response) ?? DEFAULT_HYBRID_RESPONSE;
+          if (result.code == 0) {
+            resolve();
+          } else {
+            const msg = result.message ?? 'Failed to accept application'
+            console.error(`[${this.instanceId}][acceptApplication] Failed: ${msg}`);
+            reject(this.buildRejectError(msg, result.code));
+          }
+        } catch (error: any) {
+          reject(error);
+        }
+      });
+    });
+  };
+
+  /**
+   * 拒绝入群申请（旧名 refuseGroupApplication）
+   */
+  refuseApplication = (application: any): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      const options: HybridCallOptions = {
+        api: "refuseApplication",
+        params: {
+          createStoreParams: this.instanceId,
+          info: JSON.stringify(application),
+        },
+      };
+
+      callAPI(JSON.stringify(options), (response: string) => {
+        try {
+          const result = JSON.parse<HybridResponse>(response) ?? DEFAULT_HYBRID_RESPONSE;
+          if (result.code == 0) {
+            resolve();
+          } else {
+            const msg = result.message ?? 'Failed to refuse application'
+            console.error(`[${this.instanceId}][refuseApplication] Failed: ${msg}`);
+            reject(this.buildRejectError(msg, result.code));
+          }
+        } catch (error: any) {
+          reject(error);
+        }
+      });
+    });
+  };
+
+  /**
+   * 清空入群申请未读数（旧名 clearGroupApplicationUnreadCount）
+   */
+  clearApplicationUnreadCount = (): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      const options: HybridCallOptions = {
+        api: "clearApplicationUnreadCount",
+        params: {
+          createStoreParams: this.instanceId,
+        },
+      };
+
+      callAPI(JSON.stringify(options), (response: string) => {
+        try {
+          const result = JSON.parse<HybridResponse>(response) ?? DEFAULT_HYBRID_RESPONSE;
+          if (result.code == 0) {
+            resolve();
+          } else {
+            const msg = result.message ?? 'Failed to clear application unread count'
+            console.error(`[${this.instanceId}][clearApplicationUnreadCount] Failed: ${msg}`);
+            reject(this.buildRejectError(msg, result.code));
+          }
+        } catch (error: any) {
+          reject(error);
+        }
+      });
+    });
+  };
+
+  /**
+   * 转让群主（旧名 changeGroupOwner）
+   */
+  changeOwner = (groupID: string, newOwnerID: string): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      const options: HybridCallOptions = {
+        api: "changeOwner",
+        params: {
+          createStoreParams: this.instanceId,
+          groupID,
+          newOwnerID,
+        },
+      };
+
+      callAPI(JSON.stringify(options), (response: string) => {
+        try {
+          const result = JSON.parse<HybridResponse>(response) ?? DEFAULT_HYBRID_RESPONSE;
+          if (result.code == 0) {
+            resolve();
+          } else {
+            const msg = result.message ?? 'Failed to change owner'
+            console.error(`[${this.instanceId}][changeOwner] Failed: ${msg}`);
+            reject(this.buildRejectError(msg, result.code));
+          }
+        } catch (error: any) {
+          reject(error);
+        }
+      });
+    });
+  };
+
+  updateProfile = (groupInfo: UTSJSONObject): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      const options: HybridCallOptions = {
+        api: "updateProfile",
+        params: {
+          createStoreParams: this.instanceId,
+          groupInfo: JSON.stringify(groupInfo),
+        },
+      };
+
+      callAPI(JSON.stringify(options), (response: string) => {
+        try {
+          const result = JSON.parse<HybridResponse>(response) ?? DEFAULT_HYBRID_RESPONSE;
+          if (result.code == 0) {
+            resolve();
+          } else {
+            const msg = result.message ?? 'Failed to update profile'
+            console.error(`[${this.instanceId}][updateProfile] Failed: ${msg}`);
+            reject(this.buildRejectError(msg, result.code));
+          }
+        } catch (error: any) {
+          reject(error);
+        }
+      });
+    });
+  };
+
+  setJoinOption = (groupID: string, option: any): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      const options: HybridCallOptions = {
+        api: "setJoinOption",
+        params: {
+          createStoreParams: this.instanceId,
+          groupID,
+          option: option as number,
+        },
+      };
+
+      callAPI(JSON.stringify(options), (response: string) => {
+        try {
+          const result = JSON.parse<HybridResponse>(response) ?? DEFAULT_HYBRID_RESPONSE;
+          if (result.code == 0) {
+            resolve();
+          } else {
+            const msg = result.message ?? 'Failed to set join option'
+            console.error(`[${this.instanceId}][setJoinOption] Failed: ${msg}`);
+            reject(this.buildRejectError(msg, result.code));
+          }
+        } catch (error: any) {
+          reject(error);
+        }
+      });
+    });
+  };
+
+  /**
+   * 设置邀请入群方式（旧名 setGroupInviteOption）
+   *
+   */
+  setInviteOption = (groupID: string, option: any): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      const options: HybridCallOptions = {
+        api: "setInviteOption",
+        params: {
+          createStoreParams: this.instanceId,
+          groupID,
+          option: option as number,
+        },
+      };
+
+      callAPI(JSON.stringify(options), (response: string) => {
+        try {
+          const result = JSON.parse<HybridResponse>(response) ?? DEFAULT_HYBRID_RESPONSE;
+          if (result.code == 0) {
+            resolve();
+          } else {
+            const msg = result.message ?? 'Failed to set invite option'
+            console.error(`[${this.instanceId}][setInviteOption] Failed: ${msg}`);
+            reject(this.buildRejectError(msg, result.code));
+          }
+        } catch (error: any) {
+          reject(error);
+        }
+      });
+    });
+  };
+
+  /**
+   * 全员禁言（**新增**，从 GroupMemberStore 迁入）
+   */
+  muteAllMembers = (groupID: string, isMuted: boolean): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      const options: HybridCallOptions = {
+        api: "muteAllMembers",
+        params: {
+          createStoreParams: this.instanceId,
+          groupID,
+          isMuted,
+        },
+      };
+
+      callAPI(JSON.stringify(options), (response: string) => {
+        try {
+          const result = JSON.parse<HybridResponse>(response) ?? DEFAULT_HYBRID_RESPONSE;
+          if (result.code == 0) {
+            resolve();
+          } else {
+            const msg = result.message ?? 'Failed to mute all members'
+            console.error(`[${this.instanceId}][muteAllMembers] Failed: ${msg}`);
+            reject(this.buildRejectError(msg, result.code));
+          }
+        } catch (error: any) {
+          reject(error);
+        }
+      });
+    });
+  };
+
+  /**
+   * 订阅群事件流（被踢出群 / 收到入群申请等）
+   *
+   *   handler 收到的是 UTSJSONObject 原数据（不构造 typed GroupEvent 对象，不拷贝断链）。
+   *
+   * @returns 取消订阅函数
+   */
+  onGroupEvent = (handler: (event: any) => void): (() => void) => {
+    this.groupEventHandlers.add(handler);
+    return () => {
+      this.groupEventHandlers.delete(handler);
+    };
+  };
+
+  // ============================================================================
+  // 工具方法
+  // ============================================================================
+
+  private buildRejectError(message: string, _code: number): Error {
+    return new Error(message)
+  }
+
+  // ============================================================================
+  // 销毁
+  // ============================================================================
+
+  destroyStore = (): Promise<void> => {
+    // 幂等：实例已被销毁过，直接 resolve
+    if (!InstanceMap.has(this.instanceId)) {
+      return Promise.resolve();
+    }
+    InstanceMap.delete(this.instanceId);
+    this.unbindEvent();
+
+    return new Promise((resolve) => {
+      const options: HybridCallOptions = {
+        api: "destroyStore",
+        params: {
+          createStoreParams: this.instanceId,
+        },
+      };
+
+      callAPI(JSON.stringify(options), () => {});
+    });
+  };
+}
+
+// ============================================================================
+// Hook 导出
+// ============================================================================
+
+function useGroupState(): GroupState {
+  return GroupState.getInstance();
+}
+
+export {
+  GroupType,
+  GroupJoinOption,
+  GroupInviteOption,
+  useGroupState,
+};

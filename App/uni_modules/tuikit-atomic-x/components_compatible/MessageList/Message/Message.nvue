@@ -1,20 +1,20 @@
 <template>
   <view v-if="isCenterMessage" class="msg msg--center" @tap.stop="handleMessageContentTap">
-    <RecalledMessage v-if="message.status === MessageStatus.RECALLED" :message="message" @reEdit="handleReEdit" />
+    <RecalledMessage v-if="message.status === MessageStatus.REVOKED" :message="message" :conversationID="conversationID" />
     <GroupTipMessage v-else-if="isSystemMessage || isGroupCreateMessage" :message="message" />
     <component v-else-if="isCustomCenterMessage" :is="centerCustomComponent" :message="message" :conversationID="conversationID" />
   </view>
   <view v-else class="msg msg--no-select" :class="messageClasses" :data-message-id="message.msgID" @touchstart="handleTouchStart" @touchend="handleTouchEnd" @tap.stop="handleTap" @touchmove.stop.prevent="handleTouchMove">
-    <Avatar v-if="showAvatar" :src="message.sender.avatarURL" :name="displayName" :size="80" defaultAvatarType="user" class="msg__avatar" />
-    <view class="msg__main msg__main--no-select" :class="'msg__main--'+ (message.isSelf ? 'out' : 'in')">
+    <Avatar v-if="showAvatar" :src="message.from.avatarURL" :name="displayName" :size="80" defaultAvatarType="user" lazy class="msg__avatar" />
+    <view class="msg__main msg__main--no-select" :class="'msg__main--'+ (message.isSentBySelf ? 'out' : 'in')">
       <view v-if="showNickname" class="msg__nickname">
         <text class="msg__nickname-text msg__text--no-select">{{ displayName }}</text>
       </view>
 
-      <view class="msg__bubble msg__bubble--no-select" :class="'msg__bubble--'+ (message.isSelf ? 'out' : 'in')" @longpress="handleLongPress" @tap.stop="handleMessageContentTap" @touchstart.stop="handleBubbleTouchStart" @touchmove.stop="">
+      <view class="msg__bubble msg__bubble--no-select" :class="'msg__bubble--'+ (message.isSentBySelf ? 'out' : 'in')" @longpress="handleLongPress" @tap.stop="handleMessageContentTap" @touchstart.stop="handleBubbleTouchStart" @touchmove.stop="">
         <component ref="messageContentRef" :is="currentMessageComponent" :message="message" :conversationID="conversationID" :id="message.msgID" />
 
-        <view v-if="showStatus" :class="['msg__status', 'msg__status--'+ (message.isSelf ? 'out' : 'in')]">
+        <view v-if="showStatus" :class="['msg__status', 'msg__status--'+ (message.isSentBySelf ? 'out' : 'in')]">
           <image v-if="message.status === MessageStatus.SENDING" ref="loadingIconRef" src="/uni_modules/tuikit-atomic-x/static/icon/loading.png" class="msg__status-icon" mode="aspectFill" />
           <image v-else-if="message.status === MessageStatus.SEND_FAIL" src="/uni_modules/tuikit-atomic-x/static/icon/error.png" class="msg__status-icon" mode="aspectFill" @tap="handleResend" />
         </view>
@@ -99,12 +99,12 @@ export default {
   },
   computed: {
     isSystemMessage() {
-      return this.message.messageType === MessageType.SYSTEM
+      return this.message.messageType === MessageType.TIPS
     },
     isGroupCreateMessage() {
       if (this.message.messageType === MessageType.CUSTOM) {
         try {
-          var data = JSON.parse((this.message.messageBody.customMessage && this.message.messageBody.customMessage.data) || '{}')
+          var data = JSON.parse((this.message.messagePayload && this.message.messagePayload.customData) || '{}')
           if (data.businessID === 'group_create') return true
         } catch (e) {}
       }
@@ -117,24 +117,24 @@ export default {
       return isGroupCallMessage(this.message, this.conversationID)
     },
     isCenterMessage() {
-      return this.message.status === MessageStatus.RECALLED
+      return this.message.status === MessageStatus.REVOKED
         || this.isSystemMessage
         || this.isGroupCreateMessage
         || this.isCustomCenterMessage
     },
     messageClasses() {
       return [
-        'msg--' + (this.message.isSelf ? 'out' : 'in'),
+        'msg--' + (this.message.isSentBySelf ? 'out' : 'in'),
         'msg--type-' + this.message.messageType
       ]
     },
     showStatus() {
-      return this.message.isSelf &&
+      return this.message.isSentBySelf &&
         (this.message.status === MessageStatus.SENDING ||
           this.message.status === MessageStatus.SEND_FAIL)
     },
     showReadStatus() {
-      return this.message.isSelf &&
+      return this.message.isSentBySelf &&
         this.message.status === MessageStatus.SEND_SUCCESS &&
         this.message.needReadReceipt
     },
@@ -146,7 +146,7 @@ export default {
       return readCount + '人已读'
     },
     displayName() {
-      var sender = this.message.sender
+      var sender = this.message.from
       return sender.nameCard || sender.friendRemark || sender.nickname || sender.userID
     },
     // 调用业务方传入的 customMessageRender 解析 CUSTOM 消息对应的渲染组件
@@ -172,7 +172,7 @@ export default {
       map[MessageType.TEXT] = TextMessage
       map[MessageType.IMAGE] = ImageMessage
       map[MessageType.VIDEO] = VideoMessage
-      map[MessageType.SOUND] = AudioMessage
+      map[MessageType.AUDIO] = AudioMessage
       map[MessageType.FILE] = FileMessage
       map[MessageType.FACE] = FaceMessage
       map[MessageType.CUSTOM] = CustomMessage
@@ -270,7 +270,6 @@ export default {
       if (this.loadingStartTimer !== null) { clearTimeout(this.loadingStartTimer); this.loadingStartTimer = null }
       this.loadingAnimationTimer = null
     },
-    handleReEdit(data) { this.$emit('reEdit', data) },
     handleTouchStart(e) {
       this.touchStartTime = Date.now()
       this.isLongPressing = false
@@ -309,7 +308,7 @@ export default {
           messageX: messagePosition.left,
           messageWidth: messagePosition.width,
           messageHeight: messagePosition.height / systemInfo.windowWidth * 750,
-          isSelf: self.message.isSelf,
+          isSentBySelf: self.message.isSentBySelf,
         }
       }).catch(function(error) {
         console.warn('获取位置失败:', error)

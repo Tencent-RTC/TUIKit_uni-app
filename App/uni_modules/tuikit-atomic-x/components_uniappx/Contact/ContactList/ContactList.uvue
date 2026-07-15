@@ -1,0 +1,552 @@
+<template>
+  <view class="contact-list" style="flex: 1; height: 100%;">
+
+    <scroll-view
+      ref="scrollViewRef"
+      class="contact-list__scroll"
+      scroll-y="true"
+      :show-scrollbar="false"
+      style="flex: 1; height: 100%;"
+      @scroll="handleScroll"
+    >
+      <view
+        v-for="(entry, index) in visibleEntryList"
+        :key="entry.type"
+      >
+        <view
+          class="contact-list__entry"
+          :class="{ 'contact-list__entry--last': index == visibleEntryList.length - 1 }"
+          @click="handleEntryClick(entry.type)"
+        >
+          <image class="contact-list__entry-icon" :src="entry.icon" mode="aspectFit" />
+          <view class="contact-list__entry-content">
+            <text class="contact-list__entry-text">{{ entry.label }}</text>
+            <view class="contact-list__entry-right">
+                <view v-if="showBadge(entry.badge)" class="contact-list__entry-badge">
+                    <text class="contact-list__entry-badge-text">{{ formatBadge(entry.badge) }}</text>
+                </view>
+              <image class="contact-list__entry-arrow" src="../../../static/icon/arrow-right.png" mode="aspectFit" />
+            </view>
+          </view>
+        </view>
+      </view>
+
+      <view v-if="isLoading" key="loading">
+        <view class="contact-list__placeholder">
+          <component :is="resolvedPlaceholderLoading" />
+        </view>
+      </view>
+
+      <view v-else-if="showEmpty" key="empty">
+        <view class="contact-list__placeholder">
+          <component :is="resolvedPlaceholderEmptyList" text="暂无好友" />
+        </view>
+      </view>
+
+      <template v-else>
+        <template v-for="(group, groupIndex) in groupedFriendList" :key="group.letter">
+          <view>
+            <view
+              class="contact-list__index"
+              :ref="(el: UniElement | null) => setLetterCellRef(group.letter, el)"
+            >
+              <text class="contact-list__index-text">{{ group.letter }}</text>
+              <text class="contact-list__index-text">（{{group.friends.length}}）</text>
+            </view>
+          </view>
+
+          <view
+            v-for="(friend, friendIndex) in group.friends"
+            :key="getFriendKey(friend, friendIndex)"
+          >
+            <view
+              class="contact-list__friend"
+              :class="{ 'contact-list__friend--selected': selectedContactID == getFriendField(friend, 'userID') }"
+              @click="handleContactClick(friend)"
+            >
+              <component
+                :is="resolvedAvatar"
+                :src="getFriendField(friend, 'avatarURL')"
+                :name="resolveFriendName(friend)"
+                :size="80"
+                shape="square"
+                defaultAvatarType="user"
+                :pureMode="true"
+              />
+              <view class="contact-list__friend-info">
+                <text class="contact-list__friend-name" :numberOfLines="1">{{ resolveFriendName(friend) }}</text>
+              </view>
+            </view>
+          </view>
+        </template>
+      </template>
+
+      <view v-if="friendList.length > 0" key="footer">
+        <view class="contact-list__footer">
+          <text class="contact-list__footer-text">{{ friendList.length }}个好友及联系人</text>
+        </view>
+      </view>
+    </scroll-view>
+
+    <view
+      v-if="indexLetters.length > 0"
+      class="contact-list__sidebar-wrapper"
+      :style="{ top: sidebarTopPx + 'px' }"
+      @click.stop
+    >
+      <view class="contact-list__sidebar">
+        <text
+          v-for="letter in indexLetters"
+          :key="letter"
+          class="contact-list__sidebar-letter"
+          :class="{ 'contact-list__sidebar-letter--active': activeLetter == letter }"
+          @click.stop="handleLetterClick(letter)"
+        >{{ letter }}</text>
+      </view>
+    </view>
+  </view>
+</template>
+
+<script setup lang="uts">
+
+import { ref, computed, onBeforeUnmount, onMounted, watch } from 'vue'
+import AvatarComponent from '../../Avatar/Avatar.uvue'
+import DefaultEmptyList from '../placeholders/EmptyList.uvue'
+import DefaultLoading from '../placeholders/Loading.uvue'
+import { useContactState } from '../../../state/ContactState'
+import { useGroupState } from '../../../state/GroupState'
+import { sortByFirstChar } from '../../../utils/sortByFirstChar'
+import type { ContactInfo, EntryType, EntryItem as ContactEntryItem } from '../../../types/contact'
+
+import iconNewContacts from '../../../static/icon/new-contacts.png'
+import iconGroupNotifications from '../../../static/icon/group-notifications.png'
+import iconGroups from '../../../static/icon/groups.png'
+import iconBlacklist from '../../../static/icon/blacklist.png'
+
+type Props = {
+  Avatar?: any
+  PlaceholderEmptyList?: any
+  PlaceholderLoading?: any
+  showNewContact?: boolean
+  showGroupNotification?: boolean
+  showMyGroups?: boolean
+  showBlacklist?: boolean
+}
+
+type Emits = {
+  contactSelect: any
+  entryClick: EntryType
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  showNewContact: true,
+  showGroupNotification: true,
+  showMyGroups: true,
+  showBlacklist: true
+})
+
+const resolvedAvatar = computed<any>((): any => props.Avatar ?? AvatarComponent)
+const resolvedPlaceholderLoading = computed<any>((): any => props.PlaceholderLoading ?? DefaultLoading)
+const resolvedPlaceholderEmptyList = computed<any>((): any => props.PlaceholderEmptyList ?? DefaultEmptyList)
+
+const emit = defineEmits<Emits>()
+
+const {
+  friendList,
+  friendApplicationUnreadCount,
+  destroyStore
+} = useContactState()
+
+const {
+  unreadApplicationCount,
+  loadApplications,
+} = useGroupState()
+
+const systemInfo = uni.getSystemInfoSync()
+const screenWidthPx: number = typeof systemInfo.screenWidth == 'number' ? systemInfo.screenWidth : 375
+
+const scrollViewRef = ref<UniScrollViewElement | null>(null)
+const currentScrollTop = ref<number>(0)
+const isLoading = ref<boolean>(false)
+const selectedContactID = ref<string>('')
+const activeLetter = ref<string>('')
+const letterCellRefs: Map<string, UniElement | null> = new Map<string, UniElement | null>()
+
+const entryList = computed<ContactEntryItem[]>(() => {
+  const entry1: ContactEntryItem = {
+    type: 'newContact',
+    label: '新的联系人',
+    icon: iconNewContacts,
+    visible: props.showNewContact == true,
+    badge: friendApplicationUnreadCount.value
+  }
+  const entry2: ContactEntryItem = {
+    type: 'groupNotification',
+    label: '群聊通知',
+    icon: iconGroupNotifications,
+    visible: props.showGroupNotification == true,
+    badge: unreadApplicationCount.value
+  }
+  const entry3: ContactEntryItem = {
+    type: 'myGroups',
+    label: '我的群聊',
+    icon: iconGroups,
+    visible: props.showMyGroups == true
+  }
+  const entry4: ContactEntryItem = {
+    type: 'blacklist',
+    label: '黑名单',
+    icon: iconBlacklist,
+    visible: props.showBlacklist == true
+  }
+  return [entry1, entry2, entry3, entry4]
+})
+
+const visibleEntryList = computed<ContactEntryItem[]>(() => entryList.value.filter((item: ContactEntryItem) => item.visible))
+
+const ENTRY_ITEM_HEIGHT_RPX = 96
+
+const sidebarTopPx = computed<number>((): number => {
+  const entryCount: number = visibleEntryList.value.length
+  const entryHeightPx: number = (ENTRY_ITEM_HEIGHT_RPX / 750) * screenWidthPx
+  return entryCount * entryHeightPx
+})
+
+const resolveFriendName = (friend: any): string => {
+  const obj = friend as UTSJSONObject
+  const remark = obj['friendRemark']
+  const nick = obj['nickname']
+  const uid = obj['userID']
+  if (typeof remark == 'string' && remark.length > 0) return remark
+  if (typeof nick == 'string' && nick.length > 0) return nick
+  if (typeof uid == 'string' && uid.length > 0) return uid
+  return '未知'
+}
+
+const getFriendField = (friend: any, key: string): string => {
+  try {
+    const obj = friend as UTSJSONObject
+    const v: any | null = obj[key]
+    if (typeof v == 'string') return v as string
+    if (typeof v == 'number') return `${v as number}`
+  } catch (e: any) {
+    return ''
+  }
+  return ''
+}
+
+const getFriendKey = (friend: any, index: number): string => {
+  try {
+    const obj = friend as UTSJSONObject
+    const v: any | null = obj['userID']
+    if (typeof v == 'string' && (v as string).length > 0) return v as string
+    if (typeof v == 'number') return `${v as number}`
+  } catch (e: any) {
+    return `friend-${index}`
+  }
+  return `friend-${index}`
+}
+
+const showBadge = (badge: number | null): boolean => {
+  return badge != null && badge > 0
+}
+
+const formatBadge = (b: number | null): string => {
+  if (b == null) return ''
+  return b > 99 ? '99+' : `${b}`
+}
+
+const showEmpty = computed<boolean>((): boolean => friendList.value.length == 0)
+
+type GroupedFriends = {
+  letter: string
+  friends: any[]
+}
+
+const groupedFriendList = computed<GroupedFriends[]>(() => {
+  let safeList: any[] = []
+  try {
+    const ml: any = Array.from(friendList.value ?? ([] as any[])) as any[]
+    const parsed: any[] | null = JSON.parse<any[]>(JSON.stringify(ml))
+    if (parsed != null) {
+      safeList = parsed
+    }
+  } catch (e: any) {
+    console.error('[ContactList] safeList serialize failed:', `${e}`)
+  }
+  const { groups: rawGroups } = sortByFirstChar(
+    safeList,
+    (item: any): string => {
+      try {
+        const obj: UTSJSONObject = item as UTSJSONObject
+        const remark = obj['friendRemark']
+        const nick = obj['nickname']
+        const uid = obj['userID']
+        return (typeof remark == 'string' && remark.length > 0)
+          ? (remark as string)
+          : (typeof nick == 'string' && nick.length > 0)
+            ? (nick as string)
+            : (typeof uid == 'string' && uid.length > 0)
+              ? (uid as string)
+              : '#'
+      } catch (e: any) {
+        console.error('[ContactList] getDisplayName throw:', `${e}`)
+        return '#'
+      }
+    }
+  )
+  return rawGroups.map((g: any): GroupedFriends => {
+    let letter: string = ''
+    let friends: any[] = []
+    try {
+      const obj: UTSJSONObject = JSON.parse<UTSJSONObject>(JSON.stringify(g) ?? '{}') ?? new UTSJSONObject()
+      const letterRaw: any | null = obj['letter']
+      const friendsRaw: any | null = obj['friends']
+      letter = typeof letterRaw === 'string' ? (letterRaw as string) : ''
+      friends = friendsRaw != null ? (friendsRaw as any[]) : []
+    } catch (e: any) {
+      console.error('[ContactList] rawGroups.map parse failed:', `${e}`)
+    }
+    return {
+      letter: letter,
+      friends: friends
+    }
+  })
+})
+
+const indexLetters = computed<string[]>(() => groupedFriendList.value.map((g: GroupedFriends) => g.letter))
+
+const setLetterCellRef = (letter: string, el: UniElement | null): void => {
+  if (el != null) {
+    letterCellRefs.set(letter, el)
+  }
+}
+
+const handleLetterClick = (letter: string): void => {
+  activeLetter.value = letter
+  const el = letterCellRefs.get(letter)
+  if (el == null) return
+  const sv = scrollViewRef.value
+  if (sv == null) return
+  const offsetTopVal: number = typeof el.offsetTop == 'number' ? el.offsetTop : 0
+  const dy: number = offsetTopVal - currentScrollTop.value
+  sv.scrollBy(0, dy)
+}
+
+const handleScroll = (e: UniScrollEvent): void => {
+  const scrollTopVal: number = typeof e.detail.scrollTop == 'number' ? e.detail.scrollTop : 0
+  currentScrollTop.value = scrollTopVal
+  // 容差：letter index view 大约 60rpx（约 30px），用 scrollTop + 20 近似
+  const threshold: number = scrollTopVal + 20
+  let lastActive: string = ''
+  for (const letter of indexLetters.value) {
+    const el = letterCellRefs.get(letter)
+    if (el == null) continue
+    const top: number = typeof el.offsetTop == 'number' ? el.offsetTop : 0
+    if (top <= threshold) {
+      lastActive = letter
+    } else {
+      break
+    }
+  }
+  if (lastActive.length > 0 && lastActive !== activeLetter.value) {
+    activeLetter.value = lastActive
+  }
+}
+
+const handleEntryClick = (type: EntryType): void => {
+  emit('entryClick', type)
+}
+
+const handleContactClick = (contact: any): void => {
+  const uid: string = getFriendField(contact, 'userID')
+  selectedContactID.value = uid
+  emit('contactSelect', contact)
+}
+
+watch((): string[] => indexLetters.value, (letters: string[] | null): void => {
+  if (letters != null && letters.length > 0 && activeLetter.value.length == 0) {
+    activeLetter.value = letters[0]
+  }
+}, { immediate: true })
+
+onMounted((): void => {
+  loadApplications().catch((e: any | null): void => {
+    console.error(`[ContactList] loadApplications failed: ${e}`)
+  })
+})
+
+onBeforeUnmount((): void => {
+  destroyStore()
+})
+</script>
+
+<style>
+.contact-list {
+  flex: 1;
+  background-color: #FFFFFF;
+}
+
+.contact-list__scroll {
+  flex: 1;
+}
+
+/* 入口项 */
+.contact-list__entry {
+  flex: 1;
+  flex-direction: row;
+  align-items: center;
+  padding: 0 32rpx;
+  background-color: #FFFFFF;
+}
+
+.contact-list__entry--last {
+  border-bottom-width: 0;
+}
+
+.contact-list__entry-icon {
+  width: 80rpx;
+  height: 80rpx;
+  border-radius: 10rpx;
+  margin-right: 24rpx;
+}
+
+.contact-list__entry-content {
+  flex: 1;
+  padding: 36rpx 0;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1rpx solid #DBDBDB;
+}
+
+.contact-list__entry-text {
+  flex: 1;
+  font-size: 36rpx;
+  line-height: 48rpx;
+  color: #111111;
+}
+
+.contact-list__entry-right {
+  flex-direction: row;
+  align-items: center;
+}
+
+.contact-list__entry-badge {
+  min-width: 36rpx;
+  height: 36rpx;
+  background-color: #FF584C;
+  border-radius: 18rpx;
+  justify-content: center;
+  align-items: center;
+  padding-left: 10rpx;
+  padding-right: 10rpx;
+  margin-right: 16rpx;
+}
+
+.contact-list__entry-badge-text {
+  font-size: 24rpx;
+  color: #FFFFFF;
+}
+
+.contact-list__entry-arrow {
+  width: 14rpx;
+  height: 24rpx;
+}
+
+/* 占位区域 */
+.contact-list__placeholder {
+  padding-top: 100rpx;
+  padding-bottom: 100rpx;
+  justify-content: center;
+  align-items: center;
+}
+
+/* 字母索引 */
+.contact-list__index {
+  flex-direction: row;
+  align-items: center;
+  padding: 12rpx 32rpx;
+  background-color: #F2F3F5;
+}
+
+.contact-list__index-text {
+  font-size: 28rpx;
+  color: #888888;
+  font-weight: 400;
+}
+
+/* 好友项 */
+.contact-list__friend {
+  flex-direction: row;
+  align-items: center;
+  padding: 0 32rpx;
+  background-color: #FFFFFF;
+}
+
+.contact-list__friend--selected {
+  background-color: #F0F2F7;
+}
+
+.contact-list__friend-info {
+  flex: 1;
+  margin-left: 24rpx;
+  padding: 36rpx 0;
+  border-bottom: 1rpx solid #DBDBDB;
+}
+
+.contact-list__friend-name {
+  flex: 1;
+  font-size: 36rpx;
+  line-height: 48rpx;
+  color: #111111;
+  lines: 1;
+  text-overflow: ellipsis;
+}
+
+.contact-list__sidebar-wrapper {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 80rpx;
+  justify-content: center;
+  align-items: center;
+}
+
+/* 右侧字母索引栏 */
+.contact-list__sidebar {
+  padding: 0 25rpx;
+  align-items: center;
+  justify-content: center;
+  background-color: transparent;
+}
+
+.contact-list__sidebar-letter {
+  margin-bottom: 4rpx;
+  font-size: 24rpx;
+  color: #888888;
+  font-weight: 600;
+  line-height: 28rpx;
+  text-align: center;
+}
+
+.contact-list__sidebar-letter--active {
+  color: #1C66E5;
+  font-weight: bold;
+}
+
+/* 底部好友统计 */
+.contact-list__footer {
+  padding: 24rpx 0;
+  background-color: #F2F3F5;
+  align-items: center;
+  justify-content: center;
+}
+
+.contact-list__footer-text {
+  font-size: 24rpx;
+  line-height: 34rpx;
+  color: #B2B2B2;
+}
+</style>

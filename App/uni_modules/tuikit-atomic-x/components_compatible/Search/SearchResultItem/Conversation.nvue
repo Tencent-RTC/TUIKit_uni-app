@@ -17,7 +17,7 @@ export default {
       var messages = this.messageResult.messageList
       if (!messages || messages.length === 0) return ''
       var first = messages[0]
-      if ((first.messageBody && first.messageBody.text)) return first.messageBody.text
+      if ((first.messagePayload && first.messagePayload.text)) return first.messagePayload.text
       return getMessageAbstract(first)
     },
     subtitleText() { var count = this.messageResult.messageCount; if (count === 1) return this.previewText; return count + '条相关聊天记录' },

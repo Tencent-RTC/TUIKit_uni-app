@@ -1,20 +1,20 @@
 <template>
   <view v-if="isCenterMessage" class="msg msg--center" @tap.stop="handleMessageContentTap">
-    <RecalledMessage v-if="message.status === MessageStatus.RECALLED" :message="message" @reEdit="handleReEdit" />
+    <RecalledMessage v-if="message.status === MessageStatus.REVOKED" :message="message" :conversationID="conversationID" />
     <GroupTipMessage v-else-if="isSystemMessage || isGroupCreateMessage" :message="message" />
     <component v-else-if="isCustomCenterMessage" :is="centerCustomComponent" :message="message" :conversationID="conversationID" />
   </view>
   <view v-else class="msg msg--no-select" :class="messageClasses" :data-message-id="message.msgID" @touchstart="handleTouchStart" @touchend="handleTouchEnd" @tap.stop="handleTap" @touchmove.stop.prevent="handleTouchMove">
-    <Avatar v-if="showAvatar" :src="message.sender.avatarURL" :name="displayName" :size="80" defaultAvatarType="user" class="msg__avatar" />
-    <view class="msg__main msg__main--no-select" :class="'msg__main--'+ (message.isSelf ? 'out' : 'in')">
+    <Avatar v-if="showAvatar" :src="message.from.avatarURL" :name="displayName" :size="80" defaultAvatarType="user" lazy class="msg__avatar" />
+    <view class="msg__main msg__main--no-select" :class="'msg__main--'+ (message.isSentBySelf ? 'out' : 'in')">
       <view v-if="showNickname" class="msg__nickname">
         <text class="msg__nickname-text msg__text--no-select">{{ displayName }}</text>
       </view>
 
-      <view class="msg__bubble msg__bubble--no-select" :class="'msg__bubble--'+ (message.isSelf ? 'out' : 'in')" @longpress="handleLongPress" @tap.stop="handleMessageContentTap" @touchstart.stop="handleBubbleTouchStart" @touchmove.stop="">
+      <view class="msg__bubble msg__bubble--no-select" :class="'msg__bubble--'+ (message.isSentBySelf ? 'out' : 'in')" @longpress="handleLongPress" @tap.stop="handleMessageContentTap" @touchstart.stop="handleBubbleTouchStart" @touchmove.stop="">
         <component ref="messageContentRef" :is="currentMessageComponent" :message="message" :conversationID="conversationID" :id="message.msgID" />
 
-        <view v-if="showStatus" :class="['msg__status', 'msg__status--'+ (message.isSelf ? 'out' : 'in')]">
+        <view v-if="showStatus" :class="['msg__status', 'msg__status--'+ (message.isSentBySelf ? 'out' : 'in')]">
           <image v-if="message.status === MessageStatus.SENDING" ref="loadingIconRef" src="../../../static/icon/loading.png" class="msg__status-icon" mode="aspectFill" />
           <image v-else-if="message.status === MessageStatus.SEND_FAIL" src="../../../static/icon/error.png" class="msg__status-icon" mode="aspectFill" @tap="handleResend" />
         </view>
@@ -85,7 +85,6 @@
 
   const emit = defineEmits<{
     onMessageListTap: []
-    reEdit: [data: any]
     onMessageTap: [message: MessageInfo]
   }>()
 
@@ -136,12 +135,12 @@
   })
 
   const isSystemMessage = computed(() => {
-    return props.message.messageType === MessageType.SYSTEM
+    return props.message.messageType === MessageType.TIPS
   });
 
   const isGroupCreateMessage = computed(() => {
     if (props.message.messageType === MessageType.CUSTOM) {
-      const data = JSON.parse(props.message.messageBody.customMessage?.data || '{}');
+      const data = JSON.parse(props.message.messagePayload.customData || '{}');
       if (data.businessID === 'group_create') {
         return true;
       }
@@ -158,7 +157,7 @@
 
   const isCenterMessage = computed(() => {
     if (
-      props.message.status === MessageStatus.RECALLED
+      props.message.status === MessageStatus.REVOKED
       || isSystemMessage.value
       || isGroupCreateMessage.value
       || isCustomCenterMessage.value
@@ -170,19 +169,19 @@
 
   const messageClasses = computed(() => {
     return [
-      `msg--${props.message.isSelf ? 'out' : 'in'}`,
+      `msg--${props.message.isSentBySelf ? 'out' : 'in'}`,
       `msg--type-${props.message.messageType}`
     ]
   })
 
   const showStatus = computed(() => {
-    return props.message.isSelf &&
+    return props.message.isSentBySelf &&
       (props.message.status === MessageStatus.SENDING ||
         props.message.status === MessageStatus.SEND_FAIL)
   })
 
   const showReadStatus = computed(() => {
-    return props.message.isSelf &&
+    return props.message.isSentBySelf &&
       props.message.status === MessageStatus.SEND_SUCCESS &&
       props.message.needReadReceipt
   })
@@ -200,7 +199,7 @@
   })
 
   const displayName = computed(() => {
-    const sender = props.message.sender
+    const sender = props.message.from
     return sender.nameCard || sender.friendRemark || sender.nickname || sender.userID
   })
 
@@ -230,7 +229,7 @@
       [MessageType.TEXT]: TextMessage,
       [MessageType.IMAGE]: ImageMessage,
       [MessageType.VIDEO]: VideoMessage,
-      [MessageType.SOUND]: AudioMessage,
+      [MessageType.AUDIO]: AudioMessage,
       [MessageType.FILE]: FileMessage,
       [MessageType.FACE]: FaceMessage,
       [MessageType.CUSTOM]: CustomMessage,
@@ -355,10 +354,6 @@
   })
 
 
-  const handleReEdit = (data: any) => {
-    emit('reEdit', data)
-  }
-
   const handleTouchStart = (e: any) => {
     touchStartTime.value = Date.now()
     isLongPressing.value = false
@@ -424,7 +419,7 @@
         messageX: messagePosition.left,
         messageWidth: messagePosition.width,
         messageHeight: messagePosition.height / systemInfo.windowWidth * 750,
-        isSelf: props.message.isSelf,
+        isSentBySelf: props.message.isSentBySelf,
       }
 
       longPressPosition.value = adjustedPosition

@@ -1,7 +1,7 @@
-import { computed, onMounted } from 'vue'
+import { computed } from 'vue'
 import { type UserPickerHookResult, type User } from './types'
 import { useGroupMemberState } from '../../../state/GroupMemberState'
-import { GroupMemberRole }  from '../../../types/group'
+import { GroupMemberRole } from '../../../types/group'
 
 declare const uni: any
 
@@ -18,14 +18,14 @@ export function useDemoteAdmin(routeParams?: any): UserPickerHookResult {
   
   // ======================== 数据源 ========================
   const { 
-    groupMemberList: allMembers, 
-    hasMoreGroupMembers, 
-    fetchGroupMemberList,
-    setGroupMemberRole,
-    fetchMoreGroupMemberList, 
+    memberList: allMembers, 
+    hasMoreMembers, 
+    loadMembers,
+    setMemberRole,
+    loadMoreMembers, 
   } = useGroupMemberState({ 
     groupID,
-    role: GroupMemberRole.Admin
+    role: GroupMemberRole.ADMIN
   });
   
   // ======================== 响应式状态 ========================
@@ -33,7 +33,7 @@ export function useDemoteAdmin(routeParams?: any): UserPickerHookResult {
   /** 用户列表：只显示管理员 */
   const userList = computed<User[]>(() => {
     return (allMembers.value || [])
-      .filter(member => member.role === GroupMemberRole.Admin)
+      .filter(member => member.role === GroupMemberRole.ADMIN)
       .map(member => ({
         userID: member.userID,
         nickname: member.nameCard || member.nickname || member.userID,
@@ -45,7 +45,7 @@ export function useDemoteAdmin(routeParams?: any): UserPickerHookResult {
   const lockedItems = computed<string[]>(() => [])
 
   /** 是否有更多数据 */
-  const hasMore = computed(() => hasMoreGroupMembers.value)
+  const hasMore = computed(() => hasMoreMembers.value)
 
   // ======================== 方法 ========================
 
@@ -58,11 +58,11 @@ export function useDemoteAdmin(routeParams?: any): UserPickerHookResult {
     
     try {
       for (const user of selectedUsers) {
-        await setGroupMemberRole(user.userID, GroupMemberRole.Member)
+        await setMemberRole(user.userID, GroupMemberRole.MEMBER)
       }
       uni.showToast({ title: '设置成功', icon: 'success' });
       setTimeout(() => {
-        fetchGroupMemberList();
+        loadMembers();
         uni.navigateBack()
       }, 300);
     } catch (error) {
@@ -73,9 +73,9 @@ export function useDemoteAdmin(routeParams?: any): UserPickerHookResult {
 
   /** 触底加载更多 */
   const onReachEnd = async (): Promise<void> => {
-    if (!hasMoreGroupMembers.value) return
+    if (!hasMoreMembers.value) return
     try {
-      await fetchMoreGroupMemberList()
+      await loadMoreMembers()
     } catch (error) {
       console.error('[useDemoteAdmin] onReachEnd failed:', error)
     }

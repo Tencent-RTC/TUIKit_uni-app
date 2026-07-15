@@ -74,17 +74,17 @@ const props = withDefaults(defineProps<GroupNotificationListProps>(), {
 const emit = defineEmits<GroupNotificationListEmits>()
 
 const {
-  groupApplicationUnreadCount,
-  clearGroupApplicationUnreadCount,
-  groupApplicationList,
-  acceptGroupApplication,
-  refuseGroupApplication
+  unreadApplicationCount,
+  clearApplicationUnreadCount,
+  applicationList,
+  acceptApplication,
+  refuseApplication
 } = useGroupState()
 
 const isLoading = ref(false)
 
 const pendingApplicationList = computed(() => {
-  return groupApplicationList.value.filter(item => item.handledStatus === 0)
+  return applicationList.value.filter(item => item.handledStatus === 0)
 })
 
 const handleItemClick = (item: GroupApplicationInfo) => {
@@ -93,7 +93,7 @@ const handleItemClick = (item: GroupApplicationInfo) => {
 
 const handleAccept = async (item: GroupApplicationInfo) => {
   try {
-    await acceptGroupApplication(item)
+    await acceptApplication(item)
     showToast({ message: '已同意', type: 'success' })
     emit('accept', item)
   } catch (error: any) {
@@ -103,7 +103,7 @@ const handleAccept = async (item: GroupApplicationInfo) => {
 
 const handleReject = async (item: GroupApplicationInfo) => {
   try {
-    await refuseGroupApplication(item)
+    await refuseApplication(item)
     showToast({ message: '已拒绝', type: 'success' })
     emit('reject', item)
   } catch (error: any) {
@@ -112,8 +112,8 @@ const handleReject = async (item: GroupApplicationInfo) => {
 }
 
 const handleClearUnreadCount = () => {
-  if(groupApplicationUnreadCount.value > 0) {
-    clearGroupApplicationUnreadCount()
+  if(unreadApplicationCount.value > 0) {
+    clearApplicationUnreadCount()
   }
 }
 

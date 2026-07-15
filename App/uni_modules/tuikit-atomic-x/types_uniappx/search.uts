@@ -1,0 +1,430 @@
+/**
+ * 搜索相关类型定义
+ * @module types/search
+ *
+ * 对齐底层 atomicxcore.api.search.SearchStore.kt
+ */
+import type { Component } from 'vue'
+import type { MessageInfo, MessageType } from './message'
+import type { UserProfile, Gender } from './userProfile'
+import type {
+  GroupType,
+  GroupJoinOption,
+  GroupInviteOption,
+  GroupMember,
+  GroupSearchInfo,
+} from './group'
+import type { ConversationInfo } from './conversation'
+
+// ==================== 枚举类型 ====================
+
+/**
+ * 关键词列表匹配模式（对齐 KeywordListMatchMode）
+ *
+ * 注：底层名 KeywordListMatchMode（不是 KeywordListMatchType）
+ */
+export enum KeywordListMatchMode {
+  OR = 0,
+  AND = 1,
+}
+
+/**
+ * 搜索类型（对齐 SearchType，**整数枚举**，4 值）
+ *
+ * 注意：
+ * - 底层无 USER 类型；
+ * - 旧版 class SearchType（位掩码 1<<0..4）已删除，改为普通整数枚举 0..3
+ */
+export enum SearchType {
+  FRIEND = 0,
+  GROUP = 1,
+  GROUP_MEMBER = 2,
+  MESSAGE = 3,
+}
+
+// ==================== 过滤器类型 ====================
+
+export type UserSearchFilter = {
+  gender?: Gender,
+  minBirthday?: number,
+  maxBirthday?: number,
+}
+
+export type GroupMemberSearchFilter = {
+  groupIDList?: string[],
+}
+
+export type MessageSearchFilter = {
+  conversationID?: string,
+  searchTimePosition?: number,
+  searchTimePeriod?: number,
+  senderUserIDList?: string[],
+  /** 消息类型列表（注：底层是 MessageType[]，前端可传枚举或数值） */
+  messageTypeList?: (MessageType | number)[],
+}
+
+export type SearchOption = {
+  keywordListMatchMode?: number
+  /** 搜索范围（多选）—— 数字数组，对应 SearchType 枚举 ordinal：
+   *   0=FRIEND / 1=GROUP / 2=GROUP_MEMBER / 3=MESSAGE（types/search.uts:47-52）
+   *   UTS enum 序列化为 {} 抛 NPE，必须数字字面量 */
+  searchScope?: number[]
+  /** 单页数量（默认 20） */
+  pageSize?: number
+  userFilter?: UserSearchFilter
+  groupMemberFilter?: GroupMemberSearchFilter
+  messageFilter?: MessageSearchFilter
+}
+
+// ==================== 搜索结果类型 ====================
+
+/**
+ * 好友搜索信息（对齐 FriendSearchInfo）
+ */
+export interface FriendSearchInfo {
+  userID: string
+  friendRemark?: string
+  friendAddTime?: number
+  /** 自定义信息（底层是 Map<String, ByteArray>，前端按 string 处理） */
+  friendCustomInfo?: Record<string, string>
+  userInfo?: UserProfile
+}
+
+export type MessageSearchResultItem = {
+  conversationID: string,
+  conversationShowName: string,
+  conversationAvatarURL?: string,
+  messageCount: number,
+  messageList: MessageInfo[],
+}
+
+/**
+ * 搜索状态（对齐 SearchState）
+ */
+export interface SearchStateData {
+  userList: UserProfile[]
+  userTotalCount: number
+  hasMoreUsers: boolean
+
+  friendList: FriendSearchInfo[]
+  friendTotalCount: number
+  hasMoreFriends: boolean
+
+  groupList: GroupSearchInfo[]
+  groupTotalCount: number
+  hasMoreGroups: boolean
+
+  /** 群成员搜索结果按 groupID 分组 */
+  groupMemberList: Record<string, GroupMember[]>
+  groupMemberTotalCount: number
+  hasMoreGroupMembers: boolean
+
+  messageResults: MessageSearchResultItem[]
+  messageResultTotalCount: number
+  hasMoreMessageResults: boolean
+}
+
+// ==================== 兼容重导出 ====================
+
+export type {
+  GroupType,
+  GroupJoinOption,
+  GroupInviteOption,
+  GroupMember,
+  GroupSearchInfo,
+}
+
+// ==================== 搜索 Tab 相关类型（UI 用）====================
+
+/**
+ * 搜索 Tab 值枚举
+ */
+export enum SearchTabValue {
+  All = 'all',
+  Message = 'message',
+  Friend = 'friend',
+  Group = 'group',
+}
+
+export type SearchTabItem = {
+  label: string
+  value: string
+}
+
+export type SearchTabProps = {
+  modelValue?: string,
+  tabs?: SearchTabItem[],
+}
+
+export type SearchTabEmits = {
+  'update:modelValue': [value: string],
+  change: [value: string],
+}
+
+// ==================== 搜索栏（UI）====================
+
+export type SearchBarProps = {
+  placeholder?: string,
+  modelValue?: string,
+  autoFocus?: boolean,
+  showCancel?: boolean,
+  cancelText?: string,
+  debounceTime?: number,
+  disabled?: boolean,
+}
+
+export type SearchBarEmits = {
+  'update:modelValue': [value: string],
+  input: [value: string],
+  search: [keyword: string],
+  cancel: [],
+  focus: [],
+  blur: [],
+  clear: [],
+}
+
+// ==================== 搜索结果（UI）====================
+
+/**
+ * 搜索结果类型（UI 显示分类）
+ *
+ * 注：保留 'user' 兼容旧 UI；实际 SearchType 不含 USER
+ */
+export type SearchResultType = 'user' | 'friend' | 'group' | 'groupMember' | 'message'
+
+/**
+ * SearchResultType 到 SearchType 的映射（仅 UI 内部用）
+ *
+ * user 是 UI 概念，没有底层对应；映射为 FRIEND（最接近）
+ *
+ *    改用 Map<SearchResultType, SearchType>（API 等价，可 .get(key) 取值）
+ *
+ *    0=FRIEND / 1=GROUP / 2=GROUP_MEMBER / 3=MESSAGE（types/search.uts:47-52）
+ */
+export const SearchResultTypeMap: Map<SearchResultType, number> = new Map<SearchResultType, number>([
+  ['user', 0],         // FRIEND
+  ['friend', 0],       // FRIEND
+  ['group', 1],        // GROUP
+  ['groupMember', 2],  // GROUP_MEMBER
+  ['message', 3],      // MESSAGE
+])
+
+// ==================== 组件 props 类型（对齐 ConversationList.uts：业务数据 model 改 any / any[]）====================
+
+/**
+ * SearchResults 组件 props
+ *
+ *   GroupMember[]/MessageInfo[]/ConversationInfo[]）统一改 any[]；
+ *   simple primitive / enum / Component / string[] / boolean 保留
+ */
+export type SearchResultsProps = {
+  keyword?: string,
+  conversationID?: string,
+  currentTab?: string,
+  searchType?: SearchType | SearchType[],
+  isLoading?: boolean,
+  showPresearch?: boolean,
+  userList?: any[],
+  friendList?: any[],
+  groupList?: any[],
+  groupMemberList?: any,
+  messageResults?: any[],
+  conversationList?: any[],
+  hasMoreUser?: boolean,
+  hasMoreFriend?: boolean,
+  hasMoreGroup?: boolean,
+  hasMoreGroupMember?: boolean,
+  hasMoreMessage?: boolean,
+  searchHistory?: string[],
+  showCloudSearch?: boolean,
+  SearchResultItem?: Component,
+  PlaceholderEmpty?: Component,
+  PlaceholderLoading?: Component,
+  PlaceholderPresearch?: Component,
+  Avatar?: Component,
+}
+
+export type SearchResultsEmits = {
+  resultItemClick: [
+    type: SearchResultType | 'conversation',
+    data: any | null,
+  ],
+  viewMore: [type: SearchResultType],
+  historyClick: [keyword: string],
+  clearHistory: [],
+  cloudSearchClick: [],
+}
+
+// ==================== SearchResultItem 各类（业务数据 model 改 any）====================
+
+/**
+ * User/Friend/GroupMember 共用：user 字段改 any
+ */
+export type SearchResultItemUserProps = {
+  type: 'user' | 'friend' | 'groupMember',
+  user: any,
+  keyword?: string,
+  Avatar?: Component,
+}
+
+export type SearchResultItemFriendProps = {
+  friend: any,
+  keyword?: string,
+  Avatar?: Component,
+}
+
+export type SearchResultItemGroupProps = {
+  group: any,
+  keyword?: string,
+  Avatar?: Component,
+}
+
+export type SearchResultItemGroupMemberProps = {
+  member: any,
+  groupID?: string,
+  keyword?: string,
+  Avatar?: Component,
+}
+
+export type SearchResultItemConversationProps = {
+  conversation: any,
+  keyword?: string,
+  Avatar?: Component,
+}
+
+export type SearchResultItemEmits = {
+  click: [
+    type: SearchResultType | 'conversation',
+    data: any | null,
+  ],
+}
+
+// ==================== 高级搜索（UI）====================
+
+export type MessageAdvancedProps = {
+  startDate?: string,
+  endDate?: string,
+}
+
+export type MessageAdvancedEmits = {
+  'update:startDate': [value: string],
+  'update:endDate': [value: string],
+  change: [startDate: string, endDate: string],
+}
+
+export type UserAdvancedProps = {
+  minBirthday?: number,
+  maxBirthday?: number,
+  gender?: Gender,
+}
+
+export type UserAdvancedEmits = {
+  'update:minBirthday': [value: number | null],
+  'update:maxBirthday': [value: number | null],
+  'update:gender': [value: Gender],
+  change: [minBirthday: number | null, maxBirthday: number | null, gender: Gender],
+  click: [],
+}
+
+export type SearchAdvancedProps = {
+  currentTab?: string,
+  conversationID?: string,
+  isCloudSearch?: boolean,
+}
+
+export type SearchAdvancedEmits = {
+  messageFilterChange: [filter: any],
+  userFilterChange: [filter: any],
+}
+
+// ==================== 日期范围选择器（UI）====================
+
+export type DateRangePickerProps = {
+  label?: string,
+  startDate?: string,
+  endDate?: string,
+  startPlaceholder?: string,
+  endPlaceholder?: string,
+  minYear?: number,
+  maxYear?: number,
+}
+
+export type DateRangePickerEmits = {
+  'update:startDate': [value: string],
+  'update:endDate': [value: string],
+  change: [startDate: string, endDate: string],
+}
+
+// ==================== 滑块（UI）====================
+
+export type SliderProps = {
+  label?: string,
+  min?: number,
+  max?: number,
+  minValue?: number,
+  maxValue?: number,
+  step?: number,
+  unit?: string,
+  formatValue?: (value: number) => string,
+}
+
+export type SliderEmits = {
+  'update:minValue': [value: number],
+  'update:maxValue': [value: number],
+  change: [minValue: number, maxValue: number],
+}
+
+// ==================== 主搜索组件（UI）====================
+
+export type SearchProps = {
+  conversationID?: string,
+  initialKeyword?: string,
+  initialOption?: any,
+  placeholder?: string,
+  isCloud?: boolean,
+  autoFocus?: boolean,
+  showAdvanced?: boolean,
+  showCancel?: boolean,
+  debounceTime?: number,
+  SearchBar?: Component,
+  SearchResults?: Component,
+  SearchAdvanced?: Component,
+  SearchTab?: Component,
+  PlaceholderPresearch?: Component,
+  PlaceholderLoading?: Component,
+  PlaceholderEmpty?: Component,
+  SearchResultItem?: Component,
+  Avatar?: Component,
+}
+
+export type SearchEmits = {
+  search: [keyword: string, option: any],
+  cancel: [],
+  tabChange: [tab: string],
+  resultItemClick: [
+    type: SearchResultType | 'conversation',
+    data: any,
+  ],
+}
+
+// ==================== 占位组件（UI）====================
+
+export type PresearchPlaceholderProps = {
+  searchHistory?: string[],
+  keyword?: string,
+  showCloudSearch?: boolean,
+}
+
+export type PresearchPlaceholderEmits = {
+  historyClick: [keyword: string],
+  clearHistory: [],
+  cloudSearchClick: [],
+}
+
+export type EmptyPlaceholderProps = {
+  keyword?: string,
+}
+
+export type LoadingPlaceholderProps = {
+  text?: string,
+}

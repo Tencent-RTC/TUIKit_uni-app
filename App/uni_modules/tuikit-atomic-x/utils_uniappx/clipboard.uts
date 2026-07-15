@@ -1,0 +1,52 @@
+/**
+ * 剪贴板工具（UTS 跨端）
+ *
+ *   改用 uni-app 跨端 API uni.setClipboardData / uni.getClipboardData（Promise 风格）
+ */
+
+/**
+ * 设置粘贴板数据
+ * @param text 要设置的字符串（空字符串视为清空）
+ * @returns Promise<void>
+ */
+function setClipboardText(text: string): Promise<void> {
+  const safeText: string = text ?? ''
+  return new Promise<void>((resolve, reject) => {
+    uni.setClipboardData({
+      data: safeText,
+      success: (): void => {
+        resolve()
+      },
+      fail: (err: any): void => {
+        console.error(`[clipboard] setClipboardData failed: ${err}`)
+        reject(err)
+      }
+    })
+  })
+}
+
+/**
+ * 读取粘贴板数据
+ * @returns Promise<string> 读取到的字符串（空字符串表示无数据）
+ */
+function getClipboardText(): Promise<string> {
+  return new Promise<string>((resolve, reject) => {
+    uni.getClipboardData({
+      success: (res: any): void => {
+        const resObj: UTSJSONObject = res as UTSJSONObject
+        const data: any | null = resObj['data']
+        const text: string = typeof data == 'string' ? data as string : ''
+        resolve(text)
+      },
+      fail: (err: any): void => {
+        console.error(`[clipboard] getClipboardData failed: ${err}`)
+        reject(err)
+      }
+    })
+  })
+}
+
+export {
+  setClipboardText,
+  getClipboardText
+};

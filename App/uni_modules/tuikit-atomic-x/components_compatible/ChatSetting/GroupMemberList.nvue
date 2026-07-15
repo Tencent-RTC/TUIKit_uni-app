@@ -47,11 +47,11 @@ export default {
     return { groupID: groupID, memberState: memberState, isLoading: false }
   },
   computed: {
-    allMembers() { return this.memberState.groupMemberList.value || [] },
-    owner() { return this.allMembers.find(function(m) { return m.role === GroupMemberRole.Owner }) || null },
-    admins() { return this.allMembers.filter(function(m) { return m.role === GroupMemberRole.Admin }) },
-    members() { return this.allMembers.filter(function(m) { return m.role === GroupMemberRole.Member }) },
-    hasMore() { return this.memberState.hasMoreGroupMembers.value },
+    allMembers() { return this.memberState.memberList.value || [] },
+    owner() { return this.allMembers.find(function(m) { return m.role === GroupMemberRole.OWNER }) || null },
+    admins() { return this.allMembers.filter(function(m) { return m.role === GroupMemberRole.ADMIN }) },
+    members() { return this.allMembers.filter(function(m) { return m.role === GroupMemberRole.MEMBER }) },
+    hasMore() { return this.memberState.hasMoreMembers.value },
   },
   methods: {
     getMemberName(member) { return member.nameCard || member.nickname || member.userID || '' },
@@ -61,7 +61,7 @@ export default {
       if (this.isLoading || !this.hasMore) return
       this.isLoading = true
       var self = this
-      this.memberState.fetchMoreGroupMemberList().finally(function() { self.isLoading = false })
+      this.memberState.loadMoreMembers().finally(function() { self.isLoading = false })
     },
   },
 }

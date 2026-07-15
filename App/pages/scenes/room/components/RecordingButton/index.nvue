@@ -1,0 +1,77 @@
+<template>
+  <view v-if="visible">
+    <view class="bottom-btn" @tap="handleTap">
+      <view class="bottom-icon-box">
+        <image class="bottom-icon" :src="iconSrc" mode="aspectFit" />
+        <text class="bottom-text">{{ isRecording ? '录制中' : '录制' }}</text>
+      </view>
+    </view>
+  </view>
+</template>
+
+<script setup lang="ts">
+  import { computed } from 'vue';
+  import {
+    useRoomState,
+    useRoomParticipantState,
+    RoomParticipantRole,
+    RecordingStatus,
+  } from '@/uni_modules/tuikit-atomic-x/state';
+
+  const emit = defineEmits(['request-start', 'request-stop']);
+
+  const roomState = useRoomState();
+  const { localParticipant } = useRoomParticipantState();
+
+  const role = computed(() => localParticipant.value?.role);
+  const visible = computed(
+    () => role.value === RoomParticipantRole.Owner || role.value === RoomParticipantRole.Admin
+  );
+  const isRecording = computed(
+    () => roomState.currentRoom.value?.recordingInfo?.status === RecordingStatus.Recording
+  );
+  const iconSrc = computed(() =>
+    isRecording.value
+      ? '/static/images/room/room_recording_on.png'
+      : '/static/images/room/room_recording.png'
+  );
+
+  function handleTap() {
+    if (isRecording.value) {
+      emit('request-stop');
+    } else {
+      emit('request-start');
+    }
+  }
+</script>
+
+<style>
+  .bottom-btn {
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .bottom-icon-box {
+    width: 104rpx;
+    height: 104rpx;
+    border-radius: 20rpx;
+    background-color: #2A2D38;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .bottom-icon {
+    width: 48rpx;
+    height: 48rpx;
+  }
+
+  .bottom-text {
+    color: #FFFFFF;
+    font-size: 20rpx;
+    margin-top: 6rpx;
+    lines: 1;
+    text-overflow: ellipsis;
+  }
+</style>

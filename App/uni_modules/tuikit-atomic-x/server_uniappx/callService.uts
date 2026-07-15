@@ -1,0 +1,42 @@
+
+/**
+ * 标记当前是否正在 navigateTo 期间
+ * stub: 始终 false（无防抖），SDK 接入后由真实 router 状态机控制
+ */
+let _isNavigating: boolean = false
+
+/**
+ * 标记上一次呼叫是否还在结束处理中
+ * stub: 始终 false，SDK 接入后由通话结束回调控制
+ */
+let _isCallEnding: boolean = false
+
+/**
+ * 判断当前是否正在 navigateTo 跳转中
+ * 用途：防止 navigateTo 期间重复触发导致 stack 异常
+ */
+export const isNavigating = (): boolean => {
+  return _isNavigating
+}
+
+/**
+ * 判断上一次呼叫是否还在结束处理中
+ * 用途：防止上一次 call end 异步清理未完成时再次发起新呼叫
+ */
+export const isCallEnding = (): boolean => {
+  return _isCallEnding
+}
+
+/**
+ * 获取当前页面全路径
+ * 用途：发起呼叫前通过 callContextStore.setCallLastPage 存到模块级单例，
+ *   通话结束后回跳用
+ */
+export const getCurrentPageFullPath = (): string => {
+  const pages: UniPage[] = getCurrentPages()
+  if (pages.length == 0) return ''
+  const current: UniPage = pages[pages.length - 1]
+  const route: string = current.route
+  if (route.length == 0) return ''
+  return '/' + route
+}

@@ -1,0 +1,65 @@
+<template>
+  <view class="group-tip-message">
+    <text class="tip-text">{{ tipText }}</text>
+  </view>
+</template>
+
+<script setup lang="uts">
+import { computed } from 'vue'
+import { resolveGroupTipMessage } from './resolveGroupTipMessage'
+import { MessageType } from '../../../../types/message'
+import { safeJsonParse } from '../../../../utils/utsUtils'
+
+type Props = {
+  message: any | null}
+
+const props = defineProps<Props>()
+
+const tipText = computed((): string => {
+  const messageObj: UTSJSONObject = props.message as UTSJSONObject
+  const mt: any | null = messageObj['messageType']
+  if (mt == MessageType.CUSTOM) {
+    const body: any | null = messageObj['messagePayload']
+    let customDataStr: string = ''
+    if (body != null) {
+      const bodyObj: UTSJSONObject = body as UTSJSONObject
+      const cd: any | null = bodyObj['customData']
+      customDataStr = typeof cd == 'string' ? (cd as string) : ''
+    }
+    const dataResult = safeJsonParse<UTSJSONObject>(customDataStr, new UTSJSONObject())
+    const data: UTSJSONObject = dataResult as UTSJSONObject
+    const opUser: any | null = data['opUser']
+    const businessID: any | null = data['businessID']
+    const content: any | null = data['content']
+    if (businessID == 'group_create') {
+      const from: any | null = messageObj['from']
+      let nickname: string = ''
+      if (from != null) {
+        const fObj: UTSJSONObject = from as UTSJSONObject
+        const n: any | null = fObj['nickname']
+        nickname = typeof n == 'string' ? (n as string) : ''
+      }
+      return `${nickname} ${typeof content == 'string' ? (content as string) : '创建了群组'}`;
+    }
+    return '群组创建成功';
+  }
+  return resolveGroupTipMessage(props.message as any)
+})
+</script>
+
+<style>
+.group-tip-message {
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  padding: 16rpx 0;
+}
+
+.tip-text {
+  max-width: 650rpx;
+  font-size: 24rpx;
+  line-height: 34rpx;
+  font-weight: 400;
+  color: rgba(0, 0, 0, 0.4);
+}
+</style>

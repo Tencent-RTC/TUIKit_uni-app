@@ -29,7 +29,8 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import type { MessageInfo } from '../../../../types/message'
-import { MessageMediaFileType } from '../../../../types/message'
+import { MediaQuality } from '../../../../types/message'
+import { useMessageActionState } from '../../../../state/MessageActionState'
 import { useMessageListState } from '../../../../state/MessageListState'
 
 interface Props {
@@ -47,12 +48,9 @@ const LONG_PRESS_THRESHOLD = 350
 const touchStartTime = ref(0)
 
 // 获取消息列表状态，用于下载资源
-const { downloadMessageResource } = useMessageListState({
-  conversationID: props.conversationID
-})
-
+// downloadMedia 已迁到 MessageActionState.downloadMedia
 const imageUrl = computed(() => {
-  const body = props.message.messageBody
+  const body = props.message.messagePayload
   let url = body?.originalImagePath || body?.largeImagePath || body?.thumbImagePath || ''
   // Add file:// prefix for local paths on iOS (paths starting with /)
   if (url && url.startsWith('/') && !url.startsWith('file://')) {
@@ -70,8 +68,8 @@ watch(
   }
 )
 
-const imageWidth = computed(() => props.message.messageBody?.originalImageWidth || 0)
-const imageHeight = computed(() => props.message.messageBody?.originalImageHeight || 0)
+const imageWidth = computed(() => props.message.messagePayload?.originalImageWidth || 0)
+const imageHeight = computed(() => props.message.messagePayload?.originalImageHeight || 0)
 
 const MAX_WIDTH = 400
 const MAX_HEIGHT = 600
@@ -152,8 +150,9 @@ const handleImageTap = () => {
   }
 
   if (loadingState.value === 'loaded') {
+    const { originalImageURL, originalImagePath } = props.message.messagePayload
     uni.previewImage({
-			urls: [imageUrl.value],
+			urls: [originalImageURL || originalImagePath],
 		});
   }
 }
@@ -164,9 +163,9 @@ const checkAndDownloadResource = async () => {
   if (props.message?.msgID && !imageUrl.value) {
     loadingState.value = 'loading'
     try {
-      await downloadMessageResource(props.message, MessageMediaFileType.ORIGINAL_IMAGE)
+      await useMessageActionState({ message: props.message }).downloadMedia(MediaQuality.ORIGINAL)
     } catch (error) {
-      console.error('[ImageMessage] downloadMessageResource failed:', error)
+      console.error('[ImageMessage] downloadMedia failed:', error)
       loadingState.value = 'error'
     }
   }

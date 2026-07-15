@@ -23,6 +23,9 @@ import type { IRoomState } from './interface/room';
 import {
   CallRejectReason,
   CreateRoomOptions,
+  RecordingInfo,
+  RecordingStatus,
+  RecordingStopReason,
   RoomCall,
   RoomCallResult,
   RoomEvent,
@@ -31,6 +34,7 @@ import {
   RoomType,
   RoomUser,
   ScheduleRoomOptions,
+  StartRecordingOptions,
   UpdateRoomOptions,
 } from '../types/room';
 import { roomLifecycle } from './internal/roomLifecycle';
@@ -46,6 +50,10 @@ const ApiKeys = {
   END_ROOM: 'roomStore.endRoom',
   UPDATE_ROOM_INFO: 'roomStore.updateRoomInfo',
   GET_ROOM_INFO: 'roomStore.getRoomInfo',
+
+  // 云端录制
+  START_RECORDING: 'roomStore.startRecording',
+  STOP_RECORDING: 'roomStore.stopRecording',
 
   // 预约房间
   GET_SCHEDULED_ROOM_LIST: 'roomStore.getScheduledRoomList',
@@ -80,6 +88,8 @@ const EventKeys = {
   ON_CALL_REJECTED: 'roomListener.onCallRejected',
   ON_CALL_HANDLED_BY_OTHER_DEVICE: 'roomListener.onCallHandledByOtherDevice',
   ON_CALL_REVOKED_BY_ADMIN: 'roomListener.onCallRevokedByAdmin',
+  ON_RECORDING_STARTED: 'roomListener.onRecordingStarted',
+  ON_RECORDING_STOPPED: 'roomListener.onRecordingStopped',
 } as const;
 
 function safeParse<T = any>(text: string): T | null {
@@ -236,6 +246,27 @@ class RoomStateImpl implements IRoomState {
         });
         break;
       }
+      case EventKeys.ON_RECORDING_STARTED: {
+        const roomInfo = payload.roomInfo as RoomInfo;
+        const operator = payload.operator as RoomUser;
+        const cur = this.currentRoom.value;
+        if (cur && cur.roomID === roomInfo.roomID) {
+          this.currentRoom.value = { ...cur, recordingInfo: roomInfo.recordingInfo };
+        }
+        this.emit(RoomEvent.onRecordingStarted, { roomInfo, operator });
+        break;
+      }
+      case EventKeys.ON_RECORDING_STOPPED: {
+        const roomInfo = payload.roomInfo as RoomInfo;
+        const operator = payload.operator as RoomUser;
+        const reason = payload.reason as RecordingStopReason;
+        const cur = this.currentRoom.value;
+        if (cur && cur.roomID === roomInfo.roomID) {
+          this.currentRoom.value = { ...cur, recordingInfo: roomInfo.recordingInfo };
+        }
+        this.emit(RoomEvent.onRecordingStopped, { roomInfo, operator, reason });
+        break;
+      }
       default:
         break;
     }
@@ -386,6 +417,14 @@ class RoomStateImpl implements IRoomState {
   getRoomInfo = async (options: { roomID: string }): Promise<RoomInfo> => {
     const data = await invokeApi<{ roomInfo: RoomInfo }>(ApiKeys.GET_ROOM_INFO, { roomID: options.roomID });
     return data!.roomInfo;
+  };
+
+  startRecording = async (options?: { options?: StartRecordingOptions }): Promise<void> => {
+    await invokeApi(ApiKeys.START_RECORDING, { options: options?.options ?? {} });
+  };
+
+  stopRecording = async (): Promise<void> => {
+    await invokeApi(ApiKeys.STOP_RECORDING, '');
   };
 
   /* ============== 呼叫 ============== */

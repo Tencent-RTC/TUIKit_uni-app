@@ -1,0 +1,506 @@
+<template>
+  <view class="user-picker">
+    <!-- 搜索框：enableSearch=false 时不渲染 -->
+    <view v-if="enableSearch" class="user-picker__search">
+      <view class="search__container">
+        <image class="search__icon" :src="searchIconSrc" mode="aspectFit" />
+        <input class="search__input" placeholder="搜索" v-model="searchKeyword" @input="handleSearch"></input>
+      </view>
+    </view>
+
+    <!-- 用户列表容器 -->
+    <view class="user-picker__content">
+      <scroll-view class="user-list" scroll-y="true" :scroll-into-view="scrollIntoView" @scroll="handleScroll">
+        <view v-if="!isSearching && pinnedTopItems != null && pinnedTopItems.length > 0" class="pinned-group">
+          <view
+            v-for="pinned in pinnedTopItems"
+            :key="getUserID(pinned)"
+            class="user-item user-item--pinned"
+            @tap="handlePinnedSelect(pinned)"
+          >
+            <view v-if="!singleSelect" class="user-item__checkbox">
+
+              <view class="checkbox" :class="{ 'checkbox--checked': isUserSelected(getUserID(pinned)) }">
+                <image v-if="isUserSelected(getUserID(pinned))" class="checkbox__icon" :src="checkedIconSrc" mode="aspectFit" />
+              </view>
+            </view>
+            <view class="user-item__avatar user-item__avatar--all">
+              <text class="user-item__avatar-text">@</text>
+            </view>
+            <view class="user-item__info">
+
+              <text class="user__name">{{ getUserName(pinned) }}</text>
+            </view>
+          </view>
+        </view>
+
+        <view v-for="group in filteredGroups" :key="group.letter" class="user-group" :id="`group-${group.letter}`">
+          <view class="group__header">
+            <text class="group__letter">{{ group.letter }}</text>
+          </view>
+
+          <view v-for="user in group.users" :key="getUserID(user)" class="user-item" @tap="handleUserSelect(user)">
+            <view v-if="!singleSelect" class="user-item__checkbox">
+
+              <view class="checkbox" :class="{
+                'checkbox--checked': isUserSelected(getUserID(user)),
+                'checkbox--disabled': isUserDisabled(getUserID(user))
+              }">
+                <image v-if="isUserSelected(getUserID(user))" class="checkbox__icon" :src="checkedIconSrc" mode="aspectFit" />
+              </view>
+            </view>
+
+            <view class="user-item__avatar">
+
+              <image class="avatar__image" :src="user.avatarURL ?? defaultAvatar" mode="aspectFill" />
+            </view>
+
+            <view class="user-item__info">
+              <text class="user__name">{{ getUserName(user) }}</text>
+            </view>
+          </view>
+        </view>
+
+        <!-- 空态 -->
+        <view v-if="showEmpty" class="empty">
+          <text class="empty__text">{{ emptyText }}</text>
+        </view>
+      </scroll-view>
+
+      <!-- 右侧字母索引 -->
+      <view class="alphabet-index">
+        <view v-for="letter in alphabetList" :key="letter" class="alphabet-item"
+          :class="{ 'alphabet-item--active': currentLetter == letter }" @tap="handleAlphabetTap(letter)">
+          <text class="alphabet__text">{{ letter }}</text>
+        </view>
+      </view>
+    </view>
+
+      <!-- 底部确定按钮 -->
+      <view v-if="!singleSelect" class="user-picker__footer">
+        <view class="selected-users">
+          <view v-for="user in selectedUsers.slice(0, 3)" :key="getUserID(user)" class="selected-user">
+            <image class="selected-user__avatar" :src="user.avatarURL ?? defaultAvatar" mode="aspectFill" />
+          </view>
+          <view v-if="selectedUsers.length > 3" class="selected-user selected-user--more">
+            <text class="more-text">+{{ selectedUsers.length - 3 }}</text>
+          </view>
+        </view>
+        <view class="confirm-button" :class="{ 'confirm-button--disabled': selectedUsers.length == 0 }"
+          @tap="handleConfirm">
+          <text class="confirm-button__text">确定({{ selectedUsers.length }})</text>
+        </view>
+      </view>
+    </view>
+</template>
+
+<script setup lang="uts">
+
+import { ref, computed, watch } from 'vue'
+import { sortByFirstChar } from '../utils/sortByFirstChar.uts'
+import searchIcon from '../../../static/icon/search.png'
+import checkedIcon from '../../../static/icon/checked.png'
+import { type User } from '../service/types'
+
+type UserGroup = {
+	letter: string
+	users: User[]
+}
+
+type Props = {
+	maxCount?: number
+	dataSource?: User[]
+	lockedItems?: string[]
+	title?: string
+	singleSelect?: boolean
+	pinnedTopItems?: User[]
+	remoteSearch?: boolean
+	enableSearch?: boolean
+}
+
+type Emits = {
+	back: void
+	confirm: any[]
+	searchChange: string
+}
+
+const props = withDefaults(defineProps<Props>(), {
+	maxCount: 500,
+	dataSource: (): User[] => [] as User[],
+	lockedItems: (): string[] => [],
+	title: '选择用户',
+	singleSelect: false,
+	pinnedTopItems: (): User[] => [] as User[],
+	remoteSearch: false,
+	enableSearch: true
+})
+
+const emit = defineEmits<Emits>()
+
+const searchKeyword = ref<string>('')
+const selectedUserIDs = ref<string[]>([])
+const currentLetter = ref<string>('A')
+const scrollIntoView = ref<string>('')
+const defaultAvatar = ref<string>('https://web.sdk.qcloud.com/im/assets/all-in-one/user.png')
+const searchIconSrc = ref<string>(searchIcon)
+const checkedIconSrc = ref<string>(checkedIcon)
+
+watch((): string => searchKeyword.value, (kw: string): void => {
+	emit('searchChange', kw)
+})
+
+const groupedUsers = computed((): UserGroup[] => {
+	let safeDataSource: User[] = []
+	try {
+		safeDataSource = JSON.parse<User[]>(JSON.stringify(Array.from(props.dataSource ?? ([] as User[])))) ?? ([] as User[])
+	} catch (e: any) {
+		console.error('[UserPickerList] safeDataSource serialize failed:', `${e}`)
+	}
+	const { groups: rawGroups } = sortByFirstChar(
+		safeDataSource,
+		(user: User): string => {
+			const nn: any | null = user.nickname
+			const uid: any | null = user.userID
+			if (typeof nn == 'string' && (nn as string).length > 0) return nn as string
+			if (typeof uid == 'string' && (uid as string).length > 0) return uid as string
+			return ''
+		},
+		true
+	)
+
+	const groups: UserGroup[] = []
+	if (rawGroups != null) {
+		for (let i = 0; i < rawGroups.length; i++) {
+			const g = rawGroups[i]
+			groups.push({ letter: g.letter, users: g.friends as User[] })
+		}
+	}
+	return groups
+})
+
+const alphabetList = computed((): string[] => {
+	const letters: string[] = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', '#']
+	return letters.filter((letter: string): boolean => groupedUsers.value.some((group: UserGroup): boolean => group.letter == letter))
+})
+
+const filteredGroups = computed((): UserGroup[] => {
+	if (props.remoteSearch || searchKeyword.value.trim().length == 0) {
+		return groupedUsers.value
+	}
+
+	const keyword: string = searchKeyword.value.toLowerCase()
+	return groupedUsers.value
+		.map((group: UserGroup): UserGroup => ({
+			...group,
+			users: group.users.filter((user: User): boolean => {
+				const nickRaw: any | null = user.nickname
+				const uidRaw: any | null = user.userID
+				const nickname: string = typeof nickRaw == 'string' ? nickRaw as string : ''
+				const userID: string = typeof uidRaw == 'string' ? uidRaw as string : ''
+				const name: string = (nickname.length > 0 ? nickname : userID).toLowerCase()
+				return name.includes(keyword)
+			})
+		}))
+		.filter((group: UserGroup): boolean => group.users.length > 0)
+})
+
+const selectedUsers = computed((): User[] => {
+	const result: User[] = []
+	let safeDataSource: User[] = []
+	try {
+		safeDataSource = JSON.parse<User[]>(JSON.stringify(Array.from(props.dataSource ?? ([] as User[])))) ?? ([] as User[])
+	} catch (e: any) {
+		console.error('[UserPickerList] selectedUsers serialize failed:', `${e}`)
+	}
+	for (const userID of selectedUserIDs.value) {
+		const found: User | null = safeDataSource.find((user: User): boolean => {
+			const uid: any | null = user.userID
+			if (uid == null) return false
+			return typeof uid == 'string' && (uid as string) == userID
+		}) ?? null
+		if (found != null) {
+			result.push(found)
+		}
+	}
+	return result
+})
+
+/**
+ * 是否处于搜索状态
+ */
+const isSearching = computed<boolean>((): boolean => searchKeyword.value.trim().length > 0)
+
+const showEmpty = computed<boolean>((): boolean => {
+	const filtered: UserGroup[] = filteredGroups.value ?? ([] as UserGroup[])
+	if (filtered.length > 0) return false
+	if (isSearching.value) return true
+	return (props.pinnedTopItems ?? ([] as User[])).length == 0
+})
+
+const emptyText = computed<string>((): string => isSearching.value ? '没有匹配的成员' : '暂无成员')
+
+const isUserSelected = (userID: string): boolean => selectedUserIDs.value.includes(userID)
+const isUserDisabled = (userID: string): boolean => props.lockedItems.includes(userID)
+
+const getUserID = (user: User | null): string => {
+	if (user == null) return ''
+	const uid: any | null = user.userID
+	return typeof uid == 'string' ? uid as string : `${uid}`
+}
+
+const getUserName = (user: User | null): string => {
+	if (user == null) return ''
+	const nick: any | null = user.nickname
+	if (typeof nick == 'string' && (nick as string).length > 0) return nick as string
+	const uid: any | null = user.userID
+	return typeof uid == 'string' ? uid as string : `${uid}`
+}
+
+const handleUserSelect = (user: User): void => {
+	const userID: string = getUserID(user)
+	if (isUserDisabled(userID)) return
+
+	if (props.singleSelect) {
+		emit('confirm', [user])
+		return
+	}
+
+	const index = selectedUserIDs.value.indexOf(userID)
+	if (index > -1) {
+		const newArr: string[] = [...selectedUserIDs.value]
+		newArr.splice(index, 1)
+		selectedUserIDs.value = newArr
+	} else {
+		if (selectedUserIDs.value.length >= props.maxCount) {
+			uni.showToast({ title: `最多只能选择${props.maxCount}人`, icon: 'none' })
+			return
+		}
+		selectedUserIDs.value = [...selectedUserIDs.value, userID]
+	}
+}
+
+const handlePinnedSelect = (user: User): void => {
+	if (props.singleSelect) {
+		emit('confirm', [user])
+		return
+	}
+	const userID: string = getUserID(user)
+	const index = selectedUserIDs.value.indexOf(userID)
+	if (index > -1) {
+		const newArr: string[] = [...selectedUserIDs.value]
+		newArr.splice(index, 1)
+		selectedUserIDs.value = newArr
+	} else {
+		selectedUserIDs.value = [...selectedUserIDs.value, userID]
+	}
+}
+
+const handleSearch = (): void => {
+	// 搜索逻辑已在 computed/watch 中处理
+}
+
+const handleAlphabetTap = (letter: string): void => {
+	currentLetter.value = letter
+	scrollIntoView.value = `group-${letter}`
+}
+
+const handleScroll = (_e: any): void => {
+	// 暂不处理滚动事件
+}
+
+const handleConfirm = (): void => {
+	if (selectedUsers.value.length == 0) return
+	emit('confirm', selectedUsers.value)
+}
+</script>
+
+<style>
+.user-picker { flex: 1; background-color: #F0F2F7; }
+
+.user-picker__search { background-color: #ffffff; padding: 24rpx 32rpx; }
+
+.search__container {
+  height: 80rpx;
+  background-color: #F0F2F7;
+  flex-direction: row;
+  align-items: center;
+  padding: 0 24rpx;
+}
+
+.search__icon { width: 28rpx; height: 28rpx; margin-right: 16rpx; }
+
+.search__input {
+  flex: 1;
+  font-size: 28rpx;
+  color: #333333;
+  height: 72rpx;
+  line-height: 72rpx;
+}
+
+.user-picker__content { flex: 1; flex-direction: row; position: relative; }
+
+.user-list { flex: 1; background-color: #ffffff; }
+
+.pinned-group { background-color: #ffffff; }
+
+.user-group { margin-bottom: 24rpx; }
+
+.group__header {
+  height: 60rpx;
+  background-color: #f5f5f5;
+  justify-content: flex-start;
+  padding-left: 32rpx;
+}
+
+.group__letter {
+  font-family: PingFang SC;
+  line-height: 60rpx;
+  font-size: 28rpx;
+  color: #888888;
+  font-weight: 500;
+}
+
+.user-item {
+  height: 120rpx;
+  flex-direction: row;
+  align-items: center;
+  padding: 0 32rpx;
+  background-color: #ffffff;
+  border-bottom-width: 1rpx;
+  border-bottom-style: solid;
+  border-bottom-color: #f0f0f0;
+}
+
+.user-item--pinned { background-color: #ffffff; }
+
+.user-item__checkbox {
+  width: 48rpx;
+  height: 48rpx;
+  margin-right: 24rpx;
+  align-items: center;
+  justify-content: center;
+}
+
+.checkbox {
+  width: 48rpx;
+  height: 48rpx;
+  border-radius: 24rpx;
+  border-width: 4rpx;
+  border-style: solid;
+  border-color: #d9d9d9;
+  align-items: center;
+  justify-content: center;
+  background-color: #ffffff;
+}
+
+.checkbox--checked { background-color: #1C66E5; border-color: #1C66E5; }
+
+.checkbox--disabled { background-color: #f5f5f5; border-color: #d9d9d9; }
+
+.checkbox__icon { width: 24rpx; height: 24rpx; }
+
+.user-item__avatar { width: 80rpx; height: 80rpx; margin-right: 24rpx; }
+
+.user-item__avatar--all {
+  background-color: #006EFF;
+  border-radius: 8rpx;
+  align-items: center;
+  justify-content: center;
+}
+
+.user-item__avatar-text {
+  color: #FFFFFF;
+  font-size: 40rpx;
+  font-weight: 600;
+}
+
+.avatar__image {
+  width: 80rpx;
+  height: 80rpx;
+  background-color: #f5f5f5;
+  border-radius: 10rpx;
+}
+
+.user-item__info { flex: 1; }
+
+.user__name { font-size: 32rpx; color: #333333; }
+
+.alphabet-index {
+  width: 50rpx;
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  align-items: center;
+  justify-content: center;
+}
+
+.alphabet-item {
+  width: 50rpx;
+  height: 48rpx;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 4rpx;
+}
+
+.alphabet__text { font-size: 20rpx; color: #666666; font-weight: 500; }
+
+/* 空态 */
+.empty {
+  padding: 80rpx 32rpx;
+  align-items: center;
+  justify-content: center;
+}
+
+.empty__text {
+  font-size: 26rpx;
+  color: #8F959E;
+}
+
+.user-picker__footer {
+  height: 120rpx;
+  background-color: #ffffff;
+  flex-direction: row;
+  align-items: center;
+  padding: 0 32rpx;
+  border-top-width: 1rpx;
+  border-top-style: solid;
+  border-top-color: #e5e5e5;
+}
+
+.selected-users { flex: 1; flex-direction: row; align-items: center; }
+
+.selected-user { width: 80rpx; height: 80rpx; margin-right: 24rpx; }
+
+.selected-user__avatar {
+  width: 80rpx;
+  height: 80rpx;
+  background-color: #f5f5f5;
+  border-radius: 10rpx;
+}
+
+.selected-user--more {
+  background-color: #f0f0f0;
+  align-items: center;
+  justify-content: center;
+}
+
+.more-text { font-size: 28rpx; color: #666666; }
+
+.confirm-button {
+  width: 160rpx;
+  height: 72rpx;
+  background-color: #1C66E5;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4rpx;
+}
+
+.confirm-button--disabled { background-color: #CCE2FF; }
+
+.confirm-button__text {
+  font-size: 28rpx;
+  color: #ffffff;
+  font-weight: 500;
+}
+</style>

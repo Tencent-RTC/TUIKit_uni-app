@@ -3,39 +3,25 @@
     <scroll-view class="member-avatar-list__scroll" scroll-x="true" :show-scrollbar="false">
       <view class="member-avatar-list__content">
         <view 
-          v-for="(member, index) in displayMembers" 
-          :key="member.userID"
+          v-for="(item, index) in displayItems" 
+          :key="item.key"
           class="member-avatar-list__item"
           :class="{ 'member-avatar-list__item--no-margin-right': isLastInRow(index) }"
-          @tap="handleMemberClick(member)"
+          @tap="handleItemTap(item)"
         >
           <Avatar
-            :src="member.avatarURL"
-            :name="getMemberName(member)"
+            v-if="item.kind === 'member'"
+            :src="item.member.avatarURL"
+            :name="getMemberName(item.member)"
             :size="80"
             :shape="'square'"
             :defaultAvatarType="'user'"
             pureMode
           />
-          <text v-if="showName" class="member-avatar-list__name">{{ getMemberName(member) }}</text>
-        </view>
-        <view 
-          v-if="showAddButton"
-          class="member-avatar-list__item"
-          :class="{ 'member-avatar-list__item--no-margin-right': isAddButtonLastInRow }"
-          @tap="handleAdd"
-        >
-          <view class="member-avatar-list__btn"><text class="member-avatar-list__btn-icon">+</text></view>
-          <text v-if="showName" class="member-avatar-list__name">{{ ' ' }}</text>
-        </view>
-        <view 
-          v-if="showRemoveButton"
-          class="member-avatar-list__item"
-          :class="{ 'member-avatar-list__item--no-margin-right': isRemoveButtonLastInRow }"
-          @tap="handleRemove"
-        >
-          <view class="member-avatar-list__btn"><text class="member-avatar-list__btn-icon">−</text></view>
-          <text v-if="showName" class="member-avatar-list__name">{{ ' ' }}</text>
+          <view v-else class="member-avatar-list__btn">
+            <text class="member-avatar-list__btn-icon">{{ item.kind === 'add' ? '+' : '−' }}</text>
+          </view>
+          <text v-if="showName" class="member-avatar-list__name">{{ item.kind === 'member' ? getMemberName(item.member) : ' ' }}</text>
         </view>
       </view>
     </scroll-view>
@@ -55,15 +41,30 @@ export default {
   },
   computed: {
     displayMembers() { return this.members.slice(0, this.maxDisplay) },
-    isAddButtonLastInRow() { return (this.displayMembers.length + 1) % 6 === 0 },
-    isRemoveButtonLastInRow() { return (this.displayMembers.length + (this.showAddButton ? 1 : 0) + 1) % 6 === 0 },
+    /**
+     * 把 members + add/remove 按钮合并为单一列表统一 v-for 渲染。
+     * 避免 nvue (vue2) 中「v-for + 同级 v-if 兄弟节点」在异步数据更新后
+     * 的渲染时序错乱（v-if 静态节点会跑到 v-for 列表前）。
+     */
+    displayItems() {
+      var arr = []
+      var members = this.displayMembers
+      for (var i = 0; i < members.length; i++) {
+        arr.push({ kind: 'member', key: 'm_' + members[i].userID, member: members[i] })
+      }
+      if (this.showAddButton) arr.push({ kind: 'add', key: '__add__' })
+      if (this.showRemoveButton) arr.push({ kind: 'remove', key: '__remove__' })
+      return arr
+    },
   },
   methods: {
     isLastInRow(index) { return (index + 1) % 6 === 0 },
     getMemberName(member) { return member.nameCard || member.nickname || member.userID || '' },
-    handleMemberClick(member) { this.$emit('member-click', member) },
-    handleAdd() { this.$emit('add') },
-    handleRemove() { this.$emit('remove') },
+    handleItemTap(item) {
+      if (item.kind === 'member') this.$emit('member-click', item.member)
+      else if (item.kind === 'add') this.$emit('add')
+      else if (item.kind === 'remove') this.$emit('remove')
+    },
   },
 }
 </script>

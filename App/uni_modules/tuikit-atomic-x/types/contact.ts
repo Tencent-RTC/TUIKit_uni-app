@@ -1,94 +1,82 @@
 /**
  * 联系人相关类型定义
  * @module contact
+ *
+ * 对齐底层 atomicxcore.api.contact.ContactStore.kt
  */
+import type { GroupApplicationInfo } from './group'
 
-/** 联系人在线状态 */
+// ==================== 枚举 ====================
+
+/**
+ * 联系人在线状态（对齐 ContactOnlineStatus，整数枚举）
+ */
 export enum ContactOnlineStatus {
-  UNKNOWN = 'UNKNOWN',
-  ONLINE = 'ONLINE',
-  OFFLINE = 'OFFLINE'
+  UNKNOWN = 0,
+  ONLINE = 1,
+  OFFLINE = 2,
 }
 
-/** 消息接收选项 */
+/**
+ * 消息接收选项（对齐 ConversationListStore.ReceiveMessageOpt，整数枚举）
+ *
+ * 注：此枚举对应原生 ReceiveMessageOpt（5 值），
+ * 在 ConversationListStore.setReceiveMessageOpt 中使用
+ */
 export enum ReceiveMessageOpt {
-  /** 接收消息 */
-  RECEIVE = "RECEIVE",
-  /** 不接收消息 */
-  NOT_RECEIVE = "NOT_RECEIVE",
-  /** 不通知 */
-  NOT_NOTIFY = "NOT_NOTIFY",
-  /** 不通知（除了@消息） */
-  NOT_NOTIFY_EXCEPT_MENTION = "NOT_NOTIFY_EXCEPT_MENTION",
-  /** 不接收（除了@消息） */
-  NOT_RECEIVE_EXCEPT_MENTION = "NOT_RECEIVE_EXCEPT_MENTION"
+  /** 正常接收消息 (V2TIM_RECEIVE_MESSAGE) */
+  RECEIVE = 0,
+  /** 不接收消息 (V2TIM_NOT_RECEIVE_MESSAGE) */
+  NOT_RECEIVE = 1,
+  /** 接收消息但不提醒 (V2TIM_RECEIVE_NOT_NOTIFY_MESSAGE) */
+  NOT_NOTIFY = 2,
+  /** 接收消息但不提醒，除了@消息 (V2TIM_RECEIVE_NOT_NOTIFY_MESSAGE_EXCEPT_AT) */
+  NOT_NOTIFY_EXCEPT_MENTION = 3,
+  /** 不接收消息，除了@消息 (V2TIM_NOT_RECEIVE_MESSAGE_EXCEPT_AT) */
+  NOT_RECEIVE_EXCEPT_MENTION = 4,
 }
 
-/** 好友申请类型 */
+/**
+ * 好友申请类型（对齐 V2TIMFriendApplication 常量）
+ */
 export enum FriendApplicationType {
   /** 收到的申请 */
-  RECEIVED = 'RECEIVED',
+  RECEIVED = 1,
   /** 发出的申请 */
-  SENT = 'SENT',
-  /** 双向申请 */
-  BOTH = 'BOTH'
+  SENT = 2,
+  /** 双向 */
+  BOTH = 3,
 }
 
-/** 群申请类型 */
-export enum GroupApplicationType {
-  /** 需要管理员审批的入群申请 */
-  JOIN_APPROVED_BY_ADMIN = 'JOIN_APPROVED_BY_ADMIN',
-  /** 需要被邀请人同意的邀请 */
-  INVITE_APPROVED_BY_INVITEE = 'INVITE_APPROVED_BY_INVITEE',
-  /** 需要管理员审批的邀请 */
-  INVITE_APPROVED_BY_ADMIN = 'INVITE_APPROVED_BY_ADMIN'
-}
+// ==================== 接口 ====================
 
-/** 群申请处理状态 */
-export enum GroupApplicationHandledStatus {
-  /** 未处理 */
-  UNHANDLED = 'UNHANDLED',
-  /** 被其他人处理 */
-  BY_OTHER = 'BY_OTHER',
-  /** 被自己处理 */
-  BY_MYSELF = 'BY_MYSELF'
-}
-
-/** 群申请处理结果 */
-export enum GroupApplicationHandledResult {
-  /** 拒绝 */
-  REFUSED = 'REFUSED',
-  /** 同意 */
-  AGREED = 'AGREED'
-}
-
-/** 联系人信息 */
+/**
+ * 联系人信息（对齐 ContactInfo）
+ */
 export interface ContactInfo {
-  /** 用户ID */
   userID: string
-  /** 头像URL */
   avatarURL?: string
-  /** 昵称 */
   nickname?: string
-  /** 备注 */
-  remark?: string
-  /** 个性签名 */
-  signature?: string
-  /** 是否是好友 */
-  isFriend?: boolean
-  /** 是否在黑名单 */
-  isInBlacklist?: boolean
-  /** 消息接收选项 */
-  receiveMessageOpt?: ReceiveMessageOpt
+  /** 个性签名（旧名 signature，底层字段为 aboutMe） */
+  aboutMe?: string
   /** 在线状态 */
   onlineStatus?: ContactOnlineStatus
+  /** 是否在黑名单 */
+  isInBlacklist?: boolean
+  /** 是否是好友 */
+  isFriend?: boolean
+  /** 好友备注（统一使用 friendRemark；废弃 remark） */
+  friendRemark?: string
 }
 
-/** 好友申请信息 */
+/**
+ * 好友申请信息（对齐 FriendApplicationInfo）
+ *
+ * 注：底层无独立 applicationID 字段，identifier 使用 userID
+ */
 export interface FriendApplicationInfo {
-  /** 申请ID */
-  applicationID: string
-  /** 头像URL */
+  /** 申请人 userID（同时充当申请的唯一标识） */
+  userID: string
   avatarURL?: string
   /** 标题/名称 */
   title?: string
@@ -98,35 +86,27 @@ export interface FriendApplicationInfo {
   type: FriendApplicationType
   /** 添加附言 */
   addWording?: string
+  /** 原生侧 V2TIMFriendApplication 引用，前端不直接使用 */
+  rawApplication?: any
 }
 
-/** 群申请信息 */
-export interface GroupApplicationInfo {
-  /** 申请ID */
-  applicationID: string
-  /** 群ID */
-  groupID: string
-  /** 申请人ID */
-  fromUser?: string
-  /** 申请人昵称 */
-  fromUserNickname?: string
-  /** 申请人头像URL */
-  fromUserAvatarURL?: string
-  /** 目标用户ID */
-  toUser?: string
-  /** 添加时间 */
-  addTime?: number
-  /** 申请消息 */
-  requestMsg?: string
-  /** 处理消息 */
-  handledMsg?: string
-  /** 处理状态 */
-  handledStatus?: GroupApplicationHandledStatus
-  /** 处理结果 */
-  handledResult?: GroupApplicationHandledResult
-  /** 申请类型 */
-  type: GroupApplicationType
+// ==================== 兼容类型重导出 ====================
+
+/**
+ * 群申请类型 / 处理状态 / 处理结果
+ * 已迁移到 group.ts；此处通过 re-export 保持向后兼容引用
+ */
+export type {
+  GroupApplicationInfo
 }
+
+export {
+  GroupApplicationType,
+  GroupApplicationHandledStatus,
+  GroupApplicationHandledResult,
+} from './group'
+
+// ==================== UI 组件衍生类型 ====================
 
 /** 通讯录入口类型 */
 export type EntryType = 'newContact' | 'groupNotification' | 'myGroups' | 'blacklist'
@@ -157,7 +137,7 @@ export interface ContactListEmits {
   (e: 'entryClick', type: EntryType): void
 }
 
-/** 搜索到的用户信息 */
+/** 搜索到的用户信息（UI 用，搜索域真实类型见 search.ts） */
 export interface SearchUserInfo {
   userID: string
   nickname?: string
@@ -165,7 +145,7 @@ export interface SearchUserInfo {
   isFriend?: boolean
 }
 
-/** 搜索到的群信息 */
+/** 搜索到的群信息（UI 用，搜索域真实类型见 search.ts） */
 export interface SearchGroupInfo {
   groupID: string
   groupName?: string

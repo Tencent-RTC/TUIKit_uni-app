@@ -38,7 +38,8 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import type { MessageInfo } from '../../../../types/message'
-import { MessageMediaFileType } from '../../../../types/message'
+import { MediaQuality } from '../../../../types/message'
+import { useMessageActionState } from '../../../../state/MessageActionState'
 import { useMessageListState } from '../../../../state/MessageListState'
 import { stopGlobalAudioPlayer, RECORDING_PSEUDO_ID } from '../../../../hooks/useAudioPlayer'
 
@@ -61,12 +62,9 @@ const LONG_PRESS_THRESHOLD = 350
 const touchStartTime = ref(0)
 
 // 获取消息列表状态，用于下载资源
-const { downloadMessageResource } = useMessageListState({
-  conversationID: props.conversationID
-})
-
+// downloadMedia 已迁到 MessageActionState.downloadMedia
 const videoSnapshotUrl = computed(() => {
-  let url = props.message.messageBody?.videoSnapshotPath || ''
+  let url = props.message.messagePayload?.videoSnapshotPath || ''
     // Add file:// prefix for local paths on iOS (paths starting with /)
   if (url && url.startsWith('/') && !url.startsWith('file://')) {
     url = 'file://' + url
@@ -75,7 +73,7 @@ const videoSnapshotUrl = computed(() => {
 })
 
 const videoUrl = computed(() => {
-  let url = props.message.messageBody?.videoPath || '';
+  let url = props.message.messagePayload?.videoPath || '';
   if (url && url.startsWith('/') && !url.startsWith('file://')) {
     url = 'file://' + url;
   }
@@ -83,11 +81,11 @@ const videoUrl = computed(() => {
 })
 
 const videoSnapshotWidth = computed(() => {
-  return props.message.messageBody?.videoSnapshotWidth || 0
+  return props.message.messagePayload?.videoSnapshotWidth || 0
 })
 
 const videoSnapshotHeight = computed(() => {
-  return props.message.messageBody?.videoSnapshotHeight || 0
+  return props.message.messagePayload?.videoSnapshotHeight || 0
 })
 
 // 下载进度
@@ -196,9 +194,9 @@ const checkAndDownloadSnapshot = async () => {
   if (props.message?.msgID && !videoSnapshotUrl.value && !isDownloadingSnapshot.value) {
     isDownloadingSnapshot.value = true
     try {
-      await downloadMessageResource(props.message, MessageMediaFileType.VIDEO_SNAPSHOT)
+      await useMessageActionState({ message: props.message }).downloadMedia(MediaQuality.THUMBNAIL)
     } catch (error) {
-      console.error('[VideoMessage] downloadMessageResource snapshot failed:', error)
+      console.error('[VideoMessage] downloadMedia snapshot failed:', error)
       coverError.value = true
     } finally {
       isDownloadingSnapshot.value = false
@@ -218,9 +216,9 @@ const checkAndDownloadVideo = async () => {
   }
   isDownloadingVideo.value = true;
   try {
-    await downloadMessageResource(props.message, MessageMediaFileType.VIDEO);
+    await useMessageActionState({ message: props.message }).downloadMedia(MediaQuality.ORIGINAL);
   } catch (error) {
-    console.error('[VideoMessage] downloadMessageResource video failed:', error);
+    console.error('[VideoMessage] downloadMedia video failed:', error);
     uni.showToast({ title: '视频下载失败', icon: 'none' });
   } finally {
     isDownloadingVideo.value = false;

@@ -24,6 +24,8 @@ import { useCallState, CallErrorCode } from '../../state_compatible/CallState'
 import { useDeviceState } from '../../state_compatible/DeviceState'
 import { getCurrentPageFullPath, isNavigating, isCallEnding } from '../../server_compatible/callService'
 import { checkCallPermissionWithDialog } from '../../utils/callPermission'
+import { AlbumPickerMediaFilter } from '../AlbumPicker/AlbumPicker'
+import { openAlbumPicker } from './AlbumPickerMediaSendManager'
 // @ts-ignore
 import { reportScene } from '@/uni_modules/tuikit-atomic-x'
 
@@ -66,73 +68,19 @@ export default {
       var self = this;
       switch (tool.id) {
         case 'image':
-          uni.chooseImage({
-            count: 9,
-            sourceType: ['camera', 'album'],
-            success: function(res) {
-              res.tempFiles.forEach(function(file) {
-                uni.getImageInfo({
-                  src: file.path,
-                  success: function(info) {
-                    if (!self.messageInputState) return
-                    var messageBody = {
-                      originalImagePath: self.removeUnusedResourcePrefix(info.path),
-                      originalImageWidth: info.width,
-                      originalImageHeight: info.height,
-                    }
-                    self.messageInputState.sendImageMessage({
-                      imagePath: self.removeUnusedResourcePrefix(info.path),
-                      imageWidth: info.width,
-                      imageHeight: info.height,
-                      offlinePushInfo: buildOfflinePushInfo(self.setOfflinePushInfo, {
-                        messageType: MessageType.IMAGE,
-                        messageBody: messageBody,
-                        conversationID: self.conversationID,
-                      })
-               
-                    })
-                  },
-                  fail: function() { uni.showToast({ title: '获取图片信息失败', icon: 'none' }) }
-                })
-              })
-            },
-            fail: function(err) {
-              if (err.errMsg && err.errMsg.indexOf('mission') !== -1) {
-                uni.showToast({ title: '请检查相关访问权限', icon: 'none' });
-              }
-            }
+          openAlbumPicker(self.conversationID, {
+            mediaFilter: AlbumPickerMediaFilter.IMAGE_ONLY,
+            maxSelectionCount: 9,
+            itemsPerRow: 3,
+            showsCameraItem: true,
           });
           break;
         case 'video':
-          uni.chooseMedia({
-            count: 1,
-            mediaType: ['video'],
-            success: function(res) {
-              res.tempFiles.forEach(function(file) {
-                if (!self.messageInputState) return
-                var messageBody = {
-                  videoPath: self.removeUnusedResourcePrefix(file.tempFilePath),
-                  videoSnapshotPath: self.removeUnusedResourcePrefix(file.thumbTempFilePath),
-                  videoSnapshotWidth: file.width,
-                  videoSnapshotHeight: file.height,
-                  videoDuration: Math.round(file.duration),
-                  videoType: file.type,
-                }
-                self.messageInputState.sendVideoMessage({
-                  ...messageBody,
-                  offlinePushInfo: buildOfflinePushInfo(self.setOfflinePushInfo, {
-                    messageType: MessageType.VIDEO,
-                    messageBody: messageBody,
-                    conversationID: self.conversationID,
-                  })
-                })
-              })
-            },
-            fail: function(err) {
-              if (err.errMsg && err.errMsg.indexOf('mission') !== -1) {
-                uni.showToast({ title: '请检查相关访问权限', icon: 'none' });
-              }
-            }
+          openAlbumPicker(self.conversationID, {
+            mediaFilter: AlbumPickerMediaFilter.IMAGE_AND_VIDEO,
+            maxSelectionCount: 9,
+            itemsPerRow: 3,
+            showsCameraItem: true,
           });
           break;
         case 'file':
@@ -153,26 +101,25 @@ export default {
       chooseFile({
         success: function(res) {
           if (!self.messageInputState) return
-          var messageBody = {
+          var messagePayload = {
             filePath: res.filePath,
             fileName: res.fileName,
             fileSize: res.fileSize
           }
           var offlinePushInfo = buildOfflinePushInfo(self.setOfflinePushInfo, {
             messageType: MessageType.FILE,
-            messageBody: messageBody,
+            messagePayload: messagePayload,
             conversationID: self.conversationID,
           })
-          var messageObj = {
-            messageType: MessageType.FILE,
-            messageBody: messageBody,
-          }
-          if (offlinePushInfo) {
-            messageObj.offlinePushInfo = offlinePushInfo
-          }
-          var message = JSON.stringify(messageObj)
-          self.messageInputState.sendMessage(message).catch(function(err) {
-            console.error('[ToolsPanel] sendFileMessage failed:', err);
+          self.messageInputState.sendMessage({
+            type: 'file',
+            filePath: res.filePath,
+            fileName: res.fileName,
+            fileSize: res.fileSize,
+          }, {
+            offlinePushInfo: offlinePushInfo || undefined,
+          }).catch(function(err) {
+            console.error('[ToolsPanel] sendMessage(file) failed:', err);
             uni.showToast({ title: '文件发送失败', icon: 'none' });
           });
         },

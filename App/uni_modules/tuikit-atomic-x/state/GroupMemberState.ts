@@ -1,52 +1,57 @@
 /**
  * 群成员状态管理
  * @module GroupMemberState
+ *
+ * 对齐底层 atomicxcore.api.group.GroupMemberStore.kt（HybridAPI: GroupMemberAPI.kt）
+ *
+ * **本次升级关键调整：**
+ * - `fetchGroupMemberList` → `loadMembers`（参数 `role: GroupMemberRole` → `roleList: GroupMemberFilterRole[]`）
+ * - `fetchMoreGroupMemberList` → `loadMoreMembers`
+ * - `fetchGroupMembersInfo` → `getMemberInfo`（响应 `membersInfo` → `memberInfoList`）
+ * - `addGroupMember` → `addMember`
+ * - `deleteGroupMember` → `deleteMember`
+ * - `setGroupMemberMuteTime` → `muteMember`（参数 `time` → `muteTime`）
+ * - `setSelfGroupNameCard` → `setSelfNameCard`
+ * - `setGroupMemberRole` → `setMemberRole`
+ * - **删除** `setMuteAllMembers`：已迁到 GroupStore.muteAllMembers
+ * - listener 字段：
+ *   - `groupMemberList` → `memberList`
+ *   - `hasMoreGroupMembers` → `hasMoreMembers`
+ * - createStore 必传 `groupID`
  */
 import { ref, type Ref } from "vue";
 import type { HybridCallOptions } from "@/uni_modules/tuikit-atomic-x";
 import { safeJsonParse } from "../utils/utsUtils";
 import { callAPI, addListener, removeListener } from "@/uni_modules/tuikit-atomic-x";
-import { GroupMemberRole, ReceiveMessageOpt, GroupType, GroupJoinOption } from '../types/group';
+import {
+  GroupMemberRole,
+  GroupMemberFilterRole,
+} from "../types/group";
 import type { GroupMember } from "../types/group";
 import type { HybridResponseData } from "../types/hybridService";
+
 // ============================================================================
-// UniApp 侧类型定义（实际使用）
+// 类型定义
 // ============================================================================
 
-/**
- * 群成员状态接口
- * 定义 useGroupMemberState Hook 返回的类型
- */
 interface IGroupMemberState {
-  /** Store 实例ID */
   readonly instanceId: string;
-  /** 群组 ID */
-  readonly groupID: string;
+
   /** 群成员列表 */
-  readonly groupMemberList: Ref<GroupMember[]>;
+  readonly memberList: Ref<GroupMember[]>;
   /** 是否有更多群成员 */
-  readonly hasMoreGroupMembers: Ref<boolean>;
+  readonly hasMoreMembers: Ref<boolean>;
 
   // Actions
-  /** 获取群成员列表 */
-  fetchGroupMemberList: (role?: GroupMemberRole) => Promise<void>;
-  /** 加载更多群成员 */
-  fetchMoreGroupMemberList: () => Promise<void>;
-  /** 获取指定成员信息 */
-  fetchGroupMembersInfo: (userIDList: string[]) => Promise<GroupMember[]>;
-  /** 添加群成员 */
-  addGroupMember: (userIDList: string[]) => Promise<void>;
-  /** 删除群成员 */
-  deleteGroupMember: (userIDList: string[]) => Promise<void>;
-  /** 全员禁言 */
-  setMuteAllMembers: (isMuted: boolean) => Promise<void>;
-  /** 禁言成员 */
-  setGroupMemberMuteTime: (userID: string, time: number) => Promise<void>;
-  /** 设置我的群昵称 */
-  setSelfGroupNameCard: (nameCard?: string) => Promise<void>;
-  /** 设置成员角色 */
-  setGroupMemberRole: (userID: string, role: GroupMemberRole) => Promise<void>;
-  /** 销毁 Store */
+  loadMembers: (roleList?: GroupMemberFilterRole[]) => Promise<void>;
+  loadMoreMembers: () => Promise<void>;
+  getMemberInfo: (userIDList: string[]) => Promise<GroupMember[]>;
+  addMember: (userIDList: string[]) => Promise<void>;
+  deleteMember: (userIDList: string[]) => Promise<void>;
+  muteMember: (userID: string, muteTime: number) => Promise<void>;
+  setSelfNameCard: (nameCard?: string) => Promise<void>;
+  setMemberRole: (userID: string, role: GroupMemberRole) => Promise<void>;
+
   destroyStore: () => Promise<void>;
 }
 
@@ -72,57 +77,34 @@ const InstanceMap = getGlobalInstanceMap();
 
 /**
  * 群成员状态管理类
- * @implements {IGroupMemberState}
  */
 class GroupMemberState implements IGroupMemberState {
-  /** Store 名称 */
   private static readonly STORE_NAME = "GroupMember";
 
-  /** 可绑定的数据名称列表 */
+  /** 可绑定的数据字段（对齐 GroupMemberDispatcher） */
   private static readonly BINDABLE_DATA_NAMES = [
-    "groupMemberList",
-    "hasMoreGroupMembers",
+    "memberList",
+    "hasMoreMembers",
   ] as const;
 
-  /** Store 实例ID */
   public readonly instanceId: string;
+  private readonly groupID: string;
+  private readonly filterRole?: GroupMemberRole;
 
-  /** 群组 ID */
-  public readonly groupID: string;
+  public readonly memberList: Ref<GroupMember[]>;
+  public readonly hasMoreMembers: Ref<boolean>;
 
-  /** 筛选角色（用于区分不同实例） */
-  public readonly filterRole?: GroupMemberRole;
-
-  /** 群成员列表 */
-  public readonly groupMemberList: Ref<GroupMember[]>;
-
-  /** 是否有更多群成员 */
-  public readonly hasMoreGroupMembers: Ref<boolean>;
-
-  /**
-   * 私有构造函数，使用 getInstance 获取实例
-   * @param groupID 群组ID
-   * @param role 筛选角色（可选，用于区分不同实例）
-   */
   private constructor(groupID: string, role?: GroupMemberRole) {
-    console.log(`[GroupMemberState] Constructor called, groupID: ${groupID}, role: ${role}`);
     this.instanceId = GroupMemberState.generateInstanceId(groupID, role);
     this.groupID = groupID;
     this.filterRole = role;
 
-    // 初始化响应式状态
-    this.groupMemberList = ref<GroupMember[]>([]);
-    this.hasMoreGroupMembers = ref<boolean>(false);
+    this.memberList = ref<GroupMember[]>([]);
+    this.hasMoreMembers = ref<boolean>(false);
 
-    // 初始化 Store
     this.createStore();
   }
 
-  /**
-   * 生成完整的 Store ID
-   * @param groupID 群组ID
-   * @param role 筛选角色
-   */
   private static generateInstanceId(groupID: string, role?: GroupMemberRole): string {
     return JSON.stringify({
       storeName: "GroupMember",
@@ -131,11 +113,6 @@ class GroupMemberState implements IGroupMemberState {
     });
   }
 
-  /**
-   * 获取实例（单例模式）
-   * @param groupID 群组ID
-   * @param role 筛选角色
-   */
   public static getInstance(groupID: string, role?: GroupMemberRole): GroupMemberState {
     const instanceId = GroupMemberState.generateInstanceId(groupID, role);
     if (!InstanceMap.has(instanceId)) {
@@ -144,27 +121,26 @@ class GroupMemberState implements IGroupMemberState {
     return InstanceMap.get(instanceId)!;
   }
 
-  /**
-   * 创建 Store
-   */
   private createStore(): void {
     const options: HybridCallOptions = {
       api: "createStore",
       params: {
         createStoreParams: this.instanceId,
+        groupID: this.groupID,
       },
     };
 
     callAPI(JSON.stringify(options), (response: string) => {
       try {
         const result = safeJsonParse<any>(response, {});
-        // console.log(`[${this.instanceId}][createStore] Response:`, result);
-
         if (result.code === 0) {
-          console.log(`[${this.instanceId}][createStore] Success`);
           this.bindEvent();
-          // 如果指定了 filterRole，自动拉取对应角色的成员列表
-          this.fetchGroupMemberList(this.filterRole);
+          // 自动拉取一次成员列表（默认拉全部）
+          const initialRoleList: GroupMemberFilterRole[] =
+            this.filterRole !== undefined
+              ? [this.filterRole as unknown as GroupMemberFilterRole]
+              : [GroupMemberFilterRole.ALL];
+          this.loadMembers(initialRoleList);
         } else {
           console.error(`[${this.instanceId}][createStore] Failed:`, result.message);
         }
@@ -174,31 +150,34 @@ class GroupMemberState implements IGroupMemberState {
     });
   }
 
-  /**
-   * 绑定事件监听
-   */
   private bindEvent(): void {
     const storeName = GroupMemberState.STORE_NAME;
 
-    /** dataName 到更新函数的映射 */
     const dataHandlers: Record<string, (result: any) => void> = {
-      groupMemberList: (r) => { if (Array.isArray(r.groupMemberList)) this.groupMemberList.value = r.groupMemberList; },
-      hasMoreGroupMembers: (r) => { if (typeof r.hasMoreGroupMembers === 'boolean') this.hasMoreGroupMembers.value = r.hasMoreGroupMembers; },
+      memberList: (r) => {
+        const list = safeJsonParse<GroupMember[]>(r.memberList, []);
+        this.memberList.value = list;
+      },
+      hasMoreMembers: (r) => {
+        if (typeof r.hasMoreMembers === 'boolean') {
+          this.hasMoreMembers.value = r.hasMoreMembers;
+        }
+      },
     };
 
-    GroupMemberState.BINDABLE_DATA_NAMES.forEach(dataName => {
+    GroupMemberState.BINDABLE_DATA_NAMES.forEach((dataName) => {
       addListener({
         type: "",
         store: storeName,
         name: dataName,
         params: {
           createStoreParams: this.instanceId,
-        }
+        },
       }, (data: string) => {
         try {
           const result = safeJsonParse<any>(data, {});
-          // console.log(`[${this.instanceId}][${dataName} listener] Data:`, result);
-          dataHandlers[dataName]?.(result);
+          const handler = dataHandlers[dataName];
+          if (handler) handler(result);
         } catch (error) {
           console.error(`[${this.instanceId}][${dataName} listener] Error:`, error);
         }
@@ -206,351 +185,290 @@ class GroupMemberState implements IGroupMemberState {
     });
   }
 
-  /**
-   * 移除事件监听
-   */
   private unbindEvent(): void {
     const storeName = GroupMemberState.STORE_NAME;
 
-    GroupMemberState.BINDABLE_DATA_NAMES.forEach(dataName => {
+    GroupMemberState.BINDABLE_DATA_NAMES.forEach((dataName) => {
       removeListener({
         type: "",
         store: storeName,
         name: dataName,
-        params: { createStoreParams: this.instanceId }
+        params: { createStoreParams: this.instanceId },
       });
     });
   }
 
   // ============================================================================
-  // Actions (全部使用箭头函数属性，支持解构使用)
+  // Actions
   // ============================================================================
 
   /**
-   * 获取群成员列表
+   * 拉取群成员列表（旧名 fetchGroupMemberList）
+   *
+   * @param roleList 角色筛选数组（默认 [ALL]）；旧版接受单个 role，本方法兼容
    */
-  fetchGroupMemberList = (role: GroupMemberRole = GroupMemberRole.All): Promise<void> => {
+  loadMembers = (roleList: GroupMemberFilterRole[] = [GroupMemberFilterRole.ALL]): Promise<void> => {
     return new Promise((resolve, reject) => {
       const options: HybridCallOptions = {
-        api: "fetchGroupMemberList",
+        api: "loadMembers",
         params: {
           createStoreParams: this.instanceId,
-          role
-        }
+          roleList: JSON.stringify(roleList),
+        },
       };
 
       callAPI(JSON.stringify(options), (response: string) => {
         try {
           const result = safeJsonParse<any>(response, {});
-
           if (result.code === 0) {
             resolve();
           } else {
-            console.error(`[${this.instanceId}][fetchGroupMemberList] Failed:`, result.message, result.code);
-            reject(Object.assign(new Error(result.message || 'Failed to fetch group member list'), {errCode: result.code}));
+            console.error(`[${this.instanceId}][loadMembers] Failed:`, result.message);
+            reject(Object.assign(new Error(result.message || 'Failed to load members'), { errCode: result.code }));
           }
         } catch (error) {
-          console.error(`[${this.instanceId}][fetchGroupMemberList] Parse error:`, error);
           reject(error);
         }
       });
     });
-  }
+  };
 
   /**
-   * 加载更多群成员
+   * 加载更多群成员（旧名 fetchMoreGroupMemberList）
    */
-  fetchMoreGroupMemberList = (): Promise<void> => {
+  loadMoreMembers = (): Promise<void> => {
     return new Promise((resolve, reject) => {
       const options: HybridCallOptions = {
-        api: "fetchMoreGroupMemberList",
+        api: "loadMoreMembers",
         params: {
-          createStoreParams: this.instanceId
-        }
+          createStoreParams: this.instanceId,
+        },
       };
 
       callAPI(JSON.stringify(options), (response: string) => {
         try {
           const result = safeJsonParse<any>(response, {});
-          // console.log(`[${this.instanceId}][fetchMoreGroupMemberList] Response:`, result);
-
           if (result.code === 0) {
             resolve();
           } else {
-            console.error(`[${this.instanceId}][fetchMoreGroupMemberList] Failed:`, result.message, result.code);
-            reject(Object.assign(new Error(result.message || 'Failed to fetch more group members'), { errCode: result.code }));
+            console.error(`[${this.instanceId}][loadMoreMembers] Failed:`, result.message);
+            reject(Object.assign(new Error(result.message || 'Failed to load more members'), { errCode: result.code }));
           }
         } catch (error) {
-          console.error(`[${this.instanceId}][fetchMoreGroupMemberList] Parse error:`, error);
           reject(error);
         }
       });
     });
-  }
+  };
 
   /**
-   * 获取指定成员信息
+   * 获取指定成员信息（旧名 fetchGroupMembersInfo）
+   *
+   * 响应字段从 `membersInfo` 改为 `memberInfoList`
    */
-  fetchGroupMembersInfo = (userIDList: string[]): Promise<GroupMember[]> => {
+  getMemberInfo = (userIDList: string[]): Promise<GroupMember[]> => {
     return new Promise((resolve, reject) => {
       const options: HybridCallOptions = {
-        api: "fetchGroupMembersInfo",
+        api: "getMemberInfo",
         params: {
           createStoreParams: this.instanceId,
-          userIDList: JSON.stringify(userIDList)
-        }
+          userIDList: JSON.stringify(userIDList),
+        },
       };
 
       callAPI(JSON.stringify(options), (response: string) => {
         try {
-          const result = safeJsonParse<HybridResponseData<{ membersInfo: GroupMember[] }>>(response, { code: -1 });
-
+          const result = safeJsonParse<HybridResponseData<{ memberInfoList: GroupMember[] }>>(response, { code: -1 });
           if (result.code === 0) {
-            const membersInfo = Array.isArray(result.data?.data?.membersInfo) ? result.data?.data?.membersInfo : [];
-            resolve(membersInfo);
+            const list = Array.isArray(result.data?.data?.memberInfoList) ? result.data?.data?.memberInfoList : [];
+            resolve(list);
           } else {
-            console.error(`[${this.instanceId}][fetchGroupMembersInfo] Failed:`, result.message, result.code);
-            reject(Object.assign(new Error(result.message || 'Failed to fetch group members info'), { errCode: result.code }));
+            console.error(`[${this.instanceId}][getMemberInfo] Failed:`, result.message);
+            reject(Object.assign(new Error(result.message || 'Failed to get member info'), { errCode: result.code }));
           }
         } catch (error) {
-          console.error(`[${this.instanceId}][fetchGroupMembersInfo] Parse error:`, error);
           reject(error);
         }
       });
     });
-  }
+  };
 
   /**
-   * 添加群成员
+   * 添加群成员（旧名 addGroupMember）
    */
-  addGroupMember = (userIDList: string[]): Promise<void> => {
+  addMember = (userIDList: string[]): Promise<void> => {
     return new Promise((resolve, reject) => {
       const options: HybridCallOptions = {
-        api: "addGroupMember",
+        api: "addMember",
         params: {
           createStoreParams: this.instanceId,
-          userIDList: JSON.stringify(userIDList)
-        }
-      };
-
-      callAPI(JSON.stringify(options), (response: string) => {
-        try {
-          const result = safeJsonParse<any>(response, {});
-
-          if (result.code === 0) {
-            resolve();
-          } else {
-            console.error(`[${this.instanceId}][addGroupMember] Failed:`, result.message, result.code);
-            reject(Object.assign(new Error(result.message || 'Failed to add group member'), { errCode: result.code }));
-          }
-        } catch (error) {
-          console.error(`[${this.instanceId}][addGroupMember] Parse error:`, error);
-          reject(error);
-        }
-      });
-    });
-  }
-
-  /**
-   * 删除群成员
-   */
-  deleteGroupMember = (userIDList: string[]): Promise<void> => {
-    return new Promise((resolve, reject) => {
-      const options: HybridCallOptions = {
-        api: "deleteGroupMember",
-        params: {
-          createStoreParams: this.instanceId,
-          userIDList: JSON.stringify(userIDList)
-        }
+          userIDList: JSON.stringify(userIDList),
+        },
       };
 
       callAPI(JSON.stringify(options), (response: string) => {
         try {
           const result = safeJsonParse<any>(response, {});
-          // console.log(`[${this.instanceId}][deleteGroupMember] Response:`, result);
-
           if (result.code === 0) {
             resolve();
           } else {
-            console.error(`[${this.instanceId}][deleteGroupMember] Failed:`, result.message, result.code);
-            reject(Object.assign(new Error(result.message || 'Failed to delete group member'), { errCode: result.code }));
+            console.error(`[${this.instanceId}][addMember] Failed:`, result.message);
+            reject(Object.assign(new Error(result.message || 'Failed to add member'), { errCode: result.code }));
           }
         } catch (error) {
-          console.error(`[${this.instanceId}][deleteGroupMember] Parse error:`, error);
           reject(error);
         }
       });
     });
-  }
+  };
 
   /**
-   * 全员禁言
+   * 删除群成员（旧名 deleteGroupMember）
    */
-  setMuteAllMembers = (isMuted: boolean): Promise<void> => {
+  deleteMember = (userIDList: string[]): Promise<void> => {
     return new Promise((resolve, reject) => {
       const options: HybridCallOptions = {
-        api: "setMuteAllMembers",
+        api: "deleteMember",
         params: {
           createStoreParams: this.instanceId,
-          isMuted
-        }
+          userIDList: JSON.stringify(userIDList),
+        },
       };
 
       callAPI(JSON.stringify(options), (response: string) => {
         try {
           const result = safeJsonParse<any>(response, {});
-          // console.log(`[${this.instanceId}][setMuteAllMembers] Response:`, result);
-
           if (result.code === 0) {
             resolve();
           } else {
-            console.error(`[${this.instanceId}][setMuteAllMembers] Failed:`, result.message, result.code);
-            reject(Object.assign(new Error(result.message || 'Failed to set mute all members'), { errCode: result.code }));
+            console.error(`[${this.instanceId}][deleteMember] Failed:`, result.message);
+            reject(Object.assign(new Error(result.message || 'Failed to delete member'), { errCode: result.code }));
           }
         } catch (error) {
-          console.error(`[${this.instanceId}][setMuteAllMembers] Parse error:`, error);
           reject(error);
         }
       });
     });
-  }
+  };
 
   /**
-   * 禁言成员
+   * 禁言成员（旧名 setGroupMemberMuteTime）
+   *
+   * 注意：旧参数名 `time`，新参数名 `muteTime`（底层 GroupMemberAPI 使用 `time` 不变 —— 见 GroupMemberAPI.kt）
+   *
+   * 对齐底层 `GroupMemberStore.muteMember(userID, time)`，参数名为 `time`（单位：秒）
    */
-  setGroupMemberMuteTime = (userID: string, time: number): Promise<void> => {
+  muteMember = (userID: string, time: number): Promise<void> => {
     return new Promise((resolve, reject) => {
       const options: HybridCallOptions = {
-        api: "setGroupMemberMuteTime",
+        api: "muteMember",
         params: {
           createStoreParams: this.instanceId,
           userID,
-          time
-        }
+          time,
+        },
       };
 
       callAPI(JSON.stringify(options), (response: string) => {
         try {
           const result = safeJsonParse<any>(response, {});
-          // console.log(`[${this.instanceId}][setGroupMemberMuteTime] Response:`, result);
-
           if (result.code === 0) {
             resolve();
           } else {
-            console.error(`[${this.instanceId}][setGroupMemberMuteTime] Failed:`, result.message, result.code);
-            reject(Object.assign(new Error(result.message || 'Failed to set group member mute time'), { errCode: result.code }));
+            console.error(`[${this.instanceId}][muteMember] Failed:`, result.message);
+            reject(Object.assign(new Error(result.message || 'Failed to mute member'), { errCode: result.code }));
           }
         } catch (error) {
-          console.error(`[${this.instanceId}][setGroupMemberMuteTime] Parse error:`, error);
           reject(error);
         }
       });
     });
-  }
+  };
 
   /**
-   * 设置我的群昵称
+   * 设置我的群昵称（旧名 setSelfGroupNameCard）
    */
-  setSelfGroupNameCard = (nameCard?: string): Promise<void> => {
+  setSelfNameCard = (nameCard?: string): Promise<void> => {
     return new Promise((resolve, reject) => {
       const options: HybridCallOptions = {
-        api: "setSelfGroupNameCard",
+        api: "setSelfNameCard",
         params: {
           createStoreParams: this.instanceId,
-          nameCard
-        }
+          nameCard,
+        },
       };
 
       callAPI(JSON.stringify(options), (response: string) => {
         try {
           const result = safeJsonParse<any>(response, {});
-          // console.log(`[${this.instanceId}][setSelfGroupNameCard] Response:`, result);
-
           if (result.code === 0) {
             resolve();
           } else {
-            console.error(`[${this.instanceId}][setSelfGroupNameCard] Failed:`, result.message, result.code);
-            reject(Object.assign(new Error(result.message || 'Failed to set self group name card'), { errCode: result.code }));
+            console.error(`[${this.instanceId}][setSelfNameCard] Failed:`, result.message);
+            reject(Object.assign(new Error(result.message || 'Failed to set self name card'), { errCode: result.code }));
           }
         } catch (error) {
-          console.error(`[${this.instanceId}][setSelfGroupNameCard] Parse error:`, error);
           reject(error);
         }
       });
     });
-  }
+  };
 
   /**
-   * 设置成员角色
+   * 设置成员角色（旧名 setGroupMemberRole）
    */
-  setGroupMemberRole = (userID: string, role: GroupMemberRole): Promise<void> => {
+  setMemberRole = (userID: string, role: GroupMemberRole): Promise<void> => {
     return new Promise((resolve, reject) => {
       const options: HybridCallOptions = {
-        api: "setGroupMemberRole",
+        api: "setMemberRole",
         params: {
           createStoreParams: this.instanceId,
           userID,
-          role
-        }
+          role,
+        },
       };
 
       callAPI(JSON.stringify(options), (response: string) => {
         try {
           const result = safeJsonParse<any>(response, {});
-          // console.log(`[${this.instanceId}][setGroupMemberRole] Response:`, result);
-
           if (result.code === 0) {
             resolve();
           } else {
-            console.error(`[${this.instanceId}][setGroupMemberRole] Failed:`, result.message, result.code);
-            reject(Object.assign(new Error(result.message || 'Failed to set group member role'), { errCode: result.code }));
+            console.error(`[${this.instanceId}][setMemberRole] Failed:`, result.message);
+            reject(Object.assign(new Error(result.message || 'Failed to set member role'), { errCode: result.code }));
           }
         } catch (error) {
-          console.error(`[${this.instanceId}][setGroupMemberRole] Parse error:`, error);
           reject(error);
         }
       });
     });
-  }
+  };
 
-  /**
-   * 销毁 Store
-   */
+  // ============================================================================
+  // 销毁
+  // ============================================================================
+
   destroyStore = (): Promise<void> => {
-    // 1. 先移除所有 listener
+    // 幂等：实例已从 InstanceMap 中移除，说明已被销毁过，直接 resolve
+    if (!InstanceMap.has(this.instanceId)) {
+      return Promise.resolve();
+    }
+    // 先从 InstanceMap 中移除并解绑监听，避免并发重复进入；
+    // 即使底层 callAPI 报 "store not found"（其他渠道已销毁）也视为已销毁状态。
+    InstanceMap.delete(this.instanceId);
     this.unbindEvent();
 
-    // 2. 再调用 Native destroyStore
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve) => {
       const options: HybridCallOptions = {
         api: "destroyStore",
         params: {
-          createStoreParams: this.instanceId
-        }
+          createStoreParams: this.instanceId,
+        },
       };
 
-      callAPI(JSON.stringify(options), (response: string) => {
-        try {
-          const result = safeJsonParse<any>(response, {});
-          // console.log(`[${this.instanceId}][destroyStore] Response:`, result);
-          if (result.code === 0) {
-            const deleted = InstanceMap.delete(this.instanceId);
-            if (deleted) {
-              resolve();
-            } else {
-              reject(Object.assign(new Error(`[${this.instanceId}][destroyStore] Failed to delete InstanceMap`), { errCode: -1 }));
-            }
-          } else {
-            console.error(`[${this.instanceId}][destroyStore] Failed:`, result.message, result.code);
-            reject(Object.assign(new Error(result.message || 'Failed to destroy store'), { errCode: result.code }));
-          }
-        } catch (error) {
-          console.error(`[${this.instanceId}][destroyStore] Parse error:`, error);
-          reject(error);
-        }
-      });
+      callAPI(JSON.stringify(options), () => {});
     });
-  }
+  };
 }
 
 // ============================================================================
@@ -558,55 +476,48 @@ class GroupMemberState implements IGroupMemberState {
 // ============================================================================
 
 /**
- * 创建空的 State 对象（用于错误情况）
- */
-function createEmptyState(groupID: string = ''): IGroupMemberState {
-  const noop = async () => {};
-  const noopWithArg = async (_: any) => {};
-  return {
-    instanceId: '',
-    groupID,
-    groupMemberList: ref([]),
-    hasMoreGroupMembers: ref(false),
-    fetchGroupMemberList: noopWithArg,
-    fetchMoreGroupMemberList: noop,
-    fetchGroupMembersInfo: () => Promise.resolve([]),
-    addGroupMember: noopWithArg,
-    deleteGroupMember: noopWithArg,
-    setMuteAllMembers: noopWithArg,
-    setGroupMemberMuteTime: noopWithArg as any,
-    setSelfGroupNameCard: noopWithArg,
-    setGroupMemberRole: noopWithArg as any,
-    destroyStore: noop,
-  };
-}
-
-/**
  * useGroupMemberState 参数选项
  */
 interface UseGroupMemberStateOptions {
   /** 群组 ID */
   groupID: string;
-  /** 筛选角色（可选，不同角色会创建不同实例） */
+  /** 筛选角色（可选；不同角色会创建不同实例） */
   role?: GroupMemberRole;
 }
 
-/**
- * 群成员状态管理 Hook
- * @param options 配置选项
- * @param options.groupID 群组 ID
- * @param options.role 筛选角色（可选，传入后自动拉取对应角色的成员列表）
- * @returns {IGroupMemberState} 状态对象
- */
+function createEmptyState(): IGroupMemberState {
+  const noop = async () => {};
+  const noopWithArg = async (_: any) => {};
+  return {
+    instanceId: '',
+    memberList: ref([]),
+    hasMoreMembers: ref(false),
+    loadMembers: noopWithArg as any,
+    loadMoreMembers: noop,
+    getMemberInfo: () => Promise.resolve([]),
+    addMember: noopWithArg as any,
+    deleteMember: noopWithArg as any,
+    muteMember: noopWithArg as any,
+    setSelfNameCard: noopWithArg as any,
+    setMemberRole: noopWithArg as any,
+    destroyStore: noop,
+  };
+}
+
 function useGroupMemberState(options: UseGroupMemberStateOptions): IGroupMemberState {
   const { groupID = '', role } = options;
 
   if (!groupID) {
     console.error('[useGroupMemberState] groupID is required');
-    return createEmptyState(groupID);
+    return createEmptyState();
   }
 
   return GroupMemberState.getInstance(groupID, role);
 }
 
-export { useGroupMemberState };
+export {
+  useGroupMemberState,
+  GroupMemberRole,
+  GroupMemberFilterRole,
+};
+export type { IGroupMemberState, GroupMember };

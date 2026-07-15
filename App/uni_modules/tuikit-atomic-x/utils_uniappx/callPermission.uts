@@ -1,0 +1,155 @@
+/**
+ * 通话权限检查模块
+ * 封装麦克风、摄像头权限检查及无权限时的弹窗引导逻辑
+ *
+ * iOS 权限策略（UTS 改写说明）：
+ * - iOS 端按"放行"策略：业务方发起通话时由系统自动弹原生授权弹窗
+ *   若用户拒绝，下一次再发起会进入"去设置"引导弹窗
+ * - Android 端用 UTSAndroid.requestSystemPermission 系统弹窗
+ *
+ * @deprecated 此文件保留为 iOS 端的"放行"兜底实现；后续若 SDK 暴露 iOS 原生权限 API
+ *   可在此处补回 getIosMicPermissionStatus() / requestIosMicPermission() 等真实状态读取
+ */
+import permission from './permission';
+
+const isIos: boolean = uni.getSystemInfoSync().platform == 'ios';
+
+// 权限状态缓存（占位，保留接口形态）
+let _cachedMicStatus: number | null = null;
+let _cachedCameraStatus: number | null = null;
+let _lastPermissionCheckTime: number = 0;
+const PERMISSION_CACHE_TTL: number = 3000;
+
+/**
+ * 获取 iOS 麦克风权限原始状态（UTS 中无等价 API）
+ * @returns 0=未确定（实际由系统弹窗处理）/ 1=拒绝 / 2=已授权
+ */
+function getIosMicPermissionStatus(): number {
+  return 0;
+}
+
+/**
+ * 获取 iOS 摄像头权限原始状态（UTS 中无等价 API）
+ * @returns 0=未确定（实际由系统弹窗处理）/ 2=拒绝 / 3=已授权
+ */
+function getIosCameraPermissionStatus(): number {
+  return 0;
+}
+
+/**
+ * 清除权限缓存（在权限变更后调用，如用户从设置页返回时）
+ */
+export function clearPermissionCache(): void {
+  _cachedMicStatus = null;
+  _cachedCameraStatus = null;
+  _lastPermissionCheckTime = 0;
+}
+
+/**
+ * 检查通话所需权限
+ *
+ * iOS 端只拦截"已明确拒绝(denied)"的情况：
+ * - Undetermined（从未请求）→ 放行，系统会在实际使用时自动弹出原生授权弹窗
+ * - Denied（已拒绝）→ 返回缺失权限，由调用方弹"去设置"弹窗
+ * - Granted（已授权）→ 放行
+ *
+ * Android 端保持原有逻辑，由系统弹窗请求权限。
+ *
+ * @param mediaType 通话类型: 0=语音通话(仅麦克风), 1=视频通话(麦克风+摄像头)
+ * @returns 缺失的权限名称数组，空数组表示可以继续
+ */
+export async function checkCallPermissions(mediaType: number): Promise<string[]> {
+  const missingPermissions: string[] = [];
+
+  if (isIos) {
+  } else {
+    const micResult: number = await permission.requestAndroidPermission('android.permission.RECORD_AUDIO');
+    if (micResult !== 0) {
+      missingPermissions.push('麦克风');
+    }
+    if (mediaType == 1) {
+      const cameraResult: number = await permission.requestAndroidPermission('android.permission.CAMERA');
+      if (cameraResult !== 0) {
+        missingPermissions.push('摄像头');
+      }
+    }
+  }
+
+  return missingPermissions;
+}
+
+/**
+ * 显示权限缺失弹窗，支持跳转到系统设置页
+ * @param missingPermissions 缺失的权限名称数组
+ * @returns Promise，用户点击弹窗按钮后才 resolve（'settings' 表示去设置，'cancel' 表示取消）
+ */
+export function showPermissionDialog(missingPermissions: string[]): Promise<string> {
+  return new Promise<string>((resolve): void => {
+    const permissionText: string = missingPermissions.join('和');
+    uni.showModal({
+      title: '权限提示',
+      content: `通话需要${permissionText}权限，请在系统设置中开启`,
+      confirmText: '去开启',
+      cancelText: '以后再说',
+      success: (res: any): void => {
+        const resObj: UTSJSONObject = res as UTSJSONObject
+        const confirm: boolean = resObj['confirm'] as boolean
+        if (confirm) {
+          const openAuth: (opts: any) => void = (uni.openAppAuthorizeSetting as (opts: any) => void);
+          openAuth({});
+          // 用户跳转到设置页后，清除权限缓存，确保返回时重新检查
+          clearPermissionCache();
+          resolve('settings');
+        } else {
+          resolve('cancel');
+        }
+      }
+    });
+  });
+}
+
+/**
+ * 检查通话权限并在权限不足时弹窗引导
+ * @param mediaType 通话类型: 0=语音通话, 1=视频通话
+ * @returns true=权限齐全可继续, false=权限不足已弹窗（等待用户操作完弹窗后才返回）
+ */
+export async function checkCallPermissionWithDialog(mediaType: number): Promise<boolean> {
+  const missingPermissions: string[] = await checkCallPermissions(mediaType);
+  if (missingPermissions.length > 0) {
+    await showPermissionDialog(missingPermissions);
+    return false;
+  }
+  return true;
+}
+
+/**
+ * 主动请求通话所需权限（业务侧触发原生授权弹窗）
+ *
+ * 只负责弹出系统原生授权弹窗，等待用户操作后返回结果，不会额外弹"去设置"引导弹窗，
+ * 保证不阻塞后续业务流程（如页面跳转）。
+ *
+ * - iOS: UTS 中无 iOS 原生权限 API 桥接，统一按 true 处理（由系统首次使用时弹原生弹窗）
+ * - Android: 调用系统权限请求弹框
+ *
+ * @param mediaType 通话类型: 0=语音通话(仅麦克风), 1=视频通话(麦克风+摄像头)
+ * @returns true=权限齐全, false=有权限未授予
+ */
+export async function requestCallPermissions(mediaType: number): Promise<boolean> {
+  let allGranted: boolean = true;
+
+  if (isIos) {
+  } else {
+    const micResult: number = await permission.requestAndroidPermission('android.permission.RECORD_AUDIO');
+    if (micResult !== 0) {
+      allGranted = false;
+    }
+    if (mediaType == 1) {
+      const cameraResult: number = await permission.requestAndroidPermission('android.permission.CAMERA');
+      if (cameraResult !== 0) {
+        allGranted = false;
+      }
+    }
+  }
+
+  return allGranted;
+}

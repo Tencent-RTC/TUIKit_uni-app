@@ -18,9 +18,12 @@
 </template>
 
 <script>
-import { MessageMediaFileType } from '../../../../types/message'
+import { MediaQuality } from '../../../../types/message'
 import { useMessageListState } from '../../../../state/MessageListState'
+import { useMessageActionState } from '../../../../state/MessageActionState'
 import { stopGlobalAudioPlayer, RECORDING_PSEUDO_ID } from '../../../../hooks/useAudioPlayer'
+
+var PLACEHOLDER_PREFIX = 'placeholder_video_'
 
 // 长按判定阈值，与 Message.nvue 中保持一致
 var LONG_PRESS_THRESHOLD = 350
@@ -36,10 +39,10 @@ export default {
     return { actualSize: { width: 0, height: 0 }, coverError: false, isDownloadingSnapshot: false, isDownloadingVideo: false, touchStartTime: 0, msgState: msgState }
   },
   computed: {
-    videoSnapshotUrl() { var url = (this.message.messageBody && this.message.messageBody.videoSnapshotPath) || ''; if (url && url.startsWith('/') && !url.startsWith('file://')) url = 'file://' + url; return url },
-    videoUrl() { var url = (this.message.messageBody && this.message.messageBody.videoPath) || ''; if (url && url.startsWith('/') && !url.startsWith('file://')) url = 'file://' + url; return url },
-    videoSnapshotWidth() { return (this.message.messageBody && this.message.messageBody.videoSnapshotWidth) || 0 },
-    videoSnapshotHeight() { return (this.message.messageBody && this.message.messageBody.videoSnapshotHeight) || 0 },
+    videoSnapshotUrl() { var url = (this.message.messagePayload && this.message.messagePayload.videoSnapshotPath) || ''; if (url && url.startsWith('/') && !url.startsWith('file://')) url = 'file://' + url; return url },
+    videoUrl() { var url = (this.message.messagePayload && this.message.messagePayload.videoPath) || ''; if (url && url.startsWith('/') && !url.startsWith('file://')) url = 'file://' + url; return url },
+    videoSnapshotWidth() { return (this.message.messagePayload && this.message.messagePayload.videoSnapshotWidth) || 0 },
+    videoSnapshotHeight() { return (this.message.messagePayload && this.message.messagePayload.videoSnapshotHeight) || 0 },
     downloadProgress() { return (this.message && this.message.progress != null) ? this.message.progress : 0 },
     videoContainerStyle() {
       var w = this.actualSize.width || this.videoSnapshotWidth || 400
@@ -54,10 +57,11 @@ export default {
   watch: {
     'message.msgID': { 
       handler: function(id) { 
-        if (id && !this.videoSnapshotUrl) {
+        if (!id || id.indexOf(PLACEHOLDER_PREFIX) === 0) return;
+        if (!this.videoSnapshotUrl) {
           this.checkAndDownloadSnapshot()
         }
-        if (id && !this.videoUrl) {
+        if (!this.videoUrl) {
           this.checkAndDownloadVideo()
         }
       }, immediate: true },
@@ -88,7 +92,7 @@ export default {
     async checkAndDownloadSnapshot() {
       if (this.message && this.message.msgID && !this.videoSnapshotUrl && !this.isDownloadingSnapshot) {
         this.isDownloadingSnapshot = true
-        try { await this.msgState.downloadMessageResource(this.message, MessageMediaFileType.VIDEO_SNAPSHOT) } catch (e) { this.coverError = true } finally { this.isDownloadingSnapshot = false }
+        try { await useMessageActionState({ message: this.message }).downloadMedia(MediaQuality.THUMBNAIL) } catch (e) { this.coverError = true } finally { this.isDownloadingSnapshot = false }
       }
     },
     async checkAndDownloadVideo() {
@@ -96,7 +100,7 @@ export default {
       if (this.isDownloadingVideo) { uni.showToast({ title: '正在加载视频资源...', icon: 'none' }); return }
       this.isDownloadingVideo = true
       try {
-        await this.msgState.downloadMessageResource(this.message, MessageMediaFileType.VIDEO)
+        await useMessageActionState({ message: this.message }).downloadMedia(MediaQuality.ORIGINAL)
       } catch (e) {
         uni.showToast({ title: '视频下载失败', icon: 'none' })
       } finally {

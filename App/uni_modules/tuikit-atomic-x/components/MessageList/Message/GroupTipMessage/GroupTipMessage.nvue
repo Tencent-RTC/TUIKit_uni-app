@@ -19,10 +19,10 @@ const props = defineProps<Props>()
 
 const tipText = computed(() => {
   if (props.message.messageType === MessageType.CUSTOM) {
-    const data = safeJsonParse(props.message.messageBody.customMessage?.data, { businessID: '', content: '', opUser: '' });
+    const data = safeJsonParse(props.message.messagePayload.customData, { businessID: '', content: '', opUser: '' });
     const creator = data.opUser || '';
     if (data.businessID === 'group_create') {
-      return `${props.message.sender.nickname} ${data.content || '创建了群组'}`;
+      return `${props.message.from.nickname} ${data.content || '创建了群组'}`;
     }
     return '群组创建成功';
   }

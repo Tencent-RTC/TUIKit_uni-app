@@ -1,0 +1,54 @@
+<template>
+	<view class="add-friend-page">
+		<CustomNavbar title="添加好友" :showBack="true" @back="handleBack" />
+
+		<!-- 页面内容 -->
+		<view class="page-content">
+			<AddFriend
+				@userSelect="handleUserSelect"
+			/>
+		</view>
+	</view>
+</template>
+
+<script setup lang="uts">
+
+import AddFriend from '@/uni_modules/tuikit-atomic-x/components/Contact/AddFriend.uvue'
+import CustomNavbar from '@/uni_modules/tuikit-atomic-x/components/CustomNavbar/CustomNavbar.uvue'
+import { setPageData, INFO_DATA } from '@/pages/utils/pageDataStore'
+
+/**
+ * 处理返回按钮点击
+ */
+const handleBack = (): void => {
+	uni.navigateBack({
+		delta: 1
+	})
+}
+
+const handleUserSelect = (user: any): void => {
+	const userObj: UTSJSONObject = user as UTSJSONObject
+	if (userObj['isFriend'] != true) {
+		setPageData(INFO_DATA, { userInfo: user })
+		uni.navigateTo({
+			url: '/pages/scenes/chat/contacts/contactInfo/index?type=addFriend'
+		})
+	} else {
+		setPageData(INFO_DATA, { friendInfo: user })
+		uni.navigateTo({
+			url: '/pages/scenes/chat/contacts/contactInfo/index?type=friend'
+		})
+	}
+}
+</script>
+
+<style>
+.add-friend-page {
+	flex: 1;
+	background-color: #f5f5f5;
+}
+
+.page-content {
+	flex: 1;
+}
+</style>

@@ -1,0 +1,236 @@
+<template>
+  <view class="new-contact-info">
+    <scroll-view class="new-contact-info__content" scroll-y="true">
+      <!-- 用户信息头部 -->
+      <view class="new-contact-info__header">
+        <component
+          :is="resolvedAvatar"
+          :src="(application as UTSJSONObject)?.['avatarURL'] ?? ''"
+          :name="(application as UTSJSONObject)?.['title'] ?? ((application as UTSJSONObject)?.['userID'] ?? '')"
+          :size="96"
+          shape="square"
+          defaultAvatarType="user"
+          :pureMode="true"
+        />
+        <view class="new-contact-info__header-info">
+          <text class="new-contact-info__name" :numberOfLines="1">{{ (application as UTSJSONObject)?.['title'] ?? '' }}</text>
+          <text class="new-contact-info__id" :numberOfLines="1">ID: {{ (application as UTSJSONObject)?.['userID'] ?? '' }}</text>
+        </view>
+      </view>
+
+      <!-- 验证信息 -->
+      <view class="new-contact-info__section">
+        <view class="new-contact-info__row">
+          <text class="new-contact-info__label">验证信息</text>
+          <text class="new-contact-info__value" :numberOfLines="1">{{ (application as UTSJSONObject)?.['addWording'] ?? '无' }}</text>
+        </view>
+      </view>
+
+      <!-- 操作按钮 -->
+      <view v-if="!isHandled" class="new-contact-info__actions">
+        <view class="new-contact-info__btn new-contact-info__btn--primary" @click="handleAccept">
+          <text class="new-contact-info__btn-text new-contact-info__btn-text--primary">同意</text>
+        </view>
+        <view class="new-contact-info__btn new-contact-info__btn--danger" @click="handleReject">
+          <text class="new-contact-info__btn-text new-contact-info__btn-text--danger">拒绝</text>
+        </view>
+      </view>
+
+      <view v-else class="new-contact-info__handled">
+        <text class="new-contact-info__handled-text">{{ handledText }}</text>
+      </view>
+    </scroll-view>
+  </view>
+</template>
+
+<script setup lang="uts">
+
+import { ref, computed } from 'vue'
+import AvatarComponent from '../../Avatar/Avatar.uvue'
+import { useContactState } from '../../../state/ContactState'
+import { showToast } from '../../../utils/toast'
+
+type Props = {
+  application?: any | null
+  Avatar?: any
+}
+
+type Emits = {
+  accept: any
+  reject: any
+}
+
+const props = defineProps<Props>()
+
+const resolvedAvatar = computed<any>((): any => props.Avatar ?? AvatarComponent)
+
+const emit = defineEmits<Emits>()
+
+const { acceptFriendApplication, refuseFriendApplication } = useContactState()
+
+type HandledResult = 'accepted' | 'rejected'
+const isHandled = ref<boolean>(false)
+const handledResult = ref<HandledResult | null>(null)
+
+const handledText = computed<string>((): string => {
+  if (handledResult.value == 'accepted') return '已同意'
+  if (handledResult.value == 'rejected') return '已拒绝'
+  return ''
+})
+
+const handleAccept = async (): Promise<void> => {
+  const app = props.application
+  if (app == null || isHandled.value) return
+
+  try {
+    await acceptFriendApplication(app as any)
+    isHandled.value = true
+    handledResult.value = 'accepted'
+    showToast({ message: '已同意', type: 'success' })
+    emit('accept', app)
+  } catch (error: any) {
+    showToast({ message: error.message ?? '操作失败', type: 'error' })
+  }
+}
+
+const handleReject = async (): Promise<void> => {
+  const app = props.application
+  if (app == null || isHandled.value) return
+
+  try {
+    await refuseFriendApplication(app as any)
+    isHandled.value = true
+    handledResult.value = 'rejected'
+    showToast({ message: '已拒绝', type: 'success' })
+    emit('reject', app)
+  } catch (error: any) {
+    showToast({ message: error.message ?? '操作失败', type: 'error' })
+  }
+}
+</script>
+
+<style>
+.new-contact-info {
+  flex: 1;
+  background-color: #F5F5F5;
+}
+
+.new-contact-info__content {
+  flex: 1;
+}
+
+/* 头部信息 */
+.new-contact-info__header {
+  flex-direction: row;
+  padding: 32rpx;
+  background-color: #FFFFFF;
+}
+
+.new-contact-info__header-info {
+  flex: 1;
+  margin-left: 30rpx;
+  padding-bottom: 20rpx;
+}
+
+.new-contact-info__name {
+  font-size: 36rpx;
+  font-weight: 500;
+  color: rgba(0, 0, 0, 0.9);
+  line-height: 48rpx;
+  lines: 1;
+  text-overflow: ellipsis;
+}
+
+.new-contact-info__id {
+  font-size: 26rpx;
+  color: rgba(0, 0, 0, 0.4);
+  line-height: 40rpx;
+  margin-top: 8rpx;
+  lines: 1;
+  text-overflow: ellipsis;
+}
+
+.new-contact-info__signature {
+  font-size: 26rpx;
+  color: rgba(0, 0, 0, 0.4);
+  line-height: 40rpx;
+  margin-top: 4rpx;
+  lines: 2;
+  text-overflow: ellipsis;
+}
+
+/* 验证信息区域 */
+.new-contact-info__section {
+  margin-bottom: 20rpx;
+  padding: 0 32rpx;
+  background-color: #FFFFFF;
+}
+
+.new-contact-info__row {
+  flex-direction: row;
+  align-items: center;
+  padding: 20rpx 0rpx;
+  border-top: 1rpx solid #E5E5E5;
+}
+
+.new-contact-info__label {
+  font-size: 28rpx;
+  font-weight: 400;
+  line-height: 40rpx;
+  color: #888888;
+}
+
+.new-contact-info__value {
+  flex: 1;
+  margin-left: 10rpx;
+  font-size: 28rpx;
+  font-weight: 400;
+  line-height: 40rpx;
+  color: #444444;
+  lines: 1;
+  text-overflow: ellipsis;
+}
+
+/* 操作按钮 */
+.new-contact-info__actions {
+  background-color: #FFFFFF;
+}
+
+.new-contact-info__btn {
+  align-items: center;
+  justify-content: center;
+  padding: 30rpx 0;
+  border-bottom: 2rpx solid #E5E5E5;
+}
+
+.new-contact-info__btn:last-child {
+  border-bottom-width: 0;
+}
+
+.new-contact-info__btn-text {
+  font-size: 34rpx;
+  font-weight: 400;
+  line-height: 52rpx;
+}
+
+.new-contact-info__btn-text--primary {
+  color: #1C66E5;
+}
+
+.new-contact-info__btn-text--danger {
+  color: #E54545;
+}
+
+/* 已处理状态 */
+.new-contact-info__handled {
+  padding: 40rpx 32rpx;
+  align-items: center;
+  background-color: #FFFFFF;
+  margin-top: 20rpx;
+}
+
+.new-contact-info__handled-text {
+  font-size: 28rpx;
+  color: #999999;
+}
+</style>

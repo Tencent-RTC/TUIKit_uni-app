@@ -72,7 +72,14 @@ export default {
         showToast({ message: title, type: 'success' })
         self.$emit('success', 'friend', self.userInfo)
       }).catch(function(error) {
-        showToast({ message: error.message || '发送失败', type: 'error' })
+        console.warn('add friend error:', error)
+        // 对方已将本人加入黑名单：SDK 错误信息形如 'Err_SNS_FriendAdd_Exist_In_Reverse_Black_List'
+        var rawMsg = (error && error.message) ? String(error.message) : ''
+        var isReverseBlacklisted = /Reverse_Black_List/i.test(rawMsg)
+        var errMsg = isReverseBlacklisted
+          ? '好友添加失败，对方已将您列入黑名单'
+          : (rawMsg || '发送失败')
+        showToast({ message: errMsg, type: 'error' })
         self.$emit('fail', 'friend', error)
       }).finally(function() { self.isSubmitting = false })
     },

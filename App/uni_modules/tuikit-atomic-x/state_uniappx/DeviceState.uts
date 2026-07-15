@@ -1,0 +1,60 @@
+
+// ==================== 类型定义 ====================
+
+/** openLocalCamera 选项（占位，与未来 SDK 桥接的 option 形态一致） */
+export type OpenLocalCameraOptions = {
+	isFront?: boolean
+}
+
+/** openLocalMicrophone 选项（占位，与未来 SDK 桥接的 option 形态一致） */
+export type OpenLocalMicrophoneOptions = {
+	fail?: (error: any) => void
+}
+
+// ==================== Hook 返回值类型 ====================
+
+/** useDeviceState Hook 返回值 */
+export type UseDeviceStateReturn = {
+	openLocalCamera: (options: OpenLocalCameraOptions | null) => Promise<void>
+	openLocalMicrophone: (options: OpenLocalMicrophoneOptions | null) => Promise<void>
+}
+
+// ==================== 实现函数 ====================
+
+/**
+ * 打开本地摄像头（占位 stub）
+ *
+ *   引用时类型为 `Function1<OpenLocalCameraOptions?, UTSPromise<Unit>>`
+ *   与 hook 字段类型完全匹配
+ */
+export const openLocalCameraImpl = async (options: OpenLocalCameraOptions | null): Promise<void> => {
+	const opts: OpenLocalCameraOptions | null = options ?? null
+	// stub: SDK 接入后此处调用 utssdk/app-android 或 app-ios 的摄像头桥接
+	console.warn('[DeviceState] openLocalCamera is a stub - SDK not yet integrated')
+}
+
+/**
+ * 打开本地麦克风（占位 stub）
+ *
+ */
+export const openLocalMicrophoneImpl = async (options: OpenLocalMicrophoneOptions | null): Promise<void> => {
+	const opts: OpenLocalMicrophoneOptions | null = options ?? null
+	// stub: SDK 接入后此处调用 utssdk/app-android 或 app-ios 的麦克风桥接
+	console.warn('[DeviceState] openLocalMicrophone is a stub - SDK not yet integrated')
+}
+
+// ==================== Hook ====================
+
+/**
+ * 设备状态 Hook
+ *
+ * @returns { openLocalCamera, openLocalMicrophone }
+ *   - openLocalCamera: 打开本地摄像头（占位 stub）
+ *   - openLocalMicrophone: 打开本地麦克风（占位 stub）
+ */
+export const useDeviceState = (): UseDeviceStateReturn => {
+	return {
+		openLocalCamera: openLocalCameraImpl,
+		openLocalMicrophone: openLocalMicrophoneImpl
+	}
+}

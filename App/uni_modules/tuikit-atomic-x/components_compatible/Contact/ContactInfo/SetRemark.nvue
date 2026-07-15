@@ -27,7 +27,7 @@ export default {
       if (this.isSubmitting || !this.userID) return
       this.isSubmitting = true
       var self = this
-      this.contactState.setUserRemark(this.userID, this.remarkInput.trim()).then(function() {
+      this.contactState.setFriendRemark(this.userID, this.remarkInput.trim()).then(function() {
         showToast({ message: '设置成功', type: 'success' })
         self.$emit('success', self.userID, self.remarkInput.trim())
       }).catch(function(err) {

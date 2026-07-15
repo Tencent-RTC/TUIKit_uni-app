@@ -19,11 +19,11 @@ export function useRemoveGroupMember(routeParams?: any): UserPickerHookResult {
   
   // ======================== 数据源 ========================
   const { 
-    groupMemberList: allMembers,
-    hasMoreGroupMembers,
-    deleteGroupMember,
-    fetchGroupMemberList,
-    fetchMoreGroupMemberList,
+    memberList: allMembers,
+    hasMoreMembers,
+    deleteMember,
+    loadMembers,
+    loadMoreMembers,
   } = useGroupMemberState({ groupID });
 
 
@@ -32,14 +32,14 @@ export function useRemoveGroupMember(routeParams?: any): UserPickerHookResult {
   // 当前用户角色（从成员列表中查找）
   const currentUserRole = computed(() => {
     const currentUser = allMembers.value.find(m => m.userID === loginUserInfo.value?.userID)
-    return currentUser?.role || GroupMemberRole.Member
+    return currentUser?.role || GroupMemberRole.MEMBER
   })
   
   // ======================== 响应式状态 ========================
   
   /** 用户列表：过滤掉权限大于等于自己的成员 */
   const userList = computed<User[]>(() => {
-    const myRole = currentUserRole.value || GroupMemberRole.Member
+    const myRole = currentUserRole.value || GroupMemberRole.MEMBER
     
     return (allMembers.value || [])
       .filter(member => member.role < myRole)
@@ -54,7 +54,7 @@ export function useRemoveGroupMember(routeParams?: any): UserPickerHookResult {
   const lockedItems = computed<string[]>(() => [])
 
   /** 是否有更多数据 */
-  const hasMore = computed(() => hasMoreGroupMembers.value)
+  const hasMore = computed(() => hasMoreMembers.value)
 
   // ======================== 方法 ========================
 
@@ -68,8 +68,9 @@ export function useRemoveGroupMember(routeParams?: any): UserPickerHookResult {
     const members = selectedUsers.map(user => user.userID)
     
     try {
-      await deleteGroupMember(members);
+      await deleteMember(members);
       uni.showToast({ title: '删除成功', icon: 'success' });
+      uni.$emit('onGroupMemberChanged', { type: 'remove', groupID })
       setTimeout(() => {
         uni.navigateBack()
       }, 300);
@@ -81,9 +82,9 @@ export function useRemoveGroupMember(routeParams?: any): UserPickerHookResult {
 
   /** 触底加载更多 */
   const onReachEnd = async (): Promise<void> => {
-    if (!hasMoreGroupMembers.value) return
+    if (!hasMoreMembers.value) return
     try {
-      await fetchMoreGroupMemberList()
+      await loadMoreMembers()
     } catch (error) {
       console.error('[useRemoveGroupMember] onReachEnd failed:', error)
     }

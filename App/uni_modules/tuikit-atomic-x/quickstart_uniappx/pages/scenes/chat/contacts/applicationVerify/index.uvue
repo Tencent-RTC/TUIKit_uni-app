@@ -1,0 +1,122 @@
+<template>
+	<view class="application-verify-page">
+		<CustomNavbar :title="navTitle" :showBack="true" @back="handleBack" />
+
+		<!-- 页面内容 -->
+		<view class="page-content">
+			<ApplicationVerify
+				:type="type"
+				:userInfo="userInfo"
+				:groupInfo="groupInfo"
+				@success="handleSuccess"
+				@fail="handleFail"
+			/>
+		</view>
+	</view>
+</template>
+
+<script setup lang="uts">
+
+import { ref, computed, onMounted } from 'vue'
+import { ApplicationVerify } from '@/uni_modules/tuikit-atomic-x/components/Contact/ContactInfo'
+import CustomNavbar from '@/uni_modules/tuikit-atomic-x/components/CustomNavbar/CustomNavbar.uvue'
+import { getPageData, clearPageData, VERIFY_DATA } from '@/pages/utils/pageDataStore'
+
+/** 申请类型 */
+type ApplyType = 'friend' | 'group'
+
+/** 搜索得到的用户信息（UI 用） */
+type UserInfo = {
+	userID: string
+	nickname?: string
+	avatarURL?: string
+	signature?: string
+	isFriend?: boolean
+	allowType?: number
+}
+
+/** 群组信息（UI 用） */
+type GroupInfo = {
+	groupID: string
+	groupName?: string
+	avatarURL?: string
+	type?: string
+	memberCount?: number
+	notification?: string
+	ownerID?: string
+	isJoined?: boolean
+}
+
+const type = ref<ApplyType>('friend')
+const userInfo = ref<UTSJSONObject | null>(null)
+const groupInfo = ref<UTSJSONObject | null>(null)
+
+const navTitle = computed<string>((): string => {
+	return type.value === 'friend' ? '申请添加好友' : '申请加入群聊'
+})
+
+const handleVerifyData = (data: UTSJSONObject): void => {
+	const u = data['userInfo']
+	const g = data['groupInfo']
+	const t = data['type']
+	if (u != null) {
+		userInfo.value = u as UTSJSONObject
+	}
+	if (g != null) {
+		groupInfo.value = g as UTSJSONObject
+	}
+	if (typeof t === 'string') type.value = t as ApplyType
+}
+
+onMounted((): void => {
+	const pages = getCurrentPages()
+	const currentPage = pages[pages.length - 1]
+	const directOpts: any | null = (currentPage?.options as any) ?? null
+	const opts: UTSJSONObject = (directOpts as UTSJSONObject) ?? ({} as UTSJSONObject)
+
+	const optType: any | null = opts['type']
+	if (typeof optType === 'string') {
+		type.value = optType as ApplyType
+	}
+
+	const verifyDataRaw: any | null = getPageData(VERIFY_DATA)
+	if (verifyDataRaw != null) {
+		handleVerifyData(verifyDataRaw as UTSJSONObject)
+		clearPageData(VERIFY_DATA)
+	}
+})
+
+const handleBack = (): void => {
+	uni.navigateBack({ delta: 1 })
+}
+
+const handleSuccess = (_payload: any): void => {
+	const dataObj: UTSJSONObject = _payload as UTSJSONObject
+	const applyTypeRaw: any | null = dataObj['type']
+	const applyType: string = typeof applyTypeRaw === 'string' ? (applyTypeRaw as string) : ''
+	let index = 1
+	if (applyType === 'friend') {
+		index = 2
+	}
+	setTimeout((): void => {
+		uni.navigateBack({ delta: index })
+	}, 1500)
+}
+
+const handleFail = (_payload: any): void => {
+	const dataObj: UTSJSONObject = _payload as UTSJSONObject
+	const errorRaw: any | null = dataObj['error']
+	console.error(`申请发送失败: ${errorRaw}`)
+}
+</script>
+
+<style>
+.application-verify-page {
+	flex: 1;
+	background-color: #f5f5f5;
+}
+
+.page-content {
+	flex: 1;
+}
+</style>

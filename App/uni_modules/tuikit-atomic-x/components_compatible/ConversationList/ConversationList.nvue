@@ -51,6 +51,7 @@
 
 <script>
 import { useConversationListState } from '../../state/ConversationListState'
+import { ReceiveMessageOpt } from '../../types/conversation'
 import SwipeActions from '../SwipeActions/SwipeActions.nvue'
 import DefaultPreview from './ConversationPreview.nvue'
 import ConversationActionsComponent from './ConversationActions.nvue'
@@ -217,7 +218,7 @@ export default {
     async handleMute(conversationID, isMuted) {
       try {
         this.$emit('conversationMute', conversationID, isMuted)
-        await this.storeInstance.muteConversation(conversationID, isMuted)
+        await this.storeInstance.setReceiveMessageOpt(conversationID, isMuted ? ReceiveMessageOpt.NOT_NOTIFY : ReceiveMessageOpt.RECEIVE)
       } catch (error) {
         uni.showToast({
           title: isMuted ? '设置免打扰失败' : '取消免打扰失败',

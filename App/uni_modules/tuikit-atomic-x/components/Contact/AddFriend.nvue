@@ -137,7 +137,7 @@ const inputRef = ref<any>(null)
 const { loginUserInfo } = useLoginState()
 const myUserID = computed(() => loginUserInfo.value?.userID || '')
 
-const { fetchUserInfo } = useContactState()
+const { getContactInfo } = useContactState()
 
 const handleActivateInput = () => {
   isInputActive.value = true
@@ -200,7 +200,7 @@ const handleSearch = async () => {
   emit('search', userID)
 
   try {
-    const userList = await fetchUserInfo([userID])
+    const userList = await getContactInfo([userID])
     if (userList && userList.length > 0) {
       searchResultList.value = userList;
     }
@@ -227,7 +227,7 @@ const silentRefreshSearch = async () => {
   if (!userID) return
 
   try {
-    const userList = await fetchUserInfo([userID])
+    const userList = await getContactInfo([userID])
     if (userList && userList.length > 0) {
       searchResultList.value = userList
     }

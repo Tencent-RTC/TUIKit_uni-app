@@ -85,7 +85,7 @@
 
 <script>
 import AvatarComponent from '../../Avatar'
-import { emojiUrlMap, emojiBaseUrl } from '../../../constants/emoji'
+import { parseTextToSegments, truncateSegments } from '../../ConversationList/utils'
 export default {
   props: {
     avatarURL: { type: String, default: '' }, title: { type: String, default: '' }, titleSuffix: { type: String, default: '' },
@@ -112,17 +112,42 @@ export default {
       while (idx !== -1) { if (idx > last) segs.push({ type: 'text', text: text.slice(last, idx), highlight: false }); segs.push({ type: 'text', text: text.slice(idx, idx + keyword.length), highlight: true }); last = idx + keyword.length; idx = lt.indexOf(lk, last) }
       if (last < text.length) segs.push({ type: 'text', text: text.slice(last), highlight: false }); return segs.length > 0 ? segs : [{ type: 'text', text: text, highlight: false }]
     },
-    parseTextWithEmoji(text, highlight) {
-      var segs = []; var re = /\[TUIEmoji_[^\]]+\]/g; var last = 0; var match
-      while ((match = re.exec(text)) !== null) { if (match.index > last) segs.push({ type: 'text', text: text.substring(last, match.index), highlight: highlight }); var ek = match[0]; var ef = emojiUrlMap[ek]; if (ef) segs.push({ type: 'emoji', src: emojiBaseUrl + ef }); else segs.push({ type: 'text', text: ek, highlight: highlight }); last = re.lastIndex }
-      if (last < text.length) segs.push({ type: 'text', text: text.substring(last), highlight: highlight }); return segs
+    /**
+     * 在已解析 segments 上叠加关键词高亮（emoji 透传，text 按 keyword 拆分）
+     */
+    applyKeywordHighlight(segments, keyword) {
+      if (!keyword) {
+        return segments.map(function(seg) {
+          if (seg.type === 'emoji') return { type: 'emoji', src: seg.src || '' }
+          return { type: 'text', text: seg.content || '', highlight: false }
+        })
+      }
+      var result = []; var lk = keyword.toLowerCase()
+      for (var i = 0; i < segments.length; i++) {
+        var seg = segments[i]
+        if (seg.type === 'emoji') { result.push({ type: 'emoji', src: seg.src || '' }); continue }
+        var t = seg.content || ''
+        if (!t) continue
+        var lt = t.toLowerCase(); var last = 0; var idx = lt.indexOf(lk)
+        while (idx !== -1) {
+          if (idx > last) result.push({ type: 'text', text: t.slice(last, idx), highlight: false })
+          result.push({ type: 'text', text: t.slice(idx, idx + keyword.length), highlight: true })
+          last = idx + keyword.length; idx = lt.indexOf(lk, last)
+        }
+        if (last < t.length) result.push({ type: 'text', text: t.slice(last), highlight: false })
+      }
+      return result
     },
+    /**
+     * 1) 先按 [TUIEmoji_xxx] 解析为 segments（防止 emoji key 被截断）
+     * 2) 按"用户感知字符"截断（emoji 视为 1 字符；ZWJ 序列整体回溯）
+     * 3) 在截断后的 text segment 上叠加关键词高亮
+     */
     buildSubtitleSegments(text, keyword) {
-      if (!text) return []; var t = text.length > 30 ? text.slice(0, 30) + '...' : text
-      if (!keyword) return this.parseTextWithEmoji(t, false)
-      var segs = []; var lt = t.toLowerCase(); var lk = keyword.toLowerCase(); var last = 0; var idx = lt.indexOf(lk)
-      while (idx !== -1) { if (idx > last) segs.push.apply(segs, this.parseTextWithEmoji(t.slice(last, idx), false)); segs.push({ type: 'text', text: t.slice(idx, idx + keyword.length), highlight: true }); last = idx + keyword.length; idx = lt.indexOf(lk, last) }
-      if (last < t.length) segs.push.apply(segs, this.parseTextWithEmoji(t.slice(last), false)); return segs.length > 0 ? segs : this.parseTextWithEmoji(t, false)
+      if (!text) return []
+      var parsed = parseTextToSegments(text)
+      var truncated = truncateSegments(parsed, 30)
+      return this.applyKeywordHighlight(truncated, keyword)
     },
   },
 }

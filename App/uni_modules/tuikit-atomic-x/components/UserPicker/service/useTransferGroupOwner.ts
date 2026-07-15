@@ -21,18 +21,18 @@ export function useTransferGroupOwner(routeParams?: any): UserPickerHookResult {
   const groupMemberState = useGroupMemberState({ groupID })
   const groupState = useGroupState()
   const { 
-    groupMemberList: allMembers, 
-    hasMoreGroupMembers, 
-    fetchMoreGroupMemberList,
+    memberList: allMembers, 
+    hasMoreMembers, 
+    loadMoreMembers,
   } = groupMemberState
-  const { changeGroupOwner } = groupState
+  const { changeOwner } = groupState
   
   // ======================== 响应式状态 ========================
   
   /** 用户列表：排除群主自己 */
   const userList = computed<User[]>(() => {
     return (allMembers.value || [])
-      .filter(member => member.role !== GroupMemberRole.Owner)
+      .filter(member => member.role !== GroupMemberRole.OWNER)
       .map(member => ({
         userID: member.userID,
         nickname: member.nameCard || member.nickname || member.userID,
@@ -44,7 +44,7 @@ export function useTransferGroupOwner(routeParams?: any): UserPickerHookResult {
   const lockedItems = computed<string[]>(() => [])
 
   /** 是否有更多数据 */
-  const hasMore = computed(() => hasMoreGroupMembers.value)
+  const hasMore = computed(() => hasMoreMembers.value)
 
   // ======================== 方法 ========================
 
@@ -58,8 +58,9 @@ export function useTransferGroupOwner(routeParams?: any): UserPickerHookResult {
     const newOwnerID = selectedUsers[0].userID
     
     try {
-      await changeGroupOwner(groupID, newOwnerID)
+      await changeOwner(groupID, newOwnerID)
       uni.showToast({ title: '转让成功', icon: 'success' });
+      uni.$emit('onGroupOwnerChanged', { groupID, newOwnerID })
       setTimeout(() => {
         uni.navigateBack()
       }, 300);
@@ -71,9 +72,9 @@ export function useTransferGroupOwner(routeParams?: any): UserPickerHookResult {
 
   /** 触底加载更多 */
   const onReachEnd = async (): Promise<void> => {
-    if (!hasMoreGroupMembers.value) return
+    if (!hasMoreMembers.value) return
     try {
-      await fetchMoreGroupMemberList()
+      await loadMoreMembers()
     } catch (error) {
       console.error('[useTransferGroupOwner] onReachEnd failed:', error)
     }

@@ -1,174 +1,235 @@
 /**
  * 群组相关类型定义
  * @module types/group
+ *
+ * 对齐底层 atomicxcore.api.group.GroupStore.kt / GroupMemberStore.kt
  */
 
 // ==================== 枚举类型 ====================
 
 /**
- * 群组类型
+ * 群组类型（对齐 GroupType）
+ *
+ * 底层使用 V2TIMManager.GROUP_TYPE_xxx 字符串，前端枚举值与字符串保持一致
  */
 export enum GroupType {
-  /** 工作群 */
-  Work = "Work",
-  /** 公开群 */
-  Public = "Public",
-  /** 会议群 */
-  Meeting = "Meeting",
-  /** 直播群 */
-  AVChatRoom = "AVChatRoom",
-  /** 社群 */
-  Community = "Community",
+  WORK = 'Work',
+  PUBLIC = 'Public',
+  MEETING = 'Meeting',
+  AV_CHAT_ROOM = 'AVChatRoom',
+  COMMUNITY = 'Community',
+  /** 兼容旧值（部分组件可能使用） */
+  Work = 'Work',
+  Public = 'Public',
+  Meeting = 'Meeting',
+  AVChatRoom = 'AVChatRoom',
+  Community = 'Community',
 }
 
 /**
- * 群组加入审批类型
+ * 群组加入审批方式（对齐 GroupJoinOption，整数枚举）
  */
 export enum GroupJoinOption {
-  /** 禁止加入 */
-  Forbid = 0,
-  /** 需要审批 */
-  Auth = 1,
-  /** 自由加入 */
-  Any = 2,
-  /** 未知 */
-  Unknown = 100
+  FORBID = 0,
+  AUTH = 1,
+  ANY = 2,
 }
 
 /**
- * 群成员角色
+ * 群组邀请审批方式（对齐 GroupInviteOption，**新增独立枚举**）
+ *
+ * 注：旧版与 GroupJoinOption 共用，新版底层独立为 GroupInviteOption
+ * 数值与 GroupJoinOption 一致
+ */
+export enum GroupInviteOption {
+  FORBID = 0,
+  AUTH = 1,
+  ANY = 2,
+}
+
+/**
+ * 群成员角色（对齐 GroupMemberRole）
+ *
+ * 底层使用 V2TIMGroupMemberFullInfo 常量值
  */
 export enum GroupMemberRole {
-  /** 所有成员（用于筛选） */
-  All = 0,
-  /** 未定义 */
   UNDEFINED = 0,
-  /** 普通成员 */
-  Member = 200,
-  /** 管理员 */
-  Admin = 300,
-  /** 群主 */
-  Owner = 400,
+  MEMBER = 200,
+  ADMIN = 300,
+  OWNER = 400,
 }
 
 /**
- * 消息接收选项枚举
+ * 群成员筛选角色（对齐 GroupMemberFilterRole，**新增独立枚举**）
+ *
+ * 用于 GroupMemberStore.loadMembers 的 roleList 参数
+ * 比 GroupMemberRole 多一个 ALL=0
  */
-export enum ReceiveMessageOpt {
-  /** 正常接收消息 */
-  Receive = 0,
-  /** 不接收消息 */
-  NotReceive = 1,
-  /** 接收但不通知 */
-  NotNotify = 2,
-  /** 接收但不通知（除了@消息） */
-  NotNotifyExceptMention = 3,
-  /** 不接收（除了@消息） */
-  NotReceiveExceptMention = 4,
+export enum GroupMemberFilterRole {
+  ALL = 0,
+  MEMBER = 200,
+  ADMIN = 300,
+  OWNER = 400,
+}
+
+/**
+ * 群申请类型（对齐 GroupApplicationType）
+ */
+export enum GroupApplicationType {
+  /** 需要管理员审批的入群申请 */
+  JOIN_APPROVED_BY_ADMIN = 0,
+  /** 需要被邀请人同意的邀请 */
+  INVITE_APPROVED_BY_INVITEE = 1,
+  /** 需要管理员审批的邀请 */
+  INVITE_APPROVED_BY_ADMIN = 2,
+}
+
+/**
+ * 群申请处理状态（对齐 GroupApplicationHandledStatus）
+ */
+export enum GroupApplicationHandledStatus {
+  UNHANDLED = 0,
+  BY_OTHER = 1,
+  BY_MYSELF = 2,
+}
+
+/**
+ * 群申请处理结果（对齐 GroupApplicationHandledResult）
+ */
+export enum GroupApplicationHandledResult {
+  REFUSED = 0,
+  AGREED = 1,
 }
 
 // ==================== 接口类型 ====================
 
 /**
- * 群成员信息
- */
-export interface GroupMember {
-  /** 用户 ID */
-  userID: string;
-  /** 昵称 */
-  nickname?: string;
-  /** 头像 URL */
-  avatarURL?: string;
-  /** 群名片 */
-  nameCard?: string;
-  /** 成员角色 */
-  role: GroupMemberRole;
-  /** 禁言截止时间戳（秒） */
-  muteUntil: number;
-  /** 备注 */
-  remark?: string;
-}
-
-/**
- * 群组搜索信息
- */
-export interface GroupSearchInfo {
-  groupID: string;
-  groupType?: GroupType;
-  groupName: string;
-  memberCount?: number;
-  groupAvatarURL?: string;
-  introduction?: string;
-  joinGroupApprovalType?: GroupJoinOption;
-  inviteToGroupApprovalType?: GroupJoinOption;
-}
-
-/**
- * 群组信息
+ * 群组信息（对齐 GroupInfo）
+ *
+ * 注：
+ * - 旧字段 `notice` 改为 `notification`（对齐底层 notification 字段）
+ * - 旧字段 `receiveMessageOpt` **已移除**：消息接收选项归 ConversationListStore 管理
+ * - 新增 `groupAttributes`、`isAllMuted`
  */
 export interface GroupInfo {
-  /** 群组 ID */
-  groupID: string;
-  /** 群组类型 */
-  groupType?: GroupType;
-  /** 群名称 */
-  groupName?: string;
-  /** 群头像 URL */
-  avatarURL?: string;
+  groupID: string
+  groupName?: string
+  avatarURL?: string
+  groupType?: GroupType
   /** 群公告 */
-  notice?: string;
-  /** 成员数量 */
-  memberCount?: number;
+  notification?: string
   /** 加群审批方式 */
-  joinOption?: GroupJoinOption;
-  /** 邀请入群审批方式 */
-  inviteOption?: GroupJoinOption;
-  /** 群主 ID */
-  groupOwner?: string;
+  joinOption?: GroupJoinOption
+  /** 邀请入群审批方式（独立枚举） */
+  inviteOption?: GroupInviteOption
+  /** 成员数量 */
+  memberCount?: number
   /** 全员禁言状态 */
-  isAllMuted?: boolean;
-  /** 我的角色 */
-  selfRole?: GroupMemberRole;
-  /** 消息接收选项 */
-  receiveMessageOpt?: ReceiveMessageOpt;
+  isAllMuted?: boolean
+  /** 群主 ID */
+  groupOwner?: string
+  /** 我在群里的角色 */
+  selfRole?: GroupMemberRole
+  /** 群自定义属性 */
+  groupAttributes?: Record<string, string>
 }
 
 /**
- * 入群申请信息
+ * 群成员信息（对齐 GroupMember）
+ */
+export interface GroupMember {
+  userID: string
+  nickname?: string
+  /** 好友备注（来自联系人） */
+  friendRemark?: string
+  /** 群名片 */
+  nameCard?: string
+  avatarURL?: string
+  /** 成员角色 */
+  role: GroupMemberRole
+  /** 禁言截止时间戳（毫秒，底层是 Long） */
+  muteUntil: number
+}
+
+/**
+ * 入群申请信息（对齐 GroupApplicationInfo）
+ *
+ * 注：
+ * - 字段 `applicationID` 由前端组合生成（底层无该字段，identifier 走 fromUser+addTime）
+ * - `fromUserID` 改名为 `fromUser`（对齐底层）
+ * - 新增 `toUser` / `handledMsg` / `handledStatus` / `handledResult` / `type`
  */
 export interface GroupApplicationInfo {
-  /** 申请 ID */
-  applicationID: string;
-  /** 群组 ID */
-  groupID: string;
-  /** 申请人 ID */
-  fromUserID: string;
-  /** 申请人昵称 */
-  fromUserNickname?: string;
-  /** 申请人头像 */
-  fromUserAvatarURL?: string;
+  /** 申请 ID（前端组合：`${groupID}_${fromUser}_${addTime}`） */
+  applicationID: string
+  groupID: string
+  fromUser?: string
+  fromUserNickname?: string
+  fromUserAvatarURL?: string
+  toUser?: string
+  /** 添加时间（秒） */
+  addTime?: number
   /** 申请理由 */
-  requestMessage?: string;
-  /** 申请时间 */
-  addTime?: number;
+  requestMsg?: string
+  /** 处理消息 */
+  handledMsg?: string
+  /** 申请类型 */
+  type: GroupApplicationType
   /** 处理状态 */
-  handleStatus?: number;
+  handledStatus?: GroupApplicationHandledStatus
   /** 处理结果 */
-  handleResult?: number;
+  handledResult?: GroupApplicationHandledResult
+  /** 原生侧引用，前端不直接使用 */
+  rawApplication?: any
 }
 
 /**
- * 创建群组参数
+ * 创建群参数（对齐 GroupCreateParams）
+ *
+ * 注：旧名 CreateGroupParams 改为 GroupCreateParams，对齐底层
  */
-export interface CreateGroupParams {
-  /** 群组类型 */
-  groupType: string;
+export interface GroupCreateParams {
+  /** 群类型 */
+  groupType: GroupType | string
   /** 群名称 */
-  groupName: string;
-  /** 成员列表（可选） */
-  memberList?: string[];
-  /** 群组 ID（可选） */
-  groupID?: string;
-  /** 群头像 URL（可选） */
-  avatarURL?: string;
+  groupName: string
+  /** 群 ID（可选，由后台分配则不填） */
+  groupID?: string
+  /** 群头像 URL */
+  avatarURL?: string
+  /** 初始成员列表 */
+  memberList?: string[]
+}
+
+/**
+ * @deprecated 使用 GroupCreateParams（保持向后兼容引用）
+ */
+export type CreateGroupParams = GroupCreateParams
+
+/**
+ * 群事件（对齐 GroupEvent sealed class）
+ *
+ * 用于 addListener({ name: 'groupEvent' }) 推送
+ */
+export type GroupEvent =
+  | { eventType: 'OnGroupDismissed'; data: { groupID: string; opUser: GroupMember } }
+  | { eventType: 'OnKickedFromGroup'; data: { groupID: string; opUser: GroupMember } }
+  | { eventType: 'OnQuitFromGroup'; data: { groupID: string } }
+  | { eventType: 'OnReceiveJoinApplication'; data: { groupID: string; member: GroupMember; opReason?: string } }
+  | { eventType: 'OnApplicationProcessed'; data: { groupID: string; opUser: GroupMember; opResult: boolean; opReason?: string } }
+
+/**
+ * 群组搜索信息（对齐 GroupSearchInfo，本类型同时由 search.ts 使用）
+ *
+ * 注：joinGroupApprovalType 是 GroupJoinOption；inviteToGroupApprovalType 是 GroupInviteOption
+ */
+export interface GroupSearchInfo {
+  groupID: string
+  groupType?: GroupType
+  groupName?: string
+  memberCount?: number
+  groupAvatarURL?: string
+  introduction?: string
+  joinGroupApprovalType?: GroupJoinOption
+  inviteToGroupApprovalType?: GroupInviteOption
 }

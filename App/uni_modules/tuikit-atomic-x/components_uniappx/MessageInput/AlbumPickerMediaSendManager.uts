@@ -1,0 +1,364 @@
+import { MessageType, MessageStatus } from '../../types/message'
+import type { MessageInfo, VideoMessagePayload, SendMessagePayload, SendMessageOption, OfflinePushInfoResolver, OfflinePushContext } from '../../types/message'
+import { ConversationType } from '../../types/conversation'
+import type { AlbumPickerConfig, AlbumMedia } from '../AlbumPicker/AlbumPicker'
+import { AlbumMediaType, AlbumPicker } from '../AlbumPicker/AlbumPicker'
+import { useMessageInputState } from '../../state/MessageInputState'
+import { useMessageListState } from '../../state/MessageListState'
+import { useLoginState } from '../../state/LoginState'
+import { buildOfflinePushInfo } from '../../utils/buildOfflinePushInfo'
+
+const TAG = '[AlbumPickerMediaSendManager]'
+const PLACEHOLDER_PREFIX = 'placeholder_video_'
+const { getLoginUserInfo } = useLoginState()
+
+type MediaState = {
+	placeholder?: MessageInfo
+	placeholderCreating: boolean
+	thumbnailPath?: string
+	progress: number
+}
+
+type PickerSession = {
+	picker: AlbumPicker
+	conversationID: string
+	sentMediaIds: Set<number>
+	mediaStates: Map<number, MediaState>
+	setOfflinePushInfo?: OfflinePushInfoResolver
+}
+
+export type OpenAlbumPickerOptions = {
+	setOfflinePushInfo?: OfflinePushInfoResolver
+}
+
+let _pickerSessions: Set<PickerSession> = new Set<PickerSession>()
+
+function getPickerSessions(): Set<PickerSession> {
+	return _pickerSessions
+}
+
+export function openAlbumPicker(
+	conversationID: string,
+	config: AlbumPickerConfig,
+	options: UTSJSONObject | null = null
+): void {
+	console.log(TAG, 'openAlbumPicker, conversationID:', conversationID)
+	const pickerSessions = getPickerSessions()
+
+	const opts: UTSJSONObject | null = options ?? null
+	const rawResolver: any | null = opts != null ? opts['setOfflinePushInfo'] : null
+	const setOfflinePushInfo: OfflinePushInfoResolver | null = typeof rawResolver == 'function'
+		? (rawResolver as OfflinePushInfoResolver)
+		: null
+
+	const picker = new AlbumPicker()
+	const session: PickerSession = {
+		picker,
+		conversationID,
+		sentMediaIds: new Set<number>(),
+		mediaStates: new Map<number, MediaState>(),
+		setOfflinePushInfo: setOfflinePushInfo
+	}
+	pickerSessions.add(session)
+
+	picker.show(config, null, {
+		onPickConfirm: (medias: AlbumMedia[], textMessage: string | null): void => {
+			console.log(TAG, `onPickConfirm: ${medias.length} items`)
+		},
+
+		onMediaProcessing: (albumMedia: AlbumMedia, progress: number, error: boolean): void => {
+			handleMediaProcessing(session, albumMedia, progress, error)
+		},
+
+		onMediaProcessed: (): void => {
+			console.log(TAG, `onMediaProcessed: conversationID=${conversationID}`)
+			pickerSessions.delete(session)
+			refreshMessageList(conversationID)
+		},
+
+		onCancel: (): void => {
+			console.log(TAG, `onCancel: conversationID=${conversationID}`)
+			pickerSessions.delete(session)
+			refreshMessageList(conversationID)
+		}
+	})
+}
+
+export function getPlaceholderMessages(conversationID: string): MessageInfo[] {
+	const placeholders: MessageInfo[] = []
+	for (const session of getPickerSessions()) {
+		if (session.conversationID !== conversationID) continue
+		const keys = Array.from(session.mediaStates.keys)
+		for (let i: number = 0; i < keys.length; i++) {
+			const key: number = keys[i] as number
+			const state: MediaState = session.mediaStates.get(key) as MediaState
+			const ph: MessageInfo | null = state.placeholder
+			if (ph != null) {
+				placeholders.push(ph)
+			}
+		}
+	}
+	return placeholders
+}
+
+function handleMediaProcessing(
+	session: PickerSession,
+	albumMedia: AlbumMedia,
+	progress: number,
+	error: boolean
+): void {
+	if (error) return
+	if (session.sentMediaIds.has(albumMedia.id)) return
+
+	if (albumMedia.mediaType == AlbumMediaType.IMAGE) {
+		if (progress >= 1.0 && albumMedia.mediaPath != null) {
+			session.sentMediaIds.add(albumMedia.id)
+			sendImageMessage(session, albumMedia)
+		}
+		return
+	}
+
+	if (albumMedia.mediaType == AlbumMediaType.VIDEO) {
+		handleVideoProgress(session, albumMedia, progress)
+		return
+	}
+}
+
+function handleVideoProgress(
+	session: PickerSession,
+	albumMedia: AlbumMedia,
+	progress: number
+): void {
+	let state = session.mediaStates.get(albumMedia.id)
+	if (state == null) {
+		state = { placeholderCreating: false, progress: 0 }
+		session.mediaStates.set(albumMedia.id, state)
+	}
+	state.progress = progress
+
+	createPlaceholderIfNeeded(session, albumMedia, state)
+
+	const ph: MessageInfo | null = state.placeholder
+	if (ph != null && progress < 1.0) {
+		// 上传进度
+		ph.uploadMediaProgress = Math.round(progress * 100)
+		const currentList = useMessageListState({ conversationID: session.conversationID }).messageList.value
+		const phMsgID: string = ph.msgID ?? ''
+		//   - currentList.some((msg: any) => ...) msg 形参是 any 但运行时实际是
+		const hasMatch: boolean = currentList.some((msg: any): boolean => {
+			const m: UTSJSONObject = JSON.parse<UTSJSONObject>(JSON.stringify(msg ?? new UTSJSONObject())) ?? new UTSJSONObject()
+			const id: any | null = m['msgID']
+			if (typeof id !== 'string') return false
+			return (id as string) == phMsgID
+		})
+		if (!hasMatch) {
+			refreshMessageList(session.conversationID)
+		}
+		return
+	}
+
+	if (progress >= 1.0 && albumMedia.mediaPath != null) {
+		session.sentMediaIds.add(albumMedia.id)
+		session.mediaStates.delete(albumMedia.id)
+
+		sendVideoMessage(session, albumMedia)
+	}
+}
+
+function createPlaceholderIfNeeded(
+	session: PickerSession,
+	albumMedia: AlbumMedia,
+	state: MediaState
+): void {
+	if (state.placeholder != null || state.placeholderCreating) return
+
+	state.placeholderCreating = true
+	const snapshotPath: string = albumMedia.videoThumbnailPath ?? ''
+
+	if (snapshotPath.length > 0) {
+		const infoSrc: string = snapshotPath.startsWith('/') ? 'file://' + snapshotPath : snapshotPath
+		uni.getImageInfo({
+			src: infoSrc,
+			success: (info: any): void => {
+				const infoObj: UTSJSONObject = JSON.parse<UTSJSONObject>(JSON.stringify(info ?? new UTSJSONObject())) ?? new UTSJSONObject()
+				const wRaw: any | null = infoObj['width']
+				const hRaw: any | null = infoObj['height']
+				const w: number = typeof wRaw == 'number' ? wRaw as number : 0
+				const h: number = typeof hRaw == 'number' ? hRaw as number : 0
+				buildPlaceholder(session, albumMedia, state, snapshotPath, w, h)
+			},
+			fail: (): void => {
+				buildPlaceholder(session, albumMedia, state, snapshotPath, 0, 0)
+			}
+		})
+	} else {
+		buildPlaceholder(session, albumMedia, state, '', 0, 0)
+	}
+}
+
+function buildPlaceholder(
+	session: PickerSession,
+	albumMedia: AlbumMedia,
+	state: MediaState,
+	snapshotPath: string,
+	width: number,
+	height: number
+): void {
+	const loginUser = getLoginUserInfo()
+	const normalizedSnapshotPath: string = snapshotPath.startsWith('file:///') ? snapshotPath.substring(7) : snapshotPath
+
+	const videoPayload: VideoMessagePayload = {
+		videoSnapshotPath: normalizedSnapshotPath,
+		videoSnapshotWidth: width,
+		videoSnapshotHeight: height,
+		videoDuration: albumMedia.duration ?? 0,
+		videoPath: '',
+		videoType: 'mp4',
+		videoSize: 0
+	}
+	const placeholder: MessageInfo = {
+		msgID: `${PLACEHOLDER_PREFIX}${albumMedia.id}_${Date.now()}`,
+		from: {
+			userID: loginUser?.userID ?? '',
+			avatarURL: loginUser?.avatarURL,
+			nickname: loginUser?.nickname
+		},
+		to: '',
+		isSentBySelf: true,
+		timestamp: Math.floor(Date.now() / 1000),
+		status: MessageStatus.SENDING,
+		conversationType: ConversationType.UNKNOWN,
+		messageType: MessageType.VIDEO,
+		messagePayload: videoPayload,
+		uploadMediaProgress: Math.round(state.progress * 100),
+		downloadMediaProgress: 0,
+		atUserList: [],
+		isPinned: false,
+		needReadReceipt: false,
+		isExtensionEnabled: false,
+		extensionList: [],
+		reactionList: []
+	}
+
+	state.placeholder = placeholder
+	refreshMessageList(session.conversationID)
+}
+
+function refreshMessageList(conversationID: string): void {
+	const state = useMessageListState({ conversationID })
+	const placeholders: any[] = getPlaceholderMessages(conversationID) as any[]
+	const currentList: any[] = state.messageList.value
+
+	const filtered: any[] = currentList.filter(
+		(msg: any): boolean => {
+			const m: UTSJSONObject = JSON.parse<UTSJSONObject>(JSON.stringify(msg ?? new UTSJSONObject())) ?? new UTSJSONObject()
+			const idRaw: any | null = m['msgID']
+			const id: string = typeof idRaw == 'string' ? (idRaw as string) : ''
+			return !id.startsWith(PLACEHOLDER_PREFIX)
+		}
+	)
+
+	if (placeholders.length > 0) {
+		state.messageList.value = [...filtered, ...placeholders]
+	} else if (filtered.length !== currentList.length) {
+		state.messageList.value = filtered
+	}
+}
+
+function removeFilePrefix(path: string): string {
+	return path.startsWith('file:///') ? path.substring(7) : path
+}
+
+function sendImageMessage(session: PickerSession, media: AlbumMedia): void {
+	const conversationID = session.conversationID
+	const imagePath: string = removeFilePrefix(media.mediaPath)
+	const state = useMessageInputState({ conversationID })
+	const infoSrc: string = imagePath.startsWith('/') ? 'file://' + imagePath : imagePath
+
+	const send = (width: number, height: number): void => {
+		const payload: SendMessagePayload = {
+			type: 'image',
+			imagePath,
+			imageWidth: width,
+			imageHeight: height
+		}
+		const pushCtx: OfflinePushContext = {
+			messageType: MessageType.IMAGE,
+			messagePayload: payload,
+			conversationID
+		}
+		const offlinePushInfo = buildOfflinePushInfo(session.setOfflinePushInfo, pushCtx)
+		const option: SendMessageOption = {}
+		if (offlinePushInfo != null) option.offlinePushInfo = offlinePushInfo
+
+		state?.sendMessage(payload, option).catch((err: any | null): void => {
+			console.error(TAG, 'sendMessage(image) failed:', `${err}`)
+		})
+	}
+
+	uni.getImageInfo({
+		src: infoSrc,
+		success: (info: any): void => {
+			const infoObj: UTSJSONObject = JSON.parse<UTSJSONObject>(JSON.stringify(info ?? new UTSJSONObject())) ?? new UTSJSONObject()
+			const wRaw: any | null = infoObj['width']
+			const hRaw: any | null = infoObj['height']
+			const w: number = typeof wRaw == 'number' ? wRaw as number : 0
+			const h: number = typeof hRaw == 'number' ? hRaw as number : 0
+			console.log(TAG, `sendImage: width=${w}, height=${h}, path=${imagePath}`)
+			send(w > 0 ? w : 1920, h > 0 ? h : 1080)
+		},
+		fail: (): void => {
+			console.log(TAG, `sendImage: getImageInfo failed, using default 1920x1080, path=${imagePath}`)
+			send(1920, 1080)
+		}
+	})
+}
+
+function sendVideoMessage(session: PickerSession, media: AlbumMedia): void {
+	const conversationID = session.conversationID
+	const videoPath: string = removeFilePrefix(media.mediaPath)
+	const snapshotPath: string = removeFilePrefix(media.videoThumbnailPath ?? '')
+	const state = useMessageInputState({ conversationID })
+	const infoSrc: string = videoPath.startsWith('/') ? 'file://' + videoPath : videoPath
+
+	const send = (width: number, height: number): void => {
+		const payload: SendMessagePayload = {
+			type: 'video',
+			videoFilePath: videoPath,
+			videoType: 'mp4',
+			duration: media.duration ?? 0,
+			snapshotPath,
+			snapshotWidth: width,
+			snapshotHeight: height
+		}
+		const pushCtx: OfflinePushContext = {
+			messageType: MessageType.VIDEO,
+			messagePayload: payload,
+			conversationID
+		}
+		const offlinePushInfo = buildOfflinePushInfo(session.setOfflinePushInfo, pushCtx)
+		const option: SendMessageOption = {}
+		if (offlinePushInfo != null) option.offlinePushInfo = offlinePushInfo
+
+		state?.sendMessage(payload, option).catch((err: any | null): void => {
+			console.error(TAG, 'sendMessage(video) failed:', `${err}`)
+		})
+	}
+
+	uni.getVideoInfo({
+		src: infoSrc,
+		success: (info: any): void => {
+			const infoObj: UTSJSONObject = JSON.parse<UTSJSONObject>(JSON.stringify(info ?? new UTSJSONObject())) ?? new UTSJSONObject()
+			const wRaw: any | null = infoObj['width']
+			const hRaw: any | null = infoObj['height']
+			const w: number = typeof wRaw == 'number' ? wRaw as number : 0
+			const h: number = typeof hRaw == 'number' ? hRaw as number : 0
+			console.log(TAG, `sendVideo: width=${w}, height=${h}, duration=${media.duration}, path=${videoPath}`)
+			send(w > 0 ? w : 1920, h > 0 ? h : 1080)
+		},
+		fail: (): void => {
+			console.log(TAG, `sendVideo: getVideoInfo failed, using default 1920x1080, path=${videoPath}`)
+			send(1920, 1080)
+		}
+	})
+}

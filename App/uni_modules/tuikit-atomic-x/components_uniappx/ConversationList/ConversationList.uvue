@@ -1,0 +1,311 @@
+<template>
+  <view class="conversation-list">
+    <view v-if="showLoading" class="conversation-list__placeholder">
+      <component :is="resolvedPlaceholderLoading" />
+    </view>
+
+    <view v-else-if="showLoadError" class="conversation-list__placeholder">
+      <component :is="resolvedPlaceholderLoadError" :error="loadError" />
+    </view>
+
+    <view v-else-if="showEmpty" class="conversation-list__placeholder">
+      <component :is="resolvedPlaceholderEmptyList" />
+    </view>
+
+    <scroll-view v-else class="conversation-list__scroll" scroll-y="true" :show-scrollbar="false">
+      <view
+        v-for="(item, index) in filteredAndSortedList"
+        :key="index"
+      >
+        <SwipeActions
+          :actionsWidth="computedActionsWidth"
+          :disabled="!hasVisibleActions"
+          :closeTrigger="closeTriggers.get(indexKey(item, index)) ?? 0"
+          @contentTap="handleConversationTap(item)"
+          @open="handleSwipeOpen(indexKey(item, index))"
+        >
+          <component
+            :is="resolvedPreview"
+            :conversation="item"
+            :Avatar="resolvedAvatar"
+          />
+
+          <template #actions v-if="hasVisibleActions">
+            <component
+              :is="resolvedConversationActions"
+              :conversation="item"
+              :actions="cfgActions"
+              :isSupportPin="cfgIsSupportPin"
+              :isSupportMute="cfgIsSupportMute"
+              :isSupportDelete="cfgIsSupportDelete"
+              @conversationPin="handlePin"
+              @conversationMute="handleMute"
+              @conversationDelete="handleDelete"
+            />
+          </template>
+        </SwipeActions>
+      </view>
+    </scroll-view>
+  </view>
+</template>
+
+<script setup lang="uts">
+import { ref, computed, onBeforeUnmount } from 'vue'
+import { useConversationListState } from '../../state/ConversationListState'
+import SwipeActions from '../SwipeActions/SwipeActions.uvue'
+import DefaultPreview from './ConversationPreview.uvue'
+import DefaultConversationActions from './ConversationActions.uvue'
+import AvatarComponent from '../Avatar/Avatar.uvue'
+import DefaultEmptyList from './placeholders/EmptyList.uvue'
+import DefaultLoading from './placeholders/Loading.uvue'
+import DefaultLoadError from './placeholders/LoadError.uvue'
+import { type ConversationInfo } from '../../types/conversation'
+import { type ActionsConfig, type ActionItem } from './types'
+
+const props = withDefaults(defineProps<{
+  /** 操作按钮配置 */
+  actionsConfig?: ActionsConfig
+  /** 自定义预览组件 */
+  Preview?: any
+  /** 自定义操作按钮组件 */
+  ConversationActions?: any
+  /** 自定义头像组件 */
+  Avatar?: any
+  /** 空列表占位组件 */
+  PlaceholderEmptyList?: any
+  /** 加载中占位组件 */
+  PlaceholderLoading?: any
+  /** 加载错误占位组件 */
+  PlaceholderLoadError?: any
+  /** 会话列表过滤函数 */
+  filter?: (conversation: ConversationInfo) => boolean
+  /** 会话列表排序函数 */
+  sort?: (a: ConversationInfo, b: ConversationInfo) => number
+}>(), {
+  actionsConfig: () => ({
+    isSupportPin: true,
+    isSupportMute: true,
+    isSupportDelete: true
+  } as ActionsConfig)
+})
+
+const emit = defineEmits<{
+  (e: 'conversationSelect', conversation: ConversationInfo): void
+  (e: 'conversationPin', conversationID: string, isPinned: boolean): void
+  (e: 'conversationMute', conversationID: string, isMuted: boolean): void
+  (e: 'conversationDelete', conversationID: string): void
+}>()
+
+const state = useConversationListState()
+
+const isLoading = ref<boolean>(false)
+const loadError = ref<string | null>(null)
+const openedSwipeActionId = ref<string | null>(null)
+const closeTriggers = ref<Map<string, number>>(new Map())
+
+const filteredAndSortedList = computed<any[]>((): any[] => {
+  let list: any[] = state.conversationList.value
+
+  const filterFn = props.filter
+  if (filterFn != null) {
+    list = list.filter((item: any, _index: number): boolean => {
+      return filterFn(item as ConversationInfo)
+    })
+  }
+
+  const sortFn = props.sort
+  if (sortFn != null) {
+    list = list.sort((a: any, b: any): number => {
+      return sortFn(a as ConversationInfo, b as ConversationInfo)
+    })
+  }
+
+  return list
+})
+
+const indexKey = (item: any, index: number): string => {
+  if (item == null) {
+    return `idx_${index}`
+  }
+  const id = (item as UTSJSONObject)['conversationID']
+  if (typeof id == 'string') {
+    return id
+  }
+  return `idx_${index}`
+}
+
+const resolvedPreview = computed<any>((): any => props.Preview ?? DefaultPreview)
+const resolvedConversationActions = computed<any>((): any => props.ConversationActions ?? DefaultConversationActions)
+const resolvedAvatar = computed<any>((): any => props.Avatar ?? AvatarComponent)
+const resolvedPlaceholderEmptyList = computed<any>((): any => props.PlaceholderEmptyList ?? DefaultEmptyList)
+const resolvedPlaceholderLoading = computed<any>((): any => props.PlaceholderLoading ?? DefaultLoading)
+const resolvedPlaceholderLoadError = computed<any>((): any => props.PlaceholderLoadError ?? DefaultLoadError)
+
+const showLoading = computed<boolean>((): boolean => isLoading.value)
+
+const showLoadError = computed<boolean>((): boolean => {
+  const err = loadError.value
+  return err != null && err.length > 0
+})
+
+const showEmpty = computed<boolean>((): boolean => {
+  return filteredAndSortedList.value.length == 0
+})
+
+const computedActionsWidth = computed<number>((): number => {
+  const config = props.actionsConfig as ActionsConfig
+  const actions = config.actions
+  if (actions != null && actions.length > 0) {
+    return actions.length * 160
+  }
+
+  let count = 0
+  if (config.isSupportPin == true) count++
+  if (config.isSupportMute == true) count++
+  if (config.isSupportDelete == true) count++
+
+  const width = count * 160
+  return width > 0 ? width : 480
+})
+
+const hasVisibleActions = computed<boolean>((): boolean => {
+  const config = props.actionsConfig as ActionsConfig
+  const actions = config.actions
+  if (actions != null && actions.length > 0) {
+    return true
+  }
+  return config.isSupportPin == true || config.isSupportMute == true || config.isSupportDelete == true
+})
+
+const cfgActions = computed<ActionItem[]>((): ActionItem[] => {
+  const config = props.actionsConfig as ActionsConfig
+  const a = config.actions
+  return a != null ? (a as ActionItem[]) : ([] as ActionItem[])
+})
+
+const cfgIsSupportPin = computed<boolean>((): boolean => {
+  const config = props.actionsConfig as ActionsConfig
+  return config.isSupportPin !== false
+})
+
+const cfgIsSupportMute = computed<boolean>((): boolean => {
+  const config = props.actionsConfig as ActionsConfig
+  return config.isSupportMute !== false
+})
+
+const cfgIsSupportDelete = computed<boolean>((): boolean => {
+  const config = props.actionsConfig as ActionsConfig
+  return config.isSupportDelete !== false
+})
+
+function triggerSwipeActionClose(conversationID: string): void {
+  const newMap = new Map(closeTriggers.value)
+  const cur = newMap.get(conversationID) ?? 0
+  newMap.set(conversationID, cur + 1)
+  closeTriggers.value = newMap
+}
+
+const handleSwipeOpen = (conversationID: string): void => {
+  const openedId = openedSwipeActionId.value
+  if (openedId != null && openedId !== conversationID) {
+    triggerSwipeActionClose(openedId)
+  }
+  openedSwipeActionId.value = conversationID
+}
+
+const closeSwipeAction = (): void => {
+  const openedId = openedSwipeActionId.value
+  if (openedId != null) {
+    triggerSwipeActionClose(openedId)
+    openedSwipeActionId.value = null
+  }
+}
+
+const handleConversationTap = (conversation: any): void => {
+  if (openedSwipeActionId.value != null) {
+    closeSwipeAction()
+    openedSwipeActionId.value = null
+    return
+  }
+  const convObj: UTSJSONObject = conversation as UTSJSONObject
+  const unreadCount: any | null = convObj['unreadCount']
+  if (typeof unreadCount == 'number' && unreadCount > 0) {
+    const convID: any | null = convObj['conversationID']
+    if (typeof convID == 'string' && convID.length > 0) {
+      state.clearConversationUnreadCount(convID as string)
+    }
+  }
+  emit('conversationSelect', conversation)
+}
+
+const handlePin = async (conversationID: string, isPinned: boolean): Promise<void> => {
+  emit('conversationPin', conversationID, isPinned)
+  try {
+    await state.pinConversation(conversationID, isPinned)
+  } catch (error: any) {
+    const errMsg = error instanceof Error ? (error as Error).message : `${error}`
+    console.error(`pinConversation failed: ${errMsg}`)
+    uni.showToast({
+      title: isPinned ? '置顶失败' : '取消置顶失败',
+      icon: 'none',
+      duration: 2000
+    })
+  }
+  closeSwipeAction()
+}
+
+const handleMute = async (conversationID: string, isMuted: boolean): Promise<void> => {
+  emit('conversationMute', conversationID, isMuted)
+  try {
+    await state.setReceiveMessageOpt(conversationID, isMuted ? 2 : 0)
+  } catch (error: any) {
+    const errMsg = error instanceof Error ? (error as Error).message : `${error}`
+    console.error(`setReceiveMessageOpt failed: ${errMsg}`)
+    uni.showToast({
+      title: isMuted ? '设置免打扰失败' : '取消免打扰失败',
+      icon: 'none',
+      duration: 2000
+    })
+  }
+  closeSwipeAction()
+}
+
+const handleDelete = async (conversationID: string): Promise<void> => {
+  emit('conversationDelete', conversationID)
+  try {
+    await state.deleteConversation(conversationID)
+  } catch (error: any) {
+    const errMsg = error instanceof Error ? (error as Error).message : `${error}`
+    console.error(`deleteConversation failed: ${errMsg}`)
+  }
+  closeSwipeAction()
+}
+
+onBeforeUnmount(() => {
+  const openedId = openedSwipeActionId.value
+  if (openedId != null) {
+    triggerSwipeActionClose(openedId)
+  }
+
+  openedSwipeActionId.value = null
+
+  state.destroyStore()
+})
+</script>
+
+<style>
+.conversation-list {
+  flex: 1;
+  background-color: #ffffff;
+}
+
+.conversation-list__placeholder {
+  flex: 1;
+  justify-content: center;
+  align-items: center;
+}
+
+.conversation-list__scroll {
+  flex: 1;
+}
+</style>

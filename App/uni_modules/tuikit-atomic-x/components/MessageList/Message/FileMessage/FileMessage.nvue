@@ -1,7 +1,7 @@
 <template>
   <view
     class="file-message"
-    :class="['content-'+ (message.isSelf ? 'out' : 'in')]"
+    :class="['content-'+ (message.isSentBySelf ? 'out' : 'in')]"
     @touchstart="handleTouchStart"
     @touchend="handleTouchEnd"
     @tap="handleFileTap"
@@ -29,7 +29,7 @@
     <view
       v-if="isDownloading"
       class="downloading"
-      :class="['content-'+ (message.isSelf ? 'out' : 'in')]"
+      :class="['content-'+ (message.isSentBySelf ? 'out' : 'in')]"
     >
     </view>
   </view>
@@ -38,7 +38,8 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import type { MessageInfo } from '../../../../types/message'
-import { MessageMediaFileType } from '../../../../types/message'
+import { MediaQuality } from '../../../../types/message'
+import { useMessageActionState } from '../../../../state/MessageActionState'
 import { useMessageListState } from '../../../../state/MessageListState'
 
 import wordIcon from '../../../../static/icon/file-types/word_icon.png'
@@ -57,10 +58,7 @@ interface Props {
 
 const props = defineProps<Props>()
 
-const { downloadMessageResource } = useMessageListState({
-  conversationID: props.conversationID
-})
-
+// downloadMessageResource 已迁到 MessageActionState.downloadMedia
 const isDownloading = ref(false)
 
 // 长按判定阈值，与 Message.nvue 中保持一致
@@ -68,15 +66,15 @@ const LONG_PRESS_THRESHOLD = 350
 const touchStartTime = ref(0)
 
 const fileName = computed(() => {
-  return props.message.messageBody?.fileName || '未知文件'
+  return props.message.messagePayload?.fileName || '未知文件'
 })
 
 const fileSize = computed(() => {
-  return props.message.messageBody?.fileSize || 0
+  return props.message.messagePayload?.fileSize || 0
 })
 
 const filePath = computed(() => {
-  return props.message.messageBody?.filePath || ''
+  return props.message.messagePayload?.filePath || ''
 })
 
 const isDownloaded = computed(() => !!filePath.value)
@@ -227,7 +225,7 @@ const handleFileTap = async (e: any) => {
 
   isDownloading.value = true
   try {
-    await downloadMessageResource(props.message, MessageMediaFileType.FILE)
+    await useMessageActionState({ message: props.message }).downloadMedia(MediaQuality.ORIGINAL)
   } catch (error) {
     console.error('[FileMessage] download failed:', error)
     uni.showToast({ title: '下载失败', icon: 'none' })

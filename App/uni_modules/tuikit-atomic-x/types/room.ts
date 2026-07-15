@@ -47,6 +47,36 @@ export interface RoomUser {
   avatarURL: string;
 }
 
+/** 录制状态 */
+export enum RecordingStatus {
+  /** 未录制 */
+  None = 0,
+  /** 录制中 */
+  Recording = 1,
+}
+
+/** 录制停止原因 */
+export enum RecordingStopReason {
+  /** 用户主动停止 */
+  StoppedByUser = 0,
+  /** 录制机器人已离开房间（异常中断） */
+  RecorderLeftRoom = 1,
+}
+
+/** 房间录制信息 */
+export interface RecordingInfo {
+  /** 录制状态 */
+  status: RecordingStatus;
+  /** 触发录制的操作者 */
+  operatorUser: RoomUser;
+  /** 录制开始时间戳（毫秒） */
+  startTime: number;
+}
+
+/** 开始录制选项，预留扩展 */
+export type StartRecordingOptions = {
+};
+
 /** 房间信息 */
 export interface RoomInfo {
   /** 房间唯一标识 */
@@ -83,6 +113,8 @@ export interface RoomInfo {
   isAllScreenShareDisabled?: boolean;
   /** 是否禁用消息发送 */
   isAllMessageDisabled?: boolean;
+  /** 录制信息（房间内开启录制时由底层下发） */
+  recordingInfo?: RecordingInfo;
 }
 
 /** 预约房间选项 */
@@ -367,6 +399,37 @@ export enum RoomEvent {
    * });
    */
   onCallRevokedByAdmin = 'onCallRevokedByAdmin',
+
+  /**
+   * 当房间云端录制开始时触发。
+   * @param {object} options - 事件参数对象
+   * @param {RoomInfo} options.roomInfo - 房间信息
+   * @param {RoomUser} options.operator - 触发录制的操作者
+   * @example
+   * import { useRoomState, RoomEvent } from 'tuikit-atomic-x';
+   *
+   * const roomState = useRoomState();
+   * roomState.subscribeEvent(RoomEvent.onRecordingStarted, ({ roomInfo, operator }) => {
+   *   console.log(`房间 ${roomInfo.roomName} 由 ${operator.userName} 开始录制`);
+   * });
+   */
+  onRecordingStarted = 'onRecordingStarted',
+
+  /**
+   * 当房间云端录制停止时触发。
+   * @param {object} options - 事件参数对象
+   * @param {RoomInfo} options.roomInfo - 房间信息
+   * @param {RoomUser} options.operator - 触发停止录制的操作者
+   * @param {RecordingStopReason} options.reason - 录制停止原因
+   * @example
+   * import { useRoomState, RoomEvent } from 'tuikit-atomic-x';
+   *
+   * const roomState = useRoomState();
+   * roomState.subscribeEvent(RoomEvent.onRecordingStopped, ({ roomInfo, operator, reason }) => {
+   *   console.log(`房间 ${roomInfo.roomName} 录制停止，原因：${reason}`);
+   * });
+   */
+  onRecordingStopped = 'onRecordingStopped',
 }
 
 /** 房间事件处理函数类型定义。 */
@@ -466,4 +529,21 @@ export interface RoomEventHandlers {
    * @param options.operator - 撤销呼叫的管理员
    */
   onCallRevokedByAdmin: (options: { roomInfo: RoomInfo; call: RoomCall; operator: RoomUser }) => void;
+
+  /**
+   * onRecordingStarted 事件处理函数
+   * @param options - 事件数据
+   * @param options.roomInfo - 房间信息
+   * @param options.operator - 触发录制的操作者
+   */
+  onRecordingStarted: (options: { roomInfo: RoomInfo; operator: RoomUser }) => void;
+
+  /**
+   * onRecordingStopped 事件处理函数
+   * @param options - 事件数据
+   * @param options.roomInfo - 房间信息
+   * @param options.operator - 触发停止录制的操作者
+   * @param options.reason - 录制停止原因
+   */
+  onRecordingStopped: (options: { roomInfo: RoomInfo; operator: RoomUser; reason: RecordingStopReason }) => void;
 }

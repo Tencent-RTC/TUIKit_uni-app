@@ -1,0 +1,138 @@
+<template>
+  <view v-if="isShow" class="action-sheet-mask" @tap="handleMaskTap">
+    <view class="action-sheet" @tap.stop>
+      <view
+        v-for="(item, index) in options"
+        :key="index"
+        class="action-sheet__item"
+        @tap="handleSelect(item, index)"
+      >
+        <text
+          class="action-sheet__text"
+          :style="{ color: item.color ?? 'rgba(0, 0, 0, 0.9)' }"
+        >{{ item.label }}</text>
+      </view>
+      <view class="action-sheet__gap"></view>
+      <view class="action-sheet__item action-sheet__item--cancel" @tap="handleCancel">
+        <text class="action-sheet__text">取消</text>
+      </view>
+    </view>
+  </view>
+</template>
+
+<script setup lang="uts">
+
+import { ref, watch } from 'vue'
+
+export type ActionSheetOption = {
+	label: string
+	value: any
+	color?: string
+}
+
+type ActionSheetProps = {
+	visible: boolean
+	options: ActionSheetOption[]
+}
+
+type Emits = {
+	'update:visible': boolean
+	select: any
+	cancel: void
+}
+
+const props = withDefaults(defineProps<ActionSheetProps>(), {
+	visible: false,
+	options: (): ActionSheetOption[] => []
+})
+
+const emit = defineEmits<Emits>()
+
+const isShow = ref<boolean>(false)
+
+function showSheet(): void {
+	isShow.value = true
+}
+
+function hideSheet(callback: (() => void) | null = null): void {
+	isShow.value = false
+	if (callback != null) {
+		callback()
+	}
+}
+
+watch((): boolean => props.visible, (newVal: boolean): void => {
+	if (newVal) {
+		showSheet()
+	} else {
+		hideSheet()
+	}
+})
+
+const handleSelect = (option: any, index: number): void => {
+	hideSheet((): void => {
+		emit('select', option)
+		emit('update:visible', false)
+	})
+}
+
+const handleCancel = (): void => {
+	hideSheet((): void => {
+		emit('cancel')
+		emit('update:visible', false)
+	})
+}
+
+const handleMaskTap = (): void => {
+	handleCancel()
+}
+</script>
+
+<style scoped>
+  .action-sheet-mask {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.8);
+  justify-content: flex-end;
+}
+
+.action-sheet {
+  background-color: #F5F5F5;
+  border-top-left-radius: 24rpx;
+  border-top-right-radius: 24rpx;
+  padding-bottom: 68rpx;
+}
+
+.action-sheet__item {
+  padding: 32rpx 0;
+  background-color: #FFFFFF;
+  justify-content: center;
+  align-items: center;
+  border-bottom-width: 1rpx;
+  border-bottom-style: solid;
+  border-bottom-color: #E5E5E5;
+}
+
+.action-sheet__item:active {
+  background-color: #F5F5F5;
+}
+
+.action-sheet__item--cancel {
+  margin-top: 0;
+  border-bottom-width: 0;
+}
+
+.action-sheet__text {
+  font-size: 32rpx;
+  font-weight: 500;
+  color: rgba(0, 0, 0, 0.9);
+}
+
+.action-sheet__gap {
+  height: 16rpx;
+  background-color: #F5F5F5;
+}
+</style>

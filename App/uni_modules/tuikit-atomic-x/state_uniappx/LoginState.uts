@@ -1,0 +1,370 @@
+
+import { ref, type Ref } from "vue";
+import type { HybridListenerOptions } from "@/uni_modules/tuikit-atomic-x";
+import { addListener, callAPI, removeListener, reportUIPlatform } from "@/uni_modules/tuikit-atomic-x";
+
+/**
+ * 用户权限类型
+ * @remarks
+ * 可用值：
+ * - `ALLOW_ANY`: 允许任何人
+ * - `NEED_CONFIRM`: 需要确认
+ * - `DENY_ANY`: 拒绝任何人
+ */
+export enum AllowType {
+  ALLOW_ANY = 0,
+  NEED_CONFIRM = 1,
+  DENY_ANY = 2,
+}
+
+/**
+ * 性别类型
+ * @remarks
+ * 可用值：
+ * - `UNKNOWN`: 未知
+ * - `MALE`: 男
+ * - `FEMALE`: 女
+ */
+export enum Gender {
+  UNKNOWN = 0,
+  MALE = 1,
+  FEMALE = 2,
+}
+
+/**
+ * 用户资料参数
+ */
+export type UserProfileParam = {
+  userID?: string;
+  nickname?: string;
+  avatarURL?: string;
+  selfSignature?: string;
+  gender?: Gender;
+  role?: number;
+  level?: number;
+  birthday?: number;
+  allowType?: AllowType;
+};
+
+/**
+ * 登录参数
+ */
+export type LoginOptions = {
+  sdkAppID: number;
+  userID: string;
+  userSig: string;
+  success?: () => void;
+  fail?: (errCode: number, errMsg: string) => void;
+};
+
+/**
+ * 登出参数
+ */
+export type LogoutOptions = {
+  success?: () => void;
+  fail?: (errCode: number, errMsg: string) => void;
+};
+
+/**
+ * 设置用户信息参数
+ */
+export type SetSelfInfoOptions = {
+  userProfile: UserProfileParam;
+  success?: (data?: Record<string, any>) => void;
+  fail?: (errCode: number, errMsg: string) => void;
+};
+
+/**
+ * 桥接响应（参照 atomicx LoginAPI.kt 的 HybridResponse data class）
+ *
+ */
+type HybridResponse = {
+  api: string | null;
+  code: number;
+  message: string | null;
+  data: any | null;
+};
+
+/**
+ * 桥接响应默认值（JSON.parse 失败兜底）
+ * code = -1 表示本地异常（区分于远端 0 成功 / 业务错误码）
+ */
+const DEFAULT_HYBRID_RESPONSE: HybridResponse = {
+  api: null,
+  code: -1,
+  message: null,
+  data: null
+};
+
+/**
+ * LoginStore.loginStatus 监听器 payload
+ * 形状：{ loginStatus: number }  其中 number 是 LoginStatus 枚举值（0=UNLOGIN）
+ *
+ */
+type LoginStatusPayload = {
+  loginStatus: number | null;
+};
+
+/**
+ * LoginStore.loginUserInfo 监听器 payload
+ * 形状：{ loginUserInfo: string }  其中 string 是 UserProfile 的 JSON 序列化
+ *
+ */
+type LoginUserInfoPayload = {
+  loginUserInfo: string | null;
+};
+
+type LoginGlobalState = {
+  loginUserInfo: Ref<UserProfileParam | null>;
+  loginStatus: Ref<string | null>;
+  bindEventDone: boolean;
+};
+
+// 全局状态存储 key
+const LOGIN_STATE_KEY = '__TUIKIT_LOGIN_STATE__';
+
+/**
+ * 模块级单例缓存
+ *
+ *   改用纯模块级 Map<string, LoginGlobalState> 单例。
+ */
+const _loginStateCache: Map<string, LoginGlobalState> = new Map<string, LoginGlobalState>();
+
+/**
+ * 获取全局登录状态单例
+ */
+function getGlobalState(): LoginGlobalState {
+  if (_loginStateCache.has(LOGIN_STATE_KEY)) {
+    return _loginStateCache.get(LOGIN_STATE_KEY) as LoginGlobalState;
+  }
+  const newState: LoginGlobalState = {
+    loginUserInfo: ref<UserProfileParam | null>(null),
+    loginStatus: ref<string | null>(null),
+    bindEventDone: false
+  };
+  _loginStateCache.set(LOGIN_STATE_KEY, newState);
+  return newState;
+}
+
+/**
+ * 当前登录用户信息
+ */
+const loginUserInfo: Ref<UserProfileParam | null> = getGlobalState().loginUserInfo;
+
+/**
+ * 当前登录状态
+ */
+const loginStatus: Ref<string | null> = getGlobalState().loginStatus;
+
+const createStoreParams: string = JSON.stringify({
+  storeName: "login",
+  id: ''
+});
+
+/**
+ * 登录方法
+ */
+function login(params: LoginOptions): void {
+  reportUIPlatform();
+  callAPI(JSON.stringify({
+    api: "login",
+    params: {
+      createStoreParams: createStoreParams,
+      sdkAppID: params.sdkAppID,
+      userID: params.userID,
+      userSig: params.userSig
+    }
+  }), (res: string) => {
+    try {
+      const data = JSON.parse<HybridResponse>(res) ?? DEFAULT_HYBRID_RESPONSE;
+      console.warn(`--> ${JSON.stringify(data)}`);
+
+      if (data.code == 0) {
+        params?.success?.();
+      } else {
+        const code = data.code;
+        const message = data.message ?? '';
+        params?.fail?.(code, message);
+      }
+    } catch (error: any) {
+      const errMsg = error instanceof Error ? (error as Error).message : `${error}`;
+      params?.fail?.(-1, errMsg);
+    }
+  });
+}
+
+/**
+ * 登出方法
+ */
+function logout(params?: LogoutOptions): void {
+  callAPI(JSON.stringify({
+    api: "logout",
+    params: {
+      createStoreParams: createStoreParams,
+    }
+  }), (res: string) => {
+    try {
+      const data = JSON.parse<HybridResponse>(res) ?? DEFAULT_HYBRID_RESPONSE;
+      console.warn(`logout data: ${JSON.stringify(data)}`);
+      if (data.code == 0) {
+        clearLoginState();
+        params?.success?.();
+      } else {
+        const code = data.code;
+        const message = data.message ?? '';
+        params?.fail?.(code, message);
+      }
+    } catch (error: any) {
+      const errMsg = error instanceof Error ? (error as Error).message : `${error}`;
+      params?.fail?.(-1, errMsg);
+    }
+  });
+}
+
+/**
+ * 清除登录状态数据
+ */
+function clearLoginState(): void {
+  // 解除事件绑定
+  unbindEvent();
+
+  const globalState = getGlobalState();
+  globalState.loginUserInfo.value = null;
+  globalState.loginStatus.value = null;
+  globalState.bindEventDone = false;
+}
+
+/**
+ * 解除事件监听
+ */
+function unbindEvent(): void {
+  const dataNames: string[] = ["loginStatus", "loginUserInfo"];
+
+  dataNames.forEach((name: string) => {
+    const options: HybridListenerOptions = {
+      type: "",
+      store: "LoginState",
+      name,
+      params: {
+        createStoreParams: createStoreParams
+      }
+    };
+    removeListener(options);
+  });
+}
+
+/**
+ * 设置用户信息
+ */
+function setSelfInfo(params: SetSelfInfoOptions): void {
+  const { success, fail, ...userProfile } = params;
+  callAPI(JSON.stringify({
+    api: "setSelfInfo",
+    params: userProfile
+  }), (res: string) => {
+    try {
+      const data = JSON.parse<HybridResponse>(res) ?? DEFAULT_HYBRID_RESPONSE;
+      console.warn(`setSelfInfo data: ${JSON.stringify(data)}`);
+      if (data.code == 0) {
+        success?.(data as Record<string, any>);
+      } else {
+        const code = data.code;
+        const message = data.message ?? '';
+        fail?.(code, message);
+      }
+    } catch (error: any) {
+      const errMsg = error instanceof Error ? (error as Error).message : `${error}`;
+      console.warn(`setSelfInfo error: ${errMsg}`);
+      fail?.(-1, errMsg);
+    }
+  });
+}
+
+function getLoginUserInfo(): UserProfileParam | null {
+  return loginUserInfo.value;
+}
+
+function bindEvent(): void {
+  const globalState = getGlobalState();
+  // 防止重复绑定事件
+  if (globalState.bindEventDone) {
+    return;
+  }
+  globalState.bindEventDone = true;
+
+  const statusOptions: HybridListenerOptions = {
+    type: '',
+    store: "LoginStore",
+    name: "loginStatus",
+    listenerID: "login",
+    params: {
+      createStoreParams: createStoreParams
+    }
+  };
+  addListener(statusOptions, (data: string) => {
+    console.warn(`====> 登录结果: ${data}`);
+    try {
+      const result = JSON.parse<LoginStatusPayload>(data);
+      if (result != null && result.loginStatus != null) {
+        // listener 把 loginStatus 存为字符串（`${result.loginStatus}`）
+        loginStatus.value = `${result.loginStatus}`;
+        console.log(`[loginStatus listener] Data: ${JSON.stringify(result)}`);
+      }
+    } catch (error: any) {
+      const errMsg = error instanceof Error ? (error as Error).message : `${error}`;
+      console.error(`[loginStatus listener] Error: ${errMsg}`);
+    }
+  });
+
+  const userInfoOptions: HybridListenerOptions = {
+    type: '',
+    store: "LoginStore",
+    name: "loginUserInfo",
+    listenerID: "login",
+    params: {
+      createStoreParams: createStoreParams
+    }
+  };
+  addListener(userInfoOptions, (data: string) => {
+    try {
+      const result = JSON.parse<LoginUserInfoPayload>(data);
+      if (result != null && result.loginUserInfo != null) {
+        // 二次解析：loginUserInfo 字段是 UserProfile 的 JSON 序列化字符串
+        const parsed = JSON.parse<UserProfileParam>(result.loginUserInfo);
+        if (parsed != null) {
+          loginUserInfo.value = parsed;
+        }
+      }
+    } catch (error: any) {
+      const errMsg = error instanceof Error ? (error as Error).message : `${error}`;
+      console.error(`[loginUserInfo listener] Error: ${errMsg}`);
+    }
+  });
+}
+
+/**
+ * LoginState hook 返回值类型
+ *
+ */
+type UseLoginStateReturn = {
+  loginUserInfo: Ref<UserProfileParam | null>;
+  loginStatus: Ref<string | null>;
+  login: (params: LoginOptions) => void;
+  logout: (params?: LogoutOptions) => void;
+  setSelfInfo: (params: SetSelfInfoOptions) => void;
+  getLoginUserInfo: () => UserProfileParam | null;
+};
+
+export function useLoginState(): UseLoginStateReturn {
+  bindEvent();
+  return {
+    loginUserInfo: loginUserInfo,
+    loginStatus: loginStatus,
+    login: (params: LoginOptions): void => { login(params); },
+    logout: (params?: LogoutOptions): void => { logout(params); },
+    setSelfInfo: (params: SetSelfInfoOptions): void => { setSelfInfo(params); },
+    getLoginUserInfo: (): UserProfileParam | null => { return getLoginUserInfo(); }
+  };
+}
+
+export default useLoginState;

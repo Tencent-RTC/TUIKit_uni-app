@@ -1,8 +1,8 @@
 {
   "id": "tuikit-atomic-x",
   "displayName": "【官方】腾讯云聊天+通话+直播响应式 SDK",
-  "version": "4.1.1",
-  "description": "tuikit-atomic-x sdk 是腾讯云推出的面向即时通信、音视频通话、视频直播、语聊房、多人音视频房间等场景的响应式 API sdk，支持房间管理、主播开播、观众观看、成员管理、麦位控制、基础美颜等功能。",
+  "version": "4.2.4",
+  "description": "tuikit-atomic-x sdk 是腾讯云推出的面向即时通信、音视频通话、视频直播、语聊房等场景的响应式 API sdk，支持房间管理、主播开播、观众观看、成员管理、麦位控制、基础美颜等功能。",
   "keywords": [
     "腾讯云",
     "直播",

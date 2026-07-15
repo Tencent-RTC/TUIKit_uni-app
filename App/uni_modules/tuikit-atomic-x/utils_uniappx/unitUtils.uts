@@ -1,0 +1,18 @@
+let _screenWidth: number | null = null
+
+const getScreenWidth = (): number => {
+  const cached: number | null = _screenWidth
+  if (cached != null) return cached
+  const systemInfo = uni.getSystemInfoSync()
+  const width: number = typeof systemInfo.screenWidth == 'number' ? systemInfo.screenWidth : 375
+  _screenWidth = width
+  return width
+}
+
+export const rpxToPx = (rpx: number): number => {
+  return (rpx / 750) * getScreenWidth()
+}
+
+export const pxToRpx = (px: number): number => {
+  return Math.round((px / getScreenWidth()) * 750)
+}

@@ -1,0 +1,676 @@
+
+import { ref, type Ref } from "vue";
+import type { HybridListenerOptions } from "@/uni_modules/tuikit-atomic-x";
+import type { HybridCallOptions } from "./hybridCallOptions.uts";
+import { callAPI, addListener, removeListener } from "@/uni_modules/tuikit-atomic-x";
+
+/**
+ * 桥接响应（参照 atomicx HybridResponse data class）
+ */
+type HybridResponse = {
+  api: string | null;
+  code: number;
+  message: string | null;
+  data: any | null;
+};
+
+/**
+ * 桥接响应默认值（JSON.parse 失败兜底）
+ * code = -1 表示本地异常
+ */
+const DEFAULT_HYBRID_RESPONSE: HybridResponse = {
+  api: null,
+  code: -1,
+  message: null,
+  data: null
+};
+
+/**
+ * blackList / friendList / friendApplicationList 监听 payload（共用）
+ * SDK 实际推送结构化对象/数组（非 JSON 字符串），按对象/数组声明
+ *
+ *   没有无参构造器，Gson 反序列化时 `UnsafeAllocator.newInstance` 抛 "Interface can't be instantiated"
+ *   —— 把 payload 字段类型改成 any[]（Gson 反序列化为 List<Any>，不再触发 interface 实例化）
+ */
+type ContactListPayload = {
+  blackList?: any[] | null;
+  friendList?: any[] | null;
+  friendApplicationList?: any[] | null;
+};
+
+/**
+ * friendApplicationUnreadCount 监听 payload
+ */
+type FriendApplicationUnreadCountPayload = {
+  friendApplicationUnreadCount: number | null;
+};
+
+type LoginStatusPayload = {
+  loginStatus: number | null;
+};
+
+type GetContactInfoInner = {
+  contactInfoList: any[] | null;
+};
+type GetContactInfoData = {
+  data: GetContactInfoInner | null;
+};
+
+/**
+ * 模块级单例缓存
+ */
+const InstanceMap: Map<string, ContactState> = new Map<string, ContactState>();
+
+/**
+ * 联系人状态管理类
+ */
+class ContactState {
+  /** Store 实例ID */
+  readonly instanceId: string;
+
+  /**
+   * 黑名单列表
+   *   —— 与 GroupState.uts:155 `Ref<any[]>` 模式一致
+   */
+  readonly blackList: Ref<any[]>;
+  /** 好友列表 */
+  readonly friendList: Ref<any[]>;
+  /** 好友申请列表 */
+  readonly friendApplicationList: Ref<any[]>;
+  /** 好友申请未读数 */
+  readonly friendApplicationUnreadCount: Ref<number>;
+
+  private constructor(instanceId: string) {
+    this.instanceId = instanceId;
+    this.blackList = ref<any[]>([] as any[]);
+    this.friendList = ref<any[]>([] as any[]);
+    this.friendApplicationList = ref<any[]>([] as any[]);
+    this.friendApplicationUnreadCount = ref<number>(0);
+
+    this.createStore();
+  }
+
+  private loadInit(): void {
+    this.loadFriends().catch((e: any | null): void => {
+      console.error(`[${this.instanceId}][loadInit] loadFriends swallowed: ${e}`)
+    })
+    this.loadBlackList().catch((e: any | null): void => {
+      console.error(`[${this.instanceId}][loadInit] loadBlackList swallowed: ${e}`)
+    })
+    this.loadFriendApplications().catch((e: any | null): void => {
+      console.error(`[${this.instanceId}][loadInit] loadFriendApplications swallowed: ${e}`)
+    })
+  }
+
+  static getInstance(instanceId: string): ContactState {
+    if (!InstanceMap.has(instanceId)) {
+      InstanceMap.set(instanceId, new ContactState(instanceId));
+    }
+    return InstanceMap.get(instanceId) as ContactState;
+  }
+
+  private createStore(): void {
+    const options: HybridCallOptions = {
+      api: "createStore",
+      params: {
+        createStoreParams: this.instanceId,
+      },
+    };
+
+    callAPI(JSON.stringify(options), (response: string) => {
+      try {
+        const result = JSON.parse<HybridResponse>(response) ?? DEFAULT_HYBRID_RESPONSE;
+        if (result.code == 0) {
+          this.bindEvent();
+          this.loadInit();
+        } else {
+          const msg = result.message ?? 'unknown'
+          console.error(`[${this.instanceId}][createStore] Failed: ${msg}`);
+        }
+      } catch (error: any) {
+        const errMsg = error instanceof Error ? (error as Error).message : `${error}`
+        console.error(`[${this.instanceId}][createStore] Parse error: ${errMsg}`);
+      }
+    });
+  }
+
+  private bindEvent(): void {
+    const makeOptions = (name: string): HybridListenerOptions => {
+      const opts: HybridListenerOptions = {
+        type: "",
+        store: "Contact",
+        name: name,
+        params: { createStoreParams: this.instanceId },
+      }
+      return opts
+    }
+
+    addListener(makeOptions("blackList"), (data: string) => {
+      try {
+        const result = JSON.parse<ContactListPayload>(data);
+        if (result != null) {
+          const list = result.blackList
+          if (list != null) {
+            this.blackList.value = list as any[]
+          }
+        }
+      } catch (error: any) {
+        const errMsg = error instanceof Error ? (error as Error).message : `${error}`
+        console.error(`[${this.instanceId}][blackList listener] Error: ${errMsg}`);
+      }
+    });
+
+    addListener(makeOptions("friendList"), (data: string) => {
+      try {
+        const result = JSON.parse<ContactListPayload>(data);
+        if (result != null) {
+          const list = result.friendList
+          if (list != null) {
+            this.friendList.value = list as any[]
+          }
+        }
+      } catch (error: any) {
+        const errMsg = error instanceof Error ? (error as Error).message : `${error}`
+        console.error(`[${this.instanceId}][friendList listener] Error: ${errMsg}`);
+      }
+    });
+
+    addListener(makeOptions("friendApplicationList"), (data: string) => {
+      try {
+        const result = JSON.parse<ContactListPayload>(data);
+        if (result != null) {
+          const list = result.friendApplicationList
+          if (list != null) {
+            this.friendApplicationList.value = list as any[]
+          }
+        }
+      } catch (error: any) {
+        const errMsg = error instanceof Error ? (error as Error).message : `${error}`
+        console.error(`[${this.instanceId}][friendApplicationList listener] Error: ${errMsg}`);
+      }
+    });
+
+    addListener(makeOptions("friendApplicationUnreadCount"), (data: string) => {
+      try {
+        const result = JSON.parse<FriendApplicationUnreadCountPayload>(data);
+        if (result != null && result.friendApplicationUnreadCount != null) {
+          this.friendApplicationUnreadCount.value = result.friendApplicationUnreadCount;
+        }
+      } catch (error: any) {
+        const errMsg = error instanceof Error ? (error as Error).message : `${error}`
+        console.error(`[${this.instanceId}][friendApplicationUnreadCount listener] Error: ${errMsg}`);
+      }
+    });
+  }
+
+
+  // ============================================================================
+  // Actions
+  // ============================================================================
+
+  getContactInfo = async (userIDList: string[]): Promise<any[]> => {
+    return new Promise((resolve, reject) => {
+      const options: HybridCallOptions = {
+        api: "getContactInfo",
+        params: {
+          createStoreParams: this.instanceId,
+          userIDList,
+        },
+      };
+
+      callAPI(JSON.stringify(options), (response: string) => {
+        try {
+          const result = JSON.parse<HybridResponse>(response) ?? DEFAULT_HYBRID_RESPONSE;
+          if (result.code == 0) {
+            const parsed = JSON.parse<GetContactInfoData>(JSON.stringify(result.data));
+            const list: any[] = parsed?.data?.contactInfoList ?? [];
+            resolve(list);
+          } else {
+            const msg = result.message ?? 'unknown'
+            console.error(`[${this.instanceId}][getContactInfo] Failed: ${msg}`);
+            reject(new Error(msg));
+          }
+        } catch (error: any) {
+          const errMsg = error instanceof Error ? (error as Error).message : `${error}`
+          console.error(`[${this.instanceId}][getContactInfo] Parse error: ${errMsg}`);
+          reject(error);
+        }
+      });
+    });
+  };
+
+  /**
+   * 拉取好友列表（旧名 fetchFriendList）
+   */
+  loadFriends = async (): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      const options: HybridCallOptions = {
+        api: "loadFriends",
+        params: {
+          createStoreParams: this.instanceId,
+        },
+      };
+
+      callAPI(JSON.stringify(options), (response: string) => {
+        try {
+          const result = JSON.parse<HybridResponse>(response) ?? DEFAULT_HYBRID_RESPONSE;
+          if (result.code == 0) {
+            resolve();
+          } else {
+            const msg = result.message ?? 'Failed to load friends';
+            console.error(`[${this.instanceId}][loadFriends] Failed: ${msg}`);
+            reject(new Error(msg));
+          }
+        } catch (error: any) {
+          const errMsg = error instanceof Error ? (error as Error).message : `${error}`
+          console.error(`[${this.instanceId}][loadFriends] Parse error: ${errMsg}`);
+          reject(error);
+        }
+      });
+    });
+  };
+
+  /**
+   * 拉取黑名单列表（旧名 fetchBlackList）
+   */
+  loadBlackList = async (): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      const options: HybridCallOptions = {
+        api: "loadBlackList",
+        params: {
+          createStoreParams: this.instanceId,
+        },
+      };
+
+      callAPI(JSON.stringify(options), (response: string) => {
+        try {
+          const result = JSON.parse<HybridResponse>(response) ?? DEFAULT_HYBRID_RESPONSE;
+          if (result.code == 0) {
+            resolve();
+          } else {
+            const msg = result.message ?? 'Failed to load black list';
+            console.error(`[${this.instanceId}][loadBlackList] Failed: ${msg}`);
+            reject(new Error(msg));
+          }
+        } catch (error: any) {
+          const errMsg = error instanceof Error ? (error as Error).message : `${error}`
+          console.error(`[${this.instanceId}][loadBlackList] Parse error: ${errMsg}`);
+          reject(error);
+        }
+      });
+    });
+  };
+
+  /**
+   * 拉取好友申请列表（旧名 fetchFriendApplicationList）
+   */
+  loadFriendApplications = async (): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      const options: HybridCallOptions = {
+        api: "loadFriendApplications",
+        params: {
+          createStoreParams: this.instanceId,
+        },
+      };
+
+      callAPI(JSON.stringify(options), (response: string) => {
+        try {
+          const result = JSON.parse<HybridResponse>(response) ?? DEFAULT_HYBRID_RESPONSE;
+          if (result.code == 0) {
+            resolve();
+          } else {
+            const msg = result.message ?? 'Failed to load friend applications';
+            console.error(`[${this.instanceId}][loadFriendApplications] Failed: ${msg}`);
+            reject(new Error(msg));
+          }
+        } catch (error: any) {
+          const errMsg = error instanceof Error ? (error as Error).message : `${error}`
+          console.error(`[${this.instanceId}][loadFriendApplications] Parse error: ${errMsg}`);
+          reject(error);
+        }
+      });
+    });
+  };
+
+  /**
+   * 添加好友
+   */
+  addFriend = async (userID: string, remark?: string, addWording?: string): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      const options: HybridCallOptions = {
+        api: "addFriend",
+        params: {
+          createStoreParams: this.instanceId,
+          userID,
+          remark,
+          addWording,
+        },
+      };
+
+      callAPI(JSON.stringify(options), (response: string) => {
+        try {
+          const result = JSON.parse<HybridResponse>(response) ?? DEFAULT_HYBRID_RESPONSE;
+          // 30539 = 好友请求待审核
+          if (result.code == 0 || result.code == 30539) {
+            resolve();
+          } else {
+            const msg = result.message ?? 'Failed to add friend';
+            console.error(`[${this.instanceId}][addFriend] Failed: ${msg}`);
+            reject(new Error(msg));
+          }
+        } catch (error: any) {
+          const errMsg = error instanceof Error ? (error as Error).message : `${error}`
+          console.error(`[${this.instanceId}][addFriend] Parse error: ${errMsg}`);
+          reject(error);
+        }
+      });
+    });
+  };
+
+  /**
+   * 删除好友
+   */
+  deleteFriend = async (userID: string): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      const options: HybridCallOptions = {
+        api: "deleteFriend",
+        params: {
+          createStoreParams: this.instanceId,
+          userID,
+        },
+      };
+
+      callAPI(JSON.stringify(options), (response: string) => {
+        try {
+          const result = JSON.parse<HybridResponse>(response) ?? DEFAULT_HYBRID_RESPONSE;
+          if (result.code == 0) {
+            resolve();
+          } else {
+            const msg = result.message ?? 'Failed to delete friend';
+            console.error(`[${this.instanceId}][deleteFriend] Failed: ${msg}`);
+            reject(new Error(msg));
+          }
+        } catch (error: any) {
+          const errMsg = error instanceof Error ? (error as Error).message : `${error}`
+          console.error(`[${this.instanceId}][deleteFriend] Parse error: ${errMsg}`);
+          reject(error);
+        }
+      });
+    });
+  };
+
+  /**
+   * 设置好友备注（旧名 setUserRemark）
+   */
+  setFriendRemark = async (userID: string, remark: string): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      const options: HybridCallOptions = {
+        api: "setFriendRemark",
+        params: {
+          createStoreParams: this.instanceId,
+          userID,
+          remark,
+        },
+      };
+
+      callAPI(JSON.stringify(options), (response: string) => {
+        try {
+          const result = JSON.parse<HybridResponse>(response) ?? DEFAULT_HYBRID_RESPONSE;
+          if (result.code == 0) {
+            resolve();
+          } else {
+            const msg = result.message ?? 'Failed to set friend remark';
+            console.error(`[${this.instanceId}][setFriendRemark] Failed: ${msg}`);
+            reject(new Error(msg));
+          }
+        } catch (error: any) {
+          const errMsg = error instanceof Error ? (error as Error).message : `${error}`
+          console.error(`[${this.instanceId}][setFriendRemark] Parse error: ${errMsg}`);
+          reject(error);
+        }
+      });
+    });
+  };
+
+  /**
+   * 添加到黑名单
+   */
+  addToBlacklist = async (userID: string): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      const options: HybridCallOptions = {
+        api: "addToBlacklist",
+        params: {
+          createStoreParams: this.instanceId,
+          userID,
+        },
+      };
+
+      callAPI(JSON.stringify(options), (response: string) => {
+        try {
+          const result = JSON.parse<HybridResponse>(response) ?? DEFAULT_HYBRID_RESPONSE;
+          if (result.code == 0) {
+            resolve();
+          } else {
+            const msg = result.message ?? 'Failed to add to blacklist';
+            console.error(`[${this.instanceId}][addToBlacklist] Failed: ${msg}`);
+            reject(new Error(msg));
+          }
+        } catch (error: any) {
+          const errMsg = error instanceof Error ? (error as Error).message : `${error}`
+          console.error(`[${this.instanceId}][addToBlacklist] Parse error: ${errMsg}`);
+          reject(error);
+        }
+      });
+    });
+  };
+
+  /**
+   * 从黑名单移除
+   */
+  removeFromBlacklist = async (userID: string): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      const options: HybridCallOptions = {
+        api: "removeFromBlacklist",
+        params: {
+          createStoreParams: this.instanceId,
+          userID,
+        },
+      };
+
+      callAPI(JSON.stringify(options), (response: string) => {
+        try {
+          const result = JSON.parse<HybridResponse>(response) ?? DEFAULT_HYBRID_RESPONSE;
+          if (result.code == 0) {
+            resolve();
+          } else {
+            const msg = result.message ?? 'Failed to remove from blacklist';
+            console.error(`[${this.instanceId}][removeFromBlacklist] Failed: ${msg}`);
+            reject(new Error(msg));
+          }
+        } catch (error: any) {
+          const errMsg = error instanceof Error ? (error as Error).message : `${error}`
+          console.error(`[${this.instanceId}][removeFromBlacklist] Parse error: ${errMsg}`);
+          reject(error);
+        }
+      });
+    });
+  };
+
+  /**
+   * 同意好友申请
+   */
+  acceptFriendApplication = async (application: any): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      const options: HybridCallOptions = {
+        api: "acceptFriendApplication",
+        params: {
+          createStoreParams: this.instanceId,
+          info: JSON.stringify(application),
+        },
+      };
+
+      callAPI(JSON.stringify(options), (response: string) => {
+        try {
+          const result = JSON.parse<HybridResponse>(response) ?? DEFAULT_HYBRID_RESPONSE;
+          if (result.code == 0) {
+            resolve();
+          } else {
+            const msg = result.message ?? 'Failed to accept friend application';
+            console.error(`[${this.instanceId}][acceptFriendApplication] Failed: ${msg}`);
+            reject(new Error(msg));
+          }
+        } catch (error: any) {
+          const errMsg = error instanceof Error ? (error as Error).message : `${error}`
+          console.error(`[${this.instanceId}][acceptFriendApplication] Parse error: ${errMsg}`);
+          reject(error);
+        }
+      });
+    });
+  };
+
+  /**
+   * 拒绝好友申请
+   */
+  refuseFriendApplication = async (application: any): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      const options: HybridCallOptions = {
+        api: "refuseFriendApplication",
+        params: {
+          createStoreParams: this.instanceId,
+          info: JSON.stringify(application),
+        },
+      };
+
+      callAPI(JSON.stringify(options), (response: string) => {
+        try {
+          const result = JSON.parse<HybridResponse>(response) ?? DEFAULT_HYBRID_RESPONSE;
+          if (result.code == 0) {
+            resolve();
+          } else {
+            const msg = result.message ?? 'Failed to refuse friend application';
+            console.error(`[${this.instanceId}][refuseFriendApplication] Failed: ${msg}`);
+            reject(new Error(msg));
+          }
+        } catch (error: any) {
+          const errMsg = error instanceof Error ? (error as Error).message : `${error}`
+          console.error(`[${this.instanceId}][refuseFriendApplication] Parse error: ${errMsg}`);
+          reject(error);
+        }
+      });
+    });
+  };
+
+  /**
+   * 清空好友申请未读数
+   */
+  clearFriendApplicationUnreadCount = async (): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      const options: HybridCallOptions = {
+        api: "clearFriendApplicationUnreadCount",
+        params: {
+          createStoreParams: this.instanceId,
+        },
+      };
+
+      callAPI(JSON.stringify(options), (response: string) => {
+        try {
+          const result = JSON.parse<HybridResponse>(response) ?? DEFAULT_HYBRID_RESPONSE;
+          if (result.code == 0) {
+            resolve();
+          } else {
+            const msg = result.message ?? 'Failed to clear friend application unread count';
+            console.error(`[${this.instanceId}][clearFriendApplicationUnreadCount] Failed: ${msg}`);
+            reject(new Error(msg));
+          }
+        } catch (error: any) {
+          const errMsg = error instanceof Error ? (error as Error).message : `${error}`
+          console.error(`[${this.instanceId}][clearFriendApplicationUnreadCount] Parse error: ${errMsg}`);
+          reject(error);
+        }
+      });
+    });
+  };
+
+  // ============================================================================
+  // 销毁
+  // ============================================================================
+
+  private unbindEvent(): void {
+    const dataNames = [
+      "blackList",
+      "friendList",
+      "friendApplicationList",
+      "friendApplicationUnreadCount",
+    ];
+
+    dataNames.forEach((dataName) => {
+      const options: HybridListenerOptions = {
+        type: "",
+        store: "Contact",
+        name: dataName,
+        params: { createStoreParams: this.instanceId },
+      };
+      removeListener(options);
+    });
+
+    const loginOptions: HybridListenerOptions = {
+      type: "",
+      store: "LoginStore",
+      name: "loginStatus",
+      listenerID: `contact-${this.instanceId}`,
+      params: {
+        createStoreParams: JSON.stringify({ storeName: 'login', id: '' })
+      }
+    };
+    removeListener(loginOptions);
+  }
+
+  private resetData(): void {
+    this.blackList.value = [];
+    this.friendList.value = [];
+    this.friendApplicationList.value = [];
+    this.friendApplicationUnreadCount.value = 0;
+  }
+
+  destroyStore = (): void => {
+    // 幂等：实例已被销毁过，直接 return
+    if (!InstanceMap.has(this.instanceId)) return;
+    this.unbindEvent();
+    this.resetData();
+    InstanceMap.delete(this.instanceId);
+
+    const options: HybridCallOptions = {
+      api: "destroyStore",
+      params: {
+        createStoreParams: this.instanceId,
+      },
+    };
+
+    callAPI(JSON.stringify(options), () => {});
+  };
+}
+
+/**
+ * 联系人状态管理 Hook
+ * @param instanceId Store 实例ID（可选；多 instance 场景使用）
+ *
+ *   内部用 `JSON.stringify({ storeName: 'Contact', instanceId })` 打包成 SDK 端 Gson 期望的 JSON 字符串。
+ *   SDK 端 `parseCreateStoreParamsMap` 用 Gson 解析 params.createStoreParams 字段，
+ *   期望 BEGIN_OBJECT（Map<String, String>）但拿到裸字符串会抛
+ *   `Expected BEGIN_OBJECT but was STRING` 运行时 JsonSyntaxException。
+ *   —— 与 GroupMemberState/SearchState 内部 generateInstanceId 模式一致
+ *   （GroupState/ConversationListState 已在 useXxxState 层处理）。
+ */
+export function useContactState(instanceId: string | null = null): ContactState {
+  let finalInstanceId: string
+  if (instanceId != null && instanceId.length > 0) {
+    finalInstanceId = JSON.stringify({ storeName: "Contact", instanceId })
+  } else {
+    // 默认 instance（无参数调用）：不带 instanceId 字段
+    finalInstanceId = JSON.stringify({ storeName: "Contact" })
+  }
+  return ContactState.getInstance(finalInstanceId)
+}
+
+export { ContactState };
+export default useContactState;

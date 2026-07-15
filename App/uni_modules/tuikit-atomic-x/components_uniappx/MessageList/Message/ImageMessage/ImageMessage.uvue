@@ -1,0 +1,278 @@
+<template>
+  <view 
+    class="image-message"
+    :style="imageContainerStyle"
+    @touchstart="handleTouchStart"
+  >
+    <view class="image-highlight">
+      <image
+        class="image-content"
+        :style="imageContainerStyle"
+        :class="{ 'image-hidden': loadingState !== 'loaded' }"
+        :src="imageUrl"
+        mode="aspectFill"
+        @load="handleImageLoad"
+        @error="handleImageError"
+        @tap="handleImageTap"
+      />
+      
+      <view v-if="loadingState == 'loading'" class="image-loading">
+        <text class="loading-text">加载中...</text>
+      </view>
+      
+      <view v-if="loadingState == 'error'" class="image-error">
+        <text class="error-text">图片加载失败</text>
+      </view>
+    </view>
+  </view>
+</template>
+
+<script setup lang="uts">
+import { ref, computed, watch } from 'vue'
+import { MediaQuality } from '../../../../types/message'
+import { useMessageActionState } from '../../../../state/MessageActionState'
+import { useMessageListState } from '../../../../state/MessageListState'
+
+type Props = {
+  message: any | null
+  conversationID: string}
+
+const props = defineProps<Props>()
+
+const loadingState = ref<'loading' | 'loaded' | 'error'>('loading')
+const actualSize = ref({ width: 0, height: 0 })
+
+// 长按判定阈值，与 Message.nvue 中保持一致
+const LONG_PRESS_THRESHOLD = 350
+const touchStartTime = ref(0)
+
+// 获取消息列表状态，用于下载资源
+// downloadMedia 已迁到 MessageActionState.downloadMedia
+const imageUrl = computed((): string => {
+  const messageObj: UTSJSONObject = props.message as UTSJSONObject
+  const body: UTSJSONObject = messageObj['messagePayload'] as UTSJSONObject
+  if (body == null) return ''
+  let url: string = ''
+  const origPath: any | null = body['originalImagePath']
+  if (typeof origPath == 'string' && (origPath as string).length > 0) {
+    url = origPath as string
+  } else {
+    const largePath: any | null = body['largeImagePath']
+    if (typeof largePath == 'string' && (largePath as string).length > 0) {
+      url = largePath as string
+    } else {
+      const thumbPath: any | null = body['thumbImagePath']
+      if (typeof thumbPath == 'string') {
+        url = thumbPath as string
+      }
+    }
+  }
+  // Add file:// prefix for local paths on iOS (paths starting with /)
+  if (url.length > 0 && url.startsWith('/') && !url.startsWith('file://')) {
+    url = 'file://' + url
+  }
+  return url
+})
+
+watch(
+  imageUrl,
+  (newUrl: string, oldUrl: string): void => {
+    if (newUrl.length > 0 && oldUrl.length == 0 && loadingState.value == 'error') {
+      loadingState.value = 'loading'
+    }
+  }
+)
+
+const imageWidth = computed((): number => {
+  const messageObj: UTSJSONObject = props.message as UTSJSONObject
+  const body: UTSJSONObject = messageObj['messagePayload'] as UTSJSONObject
+  if (body == null) return 0
+  const w: any | null = body['originalImageWidth']
+  return typeof w == 'number' ? (w as number) : 0
+})
+const imageHeight = computed((): number => {
+  const messageObj: UTSJSONObject = props.message as UTSJSONObject
+  const body: UTSJSONObject = messageObj['messagePayload'] as UTSJSONObject
+  if (body == null) return 0
+  const h: any | null = body['originalImageHeight']
+  return typeof h == 'number' ? (h as number) : 0
+})
+
+const MAX_WIDTH = 400
+const MAX_HEIGHT = 600
+const MIN_WIDTH = 120
+const MIN_HEIGHT = 120
+
+const imageContainerStyle = computed((): UTSJSONObject => {
+  const width: number = (actualSize.value['width'] ?? imageWidth.value ?? 200) as number
+  const height: number = (actualSize.value['height'] ?? imageHeight.value ?? 200) as number
+
+  if (width == 200 && height == 200) {
+    return {
+      width: `${MIN_WIDTH}rpx`,
+      height: `${MIN_WIDTH}rpx`,
+      borderRadius: '20rpx'
+    }
+  }
+
+  let displayWidth: number = width
+  let displayHeight: number = height
+
+  if (displayWidth > MAX_WIDTH) {
+    displayHeight = (displayHeight * MAX_WIDTH) / displayWidth
+    displayWidth = MAX_WIDTH
+  }
+
+  if (displayHeight > MAX_HEIGHT) {
+    displayWidth = (displayWidth * MAX_HEIGHT) / displayHeight
+    displayHeight = MAX_HEIGHT
+  }
+
+  if (displayWidth < MIN_WIDTH) {
+    displayHeight = (displayHeight * MIN_WIDTH) / displayWidth
+    displayWidth = MIN_WIDTH
+  }
+
+  if (displayHeight < MIN_HEIGHT) {
+    displayWidth = (displayWidth * MIN_HEIGHT) / displayHeight
+    displayHeight = MIN_HEIGHT
+  }
+
+  return {
+    width: `${displayWidth}rpx`,
+    height: `${displayHeight}rpx`,
+    borderRadius: '20rpx',
+    displayWidth: displayWidth,
+    displayHeight: displayHeight
+  }
+})
+
+const handleImageLoad = (e: UniImageLoadEvent): void => {
+  loadingState.value = 'loaded'
+  const w: number = typeof e.detail.width == 'number' ? e.detail.width : 0
+  const h: number = typeof e.detail.height == 'number' ? e.detail.height : 0
+  actualSize.value = {
+    width: w,
+    height: h
+  }
+}
+
+const handleImageError = () => {
+  loadingState.value = 'error'
+}
+
+const handleTouchStart = (e: any) => {
+  touchStartTime.value = Date.now()
+}
+
+const handleImageTap = () => {
+  // 长按判定：触摸持续时间超过阈值视为长按，交由父级 Message.nvue 处理消息操作菜单
+  // 注意：判定后必须复位 touchStartTime，否则下一次"未收到 touchstart 直接 tap"
+  // （nvue 部分场景事件丢失）会用旧时间戳算出极大 duration，导致正常点击被误判为长按
+  const startTime = touchStartTime.value
+  touchStartTime.value = 0
+  if (startTime > 0 && Date.now() - startTime >= LONG_PRESS_THRESHOLD) {
+    return
+  }
+
+  if (loadingState.value == 'loaded') {
+    const url: string = imageUrl.value
+    if (url.length > 0) {
+      uni.previewImage({
+        urls: [url],
+        longPressActions: {
+          itemList: ['保存图片']
+        }
+      })
+    }
+  }
+}
+
+// 检查并下载图片资源
+const checkAndDownloadResource = async () => {
+  const messageObj: UTSJSONObject = props.message as UTSJSONObject
+  const msgID: any | null = messageObj['msgID']
+  if ((typeof msgID == 'string' && (msgID as string).length > 0) && imageUrl.value.length == 0) {
+    loadingState.value = 'loading'
+    try {
+      const msgForAction: UTSJSONObject = props.message as UTSJSONObject
+      await useMessageActionState({ message: msgForAction }).downloadMedia(MediaQuality.ORIGINAL)
+    } catch (error: any) {
+      console.error('[ImageMessage] downloadMedia failed:', error)
+      loadingState.value = 'error'
+    }
+  }
+}
+
+// 监听 message 变化，当有数据且 imageUrl 为空时下载资源
+watch(
+  (): string | null => {
+    const messageObj: UTSJSONObject = props.message as UTSJSONObject
+    const id: any | null = messageObj['msgID']
+    return typeof id == 'string' ? (id as string) : null
+  },
+  (newMsgID: string | null): void => {
+    if (newMsgID != null && newMsgID.length > 0 && imageUrl.value.length == 0) {
+      checkAndDownloadResource()
+    }
+  },
+  { immediate: true }
+)
+</script>
+
+<style>
+.image-message {
+  position: relative;
+  border-radius: 20rpx;
+  overflow: hidden;
+}
+
+.image-highlight {
+  flex: 1;
+  position: relative;
+}
+
+.image-content {
+  flex: 1;
+  border-radius: 20rpx;
+}
+
+.image-hidden {
+  opacity: 0;
+}
+
+.image-loading {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  align-items: center;
+  justify-content: center;
+  background-color: #f5f5f5;
+  z-index: 10;
+}
+
+.loading-text {
+  font-size: 24rpx;
+  color: #999;
+}
+
+.image-error {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  align-items: center;
+  justify-content: center;
+  background-color: #f5f5f5;
+  z-index: 10;
+}
+
+.error-text {
+  font-size: 24rpx;
+  color: #ccc;
+  margin-top: 10rpx;
+}
+</style>

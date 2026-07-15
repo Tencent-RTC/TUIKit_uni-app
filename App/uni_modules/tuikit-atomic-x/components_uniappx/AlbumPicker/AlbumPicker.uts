@@ -1,0 +1,169 @@
+
+import { AlbumPickerImpl } from './impl/AlbumPickerImpl'
+import { showAlbumPicker } from '@/uni_modules/tuikit-atomic-x'
+
+/**
+ * 媒体过滤类型
+ */
+export enum AlbumPickerMediaFilter {
+	IMAGE_ONLY = 0,
+	VIDEO_ONLY = 1,
+	IMAGE_AND_VIDEO = 2,
+}
+
+/**
+ * 媒体类型
+ */
+export enum AlbumMediaType {
+	IMAGE = 0,
+	VIDEO = 1,
+}
+
+/**
+ * 选择器样式
+ */
+export enum AlbumPickerStyle {
+	LIKE_WECHAT = 0,
+	LIKE_WHATSAPP = 1,
+}
+
+/**
+ * 语言
+ */
+export enum AlbumPickerLanguage {
+	SYSTEM = 0,
+	EN = 1,
+	ZH_HANS = 2,
+	ZH_HANT = 3,
+	AR = 4,
+}
+
+/**
+ * 压缩质量
+ */
+export enum AlbumPickerCompressQuality {
+	STANDARD = 0,
+	HIGH = 1,
+}
+
+export type AlbumPickerTheme = {
+	primaryColor?: string
+	backgroundColor?: string
+	backgroundColorSecondary?: string
+	textColor?: string
+	textColorSecondary?: string
+	confirmButtonIconAsset?: string
+	bigFontSize?: number
+	normalFontSize?: number
+	smallFontSize?: number
+	bigRadius?: number
+	normalRadius?: number
+	smallRadius?: number
+}
+
+export type AlbumMedia = {
+	id: number
+	mediaType: AlbumMediaType
+	mediaPath: string
+	fileExtension: string
+	fileSize: number
+	videoThumbnailPath?: string
+	duration: number
+}
+
+export type AlbumPickerConfig = {
+	mediaFilter?: AlbumPickerMediaFilter
+	maxSelectionCount?: number
+	itemsPerRow?: number
+	showsCameraItem?: boolean
+	style?: AlbumPickerStyle
+	language?: AlbumPickerLanguage
+	compressQuality?: AlbumPickerCompressQuality
+	maxVideoDurationInSeconds?: number
+	maxOutputFileSizeInMB?: number
+}
+
+export type AlbumPickerListener = {
+	onPickConfirm?: (pickedAlbumMedias: AlbumMedia[], textMessage: string | null) => void
+	onMediaProcessing?: (albumMedia: AlbumMedia, progress: number, error: boolean) => void
+	onMediaProcessed?: () => void
+	onCancel?: () => void
+}
+
+type PickedAlbumMediasJson = {
+	pickedAlbumMedias?: any[]
+	textMessage?: string
+}
+
+type MediaProcessingJson = {
+	albumMedia?: any
+	progress?: number
+	error?: boolean
+}
+
+export class AlbumPicker {
+	private impl: AlbumPickerImpl = new AlbumPickerImpl()
+	private listener: AlbumPickerListener | null = null
+	private sessionId: string
+
+	constructor() {
+		this.sessionId = `album_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`
+	}
+
+	show(
+		config?: AlbumPickerConfig | null,
+		theme?: AlbumPickerTheme | null,
+		listener?: AlbumPickerListener | null
+	): void {
+		this.listener = listener ?? null
+
+		const nativeConfig = JSON.stringify(this.impl.serializeConfig(config))
+		const nativeTheme = JSON.stringify(this.impl.serializeTheme(theme))
+
+		showAlbumPicker(
+			nativeConfig,
+			nativeTheme,
+			this.sessionId,
+			(jsonStr: string): void => {
+				try {
+					const parsed: PickedAlbumMediasJson | null = JSON.parse<PickedAlbumMediasJson>(jsonStr)
+					if (parsed == null) return
+					const dataList: any[] = parsed.pickedAlbumMedias ?? []
+					const textMessage: string | null = parsed.textMessage ?? null
+					const medias = AlbumPickerImpl.parseAlbumMediaList(dataList)
+					if (this.listener != null && this.listener.onPickConfirm != null) {
+						this.listener.onPickConfirm(medias, textMessage)
+					}
+				} catch (e: any) {
+					console.error('[AlbumPicker] onPickConfirm parse error:', `${e}`)
+				}
+			},
+			(jsonStr: string): void => {
+				try {
+					const parsed: MediaProcessingJson | null = JSON.parse<MediaProcessingJson>(jsonStr)
+					if (parsed == null) return
+					const media = AlbumPickerImpl.parseAlbumMedia(parsed.albumMedia ?? {})
+					const progress: number = parsed.progress ?? 0
+					const error: boolean = parsed.error ?? false
+					if (this.listener != null && this.listener.onMediaProcessing != null) {
+						this.listener.onMediaProcessing(media, progress, error)
+					}
+				} catch (e: any) {
+					console.error('[AlbumPicker] onMediaProcessing parse error:', `${e}`)
+				}
+			},
+			(): void => {
+				if (this.listener != null && this.listener.onMediaProcessed != null) {
+					this.listener.onMediaProcessed()
+				}
+				this.listener = null
+			},
+			(): void => {
+				if (this.listener != null && this.listener.onCancel != null) {
+					this.listener.onCancel()
+				}
+				this.listener = null
+			}
+		)
+	}
+}

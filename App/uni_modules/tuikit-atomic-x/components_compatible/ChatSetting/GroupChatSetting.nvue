@@ -81,7 +81,8 @@ import CustomNavbar from '../CustomNavbar/CustomNavbar.nvue';
 import { useGroupMemberState } from '../../state/GroupMemberState';
 import { useGroupState } from '../../state/GroupState';
 import { useLoginState } from '../../state/LoginState';
-import { GroupType, GroupJoinOption, ReceiveMessageOpt, GroupMemberRole } from '../../types/group';
+import { GroupType, GroupJoinOption, GroupInviteOption, GroupMemberRole } from '../../types/group';
+import { ReceiveMessageOpt } from '../../types/contact';
 import { useConversationListState } from '../../state/ConversationListState';
 import { hasPermission, showGroupManagement, GroupPermission } from './utils/groupPermission';
 import { UserPickerType } from '../../types/userpicker';
@@ -110,6 +111,8 @@ export default {
       memberState: memberState,
       loginState: loginState,
       isGroupNotExist: false,
+      currentConversation: null,
+      groupInfo: null,
       selfNameCard: '',
       showGroupNamePopup: false,
       showNicknamePopup: false,
@@ -122,32 +125,35 @@ export default {
       editIcon: editIcon,
       arrowRightIcon: arrowRightIcon,
       copyIcon: copyIcon,
-      joinOptions: [{ label: '自由加入', value: 2 }, { label: '需要审批', value: 1 }, { label: '禁止加入', value: 0 }],
-      inviteOptions: [{ label: '自由加入', value: 2 }, { label: '需要审批', value: 1 }, { label: '禁止加入', value: 0 }],
+      joinOptions: [{ label: '自由加入', value: GroupJoinOption.ANY }, { label: '需要审批', value: GroupJoinOption.AUTH }, { label: '禁止加入', value: GroupJoinOption.FORBID }],
+      inviteOptions: [{ label: '自由加入', value: GroupInviteOption.ANY }, { label: '需要审批', value: GroupInviteOption.AUTH }, { label: '禁止加入', value: GroupInviteOption.FORBID }],
     }
   },
   computed: {
-    groupInfo() { return this.groupState.joinedGroupList.value.find(function(g) { return g.groupID === this.groupID }.bind(this)) || null },
     groupName() { return ((this.groupInfo && this.groupInfo.groupName) != null ? (this.groupInfo && this.groupInfo.groupName) : '') },
     memberCount() { return ((this.groupInfo && this.groupInfo.memberCount) != null ? (this.groupInfo && this.groupInfo.memberCount) : 0) },
-    notice() { return ((this.groupInfo && this.groupInfo.notice) != null ? (this.groupInfo && this.groupInfo.notice) : '') },
-    selfRole() { return ((this.groupInfo && this.groupInfo.selfRole) != null ? (this.groupInfo && this.groupInfo.selfRole) : GroupMemberRole.Member) },
+    notice() { return ((this.groupInfo && this.groupInfo.notification) != null ? (this.groupInfo && this.groupInfo.notification) : '') },
+    selfRole() { return ((this.groupInfo && this.groupInfo.selfRole) != null ? (this.groupInfo && this.groupInfo.selfRole) : GroupMemberRole.MEMBER) },
     groupType() { return ((this.groupInfo && this.groupInfo.groupType) != null ? (this.groupInfo && this.groupInfo.groupType) : GroupType.Work) },
-    joinGroupApprovalType() { return ((this.groupInfo && this.groupInfo.joinOption) != null ? (this.groupInfo && this.groupInfo.joinOption) : GroupJoinOption.Unknown) },
-    inviteToGroupApprovalType() { return ((this.groupInfo && this.groupInfo.inviteOption) != null ? (this.groupInfo && this.groupInfo.inviteOption) : GroupJoinOption.Unknown) },
-    isNotDisturb() { return (this.groupInfo && this.groupInfo.receiveMessageOpt) !== ReceiveMessageOpt.Receive },
-    isPinned() {
-      var list = (this.convState && this.convState.state) ? (this.convState.state.conversationList || []) : []
-      var cid = this.conversationID
-      var conv = list.find(function(c) { return c.conversationID === cid })
-      return ((conv && conv.isPinned) != null ? (conv && conv.isPinned) : false)
+    joinGroupApprovalType() { return ((this.groupInfo && this.groupInfo.joinOption) != null ? (this.groupInfo && this.groupInfo.joinOption) : GroupJoinOption.FORBID) },
+    inviteToGroupApprovalType() { return ((this.groupInfo && this.groupInfo.inviteOption) != null ? (this.groupInfo && this.groupInfo.inviteOption) : GroupInviteOption.FORBID) },
+    isNotDisturb() {
+      var conv = this.currentConversation
+      var opt = conv && conv.receiveOption
+      // 数据未加载时默认关闭免打扰，避免误显示为开启
+      if (opt === undefined || opt === null) return false
+      return opt !== ReceiveMessageOpt.RECEIVE
     },
-    displayMembers() { return this.memberState.groupMemberList.value || [] },
+    isPinned() {
+      var conv = this.currentConversation
+      return !!(conv && conv.isPinned)
+    },
+    displayMembers() { return this.memberState.memberList.value || [] },
     canEditGroupName() { return hasPermission(this.groupType, this.selfRole, GroupPermission.EDIT_GROUP_PROFILE_NAME) },
     canEditGroupNotice() { return hasPermission(this.groupType, this.selfRole, GroupPermission.EDIT_GROUP_PROFILE_NOTIFICATION) },
     canEditGroupProfile() { return hasPermission(this.groupType, this.selfRole, GroupPermission.EDIT_GROUP_PROFILE_ELSE) },
     canRemoveMember() { return hasPermission(this.groupType, this.selfRole, GroupPermission.REMOVE_MEMBER) },
-    canInviteMember() { return this.inviteToGroupApprovalType !== GroupJoinOption.Forbid },
+    canInviteMember() { return this.inviteToGroupApprovalType !== GroupInviteOption.FORBID },
     showGroupManagementEntry() { return showGroupManagement(this.groupType, this.selfRole) },
     canTransferOwnership() { return hasPermission(this.groupType, this.selfRole, GroupPermission.TRANSFER_OWNERSHIP) },
     canDismissGroup() { return hasPermission(this.groupType, this.selfRole, GroupPermission.DISMISS_GROUP) },
@@ -157,19 +163,19 @@ export default {
       return m[this.groupType] || '暂无'
     },
     joinOptionText() {
-      var m = {}; m[GroupJoinOption.Any] = '自由加入'; m[GroupJoinOption.Auth] = '需要审批'; m[GroupJoinOption.Forbid] = '禁止加入'; m[GroupJoinOption.Unknown] = '暂无'
+      var m = {}; m[GroupJoinOption.ANY] = '自由加入'; m[GroupJoinOption.AUTH] = '需要审批'; m[GroupJoinOption.FORBID] = '禁止加入'
       return m[this.joinGroupApprovalType] || '暂无'
     },
     inviteOptionText() {
-      var m = {}; m[GroupJoinOption.Any] = '自由加入'; m[GroupJoinOption.Auth] = '需要审批'; m[GroupJoinOption.Forbid] = '禁止加入'; m[GroupJoinOption.Unknown] = '暂无'
+      var m = {}; m[GroupInviteOption.ANY] = '自由加入'; m[GroupInviteOption.AUTH] = '需要审批'; m[GroupInviteOption.FORBID] = '禁止加入'
       return m[this.inviteToGroupApprovalType] || '暂无'
     },
   },
   beforeMount() {
     if (!this.groupID) return
     var self = this
-    this.groupState.fetchJoinedGroupList().then(function() {
-      return self.convState.fetchConversationInfo(self.conversationID)
+    this.fetchGroupInfo().then(function() {
+      return self.fetchConversationInfo()
     }).then(function() {
       return self.fetchSelfNameCard()
     })
@@ -177,6 +183,23 @@ export default {
   beforeDestroy() { this.memberState.destroyStore() },
   beforeUnmount() { this.memberState.destroyStore() },
   methods: {
+    fetchGroupInfo() {
+      if (!this.groupID) return Promise.resolve()
+      var self = this
+      return this.groupState.getGroupInfo(this.groupID).then(function(info) {
+        if (info) self.groupInfo = info
+      }).catch(function(err) {
+        if (err && err.errCode === 10010) { self.isGroupNotExist = true; return }
+        console.error('[GroupChatSetting] fetchGroupInfo failed:', err)
+      })
+    },
+    fetchConversationInfo() {
+      if (!this.conversationID) return Promise.resolve()
+      var self = this
+      return this.convState.getConversationInfo(this.conversationID).then(function(info) {
+        if (info) self.currentConversation = info
+      }).catch(function(err) { console.error('[GroupChatSetting] fetchConversationInfo failed:', err) })
+    },
     fetchSelfNameCard() {
       if (!this.groupID) return
       var self = this
@@ -184,7 +207,7 @@ export default {
         var loginUserInfo = this.loginState.state && this.loginState.state.loginUserInfo
         var userID = loginUserInfo && loginUserInfo.userID
         if (userID) {
-          this.memberState.fetchGroupMembersInfo([userID]).then(function(list) {
+          this.memberState.getMemberInfo([userID]).then(function(list) {
             if (list && list[0]) self.selfNameCard = list[0].nameCard
           }).catch(function(err) {
             if (err.errCode === 10010) { self.isGroupNotExist = true; return }
@@ -202,35 +225,111 @@ export default {
     handleGroupNameConfirm(newName) {
       var n = newName.trim()
       if (n === '') { uni.showToast({ title: '群名称不能为空', icon: 'none' }); return }
-      if (n !== this.groupName) this.groupState.updateGroupProfile({ groupID: this.groupID, groupName: n })
+      if (n !== this.groupName) {
+        var self = this
+        this.groupState.updateProfile({ groupID: this.groupID, groupName: n }).then(function() {
+          self.fetchGroupInfo()
+        }).catch(function(error) { 
+          var rawMsg = (error && error.message) ? String(error.message) : ''
+          var errMsg = rawMsg || '创建群组失败，请重试'
+          // 安全打击词识别：错误码 80001
+          // message 形如：'group info secure check fail! beat word: xxx |requestid:...|tcloudapirequestid:...'
+          // 提取 'beat word:' 后到 '|' 前的内容作为被打击词展示
+          if (error && error.errCode === 80001) {
+            var match = rawMsg.match(/beat word:\s*([^|]+?)\s*(\||$)/i)
+            var beatWord = match ? match[1].trim() : ''
+            errMsg = beatWord
+              ? '创建群组失败，存在被打击词汇：' + beatWord
+              : '创建群组失败，存在被打击词汇'
+          }
+          uni.showToast({ title: errMsg, icon: 'none' })
+        })
+      }
     },
     handleMemberListClick() { uni.navigateTo({ url: '/pages/scenes/chat/groupMemberList/index?conversationID=' + this.conversationID }) },
-    handleAddMember() { uni.navigateTo({ url: '/pages/scenes/chat/userPicker/userPicker?businessType=' + UserPickerType.INVITE_GROUP_MEMBER + '&conversationID=' + this.conversationID }) },
-    handleRemoveMember() { uni.navigateTo({ url: '/pages/scenes/chat/userPicker/userPicker?businessType=' + UserPickerType.REMOVE_GROUP_MEMBER + '&conversationID=' + this.conversationID }) },
+    handleAddMember() {
+      var self = this
+      uni.$off('onGroupMemberChanged')
+      uni.$once('onGroupMemberChanged', function() {
+        setTimeout(function() { self.fetchGroupInfo() }, 500)
+      })
+      uni.navigateTo({
+        url: '/pages/scenes/chat/userPicker/userPicker?businessType=' + UserPickerType.INVITE_GROUP_MEMBER + '&conversationID=' + this.conversationID,
+        fail: function() { uni.$off('onGroupMemberChanged') }
+      })
+    },
+    handleRemoveMember() {
+      var self = this
+      uni.$off('onGroupMemberChanged')
+      uni.$once('onGroupMemberChanged', function() {
+        setTimeout(function() { self.fetchGroupInfo() }, 500)
+      })
+      uni.navigateTo({
+        url: '/pages/scenes/chat/userPicker/userPicker?businessType=' + UserPickerType.REMOVE_GROUP_MEMBER + '&conversationID=' + this.conversationID,
+        fail: function() { uni.$off('onGroupMemberChanged') }
+      })
+    },
     handleMemberClick(member) {},
     handleNoticeClick() { if (this.canEditGroupNotice) this.showNoticePopup = true },
     handleNoticeConfirm(newNotice) {
       var n = newNotice.trim()
-      if (n !== this.notice) this.groupState.updateGroupProfile({ groupID: this.groupID, notice: n })
+      if (n !== this.notice) {
+        var self = this
+        this.groupState.updateProfile({ groupID: this.groupID, notification: n }).then(function() {
+          self.fetchGroupInfo()
+        })
+      }
     },
     handleGroupManagementClick() { uni.navigateTo({ url: '/pages/scenes/chat/groupManagement/index?conversationID=' + this.conversationID }) },
     handleJoinGroupApprovalTypeClick() { if (this.canEditGroupProfile) this.showJoinOptionSheet = true },
-    handleJoinOptionSelect(option) { this.groupState.setGroupJoinOption(this.groupID, option.value) },
+    handleJoinOptionSelect(option) {
+      var self = this
+      this.groupState.setJoinOption(this.groupID, option.value).then(function() {
+        self.fetchGroupInfo()
+      })
+    },
     handleInviteGroupApprovalTypeClick() { if (this.canEditGroupProfile) this.showInviteOptionSheet = true },
-    handleInviteOptionSelect(option) { this.groupState.setGroupInviteOption(this.groupID, option.value) },
+    handleInviteOptionSelect(option) {
+      var self = this
+      this.groupState.setInviteOption(this.groupID, option.value).then(function() {
+        self.fetchGroupInfo()
+      })
+    },
     handleEditNickname() { this.showNicknamePopup = true },
     handleNicknameConfirm(newNickname) {
       var n = newNickname.trim()
       if (n !== this.selfNameCard) {
         var self = this
-        this.memberState.setSelfGroupNameCard(n).then(function() { self.fetchSelfNameCard() })
+        this.memberState.setSelfNameCard(n).then(function() { self.fetchSelfNameCard() })
       }
     },
     handleNotDisturbChange: throttle(function(value) {
-      this.groupState.setReceiveMessageOpt(this.groupID, value ? ReceiveMessageOpt.NotNotify : ReceiveMessageOpt.Receive)
+      var self = this
+      var opt = value ? ReceiveMessageOpt.NOT_NOTIFY : ReceiveMessageOpt.RECEIVE
+      this.convState.setReceiveMessageOpt('group_' + this.groupID, opt).then(function() {
+        self.fetchConversationInfo()
+      }).catch(function(err) {
+        console.error('[GroupChatSetting] setReceiveMessageOpt failed:', err)
+      })
     }, 1000, { leading: true, trailing: true }),
-    handlePinnedChange(value) { this.convState.pinConversation(this.conversationID, value) },
-    handleTransferOwnership() { uni.navigateTo({ url: '/pages/scenes/chat/userPicker/userPicker?businessType=' + UserPickerType.TRANSFER_GROUP_OWNER + '&conversationID=' + this.conversationID }) },
+    handlePinnedChange: throttle(function(value) {
+      if (!this.conversationID) return
+      var self = this
+      this.convState.pinConversation(this.conversationID, value).then(function() {
+        self.fetchConversationInfo()
+      }).catch(function(err) {
+        console.error('[GroupChatSetting] pinConversation failed:', err)
+      })
+    }, 1000, { leading: true, trailing: true }),
+    handleTransferOwnership() {
+      var self = this
+      uni.$off('onGroupOwnerChanged')
+      uni.$once('onGroupOwnerChanged', function() { self.fetchGroupInfo() })
+      uni.navigateTo({
+        url: '/pages/scenes/chat/userPicker/userPicker?businessType=' + UserPickerType.TRANSFER_GROUP_OWNER + '&conversationID=' + this.conversationID,
+        fail: function() { uni.$off('onGroupOwnerChanged') }
+      })
+    },
     handleQuitClick() { this.showQuitConfirm = true },
     handleQuitCancel() {},
     handleQuitConfirm() { this.groupState.quitGroup(this.groupID).then(function() { uni.navigateBack({ delta: 2 }) }) },

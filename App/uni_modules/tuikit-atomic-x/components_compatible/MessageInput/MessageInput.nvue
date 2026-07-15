@@ -282,6 +282,13 @@ export default {
   },
   mounted() {
     uni.onKeyboardHeightChange(this._onKeyboardChange)
+    // 监听撤回消息的"重新编辑"事件（组件内部自洽，不依赖业务层）
+    var self = this
+    this._onReEditHandler = function(data) {
+      if (!data || data.conversationID !== self.conversationID) return
+      self._setTextFromReEdit(data.text || '')
+    }
+    uni.$on('atomicx-reEdit', this._onReEditHandler)
     // 预热文件选择器的 Android 桥接类（同步跨桥约 500-1000ms）
     // 延后 500ms 错开 MessageList 首屏关键路径，用户首次点"文件"时类已就绪
     setTimeout(function() { prewarmFilePicker() }, 500)
@@ -292,6 +299,7 @@ export default {
     _cleanup() {
       if (this.isCleaned) return; this.isCleaned = true
       uni.offKeyboardHeightChange(this._onKeyboardChange)
+      if (this._onReEditHandler) { uni.$off('atomicx-reEdit', this._onReEditHandler); this._onReEditHandler = null }
       this._stopWaveAnimation()
       if (this.recordingTimer) { clearInterval(this.recordingTimer); this.recordingTimer = null }
       this.messageInputStateInst && this.messageInputStateInst.destroyStore()
@@ -301,6 +309,13 @@ export default {
     focus() { this._switchMode('TEXT') },
     blur() { (this.$refs.textareaRef && this.$refs.textareaRef.blur()) },
     getState() { return this.inputState },
+    _setTextFromReEdit(text) {
+      this._switchMode('NONE')
+      this.inputText = text
+      this.mentions = []
+      this.selectedMembers = new Map()
+      this.mentionAnchor = -1
+    },
     _onKeyboardChange(res) {
       var h = res.height, dur = res.duration > 0 ? res.duration : ANIMATION_DURATION, cs = this.inputState
       this.currentKeyboardHeightPx = h
@@ -553,17 +568,19 @@ export default {
         }
       }
       if (this.messageInputStateInst) {
-        var messageBody = { text: text }
+        var messagePayload = { text: text }
         var offlinePushInfo = buildOfflinePushInfo(this.setOfflinePushInfo, {
           messageType: MessageType.TEXT,
-          messageBody: messageBody,
+          messagePayload: messagePayload,
           conversationID: this.conversationID,
         })
-        this.messageInputStateInst.sendTextMessage({
+        var sendOption = {}
+        if (atUserList && atUserList.length > 0) sendOption.atUserList = atUserList
+        if (offlinePushInfo) sendOption.offlinePushInfo = offlinePushInfo
+        this.messageInputStateInst.sendMessage({
+          type: 'text',
           text: text,
-          atUserList: atUserList,
-          offlinePushInfo: offlinePushInfo,
-        }).catch(function(err) { uni.showToast({ title: resolveSendError(err), icon: 'none' }) })
+        }, sendOption).catch(function(err) { uni.showToast({ title: resolveSendError(err), icon: 'none' }) })
       }
       this.$emit('send', text); this.inputText = ''
       // 清理 mention 上下文
@@ -719,22 +736,20 @@ export default {
     _sendVoiceMessage(filePath, duration) {
       if (!this.messageInputStateInst) return
       var absolutePath = convertToAbsolutePath(filePath)
-      var messageBody = { soundPath: absolutePath, soundDuration: duration }
+      var messagePayload = { soundPath: absolutePath, soundDuration: duration }
       var offlinePushInfo = buildOfflinePushInfo(this.setOfflinePushInfo, {
-        messageType: MessageType.SOUND,
-        messageBody: messageBody,
+        messageType: MessageType.AUDIO,
+        messagePayload: messagePayload,
         conversationID: this.conversationID,
       })
-      var messageObj = {
-        messageType: MessageType.SOUND,
-        messageBody: messageBody,
-      }
-      if (offlinePushInfo) {
-        messageObj.offlinePushInfo = offlinePushInfo
-      }
-      var message = JSON.stringify(messageObj)
       var self = this
-      this.messageInputStateInst.sendMessage(message).then(function() {
+      this.messageInputStateInst.sendMessage({
+        type: 'audio',
+        audioFilePath: absolutePath,
+        duration: duration,
+      }, {
+        offlinePushInfo: offlinePushInfo || undefined,
+      }).then(function() {
         self.$emit('sendVoice', filePath)
       }).catch(function(error) {
         console.error('[MessageInput] Voice message send failed:', error)

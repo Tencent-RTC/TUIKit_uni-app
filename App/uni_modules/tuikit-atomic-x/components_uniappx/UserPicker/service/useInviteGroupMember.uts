@@ -1,0 +1,107 @@
+import { computed, watch } from 'vue'
+import { type UserPickerHookResult, type User, toMap } from './types'
+import { useContactState } from '../../../state/ContactState'
+import { useGroupMemberState, type UseGroupMemberStateOptions } from '../../../state/GroupMemberState'
+
+/**
+ * 邀请群成员 Hook（uvue 版）
+ *
+ */
+export function useInviteGroupMember(routeParams?: any): UserPickerHookResult {
+	const rp: UTSJSONObject = toMap(routeParams ?? null)
+	const conversationID: string = (rp['conversationID'] as string) ?? ''
+	const groupID: string = conversationID.startsWith('group_') ? conversationID.replace('group_', '') : ''
+
+	const { friendList, destroyStore: destroyContactListStore } = useContactState('inviteGroupMember')
+	const memberOpts: UseGroupMemberStateOptions = { groupID: groupID } as UseGroupMemberStateOptions
+	const { memberList: allMembers, hasMoreMembers, addMember, loadMoreMembers } = useGroupMemberState(memberOpts)
+
+	watch((): number => allMembers.value.length, async (): Promise<void> => {
+		if (hasMoreMembers.value) {
+			await loadMoreMembers()
+		}
+	}, {
+		immediate: true
+	})
+
+	const userList = computed<User[]>((): User[] => {
+		const existingMemberIDs: Set<string> = new Set(
+			((allMembers.value?.map((m: any): string => toMap(m)['userID'] as string)) ?? []) as string[]
+		)
+
+		return (friendList.value ?? [])
+			.filter((contact: any): boolean => !existingMemberIDs.has(toMap(contact)['userID'] as string))
+		.map((item: any): User => {
+			const itemObj: UTSJSONObject = toMap(item)
+			const idRaw: any | null = itemObj['userID']
+			const remarkRaw: any | null = itemObj['friendRemark']
+			const nickRaw: any | null = itemObj['nickname']
+			const avatarRaw: any | null = itemObj['avatarURL']
+			const id: string = typeof idRaw == 'string' ? idRaw as string : ''
+			const remark: string = typeof remarkRaw == 'string' ? remarkRaw as string : ''
+			const nick: string = typeof nickRaw == 'string' ? nickRaw as string : ''
+			const avatar: string = typeof avatarRaw == 'string' ? avatarRaw as string : ''
+			return {
+				userID: id,
+				nickname: remark.length > 0 ? remark : nick.length > 0 ? nick : id,
+				avatarURL: avatar
+			}
+		})
+	})
+
+	const lockedItems = computed<string[]>((): string[] => [])
+	const hasMore = computed((): boolean => hasMoreMembers.value)
+
+	const handleConfirm = async (selectedUsers: any[]): Promise<void> => {
+		if (selectedUsers.length == 0) {
+			uni.showToast({ title: '请选择要添加的成员', icon: 'none' })
+			return
+		}
+
+		const idArr: string[] = []
+		for (let i: number = 0; i < selectedUsers.length; i++) {
+			const u: UTSJSONObject = toMap(selectedUsers[i])
+			const uid: any | null = u['userID']
+			if (typeof uid == 'string') idArr.push(uid as string)
+		}
+		try {
+			await addMember(idArr)
+			uni.showToast({ title: '添加成功', icon: 'success' })
+			uni.$emit('onGroupMemberChanged', { type: 'add', groupID })
+			setTimeout((): void => {
+				uni.navigateBack()
+			}, 300)
+		} catch (error: any) {
+			uni.showToast({ title: '添加失败', icon: 'none' })
+			console.error('[useInviteGroupMember] handleConfirm failed:', `${error}`)
+		}
+	}
+
+	const handleCancel = async (): Promise<void> => {
+		try {
+			await destroyContactListStore()
+		} catch (error: any) {
+			console.error('[useInviteGroupMember] handleCancel failed:', `${error}`)
+		}
+	}
+
+	const onReachEnd = async (): Promise<void> => {
+		if (!hasMoreMembers.value) return
+		try {
+			await loadMoreMembers()
+		} catch (error: any) {
+			console.error('[useInviteGroupMember] onReachEnd failed:', `${error}`)
+		}
+	}
+
+	return {
+		userList,
+		lockedItems,
+		maxCount: 100,
+		title: '添加群成员',
+		hasMore,
+		handleConfirm,
+		handleCancel,
+		onReachEnd
+	}
+}

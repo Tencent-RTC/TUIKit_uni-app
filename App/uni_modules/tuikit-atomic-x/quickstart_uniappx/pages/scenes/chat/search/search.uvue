@@ -1,0 +1,101 @@
+<template>
+  <view class="search-page" :style="{ paddingTop: statusBarHeight + 'px' }">
+    <Search
+      ref="searchRef"
+      :placeholder="'搜索联系人、群聊、聊天记录'"
+      :showAdvanced="true"
+      :showCancel="true"
+      :debounceTime="300"
+      @search="handleSearch"
+      @cancel="handleCancel"
+      @resultItemClick="handleResultItemClick"
+    />
+  </view>
+</template>
+
+<script setup lang="uts">
+
+import { ref } from 'vue'
+import Search from '@/uni_modules/tuikit-atomic-x/components/Search/Search.uvue'
+import type { SearchOption } from '@/uni_modules/tuikit-atomic-x/types/search.uts'
+
+const searchRef = ref<any | null>(null)
+const keyword = ref<string>('')
+const searchOption = ref<SearchOption | null>(null)
+
+const systemInfo = uni.getSystemInfoSync()
+const statusBarHeight = ref<number>(
+  typeof systemInfo.statusBarHeight === 'number' ? systemInfo.statusBarHeight : 0
+)
+
+const handleSearch = (searchKeyword: string, option: SearchOption): void => {
+  keyword.value = searchKeyword
+  searchOption.value = option
+}
+
+const handleCancel = (): void => {
+  uni.navigateBack()
+}
+
+const handleResultItemClick = (type: string, data: any | null): void => {
+  const obj = (data != null ? (data as UTSJSONObject) : null)
+  switch (type) {
+    case 'user': {
+      const uid = obj?.['userID']
+      if (typeof uid === 'string' && uid.length > 0) {
+        uni.navigateTo({
+          url: `/pages/user/detail?userID=${uid}`
+        })
+      }
+      break
+    }
+    case 'friend': {
+      const info = obj?.['userInfo'] as UTSJSONObject | null
+      const nestedUid = info?.['userID']
+      const uid = (typeof nestedUid === 'string' && nestedUid.length > 0) ? nestedUid : (obj?.['userID'] as string | null)
+      const friendConvID = `c2c_${uid ?? ''}`
+      uni.navigateTo({
+        url: `/pages/scenes/chat/chat/index?conversationID=${friendConvID}`
+      })
+      break
+    }
+    case 'group': {
+      const gid = obj?.['groupID']
+      if (typeof gid === 'string' && gid.length > 0) {
+        const groupConvID = `group_${gid}`
+        uni.navigateTo({
+          url: `/pages/scenes/chat/chat/index?conversationID=${groupConvID}`
+        })
+      }
+      break
+    }
+    case 'groupMember': {
+      const uid = obj?.['userID']
+      if (typeof uid === 'string' && uid.length > 0) {
+        uni.navigateTo({
+          url: `/pages/user/detail?userID=${uid}`
+        })
+      }
+      break
+    }
+    case 'conversation': {
+      const convID = obj?.['conversationID']
+      if (typeof convID === 'string' && convID.length > 0) {
+        uni.navigateTo({
+          url: `/pages/scenes/chat/search/searchInConversation?conversationID=${convID}&keyword=${encodeURIComponent(keyword.value)}&option=${encodeURIComponent(JSON.stringify(searchOption.value))}`
+        })
+      }
+      break
+    }
+    default:
+      console.warn(`[SearchPage] Unknown result type: ${type}`)
+  }
+}
+</script>
+
+<style>
+.search-page {
+  flex: 1;
+  background-color: #ffffff;
+}
+</style>

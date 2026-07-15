@@ -18,14 +18,16 @@
   import CustomNavbar from '@/uni_modules/tuikit-atomic-x/components/CustomNavbar/CustomNavbar.nvue'
   import { useConversationListState } from '@/uni_modules/tuikit-atomic-x/state/ConversationListState'
   import { useGroupState } from '@/uni_modules/tuikit-atomic-x/state/GroupState'
+  import { useLoginState } from '@/uni_modules/tuikit-atomic-x/state/LoginState'
   import { MessageType } from '@/uni_modules/tuikit-atomic-x/types/message'
   import type { OfflinePushContext, OfflinePushInfo } from '@/uni_modules/tuikit-atomic-x/types/message'
 
   // ==================== State ====================
   const {
     joinedGroupList,
-    fetchJoinedGroupList,
+    loadJoinedGroups,
   } = useGroupState();
+  const { loginUserInfo } = useLoginState();
 
   // ==================== 状态 ====================
   const conversationID = ref('')
@@ -34,17 +36,25 @@
   const messageInputRef = ref(null)
   const inputToolbarHeight = ref(0)
   const inputPanelHeight = ref(0)
+  const currentConversation = ref(null)
 
-  const { fetchConversationInfo, conversationList } = useConversationListState('chat')
+  const { getConversationInfo } = useConversationListState('chat')
 
   // ==================== 计算属性 ====================
   const isC2CConversation = computed(() => conversationID.value.startsWith('c2c_'))
 
-  const currentConversation = computed(() =>
-    conversationList.value.find(conv => conv.conversationID === conversationID.value)
-  )
-
   const navigationTitle = computed(() => currentConversation.value?.title || '聊天')
+
+  const refreshConversationInfo = () => {
+    if (!conversationID.value) return
+    getConversationInfo(conversationID.value)
+      .then((info) => {
+        currentConversation.value = info
+      })
+      .catch((e) => {
+        console.error('[chat] getConversationInfo failed:', e)
+      })
+  }
 
   // const customToolList = computed(() => DEFAULT_TOOLS.filter(tool => tool.id !== 'videoCall' && tool.id !== 'voiceCall'))
 
@@ -77,13 +87,16 @@
 
   // ==================== 离线推送 ====================
   const setOfflinePushInfo = (ctx: OfflinePushContext): OfflinePushInfo | null => {
-    const title = currentConversation.value?.title || '新消息'
+    // 群组会话用群名；C2C 会话用当前登录用户的昵称（消息发送者本人），fallback userID
+    const title = isC2CConversation.value
+      ? (loginUserInfo.value?.nickname || loginUserInfo.value?.userID || '新消息')
+      : (currentConversation.value?.title || '新消息')
     const conv = ctx.conversationID
 
     let description = '[新消息]'
     switch (ctx.messageType) {
       case MessageType.TEXT:
-        description = (ctx.messageBody as { text?: string })?.text || '[文本消息]'
+        description = (ctx.messagePayload as { text?: string })?.text || '[文本消息]'
         break
       case MessageType.IMAGE:
         description = '[图片]'
@@ -91,7 +104,7 @@
       case MessageType.VIDEO:
         description = '[视频]'
         break
-      case MessageType.SOUND:
+      case MessageType.AUDIO:
         description = '[语音]'
         break
       case MessageType.FILE:
@@ -123,8 +136,8 @@
     }
 
     conversationID.value = options.conversationID
-    fetchConversationInfo(conversationID.value);
-    fetchJoinedGroupList();
+    refreshConversationInfo();
+    loadJoinedGroups();
 
     // 处理定位消息
     if (uni.$locateMessage) {
@@ -133,7 +146,7 @@
     }
   })
 
-  onShow(() => fetchConversationInfo(conversationID.value))
+  onShow(() => refreshConversationInfo())
 </script>
 
 <style>

@@ -1,7 +1,7 @@
 <template>
   <view 
     class="merger-message"
-    :class="'merger-message-' + (message.isSelf ? 'out' : 'in')"
+    :class="'merger-message-' + (message.isSentBySelf ? 'out' : 'in')"
     @tap="handleTap"
   >
     <view class="merger-highlight">
@@ -39,7 +39,7 @@ const emit = defineEmits<{
 }>()
 
 const mergedMessage = computed(() => {
-  return props.message.messageBody?.mergedMessage
+  return props.message.messagePayload
 })
 
 const mergerTitle = computed(() => {

@@ -1,0 +1,543 @@
+<template>
+  <view class="conv-preview" :class="pinnedClass">
+    <component
+      :is="resolvedAvatar"
+      :src="convAvatarURL"
+      :name="displayName"
+      :badgeCount="convUnreadCount"
+      :showBadgeDot="isMuted"
+      :defaultAvatarType="defaultAvatarType"
+    />
+    <view class="conv-preview__info">
+      <view class="conv-preview__header">
+        <text class="conv-preview__name" :lines="1">{{ convTitle }}</text>
+        <text class="conv-preview__time">{{ timeText }}</text>
+      </view>
+
+      <view class="conv-preview__footer">
+        <view class="conv-preview__message">
+          <text v-if="hasAtAll" class="conv-preview__label conv-preview__label--mention">[@所有人]</text>
+          <text v-if="hasAtMe" class="conv-preview__label conv-preview__label--mention">[有人@我]</text>
+          <text v-if="convDraft.length > 0" class="conv-preview__label conv-preview__label--draft">[草稿]</text>
+          <text v-else-if="isMuted && convUnreadCount > 0" class="conv-preview__label conv-preview__label--count">[{{convUnreadCount}}条]</text>
+
+          <view class="conv-preview__last-msg-container">
+            <template v-for="(segment, index) in messageSegments" :key="index">
+              <text
+                v-if="segment.type == 'text'"
+                class="conv-preview__last-msg-text"
+              >{{ segment.content }}</text>
+              <image
+                v-else-if="segment.type == 'emoji'"
+                class="conv-preview__emoji"
+                :src="segment.src"
+              />
+            </template>
+          </view>
+        </view>
+
+        <view class="conv-preview__status">
+          <view v-if="isMuted" class="conv-preview__icon">
+            <image
+              src="../../static/icon/mute.png"
+              class="conv-preview__icon-img"
+              mode="aspectFill"
+            />
+          </view>
+        </view>
+      </view>
+    </view>
+  </view>
+</template>
+
+<script setup lang="uts">
+import { computed } from 'vue'
+import AvatarComponent from '../Avatar/Avatar.uvue'
+import {
+  ConversationType,
+  ReceiveMessageOpt,
+  GroupAtType,
+  MessageType
+} from './types'
+import {
+  parseTextToSegments,
+  truncateSegments,
+  type MessageSegment
+} from './utils'
+
+type AtFlags = { hasAtAll: boolean; hasAtMe: boolean }
+
+const props = withDefaults(defineProps<{
+  /** 会话信息（UTSJSONObject 形态，script 内 objString/objNumber/objBool 下标访问） */
+  conversation?: any
+  /** 自定义头像组件 */
+  Avatar?: any
+}>(), {
+})
+
+const resolvedAvatar = computed<any>((): any => props.Avatar ?? AvatarComponent)
+
+function objString(obj: any | null, key: string, fallback: string = ''): string {
+  if (obj == null) {
+    return fallback
+  }
+  const v = (obj as UTSJSONObject)[key]
+  return typeof v == 'string' ? (v as string) : fallback
+}
+
+function objNumber(obj: any | null, key: string, fallback: number = 0): number {
+  if (obj == null) {
+    return fallback
+  }
+  const v = (obj as UTSJSONObject)[key]
+  return typeof v == 'number' ? (v as number) : fallback
+}
+
+function objBool(obj: any | null, key: string): boolean {
+  if (obj == null) {
+    return false
+  }
+  const v = (obj as UTSJSONObject)[key]
+  return v == true
+}
+
+function objReceiveOptEnum(obj: any | null): ReceiveMessageOpt {
+  if (obj == null) {
+    return ReceiveMessageOpt.RECEIVE
+  }
+  const v = (obj as UTSJSONObject)['receiveOption']
+  if (typeof v !== 'number') {
+    return ReceiveMessageOpt.RECEIVE
+  }
+  const n = v as number
+  if (n == 1) {
+    return ReceiveMessageOpt.NOT_RECEIVE
+  }
+  if (n == 2) {
+    return ReceiveMessageOpt.NOT_NOTIFY
+  }
+  if (n == 3) {
+    return ReceiveMessageOpt.NOT_NOTIFY_EXCEPT_MENTION
+  }
+  if (n == 4) {
+    return ReceiveMessageOpt.NOT_RECEIVE_EXCEPT_MENTION
+  }
+  return ReceiveMessageOpt.RECEIVE
+}
+
+function objConversationTypeEnum(obj: any | null): ConversationType {
+  if (obj == null) {
+    return ConversationType.UNKNOWN
+  }
+  const v = (obj as UTSJSONObject)['type']
+  if (typeof v !== 'number') {
+    return ConversationType.UNKNOWN
+  }
+  const n = v as number
+  if (n == 1) {
+    return ConversationType.C2C
+  }
+  if (n == 2) {
+    return ConversationType.GROUP
+  }
+  return ConversationType.UNKNOWN
+}
+
+function objGroupTypeString(obj: any | null): string | null {
+  if (obj == null) {
+    return null
+  }
+  const v = (obj as UTSJSONObject)['groupType']
+  return typeof v == 'string' ? (v as string) : null
+}
+
+function objLastMessage(obj: any | null): UTSJSONObject | null {
+  if (obj == null) {
+    return null
+  }
+  const v = (obj as UTSJSONObject)['lastMessage']
+  return v != null ? (v as UTSJSONObject) : null
+}
+
+function objGroupAtInfoList(obj: any | null): UTSJSONObject[] {
+  if (obj == null) {
+    return []
+  }
+  const v = (obj as UTSJSONObject)['groupAtInfoList']
+  if (v == null) {
+    return []
+  }
+  return v as UTSJSONObject[]
+}
+
+const convTitle = computed<string>((): string => {
+  const t = objString(props.conversation, 'title', '')
+  return t.length > 0 ? t : '未知会话'
+})
+
+const convAvatarURL = computed<string>((): string => {
+  return objString(props.conversation, 'avatarURL', '')
+})
+
+const convUnreadCount = computed<number>((): number => {
+  return objNumber(props.conversation, 'unreadCount', 0)
+})
+
+const convDraft = computed<string>((): string => {
+  return objString(props.conversation, 'draft', '')
+})
+
+const pinnedClass = computed<string>((): string => {
+  return objBool(props.conversation, 'isPinned') ? 'conv-preview conv-preview--pinned' : 'conv-preview'
+})
+
+const displayName = computed<string>((): string => {
+  return convTitle.value
+})
+
+const defaultAvatarType = computed<string>((): string => {
+  const ct = objConversationTypeEnum(props.conversation)
+  if (ct == ConversationType.GROUP) {
+    const gt = objGroupTypeString(props.conversation)
+    return gt != null ? gt.toLowerCase() : 'user'
+  }
+  return 'user'
+})
+
+const isMuted = computed<boolean>((): boolean => {
+  const opt = objReceiveOptEnum(props.conversation)
+  return opt == ReceiveMessageOpt.NOT_RECEIVE
+    || opt == ReceiveMessageOpt.NOT_NOTIFY
+})
+
+const atFlags = computed<AtFlags>((): AtFlags => {
+  const result = { hasAtAll: false, hasAtMe: false } as AtFlags
+  const ct = objConversationTypeEnum(props.conversation)
+  if (ct !== ConversationType.GROUP) {
+    return result
+  }
+  if (convUnreadCount.value <= 0) {
+    return result
+  }
+  const list = objGroupAtInfoList(props.conversation)
+  if (list.length == 0) {
+    return result
+  }
+  for (let i = 0; i < list.length; i++) {
+    const item = list[i]
+    const atTypeValue = (item as UTSJSONObject)['atType']
+    if (typeof atTypeValue !== 'number') {
+      continue
+    }
+    const atType = atTypeValue as number
+    if (atType == 2) {
+      result.hasAtAll = true
+    } else if (atType == 1) {
+      result.hasAtMe = true
+    } else if (atType == 3) {
+      result.hasAtAll = true
+      result.hasAtMe = true
+    }
+  }
+  return result
+})
+
+const hasAtAll = computed<boolean>((): boolean => atFlags.value.hasAtAll)
+const hasAtMe = computed<boolean>((): boolean => atFlags.value.hasAtMe)
+
+function getPayloadText(msg: UTSJSONObject | null): string {
+  if (msg == null) {
+    return ''
+  }
+  const payload = (msg as UTSJSONObject)['messagePayload']
+  if (payload == null) {
+    return ''
+  }
+  const text = (payload as UTSJSONObject)['text']
+  return typeof text == 'string' ? (text as string) : ''
+}
+
+/**
+ * 读取 messageType（数字）
+ */
+function getMessageType(msg: UTSJSONObject | null): number {
+  if (msg == null) {
+    return 0
+  }
+  const v = (msg as UTSJSONObject)['messageType']
+  return typeof v == 'number' ? (v as number) : 0
+}
+
+/**
+ * 读取 sender 名称（优先 from.nickname，回退 sender）
+ */
+function getMsgSenderName(msg: UTSJSONObject | null): string {
+  if (msg == null) {
+    return ''
+  }
+  const from = (msg as UTSJSONObject)['from']
+  if (from != null) {
+    const nickname = (from as UTSJSONObject)['nickname']
+    if (typeof nickname == 'string') {
+      return nickname as string
+    }
+  }
+  const sender = (msg as UTSJSONObject)['sender']
+  return typeof sender == 'string' ? (sender as string) : ''
+}
+
+/**
+ * 群聊判断（groupID 非空）
+ */
+function isGroupMessageObj(msg: UTSJSONObject | null): boolean {
+  if (msg == null) {
+    return false
+  }
+  const type = (msg as UTSJSONObject)['conversationType']
+  return type == 2
+}
+
+/**
+ * 摘要（统一文本拼接）
+ */
+function buildAbstract(msg: UTSJSONObject | null): string {
+  if (msg == null) {
+    return ''
+  }
+  let senderName = '';
+  const isGroup = isGroupMessageObj(msg)
+  if (isGroup) {
+    senderName = getMsgSenderName(msg)
+  }
+  const status = (msg as UTSJSONObject)['status']
+  if (status == 4) {
+    return senderName.length > 0 ? `${senderName}: [消息已撤回]` : '[消息已撤回]'
+  }
+  const messageType = getMessageType(msg)
+  if (messageType == 1) {
+    const text = getPayloadText(msg)
+    return senderName.length > 0 ? `${senderName}: ${text}` : text
+  }
+  if (messageType == 2) {
+    return senderName.length > 0 ? `${senderName}: [图片]` : '[图片]'
+  }
+  if (messageType == 3) {
+    return senderName.length > 0 ? `${senderName}: [视频]` : '[视频]'
+  }
+  if (messageType == 4) {
+    return senderName.length > 0 ? `${senderName}: [语音]` : '[语音]'
+  }
+  if (messageType == 5) {
+    return senderName.length > 0 ? `${senderName}: [文件]` : '[文件]'
+  }
+  if (messageType == 8) {
+    return senderName.length > 0 ? `${senderName}: [自定义消息]` : '[自定义消息]'
+  }
+  return '[消息]'
+}
+
+const messageSegments = computed<MessageSegment[]>((): MessageSegment[] => {
+  const draft = convDraft.value
+  if (draft.length > 0) {
+    return truncateSegments(parseTextToSegments(draft))
+  }
+
+  const lastMessage = objLastMessage(props.conversation)
+  if (lastMessage == null) {
+    return [{ type: 'text', content: '暂无消息', src: '' } as MessageSegment]
+  }
+
+  // 文本消息特殊处理：拼接 sender + 替换换行
+  const messageType = getMessageType(lastMessage)
+  const status = (lastMessage as UTSJSONObject)['status']
+  if (messageType == 1 && status != 4) {
+    let text = getPayloadText(lastMessage)
+    if (text.length > 0) {
+      const parts: string[] = text.split('\n')
+      text = parts.join(' ')
+      const parts2: string[] = text.split('\r')
+      text = parts2.join(' ')
+
+      if (isGroupMessageObj(lastMessage)) {
+        const senderName = getMsgSenderName(lastMessage)
+        if (senderName.length > 0) {
+          text = `${senderName}: ${text}`
+        }
+      }
+      return truncateSegments(parseTextToSegments(text))
+    }
+  }
+
+  // 其它类型走 buildAbstract
+  const abstract = buildAbstract(lastMessage)
+  return [{ type: 'text', content: abstract, src: '' } as MessageSegment]
+})
+
+/**
+ * 时间格式化（适配新版：timestamp 在 lastMessage.timestamp，不再在 conversation.timestamp）
+ */
+function formatTime(timestamp: number | null): string {
+  if (timestamp == null || timestamp <= 0) {
+    return ''
+  }
+
+  const messageTime = new Date(timestamp * 1000)
+  const now = new Date()
+
+  const messageYear: number = messageTime.getFullYear()
+  const messageMonth: number = messageTime.getMonth() + 1
+  const messageHours: string = messageTime.getHours().toString().padStart(2, '0')
+  const messageMinutes: string = messageTime.getMinutes().toString().padStart(2, '0')
+  const messageDayOfWeek: number = messageTime.getDay()
+
+  const formattedMonth: string = messageMonth.toString().padStart(2, '0')
+  // 不再使用 formattedDay
+  void messageMonth
+
+  const currentYear: number = now.getFullYear()
+  const timeDiff: number = now.getTime() - messageTime.getTime()
+  const dayDiff: number = Math.floor(timeDiff / (1000 * 60 * 60 * 24))
+
+  if (dayDiff == 0) {
+    return `${messageHours}:${messageMinutes}`
+  }
+  if (dayDiff == 1) {
+    return `昨天 ${messageHours}:${messageMinutes}`
+  }
+  if (dayDiff > 1 && dayDiff < 7) {
+    const weekDays: string[] = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
+    const weekDay: string = weekDays[messageDayOfWeek]
+    return `${weekDay} ${messageHours}:${messageMinutes}`
+  }
+  if (messageYear == currentYear) {
+    return `${formattedMonth}/${messageTime.getDate().toString().padStart(2, '0')}`
+  }
+  return `${messageYear}/${formattedMonth}/${messageTime.getDate().toString().padStart(2, '0')}`
+}
+
+const timeText = computed<string>((): string => {
+  const lastMessage = objLastMessage(props.conversation)
+  if (lastMessage == null) {
+    return ''
+  }
+  const ts: number = objNumber(lastMessage, 'timestamp', 0)
+  if (ts <= 0) {
+    return ''
+  }
+  return formatTime(ts)
+})
+</script>
+
+<style>
+.conv-preview {
+  flex-direction: row;
+  align-items: center;
+  padding-left: 22rpx;
+  background-color: #ffffff;
+  position: relative;
+}
+
+.conv-preview--pinned {
+  background-color: #F0F2F7;
+}
+
+.conv-preview__info {
+  padding: 24rpx 32rpx 24rpx 14rpx;
+  flex: 1;
+  justify-content: space-between;
+  border-bottom: 1rpx solid #E6E9F0;
+}
+
+.conv-preview__header {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4rpx;
+}
+
+.conv-preview__name {
+  flex: 1;
+  font-size: 36rpx;
+  line-height: 48rpx;
+  font-weight: 400;
+  color: #333333;
+  lines: 1;
+  text-overflow: ellipsis;
+  margin-right: 16rpx;
+}
+
+.conv-preview__time {
+  flex-shrink: 0;
+  font-weight: 400;
+  font-size: 24rpx;
+  line-height: 34rpx;
+  color: #999999;
+}
+
+.conv-preview__footer {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.conv-preview__message {
+  flex: 1;
+  flex-direction: row;
+  align-items: center;
+  margin-right: 16rpx;
+}
+
+.conv-preview__label {
+  font-weight: 400;
+  font-size: 28rpx;
+  line-height: 40rpx;
+  margin-right: 8rpx;
+}
+
+.conv-preview__label--draft {
+  font-size: 24rpx;
+  color: #ff4444;
+}
+
+.conv-preview__label--mention {
+  font-size: 24rpx;
+  color: #ff4444;
+}
+
+.conv-preview__label--count {
+  color: #999999;
+}
+
+.conv-preview__last-msg-container {
+  flex: 1;
+  flex-direction: row;
+  align-items: center;
+  overflow: hidden;
+}
+
+.conv-preview__last-msg-text {
+  font-size: 28rpx;
+  line-height: 40rpx;
+  color: #999999;
+}
+
+.conv-preview__emoji {
+  width: 32rpx;
+  height: 32rpx;
+  margin: 0 4rpx;
+}
+
+.conv-preview__status {
+  flex-direction: row;
+  align-items: center;
+}
+
+.conv-preview__icon {
+  margin-right: 8rpx;
+}
+
+.conv-preview__icon-img {
+  width: 26rpx;
+  height: 26rpx;
+}
+</style>

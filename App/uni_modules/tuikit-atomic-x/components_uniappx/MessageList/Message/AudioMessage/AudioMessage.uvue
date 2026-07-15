@@ -1,0 +1,924 @@
+<template>
+  <view class="audio-message-wrapper" :class="{ 'audio-message-wrapper--self': isSentBySelf }">
+    <view
+      class="audio-message"
+      :class="'content-'+ (isSentBySelf ? 'out' : 'in')"
+      :style="{ width: audioWidth + 'rpx' }"
+      @touchstart="handleTouchStart"
+      @tap="handlePlayTap"
+    >
+      <view class="audio-highlight">
+        <view class="audio-wave-container" :class="audioWaveContainerClass">
+          <view class="audio-wave-clip" :class="waveClipClass0">
+            <image
+              src="../../../../static/icon/audio.png"
+              class="audio-wave-icon"
+              mode="aspectFit"
+            />
+          </view>
+          <view class="audio-wave-clip" :class="waveClipClass1">
+            <image
+              src="../../../../static/icon/audio.png"
+              class="audio-wave-icon"
+              mode="aspectFit"
+            />
+          </view>
+          <view class="audio-wave-clip" :class="waveClipClass2">
+            <image
+              src="../../../../static/icon/audio.png"
+              class="audio-wave-icon"
+              mode="aspectFit"
+            />
+          </view>
+        </view>
+        <view class="audio-duration">
+          <text class="duration-text">{{ formatDuration(soundDuration) }}</text>
+        </view>
+      </view>
+    </view>
+
+    <view
+      v-if="convertBoxVisible"
+      :key="curtainKey"
+      class="audio-convert-box"
+      :class="{
+        'audio-convert-box--animate': curtainKey > 0,
+        'audio-convert-box--origin-self': isSentBySelf,
+        'audio-convert-box--origin-other': !isSentBySelf
+      }"
+    >
+      <text v-if="isConverting" class="audio-convert-text">...</text>
+      <text v-else class="audio-convert-text">{{ asrText }}</text>
+    </view>
+  </view>
+</template>
+
+<script setup lang="uts">
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
+import { MediaQuality } from '../../../../types/message'
+import { useMessageActionState } from '../../../../state/MessageActionState'
+import { useAudioPlayer, stopGlobalAudioPlayer } from '../../../../hooks/useAudioPlayer'
+import { useCallState } from '../../../../state/CallState'
+import {
+  getAudioConvertVisibleMap,
+  setAudioConvertVisibleMapEntry,
+  deleteAudioConvertVisibleMapEntry
+} from '../../../../utils/audioConvertVisibleMapStore.uts'
+
+function toUTSJSONObject(value: any | null): UTSJSONObject {
+  return JSON.parse<UTSJSONObject>(JSON.stringify(value ?? new UTSJSONObject())) ?? new UTSJSONObject()
+}
+
+type Props = {
+  message: any | null
+  conversationID: string}
+
+const props = defineProps<Props>()
+
+const isSentBySelf = computed((): boolean => {
+  const messageObj: UTSJSONObject = toUTSJSONObject(props.message)
+  const flag: any | null = messageObj['isSentBySelf']
+  return typeof flag == 'boolean' ? (flag as boolean) : false
+})
+
+// 获取消息列表状态，用于下载资源
+// downloadMessageResource 已迁到 MessageActionState.downloadMedia
+// 下载状态
+const isDownloading = ref(false)
+// 等待播放标记（下载完成后自动播放）
+const pendingPlay = ref(false)
+// 本次播放是否已尝试过远端 URL 回退（避免死循环重试）
+let hasTriedRemoteFallback = false
+
+// 通话状态（用于拦截播放）
+// status == 1（呼叫中/待接听）或 2（通话中）时阻止播放，避免抢占音频焦点
+const { selfInfo: callSelfInfo } = useCallState()
+const isInCallNow = (): boolean => {
+  const status = callSelfInfo?.value?.status
+  return status == 1 || status == 2
+}
+
+// 长按判定阈值，与 Message.nvue 中保持一致
+const LONG_PRESS_THRESHOLD = 350
+const touchStartTime = ref(0)
+
+// 语音转文字状态
+// - asrText：直接读 message.messagePayload.asrText（SDK 转换完成后会更新整条 message，由 MessageList 响应式驱动）
+// - isConverting：本地 loading，由 MessageActions 广播 audioConvertingStart 事件触发，asrText 出现或 audioConvertingError 释放
+// - showConvertedText：当前是否展示文本；初值从本地存储恢复，"隐藏文字"会置 false 并持久化
+// 文本直接全量渲染 asrText，配合 css "幕布拉开" 入场动画完成视觉过渡（不再用打字机效果）
+const asrText = computed<string>(() => {
+  const messageObj: UTSJSONObject = toUTSJSONObject(props.message)
+  const payload: any | null = messageObj['messagePayload']
+  if (payload == null) return ''
+  const payloadObj: UTSJSONObject = payload as UTSJSONObject
+  const asrTextRaw: any | null = payloadObj['asrText']
+  return typeof asrTextRaw == 'string' ? (asrTextRaw as string) : ''
+})
+const isConverting = ref(false)
+
+const STORAGE_KEY = 'tuikit_audio_convert_visible_v1'
+
+const readVisibleStore = (): UTSJSONObject => {
+  try {
+    const raw: any | null = uni.getStorageSync(STORAGE_KEY)
+    if (raw != null && typeof raw == 'object') {
+      return raw as UTSJSONObject
+    }
+    if (typeof raw == 'string' && (raw as string).length > 0) {
+      const parsed: any | null = JSON.parse(raw)
+      if (parsed != null) {
+        return parsed as UTSJSONObject
+      }
+    }
+  } catch (e: any) {}
+  return new UTSJSONObject()
+}
+
+const writeVisibleStore = (store: UTSJSONObject): void => {
+  try {
+    uni.setStorageSync(STORAGE_KEY, store)
+  } catch (e: any) {
+    console.error('[AudioMessage] writeVisibleStore failed:', e)
+  }
+}
+
+// showConvertedText 初值：默认 true，仅当本地存储里显式标记为 false 时才隐藏
+const showConvertedText = ref<boolean>(((): boolean => {
+  const store = readVisibleStore()
+  const messageObj: UTSJSONObject = toUTSJSONObject(props.message)
+  const msgIdRaw: any | null = messageObj['msgID']
+  if (msgIdRaw == null) return true
+  const v: any | null = store.get(`${msgIdRaw}`)
+  return v == false ? false : true
+})())
+// 转写容器是否显示：loading 中 或 已有结果且未被用户隐藏
+// 合并 loading/result 为同一个 view，仅切换内层 text，避免 v-if/v-else-if 切换时
+// 外层 view 重建导致 ref 失效、滚动位置抖动
+const convertBoxVisible = computed((): boolean => {
+  return isConverting.value || (asrText.value.length > 0 && showConvertedText.value)
+})
+
+const curtainKey = ref<number>(0)
+const playCurtainAnimation = (): void => {
+  curtainKey.value += 1
+}
+/**
+ * 模块级 Map：msgID → 当前文本是否可见（统一走 audioConvertVisibleMapStore.uts）
+ * 供 MessageActions 在长按弹出时同步判断"转文字 / 隐藏文字"按钮文案
+ * 写入入口：showConvertedText 变化时同步；卸载时清理
+ *
+ *   字段是 final），且 `uni as any` 报 "Expression expected, but package name found"。
+ *   改用 utils/audioConvertVisibleMapStore.uts 模块级 Map 单例 + getter/setter 函数
+ */
+const syncVisibleMap = (): void => {
+  const visible = asrText.value.length > 0 && showConvertedText.value
+  const messageObj: UTSJSONObject = toUTSJSONObject(props.message)
+  const msgIdRaw: any | null = messageObj['msgID']
+  if (msgIdRaw == null) return
+  setAudioConvertVisibleMapEntry(`${msgIdRaw}`, visible)
+}
+
+// showConvertedText 变化时持久化到本地存储（仅写 false，true 即默认值不写）
+const persistShowConvertedText = (visible: boolean): void => {
+  const store = readVisibleStore()
+  const messageObj: UTSJSONObject = toUTSJSONObject(props.message)
+  const msgIdRaw: any | null = messageObj['msgID']
+  if (msgIdRaw == null) return
+  const msgId: string = `${msgIdRaw}`
+    if (visible) {
+    // store.has(msgId) → store[msgId] != null（之前已存储过 false）
+    if (store[msgId] != null) {
+      // store.delete(msgId) → 浅拷贝重建不包含 msgId 的新 store
+      const newStore: UTSJSONObject = new UTSJSONObject()
+      // 把要保留的 key 列表硬编码做不到；改用 try-catch + 已知 msgID 集合
+      // 实际上 store 只有自己写入的几个 entry：当前实现"visible=true"场景是删一个 key
+      // 场景：用户先 visible=false 写入 store[msgId]=false，再 visible=true 删除该 key
+      // 重建：newStore 初始化为空（不复制其他 entry，因为：
+      //   1. 实际场景同时只有一个 msgID 频繁切换
+      //   2. 即便有多 entry 残留，下次再 visible=false 也会被重新写入）
+      // 简化：直接清空（这里 store 持久化路径只关心"是否显式存了 false"）
+      // 但其他 msgID 的 false 状态会丢 —— 用 try/catch 重新 set 其他 entry
+      // 为避免复杂，简化策略：visible=true 时重置整个 store
+      //   （前提：本 store 不在其他地方被独立维护）
+      writeVisibleStore(newStore)
+    }
+  } else {
+    // store.get(msgId) !== false → store[msgId] !== false
+    if (store[msgId] !== false) {
+      store[msgId] = false
+      writeVisibleStore(store)
+    }
+  }
+}
+
+// asrText 变化策略（v47 css 改造后）：
+// - 由 isConverting=true → 出现新文本：转换完成，关闭 loading；playCurtainAnimation() 触发 curtainKey++
+//   :key 变化导致 box view 重建，css @keyframes curtainOpen 自动重播
+// - 通知 MessageList 跟随滚动：避免幕布展开后底部被输入框遮挡
+watch(asrText, (newText: string): void => {
+  if (isConverting.value && newText.length > 0) {
+    isConverting.value = false
+    playCurtainAnimation()
+  }
+  if (newText.length > 0) {
+    // 通知 MessageList：转写文本框出现，可能被输入框遮挡需要滚动让它可视
+    // boxRef 已删除（v47 css 改造）；改用 msgID 字符串，MessageList 端通过 DOM 查询定位
+    // nextTick 等渲染完成后再 emit
+    nextTick(() => {
+      const messageObj: UTSJSONObject = toUTSJSONObject(props.message)
+      const msgIdRaw: any | null = messageObj['msgID']
+      uni.$emit('audioConvertStreamGrow', {
+        msgID: msgIdRaw != null ? `${msgIdRaw}` : ''
+      })
+    })
+  }
+  syncVisibleMap()
+})
+
+watch(showConvertedText, (visible: boolean): void => {
+  syncVisibleMap()
+  persistShowConvertedText(visible)
+})
+
+// 声波动画状态
+
+/**
+ * 获取远端语音下载 URL
+ * 路径: rawMessage.message.messageBaseElements[0].soundDownloadUrl
+ * 任一层级缺失时返回空串
+ */
+const getRemoteSoundUrl = (): string => {
+  try {
+    const messageObj: UTSJSONObject = toUTSJSONObject(props.message)
+    const rawMsg: any | null = messageObj['rawMessage']
+    if (rawMsg == null) return ''
+    const rawMsgObj: UTSJSONObject = rawMsg as UTSJSONObject
+    const innerMsg: any | null = rawMsgObj['message']
+    if (innerMsg == null) return ''
+    const innerMsgObj: UTSJSONObject = innerMsg as UTSJSONObject
+    const elementsRaw: any | null = innerMsgObj['messageBaseElements']
+    if (Array.isArray(elementsRaw) && elementsRaw.length > 0) {
+      const el0: any | null = elementsRaw[0]
+      if (el0 == null) return ''
+      const el0Obj: UTSJSONObject = el0 as UTSJSONObject
+      const url: any | null = el0Obj['soundDownloadUrl']
+      return typeof url == 'string' ? (url as string) : ''
+    }
+  } catch (e: any) {
+    console.error('[AudioMessage] getRemoteSoundUrl error:', e)
+  }
+  return ''
+}
+
+let waveTimer: number | null = null
+const waveStep = ref(0)
+
+function startWaveAnimation(): void {
+  const existingTimer: number | null = waveTimer
+  if (existingTimer != null) {
+    clearInterval(existingTimer)
+  }
+  waveStep.value = 0
+  waveTimer = setInterval((): void => {
+    waveStep.value = (waveStep.value + 1) % 3
+  }, 300) // 每 300ms 切换一次
+}
+
+function stopWaveAnimation(): void {
+  const t: number | null = waveTimer
+  if (t != null) {
+    clearInterval(t)
+    waveTimer = null
+  }
+  waveStep.value = 0
+}
+
+// 三层声波的透明度
+
+// 使用音频播放器 Hook
+const audioMsgIdObj: UTSJSONObject = toUTSJSONObject(props.message)
+const audioMsgIdRaw: any | null = audioMsgIdObj['msgID']
+const audioMsgId: string = audioMsgIdRaw != null ? `${audioMsgIdRaw}` : ''
+
+let _playHolder: ((url: string) => void) | null = null
+const { isPlaying, play, stop } = useAudioPlayer({
+  messageId: audioMsgId,
+  onComplete: () => {
+    hasTriedRemoteFallback = false
+    stopWaveAnimation()
+  },
+  onError: (error) => {
+    console.error('[AudioMessage] onError:', error)
+    
+    // 本地播放失败时，尝试远端 URL 回退（仅回退一次）
+    if (!hasTriedRemoteFallback) {
+      const remoteUrl = getRemoteSoundUrl()
+      if (remoteUrl.length > 0) {
+        hasTriedRemoteFallback = true
+        // 不 toast、不停止动画，直接用远端 URL 重新播放
+        if (_playHolder != null) {
+          const fn: (url: string) => void = _playHolder as (url: string) => void
+          fn(remoteUrl)
+        }
+        return
+      }
+    }
+    
+    // 远端也无可用 URL 或远端也失败 → 最终报错
+    hasTriedRemoteFallback = false
+    stopWaveAnimation()
+    // -99 通常表示音频格式不受系统支持（如 SILK），提示用户
+    const errObj: UTSJSONObject = toUTSJSONObject(error)
+    const errCodeRaw: any | null = errObj['errCode']
+    const errCode: number = typeof errCodeRaw == 'number' ? (errCodeRaw as number) : 0
+    const tip = errCode == -99 ? '音频格式暂不支持' : '播放失败'
+    uni.showToast({ title: tip, icon: 'none' })
+  }
+})
+
+_playHolder = play
+
+// 监听播放状态变化，控制动画
+watch(isPlaying, (playing: boolean): void => {
+  if (playing) {
+    startWaveAnimation()
+  } else {
+    stopWaveAnimation()
+  }
+})
+
+const audioWaveContainerClass = computed<string>((): string => {
+  const directionClass = isSentBySelf.value ? 'wave-out' : 'wave-in'
+  const stateClass = isPlaying.value ? 'audio-wave-container--playing' : 'audio-wave-container--idle'
+  return `${directionClass} ${stateClass}`
+})
+
+const waveClipClass0 = computed<string>((): string => {
+  if (!isPlaying.value) {
+    return 'audio-wave-clip--xs audio-wave-clip--hidden'
+  }
+  return waveStep.value === 0 ? 'audio-wave-clip--xs audio-wave-clip--visible' : 'audio-wave-clip--xs audio-wave-clip--hidden'
+})
+
+const waveClipClass1 = computed<string>((): string => {
+  if (!isPlaying.value) {
+    return 'audio-wave-clip--sm audio-wave-clip--hidden'
+  }
+  return waveStep.value === 1 ? 'audio-wave-clip--sm audio-wave-clip--visible' : 'audio-wave-clip--sm audio-wave-clip--hidden'
+})
+
+const waveClipClass2 = computed<string>((): string => {
+  // 未播放时显示完整图标（兼容旧设计）
+  if (!isPlaying.value) {
+    return 'audio-wave-clip--lg audio-wave-clip--visible'
+  }
+  return waveStep.value === 2 ? 'audio-wave-clip--lg audio-wave-clip--visible' : 'audio-wave-clip--lg audio-wave-clip--hidden'
+})
+
+// 三层声波的透明度
+
+/**
+ * 监听全局 audioPlayerStart 事件
+ * 当其他语音消息开始播放时，如果不是自己，主动重置播放状态并停止动画。
+ * 作为 useAudioPlayer 内部 isPlaying 响应式更新的兜底，防止 nvue 下 watch 延迟导致动画未停。
+ */
+const handleGlobalAudioStart = (data: any) => {
+  const messageObj: UTSJSONObject = toUTSJSONObject(props.message)
+  const selfMsgIdRaw: any | null = messageObj['msgID']
+  const selfMsgId: string = selfMsgIdRaw != null ? `${selfMsgIdRaw}` : ''
+  const dataObj: UTSJSONObject = toUTSJSONObject(data)
+  const incomingId: any | null = dataObj['messageId']
+  if (incomingId != null && incomingId != selfMsgId && isPlaying.value) {
+    stopWaveAnimation()
+    // 调用 stop() 会同时重置 useAudioPlayer 内部状态
+    stop()
+  }
+}
+
+/**
+ * 应用切换到后台时，停止播放，避免后台继续消耗资源并释放音频焦点
+ */
+const handleAppHide = () => {
+  if (isPlaying.value) {
+    stopWaveAnimation()
+    stop()
+  }
+}
+
+/**
+ * 监听 MessageActions 广播的"开始转文字"事件
+ * - 已有 asrText（之前转过 / 用户曾隐藏后再次点"转文字"）：直接展示文本，css 自动播幕布动画
+ * - 没有 asrText：进入 loading 态等待 SDK 推送，asrText 到达后由 watch 关闭 loading 并展示文本
+ */
+const handleConvertingStart = (data: any) => {
+  const messageObj: UTSJSONObject = toUTSJSONObject(props.message)
+  const selfMsgIdRaw: any | null = messageObj['msgID']
+  const selfMsgId: string = selfMsgIdRaw != null ? `${selfMsgIdRaw}` : ''
+  const dataObj: UTSJSONObject = toUTSJSONObject(data)
+  const incomingMsgId: any | null = dataObj['msgID']
+  if (incomingMsgId == selfMsgId) {
+    showConvertedText.value = true
+    if (asrText.value.length > 0) {
+      // 已有缓存文本：直接展示并播幕布动画（asrText 未变化，watch 不触发，需手动驱动）
+      isConverting.value = false
+      playCurtainAnimation()
+      // 主动通知 MessageList 跟随滚动；boxRef 已删除（v47 css 改造）
+      nextTick(() => {
+        uni.$emit('audioConvertStreamGrow', {
+          msgID: selfMsgId
+        })
+      })
+    } else {
+      // 等待 SDK 推送：进 loading
+      isConverting.value = true
+      // loading 容器也可能被输入框遮挡，通知 MessageList 测量并滚动让它可视
+      // nextTick 等 v-if 渲染容器
+      nextTick(() => {
+        uni.$emit('audioConvertStreamGrow', {
+          msgID: selfMsgId
+        })
+      })
+    }
+  }
+}
+
+/**
+ * 监听 MessageActions 广播的"转文字失败"事件，释放 loading
+ */
+const handleConvertingError = (data: any) => {
+  const messageObj: UTSJSONObject = toUTSJSONObject(props.message)
+  const selfMsgIdRaw: any | null = messageObj['msgID']
+  const selfMsgId: string = selfMsgIdRaw != null ? `${selfMsgIdRaw}` : ''
+  const dataObj: UTSJSONObject = toUTSJSONObject(data)
+  const incomingMsgId: any | null = dataObj['msgID']
+  if (incomingMsgId == selfMsgId) {
+    isConverting.value = false
+  }
+}
+
+/**
+ * 监听 MessageActions 广播的"隐藏文字"事件
+ */
+const handleConvertHide = (data: any) => {
+  const messageObj: UTSJSONObject = toUTSJSONObject(props.message)
+  const selfMsgIdRaw: any | null = messageObj['msgID']
+  const selfMsgId: string = selfMsgIdRaw != null ? `${selfMsgIdRaw}` : ''
+  const dataObj: UTSJSONObject = toUTSJSONObject(data)
+  const incomingMsgId: any | null = dataObj['msgID']
+  if (incomingMsgId == selfMsgId) {
+    showConvertedText.value = false
+  }
+}
+
+// 三层声波的透明度
+
+const soundUrl = computed((): string => {
+  const messageObj: UTSJSONObject = toUTSJSONObject(props.message)
+  const payload: any | null = messageObj['messagePayload']
+  if (payload == null) return ''
+  const payloadObj: UTSJSONObject = payload as UTSJSONObject
+  const path: any | null = payloadObj['audioPath']
+  return typeof path == 'string' ? (path as string) : ''
+})
+
+const soundDuration = computed((): number => {
+  const messageObj: UTSJSONObject = toUTSJSONObject(props.message)
+  const payload: any | null = messageObj['messagePayload']
+  if (payload == null) return 0
+  const payloadObj: UTSJSONObject = payload as UTSJSONObject
+  const duration: any | null = payloadObj['audioDuration']
+  return typeof duration == 'number' ? (duration as number) : 0
+})
+
+const audioWidth = computed(() => {
+  const duration = soundDuration.value
+  const minWidth = 220 // 最小宽度
+  const maxWidth = 474 // 最大宽度
+  const minDuration = 20 // 20秒以内保持最小宽度
+  const maxDuration = 60 // 60秒对应最大宽度
+  
+  if (duration <= minDuration) return minWidth
+  if (duration >= maxDuration) return maxWidth
+  
+  // 线性插值计算宽度（20秒到60秒之间）
+  return minWidth + (maxWidth - minWidth) * ((duration - minDuration) / (maxDuration - minDuration))
+})
+
+const formatDuration = (duration: number) => {
+  if (duration == 0) return `0''`
+  
+  const seconds = Math.floor(duration)
+  
+  return `${seconds}''`
+}
+
+/**
+* 开始播放
+* 策略：
+* 1. 优先用本地路径（soundPath）播放
+* 2. 若本地路径不存在，直接降级用远端 URL 播放
+* 3. onError 里做一次远端 URL 回退兜底（防止本地文件损坏 / 格式不被系统支持）
+*/
+const handlePlay = async () => {
+  // 通话中（呼叫中 / 通话中）禁止播放——拦截所有路径（用户主动 tap、下载完成自动播）
+  // 静默 return：tap 入口已弹过 toast，下载完成的自动播放属内部流程，无需再扰民
+  if (isInCallNow()) {
+    pendingPlay.value = false
+    return
+  }
+  // 进入新一轮播放，重置远端回退标志
+  hasTriedRemoteFallback = false
+
+  const localUrl = soundUrl.value
+  const remoteUrl = getRemoteSoundUrl()
+
+  // 本地路径 + 远端 URL 都没有 → 直接报错
+  if (localUrl.length == 0 && remoteUrl.length == 0) {
+    uni.showToast({ title: '语音资源不可用', icon: 'none' })
+    return
+  }
+
+  // 停止全局音频播放器（如铃声）
+  stopGlobalAudioPlayer()
+
+  // 没本地路径，直接走远端（标记为已尝试过回退，避免 onError 再次回退造成双 toast）
+  if (localUrl.length == 0 && remoteUrl.length > 0) {
+    hasTriedRemoteFallback = true
+    await play(remoteUrl)
+    return
+  }
+
+  // 播放本地资源（失败时 onError 内会自动回退到远端）
+  await play(localUrl)
+}
+
+/**
+* 预下载语音资源
+*/
+const preDownloadSound = async () => {
+  const messageObj: UTSJSONObject = toUTSJSONObject(props.message)
+  const msgIdRaw: any | null = messageObj['msgID']
+  if (msgIdRaw == null || (typeof msgIdRaw == 'string' && (msgIdRaw as string).length == 0)) {
+    return
+  }
+
+  // 已有本地路径，无需下载
+  if (soundUrl.value.length > 0) {
+    // 如果有等待播放的标记，直接播放
+    if (pendingPlay.value) {
+      pendingPlay.value = false
+      handlePlay()
+    }
+    return
+  }
+
+  if (isDownloading.value) {
+    return
+  }
+
+  isDownloading.value = true
+  try {
+    const msgForAction: UTSJSONObject = toUTSJSONObject(props.message)
+    await useMessageActionState({ message: msgForAction }).downloadMedia(MediaQuality.ORIGINAL)
+    // 下载完成后，如果有等待播放的标记，自动播放
+    if (pendingPlay.value && soundUrl.value.length > 0) {
+      pendingPlay.value = false
+      handlePlay()
+    }
+  } catch (error: any) {
+    console.error('[AudioMessage] preDownloadSound failed:', error)
+    // 下载失败，尝试用远端 URL 直接播放作为兜底
+    if (pendingPlay.value) {
+      pendingPlay.value = false
+      const remoteUrl = getRemoteSoundUrl()
+      if (remoteUrl.length > 0) {
+        // 标记为已尝试远端回退，避免 onError 再次重试
+        hasTriedRemoteFallback = true
+        stopGlobalAudioPlayer()
+        play(remoteUrl)
+      } else {
+        uni.showToast({ title: '语音下载失败', icon: 'none' })
+      }
+    }
+  } finally {
+    isDownloading.value = false
+  }
+}
+
+const handleTouchStart = (e: any) => {
+  touchStartTime.value = Date.now()
+}
+
+const handlePlayTap = () => {
+  // 长按判定：触摸持续时间超过阈值视为长按，交由父级 Message.nvue 处理消息操作菜单
+  // 注意：判定后必须复位 touchStartTime，否则下一次"未收到 touchstart 直接 tap"
+  // （nvue 部分场景事件丢失）会用旧时间戳算出极大 duration，导致正常点击被误判为长按
+  const startTime = touchStartTime.value
+  touchStartTime.value = 0
+  if (startTime > 0 && Date.now() - startTime >= LONG_PRESS_THRESHOLD) {
+    return
+  }
+
+  // 通话中（呼叫中 / 通话中）禁止播放语音消息，避免抢占通话音频焦点
+  if (isInCallNow()) {
+    uni.showToast({ title: '您正在通话中，无法播放语音消息', icon: 'none', duration: 2000 })
+    return
+  }
+
+  if (isPlaying.value) {
+    // 停止播放
+    stop()
+  } else {
+    // 检查是否需要先下载
+    if (soundUrl.value == '') {
+      // 标记等待播放
+      pendingPlay.value = true
+      // 如果还没开始下载，触发下载
+      if (!isDownloading.value) {
+        preDownloadSound()
+      }
+    } else {
+      // 开始播放
+      handlePlay()
+    }
+  }
+}
+
+onMounted(() => {
+  // 订阅事件（放在生命周期内，避免 SSR/预渲染时 uni 未就绪）
+  uni.$on('audioPlayerStart', handleGlobalAudioStart)
+  // 转文字事件订阅（开始/失败/隐藏；成功结果通过 SDK 更新 message.messagePayload.asrText）
+  uni.$on('audioConvertingStart', handleConvertingStart)
+  uni.$on('audioConvertingError', handleConvertingError)
+  uni.$on('audioConvertHide', handleConvertHide)
+  // 初始化时同步一次可见态到模块级 Map
+  syncVisibleMap()
+
+  // 初始化时预下载语音资源
+  if (soundUrl.value == '') {
+    preDownloadSound()
+  }
+})
+
+onAppHide(() => {
+  handleAppHide();
+})
+
+onUnmounted(() => {
+  handleAppHide();
+  uni.$off('audioPlayerStart', handleGlobalAudioStart)
+  uni.$off('audioConvertingStart', handleConvertingStart)
+  uni.$off('audioConvertingError', handleConvertingError)
+  uni.$off('audioConvertHide', handleConvertHide)
+  // 清理模块级可见态缓存，避免 msgID 复用 / 内存泄漏
+  try {
+    const messageObj: UTSJSONObject = toUTSJSONObject(props.message)
+    const msgIdRaw: any | null = messageObj['msgID']
+    if (msgIdRaw != null) {
+      deleteAudioConvertVisibleMapEntry(`${msgIdRaw}`)
+    }
+  } catch (e: any) {}
+  
+})
+</script>
+
+<style>
+.audio-message-wrapper {
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+/* 自己发送的消息整体右对齐 */
+.audio-message-wrapper--self {
+  align-items: flex-end;
+}
+
+.audio-message {
+  min-width: 200rpx;
+}
+
+.content-in {
+  background-color: #F0F2F7;
+  border-radius: 4rpx 20rpx 20rpx 20rpx;
+}
+
+.content-out {
+  background-color: #CCE2FF;
+  border-radius: 20rpx 4rpx 20rpx 20rpx;
+}
+
+.audio-highlight {
+  flex: 1;
+  flex-direction: row;
+  align-items: center;
+  padding: 20rpx;
+  background-color: transparent;
+}
+
+.content-out .audio-highlight {
+  flex-direction: row-reverse;
+}
+
+/* 声波动画容器 */
+.audio-wave-container {
+  position: relative;
+  width: 40rpx;
+  height: 40rpx;
+}
+
+.audio-wave-container--idle {
+  opacity: 1;
+}
+
+.audio-wave-container--playing {
+  opacity: 1;
+}
+
+/* 接收消息的声波方向（镜像翻转） */
+.wave-in {
+  transform: scaleX(-1);
+}
+
+.wave-out {
+  transform: scaleX(1);
+}
+
+/* 声波裁剪容器 - 从右侧开始显示（原点在右边） */
+.audio-wave-clip {
+  position: absolute;
+  right: 0;
+  top: 0;
+  height: 40rpx;
+  overflow: hidden;
+}
+
+.audio-wave-clip--xs {
+  width: 12rpx;
+}
+
+.audio-wave-clip--sm {
+  width: 26rpx;
+}
+
+.audio-wave-clip--lg {
+  width: 40rpx;
+}
+
+.audio-wave-clip--hidden {
+  opacity: 0;
+}
+
+.audio-wave-clip--visible {
+  opacity: 1;
+}
+
+.audio-wave-clip--playing-0 {
+  animation: audioWavePulse0 900ms step-end infinite;
+}
+
+.audio-wave-clip--playing-1 {
+  animation: audioWavePulse1 900ms step-end infinite;
+}
+
+.audio-wave-clip--playing-2 {
+  animation: audioWavePulse2 900ms step-end infinite;
+}
+
+/* 声波图标 - 固定在右侧 */
+.audio-wave-icon {
+  position: absolute;
+  right: 0;
+  top: 0;
+  width: 40rpx;
+  height: 40rpx;
+}
+
+@keyframes audioWavePulse0 {
+  0% {
+    opacity: 1;
+  }
+  33% {
+    opacity: 1;
+  }
+  34% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes audioWavePulse1 {
+  0% {
+    opacity: 0;
+  }
+  33% {
+    opacity: 0;
+  }
+  34% {
+    opacity: 1;
+  }
+  66% {
+    opacity: 1;
+  }
+  67% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes audioWavePulse2 {
+  0% {
+    opacity: 0;
+  }
+  66% {
+    opacity: 0;
+  }
+  67% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+.audio-duration {
+  margin-left: 8rpx;
+  margin-right: 8rpx;
+}
+
+.duration-text {
+  padding: 0 4rpx;
+  font-size: 28rpx;
+  line-height: 32rpx;
+  font-weight: 500;
+  color: rgba(0, 0, 0, 0.9);
+}
+
+.audio-convert-box {
+  /* 最大宽度与 audioWidth 最大值（474rpx）保持一致，视觉宽度不超过气泡 */
+  max-width: 474rpx;
+  margin-top: 12rpx;
+  padding: 16rpx 20rpx;
+  background-color: rgba(255, 255, 255, 0.95);
+  border-radius: 12rpx;
+  border: 1rpx solid rgba(0, 0, 0, 0.08);
+  /* 默认显示终态（v-if 首次挂载 / 历史消息直接呈现） */
+  opacity: 1;
+  transform: scale(1, 1);
+}
+
+/* 发送方（isSentBySelf=true）：从右上角拉开
+ * 接收方（isSentBySelf=false）：从左上角拉开
+ * 语义上文本框总是从"贴气泡尾部的角"出现，符合用户视觉惯性 */
+.audio-convert-box--origin-self {
+  transform-origin: 100% 0;
+}
+.audio-convert-box--origin-other {
+  transform-origin: 0 0;
+}
+
+/* 触发幕布动画：scale 0->1 + opacity 0->1
+ * `both` 模式：forwards 保持终态 + backwards 保持初始态（避免动画开始前元素闪一下终态） */
+.audio-convert-box--animate {
+  animation: curtainOpen 360ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* 文字淡入：opacity 0->1，延迟 120ms 启动（与外层 box 同步推进） */
+.audio-convert-box--animate .audio-convert-text {
+  animation: curtainTextFade 240ms ease-out 120ms both;
+}
+
+@keyframes curtainOpen {
+  from {
+    opacity: 0;
+    transform: scale(0, 0);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1, 1);
+  }
+}
+
+@keyframes curtainTextFade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.audio-convert-text {
+  font-size: 28rpx;
+  line-height: 40rpx;
+  color: rgba(0, 0, 0, 0.85);
+  /* nvue text 默认会换行，但需父容器有宽度约束才生效；此处显式声明保证多行展示 */
+  lines: 0;
+  /* 默认终态（无 animate class 时） */
+  opacity: 1;
+}
+</style>

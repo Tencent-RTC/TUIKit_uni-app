@@ -44,8 +44,8 @@ export default {
       return result
     },
   },
-  mounted() { this.groupState.fetchJoinedGroupList() },
-  onShow() { this.groupState.fetchJoinedGroupList() },
+  mounted() { this.groupState.loadJoinedGroups() },
+  onShow() { this.groupState.loadJoinedGroups() },
   methods: {
     handleGroupClick(group) { this.selectedGroupID = group.groupID; this.$emit('groupSelect', group) },
   },

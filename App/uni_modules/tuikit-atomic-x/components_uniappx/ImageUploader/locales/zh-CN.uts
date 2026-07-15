@@ -1,0 +1,9 @@
+
+const zhCN: Map<string, string> = new Map()
+zhCN.set('take_photo', '拍照')
+zhCN.set('choose_from_album', '从相册选择')
+zhCN.set('cancel', '取消')
+zhCN.set('done', '完成')
+zhCN.set('crop_failed', '裁剪失败')
+
+export { zhCN }

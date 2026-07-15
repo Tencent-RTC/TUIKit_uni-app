@@ -62,13 +62,13 @@ export default {
       uni.hideKeyboard(); this.hasSearched = true; this.isSearching = true; this.searchResultList = []
       this.$emit('search', groupID)
       var self = this
-      this.groupState.fetchGroupInfo([groupID]).then(function(result) { self.searchResultList = result }).catch(function(err) { console.error('[AddGroup] Search failed:', err); self.searchResultList = [] }).finally(function() { self.isSearching = false })
+      this.groupState.getGroupInfo(groupID).then(function(info) { self.searchResultList = info ? [info] : [] }).catch(function(err) { console.error('[AddGroup] Search failed:', err); self.searchResultList = [] }).finally(function() { self.isSearching = false })
     },
     handleGroupClick(group) { uni.hideKeyboard(); this.$emit('groupSelect', group) },
     silentRefreshSearch() {
       var groupID = this.searchValue.trim(); if (!groupID) return
       var self = this
-      this.groupState.fetchGroupInfo([groupID]).then(function(result) { self.searchResultList = result }).catch(function(err) { console.error('[AddGroup] silentRefreshSearch failed:', err) })
+      this.groupState.getGroupInfo(groupID).then(function(info) { self.searchResultList = info ? [info] : [] }).catch(function(err) { console.error('[AddGroup] silentRefreshSearch failed:', err) })
     },
   },
 }

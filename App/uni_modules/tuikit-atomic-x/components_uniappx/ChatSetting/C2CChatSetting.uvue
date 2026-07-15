@@ -1,0 +1,513 @@
+<template>
+  <view class="c2c-chat-setting">
+    <!-- 导航栏 -->
+    <CustomNavbar
+      :title="navTitle"
+      :showBack="alwaysTrue"
+      @back="handleNavBack"
+    />
+
+    <!-- 内容区域 -->
+    <scroll-view class="c2c-chat-content" :scroll-y="alwaysTrue">
+      <!-- 用户信息区 -->
+      <view class="user-info">
+        <view class="user-info__avatar-wrapper">
+          <Avatar
+            :src="avatarURL"
+            :name="displayName"
+            :size="avatarSize"
+            :shape="avatarShape"
+            :defaultAvatarType="defaultAvatarType"
+            :pureMode="alwaysTrue"
+          />
+        </view>
+        <view class="user-info__detail">
+          <text class="user-info__nickname">{{ displayName }}</text>
+          <text class="user-info__id">ID：{{ userIDDisplay }}</text>
+          <view>
+            <text class="user-info__signature" >用户签名：{{ signatureDisplay }}</text>
+          </view>
+          </view>
+      </view>
+
+      <!-- 分隔区 -->
+      <view class="section-gap"></view>
+
+      <!-- 备注名行 -->
+      <SettingRowNavigate
+        v-if="isFriend"
+        label="备注名"
+        :value="friendRemark"
+        @click="handleRemarkClick"
+      />
+
+      <!-- 分隔区 -->
+      <view class="section-gap"></view>
+
+      <!-- 开关设置区 -->
+      <SettingRowToggle
+        label="消息免打扰"
+        :modelValue="isNotDisturbValue"
+        @change="handleNotDisturbChange"
+      />
+      <SettingRowToggle
+        label="置顶聊天"
+        :modelValue="isPinnedValue"
+        @change="handlePinnedChange"
+      />
+
+      <!-- 分隔区 -->
+      <view class="section-gap"></view>
+
+      <SettingRowToggle
+        label="加入黑名单"
+        :modelValue="isInBlacklistValue"
+        @change="handleBlacklistChange"
+      />
+
+      <!-- 分隔区 -->
+      <view class="section-gap"></view>
+
+      <!-- 操作按钮区 -->
+      <SettingRowButton
+        label="发送消息"
+        color="#0066FF"
+        @click="handleSendMessage"
+      />
+      <SettingRowButton
+        v-if="isFriend"
+        label="删除好友"
+        color="#FF3B30"
+        @click="handleDeleteFriendClick"
+      />
+    </scroll-view>
+
+    <!-- 备注编辑弹窗 -->
+    <TextInputPopup
+      v-model:visible="showRemarkPopup"
+      title="修改备注"
+      :value="friendRemark"
+      placeholder="请输入备注名"
+      :maxLength="15"
+      :maxByteLength="50"
+      @confirm="handleRemarkConfirm"
+    />
+
+    <!-- 删除好友确认弹窗 -->
+    <ConfirmDialog
+      v-model="showDeleteConfirm"
+      title="确定删除该好友？"
+      confirmText="删除"
+      @confirm="handleDeleteConfirm"
+      @cancel="handleDeleteCancel"
+    />
+  </view>
+</template>
+
+<script setup lang="uts">
+
+import { ref, computed, onBeforeMount } from 'vue'
+import SettingRowToggle from './components/SettingRowToggle.uvue'
+import SettingRowNavigate from './components/SettingRowNavigate.uvue'
+import SettingRowButton from './components/SettingRowButton.uvue'
+import TextInputPopup from './components/TextInputPopup.uvue'
+import ConfirmDialog from './components/ConfirmDialog.uvue'
+import CustomNavbar from '../CustomNavbar/CustomNavbar.uvue'
+import { Avatar } from '../Avatar'
+import { useContactState } from '../../state/ContactState'
+import { useConversationListState } from '../../state/ConversationListState'
+import type { ContactInfo } from '../../types/contact'
+import type { ConversationInfo } from '../../types/conversation'
+
+type Props = {
+	conversationID: string
+	showType: string | number
+}
+
+const props = defineProps<Props>()
+
+const alwaysTrue: boolean = true
+const avatarSize: number = 96
+const avatarShape: string = 'square'
+const defaultAvatarType: string = 'user'
+
+// 从 conversationID 提取 userID
+const userID = computed((): string => {
+	return props.conversationID.startsWith('c2c_') ? props.conversationID.replace('c2c_', '') : ''
+})
+
+// 使用 ContactState
+const {
+	friendList,
+	blackList,
+	setFriendRemark,
+	addToBlacklist,
+	removeFromBlacklist,
+	deleteFriend,
+	getContactInfo,
+} = useContactState('c2cSetting')
+
+// 使用 ConversationListState 获取置顶状态 + 设置消息接收选项
+const conversationListState = useConversationListState('c2cSetting')
+
+// 用户信息
+const userInfo = ref<any | null>(null)
+const currentConversation = ref<any | null>(null)
+// 计算属性 - 用户信息
+const nickname = computed((): string => {
+	const ui = userInfo.value
+	if (ui == null) return ''
+	const uiObj: UTSJSONObject = ui as UTSJSONObject
+	const v: any | null = uiObj['nickname']
+	return typeof v == 'string' ? v as string : ''
+})
+const avatarURL = computed((): string => {
+	const ui = userInfo.value
+	if (ui == null) return ''
+	const uiObj: UTSJSONObject = ui as UTSJSONObject
+	const v: any | null = uiObj['avatarURL']
+	return typeof v == 'string' ? v as string : ''
+})
+const signature = computed((): string => {
+	const ui = userInfo.value
+	if (ui == null) return ''
+	const uiObj: UTSJSONObject = ui as UTSJSONObject
+	const v: any | null = uiObj['aboutMe']
+	return typeof v == 'string' ? v as string : ''
+})
+// friendRemark 仅在 V2TIMFriendInfo（friendList）上有值，V2TIMUserFullInfo（getContactInfo）路径不会带；
+// 优先从 friendList 取，再 fallback 到 userInfo
+const remarkOverride = ref<string>('')
+const friendRemark = computed((): string => {
+	if (remarkOverride.value.length > 0) return remarkOverride.value
+	const friendItem: any | null = friendList.value.find((f: any): boolean => {
+		const obj = f as UTSJSONObject
+		return obj['userID'] == userID.value
+	}) ?? null
+	let fromFriend: string = ''
+	if (friendItem != null) {
+		const obj = friendItem as UTSJSONObject
+		const fr = obj['friendRemark']
+		fromFriend = typeof fr == 'string' ? fr as string : ''
+	}
+	const ui = userInfo.value
+	if (ui != null) {
+		const uiObj: UTSJSONObject = ui as UTSJSONObject
+		const ur: any | null = uiObj['friendRemark']
+		return fromFriend.length > 0 ? fromFriend : (typeof ur == 'string' ? ur as string : '')
+	}
+	return fromFriend
+})
+const isFriend = computed((): boolean => {
+	const ui = userInfo.value
+	if (ui == null) return false
+	const uiObj: UTSJSONObject = ui as UTSJSONObject
+	return uiObj['isFriend'] == true
+})
+const isInBlacklist = computed((): boolean => {
+	const hit: any | null = blackList.value.find((f: any): boolean => {
+		const obj = f as UTSJSONObject
+		return obj['userID'] == userID.value
+	}) ?? null
+	const ui = userInfo.value
+	if (ui != null) {
+		const uiObj: UTSJSONObject = ui as UTSJSONObject
+		return hit != null || uiObj['isInBlacklist'] == true
+	}
+	return hit != null
+})
+const RECEIVE_OPT_NOT_NOTIFY = 2
+const RECEIVE_OPT_RECEIVE = 0
+
+const isNotDisturb = computed((): boolean => {
+	const conv = currentConversation.value
+	if (conv == null) return false
+	const convObj: UTSJSONObject = conv as UTSJSONObject
+	const optRaw: any | null = convObj['receiveOption']
+	if (optRaw == null) return false
+	if (typeof optRaw !== 'number') return false
+	return optRaw !== RECEIVE_OPT_RECEIVE
+})
+
+// 计算属性 - 置顶状态（从 currentConversation 读，不依赖 conversationList 实时更新）
+const isPinned = computed((): boolean => {
+	const conv = currentConversation.value
+	if (conv == null) return false
+	const convObj: UTSJSONObject = conv as UTSJSONObject
+	return convObj['isPinned'] == true
+})
+const isNotDisturbValue = computed((): boolean => isNotDisturb.value)
+const isPinnedValue = computed((): boolean => isPinned.value)
+const isInBlacklistValue = computed((): boolean => isInBlacklist.value)
+
+// 弹窗状态
+const showRemarkPopup = ref<boolean>(false)
+const showDeleteConfirm = ref<boolean>(false)
+
+// 导航栏标题
+const normalizedShowType = computed((): number => {
+	const raw = props.showType
+	if (typeof raw == 'number') return raw
+	if (typeof raw == 'string' && raw.length > 0) {
+		if (raw == '1') return 1
+		if (raw == '2') return 2
+		return 0
+	}
+	return 0
+})
+
+const navTitle = computed((): string => {
+	if (normalizedShowType.value == 0) {
+		return '个人设置'
+	}
+	return '设置'
+})
+
+// 头像文字
+const avatarText = computed((): string => {
+	if (nickname.value.length > 0) return nickname.value.substring(0, 1)
+	if (userID.value.length > 0) return userID.value.substring(0, 1)
+	return ''
+})
+
+const displayName = computed((): string => {
+	if (nickname.value.length > 0) return nickname.value
+	return userID.value
+})
+const userIDDisplay = computed((): string => {
+	// 用于：{{ userID || '-' }}
+	return userID.value ?? '-'
+})
+const signatureDisplay = computed((): string => {
+	// 用于：{{ signature || '暂无签名' }}
+	return signature.value ?? '暂无签名'
+})
+
+// 获取用户信息
+const fetchPeerUserInfo = async (): Promise<void> => {
+	const uid = userID.value
+	if (uid.length == 0) return
+	try {
+		const list = await getContactInfo([uid])
+		if (list != null && list.length > 0) {
+			userInfo.value = list[0]
+		}
+	} catch (error: any) {
+		console.error('[C2CChatSetting] fetchPeerUserInfo failed:', `${error}`)
+	}
+}
+
+const fetchConversationInfo = async (): Promise<void> => {
+	if (props.conversationID.length == 0) return
+	try {
+		const info = await conversationListState.getConversationInfo(props.conversationID)
+		if (info != null) {
+			currentConversation.value = info
+		}
+	} catch (error: any) {
+		console.error('[C2CChatSetting] fetchConversationInfo failed:', `${error}`)
+	}
+}
+
+// 初始化
+onBeforeMount((): void => {
+	void (async (): Promise<void> => {
+		await Promise.all([
+			fetchPeerUserInfo(),
+			fetchConversationInfo(),
+		])
+	})()
+})
+
+// 点击备注名
+const handleRemarkClick = (): void => {
+	showRemarkPopup.value = true
+}
+
+// 确认修改备注
+const handleRemarkConfirm = async (newRemark: string): Promise<void> => {
+	const uid = userID.value
+	if (uid.length == 0) return
+	try {
+		await setFriendRemark(uid, newRemark)
+		remarkOverride.value = newRemark
+	} catch (error: any) {
+		console.error('[C2CChatSetting] setFriendRemark failed:', `${error}`)
+	}
+}
+
+// 切换免打扰 (使用 throttle 防止限频，trailing: true 确保最后一次操作生效)
+let lastNotDisturbChangeAt: number = 0
+const handleNotDisturbChange = (value: boolean): void => {
+	const now = Date.now()
+	if (now - lastNotDisturbChangeAt < 1000) return
+	lastNotDisturbChangeAt = now
+	void (async (v: boolean): Promise<void> => {
+		const uid = userID.value
+		if (uid.length == 0) return
+		const cid = `c2c_${uid}`
+		try {
+			const opt: number = v ? 2 : 0
+			await conversationListState.setReceiveMessageOpt(cid, opt)
+			await fetchConversationInfo()
+		} catch (error: any) {
+			console.error('[C2CChatSetting] setReceiveMessageOpt failed:', `${error}`)
+		}
+	})(value)
+}
+
+// 切换置顶
+let lastPinnedChangeAt: number = 0
+const handlePinnedChange = (value: boolean): void => {
+	const now = Date.now()
+	if (now - lastPinnedChangeAt < 1000) return
+	lastPinnedChangeAt = now
+	void (async (v: boolean): Promise<void> => {
+		if (props.conversationID.length == 0) return
+		try {
+			await conversationListState.pinConversation(props.conversationID, v)
+			await fetchConversationInfo()
+		} catch (error: any) {
+			console.error('[C2CChatSetting] pinConversation failed:', `${error}`)
+		}
+	})(value)
+}
+
+// 切换黑名单
+const handleBlacklistChange = async (value: boolean): Promise<void> => {
+	const uid = userID.value
+	if (uid.length == 0) return
+	try {
+		if (value) {
+			await addToBlacklist(uid)
+		} else {
+			await removeFromBlacklist(uid)
+		}
+		// 拉黑/取消拉黑后可能会影响好友关系，需要重新获取用户信息
+		await fetchPeerUserInfo()
+	} catch (error: any) {
+		console.error('[C2CChatSetting] blacklist operation failed:', `${error}`)
+	}
+}
+
+// 发送消息
+const handleSendMessage = (): void => {
+	switch (normalizedShowType.value) {
+		case 0:
+			uni.navigateBack()
+			break
+		case 1:
+			break
+		case 2:
+			break
+	}
+}
+
+// 点击删除好友
+const handleDeleteFriendClick = (): void => {
+	showDeleteConfirm.value = true
+}
+
+// 取消删除
+const handleDeleteCancel = (): void => {
+	showDeleteConfirm.value = false
+}
+
+// 确认删除
+const handleDeleteConfirm = async (): Promise<void> => {
+	showDeleteConfirm.value = false
+	const uid = userID.value
+	if (uid.length == 0) return
+	try {
+		await deleteFriend(uid)
+		// 删除成功后返回
+		uni.navigateBack()
+	} catch (error: any) {
+		console.error('[C2CChatSetting] deleteFriend failed:', `${error}`)
+	}
+}
+
+const handleNavBack = (): void => {
+	uni.navigateBack()
+}
+</script>
+
+<style scoped>
+.c2c-chat-setting {
+  flex: 1;
+  background-color: #F5F5F5;
+}
+
+/* 内容区域 */
+.c2c-chat-content {
+  flex: 1;
+}
+
+/* 用户信息区 */
+.user-info {
+  flex-direction: row;
+  /* uvue 不支持 padding 简写，必须分开写 */
+  padding-top: 24rpx;
+  padding-bottom: 24rpx;
+  padding-left: 32rpx;
+  padding-right: 32rpx;
+  background-color: #FFFFFF;
+}
+
+.user-info__avatar-wrapper {
+  margin-right: 30rpx;
+}
+
+.user-info__avatar {
+  width: 96rpx;
+  height: 96rpx;
+  background-color: #F5F5F5;
+}
+
+.user-info__avatar--default {
+  justify-content: center;
+  align-items: center;
+  background-color: #CCCCCC;
+}
+
+.user-info__avatar-text {
+  font-size: 48rpx;
+  color: #FFFFFF;
+  font-weight: 500;
+}
+
+.user-info__detail {
+  flex: 1;
+  justify-content: center;
+}
+
+.user-info__nickname {
+  font-size: 36rpx;
+  font-weight: 500;
+  color: rgba(0, 0, 0, 0.9);
+  margin-bottom: 8rpx;
+  line-height: 48rpx;
+  lines: 1;
+  text-overflow: ellipsis;
+  max-width: 400rpx;
+}
+
+.user-info__id {
+  font-size: 26rpx;
+  color: rgba(0, 0, 0, 0.5);
+  margin-bottom: 4rpx;
+  line-height: 40rpx;
+}
+
+.user-info__signature {
+  font-size: 26rpx;
+  color: rgba(0, 0, 0, 0.5);
+  max-width: 550rpx;
+}
+
+/* 分隔区 */
+.section-gap {
+  height: 20rpx;
+  background-color: #F0F2F7;
+}
+</style>

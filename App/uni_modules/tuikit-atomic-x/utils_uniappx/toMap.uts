@@ -1,0 +1,8 @@
+/**
+ * typed instance → UTSJSONObject 唯一安全转换（typed as UTSJSONObject 抛 NPE，规则 47 v9 推广）。
+ * 用于跨页/跨 hook 传 typed object 后访问字段——JSON 序列化做真转换。
+ */
+export const toMap = (v?: any): UTSJSONObject => {
+	if (v == null) return new UTSJSONObject()
+	return JSON.parse<UTSJSONObject>(JSON.stringify(v)) ?? new UTSJSONObject()
+}

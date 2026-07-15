@@ -7,8 +7,8 @@ export default {
   name: 'FaceMessage',
   props: { message: { type: Object, required: true } },
   computed: {
-    faceIndex() { return (this.message.messageBody && this.message.messageBody.faceIndex) || 0 },
-    faceName() { return (this.message.messageBody && this.message.messageBody.faceName) || '' },
+    faceIndex() { return (this.message.messagePayload && this.message.messagePayload.faceIndex) || 0 },
+    faceName() { return (this.message.messagePayload && this.message.messagePayload.faceData) || '' },
     faceImageUrl() { return this.getFaceUrlByIndex(this.faceIndex, this.faceName) },
     faceImageStyle() { return { width: '120rpx', height: '120rpx' } }
   },

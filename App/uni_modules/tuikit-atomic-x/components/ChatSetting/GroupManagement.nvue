@@ -74,7 +74,7 @@ import MemberAvatarList from './components/MemberAvatarList.nvue';
 import SettingRowToggle from './components/SettingRowToggle.nvue';
 import { useGroupMemberState } from '../../state/GroupMemberState';
 import { useGroupState } from '../../state/GroupState';
-import { GroupMemberRole, GroupType, type GroupInfo, type GroupMember} from '../../types/group';
+import { GroupMemberRole, GroupMemberFilterRole, GroupType, type GroupInfo, type GroupMember} from '../../types/group';
 import { hasPermission, GroupPermission } from './utils/groupPermission';
 import { UserPickerType } from '../../types/userpicker';
 import arrowRightIcon from './assets/nvue_arrow-right.png';
@@ -91,43 +91,42 @@ const groupID = props.conversationID.startsWith('group_') ? props.conversationID
 
 // 获取群成员状态（管理员）
 const {
-  hasMoreGroupMembers: hasMoreAdminMembers,
-  groupMemberList: adminMembers,
-  fetchGroupMemberList: fetchAdminMembers,
+  hasMoreMembers: hasMoreAdminMembers,
+  memberList: adminMembers,
+  loadMembers: fetchAdminMembers,
 } = useGroupMemberState({
   groupID,
-  role: GroupMemberRole.Admin,
+  role: GroupMemberFilterRole.ADMIN,
 });
 
 // 获取群成员状态（群主）
 const {
-  groupMemberList: ownerMember,
-  fetchGroupMemberList: fetchOwnerMembers,
+  memberList: ownerMember,
+  loadMembers: fetchOwnerMembers,
 } = useGroupMemberState({
   groupID,
-  role: GroupMemberRole.Owner,
+  role: GroupMemberFilterRole.OWNER,
 });
 
 // 获取群成员状态（全部）
 const {
-  groupMemberList: allMembers,
-  setMuteAllMembers,
-  setGroupMemberMuteTime,
-  fetchGroupMemberList: fetchAllMembers,
+  memberList: allMembers,
+  muteMember,
+  loadMembers: fetchAllMembers,
 } = useGroupMemberState({
   groupID,
 });
 
-// 获取群状态
-const { fetchGroupInfo } = useGroupState();
+// 获取群状态（含 muteAllMembers，从 GroupMember 迁来）
+const { getGroupInfo, muteAllMembers } = useGroupState();
 
-// 群信息（通过 fetchGroupInfo 获取）
+// 群信息（通过 getGroupInfo 获取）
 const groupInfo = ref<GroupInfo | null>(null);
 
 // 从群信息中提取的计算属性
 const groupType = computed(() => (groupInfo.value as GroupInfo)?.groupType ?? GroupType.Work);
 const isAllMuted = computed(() => (groupInfo.value as GroupInfo)?.isAllMuted ?? false);
-const selfRole = computed(() => (groupInfo.value as GroupInfo)?.selfRole ?? GroupMemberRole.Member);
+const selfRole = computed(() => (groupInfo.value as GroupInfo)?.selfRole ?? GroupMemberRole.MEMBER);
 const memberCount = computed(() => (groupInfo.value as GroupInfo)?.memberCount ?? 0);
 
 // 状态栏高度
@@ -137,12 +136,12 @@ const statusBarHeight = ref(44);
 // 权限计算属性
 // ============================================================================
 const canPromoteAdmin = computed(() => {
-  return selfRole.value === GroupMemberRole.Owner;
+  return selfRole.value === GroupMemberRole.OWNER;
 });
 
 // 是否可删除成员
 const canDemoteAdmin = computed(() => {
-  return selfRole.value === GroupMemberRole.Owner;
+  return selfRole.value === GroupMemberRole.OWNER;
 });
 
 // 是否可禁言成员
@@ -167,7 +166,7 @@ const adminAndOwnerMembers = computed(() => {
     if (seenUserIDs.has(member.userID)) {
       return false;
     }
-    if (member.role === GroupMemberRole.Owner || member.role === GroupMemberRole.Admin) {
+    if (member.role === GroupMemberRole.OWNER || member.role === GroupMemberRole.ADMIN) {
       seenUserIDs.add(member.userID);
       return true;
     }
@@ -188,7 +187,7 @@ const mutedMembers = computed(() => {
 
 async function fetchAllAdmin() {
   while (hasMoreAdminMembers.value) {
-    await fetchAdminMembers(GroupMemberRole.Admin);
+    await fetchAdminMembers([GroupMemberFilterRole.ADMIN]);
   }
 }
 
@@ -196,9 +195,9 @@ async function fetchAllAdmin() {
 async function loadGroupInfo() {
   if (!groupID) return;
   try {
-    const list = await fetchGroupInfo([groupID]);
-    if (list.length > 0) {
-      groupInfo.value = list[0];
+    const info = await getGroupInfo(groupID);
+    if (info) {
+      groupInfo.value = info;
     }
   } catch (error) {
     console.error('[GroupManagement] Failed to fetch group info:', error);
@@ -211,8 +210,8 @@ onMounted(() => {
 
   loadGroupInfo();
   fetchAllAdmin();
-  fetchOwnerMembers(GroupMemberRole.Owner);
-  fetchAllMembers(GroupMemberRole.All);
+  fetchOwnerMembers([GroupMemberFilterRole.OWNER]);
+  fetchAllMembers([GroupMemberFilterRole.ALL]);
 });
 
 // ============================================================================
@@ -252,7 +251,7 @@ const handleMemberClick = (member: GroupMember) => {
 
 // 切换全员禁言
 const handleMuteAllChange = (value: boolean) => {
-  setMuteAllMembers(value).then(() => {
+  muteAllMembers(groupID, value).then(() => {
     loadGroupInfo();
   });
 };

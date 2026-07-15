@@ -175,7 +175,7 @@ import { UserPickerType } from '../../types/userpicker';
 import { useGroupState } from '../../state/GroupState';
 import type { ToolItem } from './types';
 import { MessageType, MessageStatus } from '../../types/message';
-import type { MessageInfo, OfflinePushInfoResolver } from '../../types/message';
+import type { MessageInfo, OfflinePushInfoResolver, SendMessagePayload, SendMessageOption } from '../../types/message';
 import { buildOfflinePushInfo } from '../../utils/buildOfflinePushInfo';
 import permission from '../../utils/permission';
 import { requestCallPermissions, showPermissionDialog } from '../../utils/callPermission';
@@ -528,6 +528,9 @@ onMounted(() => {
   // 监听键盘高度变化
   uni.onKeyboardHeightChange(onKeyboardChange);
 
+  // 监听撤回消息的"重新编辑"事件（组件内部自洽，不依赖业务层）
+  uni.$on('atomicx-reEdit', onReEdit);
+
   // 预热文件选择器的 Android 桥接类（同步跨桥约 500-1000ms）
   // 延后到 MessageList 首屏完成后触发（首屏展示逻辑约 150ms 完成），
   // 500ms 错开首屏关键路径，用户首次点"文件"时类已就绪
@@ -547,6 +550,7 @@ onShow(() => {
 
 onUnmounted(() => {
   uni.offKeyboardHeightChange(onKeyboardChange);
+  uni.$off('atomicx-reEdit', onReEdit);
   messageInputState?.destroyStore();
 });
 
@@ -1259,22 +1263,24 @@ const handleSend = (): void => {
   // 接收端按 key 渲染 PNG，跨端表情视觉一致
   const text: string = transformEmojiNameToKey(rawText);
 
-  const messageBody = { text };
+  const messagePayload = { text };
 
   // 派生 atUserList（去重）；仅在支持 @ 的会话才附带
   const atUserList = isAtSupported.value && mentions.value.length > 0
     ? Array.from(new Set(mentions.value.map(m => m.userID)))
     : undefined;
 
-  messageInputState?.sendTextMessage({
-    text: text,
-    atUserList,
-    offlinePushInfo: buildOfflinePushInfo(props.setOfflinePushInfo, {
-      messageType: MessageType.TEXT,
-      messageBody,
-      conversationID: props.conversationID,
-    }),
-  }).then(() => {
+  const payload: SendMessagePayload = { type: 'text', text };
+  const option: SendMessageOption = {};
+  if (atUserList && atUserList.length > 0) option.atUserList = atUserList;
+  const offlinePush = buildOfflinePushInfo(props.setOfflinePushInfo, {
+    messageType: MessageType.TEXT,
+    messagePayload,
+    conversationID: props.conversationID,
+  });
+  if (offlinePush) option.offlinePushInfo = offlinePush;
+
+  messageInputState?.sendMessage(payload, option).then(() => {
     // success
   }).catch((error) => {
     const toastText = resolveSendError(error);
@@ -1613,20 +1619,20 @@ const sendVoiceMessage = (filePath: string, duration: number): void => {
     soundDuration: duration,
   };
   const offlinePushInfo = buildOfflinePushInfo(props.setOfflinePushInfo, {
-    messageType: MessageType.SOUND,
+    messageType: MessageType.AUDIO,
     messageBody,
     conversationID: props.conversationID,
   });
-  const messageObj: any = {
-    messageType: MessageType.SOUND,
-    messageBody,
-  };
-  if (offlinePushInfo) {
-    messageObj.offlinePushInfo = offlinePushInfo;
-  }
-  const message: MessageInfo = JSON.stringify(messageObj);
   
-  messageInputState.sendMessage(message).then(() => {
+  const audioPayload: SendMessagePayload = {
+    type: 'audio',
+    audioFilePath: absolutePath,
+    duration,
+  };
+  const audioOption: SendMessageOption = {};
+  if (offlinePushInfo) audioOption.offlinePushInfo = offlinePushInfo;
+
+  messageInputState.sendMessage(audioPayload, audioOption).then(() => {
     emit('sendVoice', filePath);
   }).catch((error) => {
     console.error('[MessageInput] Voice message send failed:', error);
@@ -1783,6 +1789,20 @@ defineExpose<MessageInputExpose>({
   },
   getState: () => inputState.value,
 });
+
+// ==================== 撤回消息 - 重新编辑（内部自洽） ====================
+/**
+ * 监听 RecalledMessage 发出的全局事件 'atomicx-reEdit'
+ * 通过 conversationID 隔离作用域，组件内部完成原文回填，无需业务层粘合
+ */
+const onReEdit = (data: { conversationID: string; text: string }): void => {
+  if (!data || data.conversationID !== props.conversationID) return;
+  switchMode('NONE');
+  inputText.value = data.text;
+  mentions.value = [];
+  selectedMembers.value = new Map();
+  mentionAnchor.value = -1;
+};
 </script>
 
 <style scoped>

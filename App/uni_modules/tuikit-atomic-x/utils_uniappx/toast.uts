@@ -1,0 +1,59 @@
+/**
+ * Toast 工具模块
+ *
+ * 简化为统一走 uni.showToast（UTS 不支持 plus 全局对象，原 plus.nativeUI.toast 分支废弃）
+ *
+ */
+
+const ICON_BASE: string = '/uni_modules/tuikit-atomic-x/static/icon/';
+
+const ICONS: Map<string, string> = new Map<string, string>([
+  ['success', ICON_BASE + 'success-icon.png'],
+  ['error', ICON_BASE + 'error-icon.png']
+])
+
+export type ToastType = 'none' | 'success' | 'error';
+
+export type ToastOptions = {
+  /** 提示消息 */
+  message: string,
+  /** Toast 类型：none | success | error，默认 none */
+  type?: ToastType,
+  /** 自定义图标路径，支持本地路径、网络URL、base64（优先级高于 type） */
+  icon?: string,
+  /** 显示时长：short 短 | long 长，默认 short */
+  duration?: 'short' | 'long',
+  /** 垂直位置：top | center | bottom，默认 center */
+  verticalAlign?: 'top' | 'center' | 'bottom'
+}
+
+export function showToast(options: ToastOptions | string): void {
+  let opts: ToastOptions;
+  if (typeof options == 'string') {
+    const msg: string = options as string;
+    const stringOpts: ToastOptions = {
+      message: msg,
+      type: 'none',
+      duration: 'short',
+      verticalAlign: 'center'
+    };
+    opts = stringOpts;
+  } else {
+    opts = options as ToastOptions;
+  }
+
+  const message: string = opts.message;
+  const duration: 'short' | 'long' = opts.duration ?? 'short';
+
+  const showOptions: ShowToastOptions = {
+    title: message,
+    icon: 'none',
+    duration: duration == 'short' ? 2000 : 3500
+  };
+
+  uni.showToast(showOptions);
+}
+
+export default {
+  show: showToast
+};

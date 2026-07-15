@@ -1,0 +1,73 @@
+<template>
+  <ResultItem
+    :avatarURL="avatarURL"
+    :title="displayName"
+    :titleSuffix="titleSuffix"
+    :subtitle="subtitleText"
+    :keyword="keyword"
+    :Avatar="Avatar"
+    :defaultAvatarType="defaultAvatarType"
+  />
+</template>
+
+<script setup lang="uts">
+/**
+ * SearchResultItem/Group - 搜索结果项群（uvue 版）
+ *
+ */
+import { computed } from 'vue'
+import AvatarComponent from '../../Avatar'
+import ResultItem from './ResultItem.uvue'
+import type { SearchResultItemGroupProps } from '../../../types/search.uts'
+import { GroupType } from '../../../types/group'
+
+const props = withDefaults(defineProps<SearchResultItemGroupProps>(), {
+	keyword: '',
+	Avatar: (): any => AvatarComponent
+})
+
+const avatarURL = computed((): string | null => {
+	const g: UTSJSONObject = (props.group ?? new UTSJSONObject()) as UTSJSONObject
+	const raw: any | null = g['groupAvatarURL']
+	return typeof raw == 'string' ? (raw as string) : null
+})
+
+const displayName = computed((): string => {
+	const g: UTSJSONObject = (props.group ?? new UTSJSONObject()) as UTSJSONObject
+	const nameRaw: any | null = g['groupName']
+	const idRaw: any | null = g['groupID']
+	const name: string = typeof nameRaw == 'string' ? (nameRaw as string) : ''
+	if (name.length > 0) return name
+	const id: string = typeof idRaw == 'string' ? (idRaw as string) : ''
+	return id.length > 0 ? id : '未知群组'
+})
+
+const titleSuffix = computed((): string => {
+	const g: UTSJSONObject = (props.group ?? new UTSJSONObject()) as UTSJSONObject
+	const idRaw: any | null = g['groupID']
+	const id: string = typeof idRaw == 'string' ? (idRaw as string) : ''
+	return `(${id})`
+})
+
+const subtitleText = computed((): string => {
+	const g: UTSJSONObject = (props.group ?? new UTSJSONObject()) as UTSJSONObject
+	const cntRaw: any | null = g['memberCount']
+	const cnt: number = typeof cntRaw == 'number' ? (cntRaw as number) : 0
+	return `${cnt}人`
+})
+
+const GROUP_TYPE_TO_AVATAR: UTSJSONObject = new UTSJSONObject()
+GROUP_TYPE_TO_AVATAR.set(GroupType.Work, 'work')
+GROUP_TYPE_TO_AVATAR.set(GroupType.Public, 'public')
+GROUP_TYPE_TO_AVATAR.set(GroupType.Meeting, 'meeting')
+GROUP_TYPE_TO_AVATAR.set(GroupType.AVChatRoom, 'avchatroom')
+GROUP_TYPE_TO_AVATAR.set(GroupType.Community, 'public')
+
+const defaultAvatarType = computed((): string => {
+	const g: UTSJSONObject = (props.group ?? new UTSJSONObject()) as UTSJSONObject
+	const groupTypeRaw: any | null = g['groupType']
+	if (groupTypeRaw == null) return 'public'
+	const v: any | null = GROUP_TYPE_TO_AVATAR.get(groupTypeRaw as any)
+	return typeof v == 'string' ? v : 'public'
+})
+</script>

@@ -1,0 +1,1198 @@
+<template>
+  <view class="group-chat-setting">
+    <!-- 导航栏 -->
+    <CustomNavbar
+      title="群设置"
+      :showBack="true"
+      @back="handleBack"
+    />
+
+    <view v-if="isGroupNotExist">
+      <text class="group-not-exist">群聊已不存在</text>
+    </view>
+
+    <!-- 内容区域 -->
+    <scroll-view v-else class="content" scroll-y="true">
+      <!-- 群名称区 -->
+      <view class="group-name-section">
+        <text class="group-name-section__label">群名称</text>
+        <view class="group-name-section__row" @tap="handleEditGroupName">
+          <text class="group-name-section__value">{{ groupNameDisplay }}</text>
+          <image
+            v-if="canEditGroupName"
+            class="group-name-section__edit"
+            :src="editIcon"
+          />
+        </view>
+      </view>
+
+      <!-- 群ID区 -->
+      <view class="group-id-section">
+        <text class="group-id-section__label">群ID</text>
+        <view class="group-id-section__row" @tap="handleCopyGroupID">
+          <text class="group-id-section__value">{{ groupID }}</text>
+          <image
+            class="group-name-section__edit"
+            :src="copyIcon"
+          />
+        </view>
+      </view>
+
+      <!-- 分隔区 -->
+      <view class="section-gap"></view>
+
+      <!-- 群成员区 -->
+      <view class="member-section">
+        <view class="member-section__header">
+          <text class="member-section__label">群成员</text>
+          <view class="member-section__right" @tap="handleMemberListClick">
+            <text class="member-section__count">{{ memberCount }}人</text>
+            <image class="member-section__arrow" :src="arrowRightIcon" />
+          </view>
+        </view>
+        <MemberAvatarList
+          :members="displayMembers"
+          :maxDisplay="4"
+          :showAddButton="canInviteMember"
+          :showRemoveButton="canRemoveMember"
+          :showName="true"
+          @add="handleAddMember"
+          @remove="handleRemoveMember"
+          @member-click="handleMemberClick"
+        />
+      </view>
+
+      <!-- 分隔区 -->
+      <view class="section-gap"></view>
+
+      <!-- 群公告 -->
+      <view class="notice-section">
+        <text class="notice-section__label">群公告</text>
+        <view class="notice-section__content" @tap="handleNoticeClick">
+          <text class="notice-section__value">{{ noticeDisplay }}</text>
+          <image v-if="canEditGroupNotice" class="notice-section__arrow" :src="editIcon" />
+        </view>
+      </view>
+
+      <!-- 群管理（权限控制） -->
+      <SettingRowNavigate
+        v-if="showGroupManagementEntry"
+        label="群管理"
+        :value="''"
+        @click="handleGroupManagementClick"
+      />
+
+      <!-- 群类型 -->
+      <SettingRowNavigate
+        label="群类型"
+        :value="groupTypeText"
+        :disabled="true"
+      />
+
+      <!-- 主动加群审批方式 -->
+      <SettingRowNavigate
+        label="主动加群审批模式"
+        :value="joinOptionText"
+        :disabled="!canEditGroupProfile"
+        @click="handleJoinGroupApprovalTypeClick"
+      />
+
+      <!-- 邀请入群审批方式 -->
+      <SettingRowNavigate
+        label="邀请入群审批模式"
+        :value="inviteOptionText"
+        :disabled="!canEditGroupProfile"
+        @click="handleInviteGroupApprovalTypeClick"
+      />
+
+      <!-- 分隔区 -->
+      <view class="section-gap"></view>
+
+      <!-- 我的群昵称 -->
+      <view class="nickname-row">
+        <text class="nickname-row__label">我的群昵称</text>
+        <view class="nickname-row__right" @tap="handleEditNickname">
+          <text class="nickname-row__value">{{ selfNameCardDisplay }}</text>
+          <image class="nickname-row__edit" :src="editIcon" />
+        </view>
+      </view>
+
+      <!-- 分隔区 -->
+      <view class="section-gap"></view>
+
+      <!-- 开关设置区 -->
+      <SettingRowToggle
+        label="消息免打扰"
+        :modelValue="isNotDisturb"
+        @change="handleNotDisturbChange"
+      />
+      <SettingRowToggle
+        label="置顶聊天"
+        :modelValue="isPinned"
+        @change="handlePinnedChange"
+      />
+
+      <!-- 分隔区 -->
+      <view class="section-gap"></view>
+
+      <!-- 操作按钮区 -->
+      <!-- 转让群主 -->
+      <SettingRowButton
+        v-if="canTransferOwnership"
+        label="转让群主"
+        color="#0066FF"
+        @click="handleTransferOwnership"
+      />
+
+      <!-- 解散群 -->
+      <SettingRowButton
+        v-if="canDismissGroup"
+        label="解散群聊"
+        color="#FF3B30"
+        @click="handleDismissClick"
+      />
+
+      <!-- 退出群 -->
+      <SettingRowButton
+        v-if="canQuitGroup"
+        label="退出群聊"
+        color="#FF3B30"
+        @click="handleQuitClick"
+      />
+
+      <!-- 清除聊天记录 -->
+      <SettingRowButton
+        label="清除聊天记录"
+        color="#FF3B30"
+        @click="handleClearMessageClick"
+      />
+
+      <!-- 底部安全区 -->
+      <view class="safe-area-bottom"></view>
+    </scroll-view>
+
+    <!-- 群名称编辑弹窗 -->
+    <TextInputPopup
+      v-model:visible="showGroupNamePopup"
+      title="修改群名称"
+      :value="groupName"
+      placeholder="请输入群名称"
+      :maxLength="20"
+      :maxByteLength="100"
+      @confirm="handleGroupNameConfirm"
+    />
+
+    <!-- 群公告编辑弹窗 -->
+    <TextInputPopup
+      v-model:visible="showNoticePopup"
+      title="修改群公告"
+      :value="notice"
+      placeholder="请输入群公告"
+      :maxLength="100"
+      :maxByteLength="400"
+      @confirm="handleNoticeConfirm"
+    />
+
+    <!-- 我的群昵称编辑弹窗 -->
+    <TextInputPopup
+      v-model:visible="showNicknamePopup"
+      title="修改我的群昵称"
+      :value="selfNameCard"
+      placeholder="请输入群昵称"
+      :maxLength="15"
+      :maxByteLength="50"
+      @confirm="handleNicknameConfirm"
+    />
+
+    <!-- 加群方式选择弹窗 -->
+    
+    <ActionSheet
+      v-model:visible="showJoinOptionSheet"
+      :options="joinOptions"
+      @select="handleJoinOptionSelect"
+    />
+
+    <!-- 邀请入群方式选择弹窗 -->
+    <ActionSheet
+      v-model:visible="showInviteOptionSheet"
+      :options="inviteOptions"
+      @select="handleInviteOptionSelect"
+    />
+
+    <!-- 退出群聊确认弹窗 -->
+    <ConfirmDialog
+      v-model="showQuitConfirm"
+      title="确定退出该群聊？"
+      description="退出后将不再接收该群聊的消息"
+      confirmText="确定退出"
+      @confirm="handleQuitConfirm"
+      @cancel="handleQuitCancel"
+    />
+
+    <!-- 解散群确认弹窗 -->
+    <ConfirmDialog
+      v-model="showDismissConfirm"
+      title="确定解散该群聊？"
+      description="解散后所有群成员将被移出群聊，且无法恢复"
+      confirmText="确定解散"
+      @confirm="handleDismissConfirm"
+      @cancel="handleDismissCancel"
+    />
+
+    <!-- 清除聊天记录确认弹窗 -->
+    <ConfirmDialog
+      v-model="showClearMessageConfirm"
+      title="确定清除聊天记录？"
+      description="清除后将无法恢复"
+      confirmText="确定清除"
+      @confirm="handleClearMessageConfirm"
+      @cancel="handleClearMessageCancel"
+    />
+  </view>
+</template>
+
+<script setup lang="uts">
+
+import { ref, computed, onBeforeMount, onUnmounted } from 'vue'
+import SettingRowToggle from './components/SettingRowToggle.uvue'
+import SettingRowNavigate from './components/SettingRowNavigate.uvue'
+import SettingRowButton from './components/SettingRowButton.uvue'
+import TextInputPopup from './components/TextInputPopup.uvue'
+import ActionSheet, { type ActionSheetOption } from './components/ActionSheet.uvue'
+import ConfirmDialog from './components/ConfirmDialog.uvue'
+import MemberAvatarList from './components/MemberAvatarList.uvue'
+import CustomNavbar from '../CustomNavbar/CustomNavbar.uvue'
+import { useGroupMemberState } from '../../state/GroupMemberState'
+import { useGroupState } from '../../state/GroupState'
+import { useLoginState } from '../../state/LoginState'
+import {
+	GroupType,
+	GroupJoinOption,
+	GroupInviteOption,
+	GroupMemberRole,
+	GroupMemberFilterRole,
+} from '../../types/group'
+import { ReceiveMessageOpt } from '../../types/conversation'
+import { useConversationListState } from '../../state/ConversationListState'
+import { hasPermission, showGroupManagement, GroupPermission } from './utils/groupPermission.uts'
+import { UserPickerType } from '../../types/userpicker'
+import { throttle } from '../../utils/lodash'
+import { setClipboardText } from '../../utils/clipboard'
+import editIcon from './assets/nvue_edit.png'
+import arrowRightIcon from './assets/nvue_arrow-right.png'
+import copyIcon from './assets/nvue_file-copy.png'
+import type { GroupInfo, GroupMember } from '../../types/group'
+import type { ConversationInfo } from '../../types/conversation'
+
+type Props = {
+	conversationID: string
+}
+
+const props = defineProps<Props>()
+
+// 获取 groupID
+const groupID: string = props.conversationID.startsWith('group_') ? props.conversationID.replace('group_', '') : ''
+
+// ============================================================================
+//                                  init states
+// ============================================================================
+// 获取会话置顶信息
+const conversationListState = useConversationListState('groupSetting')
+// 获取群基础信息
+const groupState = useGroupState()
+
+// 获取群成员信息
+const groupMemberState = useGroupMemberState({ groupID: groupID })
+const allMembers = groupMemberState.memberList
+
+// 获取登录用户信息
+const loginState = useLoginState()
+
+// ============================================================================
+//                                 UI variables
+// ============================================================================
+
+const isGroupNotExist = ref<boolean>(false)
+const currentConversation = ref<any | null>(null)
+
+// 群信息（通过 getGroupInfo 主动拉取，按需刷新）
+const groupInfo = ref<any | null>(null)
+
+// 群信息(从上至下)
+const groupName = computed((): string => {
+	const gi = groupInfo.value
+	if (gi == null) return ''
+	const giObj: UTSJSONObject = gi as UTSJSONObject
+	const v: any | null = giObj['groupName']
+	return typeof v == 'string' ? v as string : ''
+})
+const groupNameDisplay = computed((): string => {
+	return groupName.value.length > 0 ? groupName.value : '未设置'
+})
+const memberCount = computed((): number => {
+	const gi = groupInfo.value
+	if (gi == null) return 0
+	const giObj: UTSJSONObject = gi as UTSJSONObject
+	const v: any | null = giObj['memberCount']
+	return typeof v == 'number' ? v as number : 0
+})
+const notice = computed((): string => {
+	const gi = groupInfo.value
+	if (gi == null) return ''
+	const giObj: UTSJSONObject = gi as UTSJSONObject
+	const v: any | null = giObj['notification']
+	return typeof v == 'string' ? v as string : ''
+})
+const noticeDisplay = computed((): string => {
+	return notice.value.length > 0 ? notice.value : '暂无公告'
+})
+const toMemberRole = (n: number): GroupMemberRole => {
+  if (n == 0) return GroupMemberRole.UNDEFINED
+  if (n == 200) return GroupMemberRole.MEMBER
+  if (n == 300) return GroupMemberRole.ADMIN
+  if (n == 400) return GroupMemberRole.OWNER
+  return GroupMemberRole.MEMBER
+}
+const selfRole = computed((): GroupMemberRole => {
+	const gi = groupInfo.value
+	if (gi == null) return GroupMemberRole.MEMBER
+	const giObj: UTSJSONObject = gi as UTSJSONObject
+	const v: any | null = giObj['selfRole']
+	const n: number = typeof v == 'number' ? v as number : 200
+	return toMemberRole(n)
+})
+
+const toGroupType = (v: any | null): GroupType => {
+  if (v != null && typeof v == 'string') {
+    // PascalCase 兼容
+    if (v == 'Work') return GroupType.WORK
+    if (v == 'Public') return GroupType.PUBLIC
+    if (v == 'Meeting') return GroupType.MEETING
+    if (v == 'AVChatRoom') return GroupType.AV_CHAT_ROOM
+    if (v == 'Community') return GroupType.COMMUNITY
+    // camelCase iOS Swift rawValue
+    if (v == 'work') return GroupType.WORK
+    if (v == 'publicGroup') return GroupType.PUBLIC
+    if (v == 'meeting') return GroupType.MEETING
+    if (v == 'avChatRoom') return GroupType.AV_CHAT_ROOM
+    if (v == 'community') return GroupType.COMMUNITY
+    if (v == 'PublicGroup' || v == 'PUBLIC' || v == 'Public') return GroupType.PUBLIC
+    if (v == 'AVCHATROOM') return GroupType.AV_CHAT_ROOM
+    // 数字 ordinal 兜底：Work=0 / Public=1 / Meeting=2 / AVChatRoom=3 / Community=4
+    //   SDK Gson 序列化有时会走 ordinal（rule 47 v18 推广已知场景）
+    const n: number = parseInt(v, 10) ?? 0
+    if (n == 0) return GroupType.WORK
+    if (n == 1) return GroupType.PUBLIC
+    if (n == 2) return GroupType.MEETING
+    if (n == 3) return GroupType.AV_CHAT_ROOM
+    if (n == 4) return GroupType.COMMUNITY
+  }
+  return GroupType.WORK
+}
+// number enum GroupJoinOption 转换（SDK 传数字 0/1/2）
+const toJoinOption = (v: any | null): GroupJoinOption => {
+  if (v != null && typeof v == 'number') {
+    if (v == 0) return GroupJoinOption.FORBID
+    if (v == 1) return GroupJoinOption.AUTH
+    if (v == 2) return GroupJoinOption.ANY
+  }
+  return GroupJoinOption.FORBID
+}
+// number enum GroupInviteOption 转换（SDK 传数字 0/1/2）
+const toInviteOption = (v: any | null): GroupInviteOption => {
+  if (v != null && typeof v == 'number') {
+    if (v == 0) return GroupInviteOption.FORBID
+    if (v == 1) return GroupInviteOption.AUTH
+    if (v == 2) return GroupInviteOption.ANY
+  }
+  return GroupInviteOption.FORBID
+}
+
+const inviteOptionValue = (opt: GroupInviteOption): number => {
+  if (opt == GroupInviteOption.FORBID) return 0
+  if (opt == GroupInviteOption.AUTH) return 1
+  if (opt == GroupInviteOption.ANY) return 2
+  return 0
+}
+const joinOptionValue = (opt: GroupJoinOption): number => {
+  if (opt == GroupJoinOption.FORBID) return 0
+  if (opt == GroupJoinOption.AUTH) return 1
+  if (opt == GroupJoinOption.ANY) return 2
+  return 0
+}
+
+const groupType = computed((): GroupType => {
+	const gi = groupInfo.value
+	if (gi == null) return GroupType.WORK
+	const giObj: UTSJSONObject = gi as UTSJSONObject
+	const v: any | null = giObj['groupType']
+	return toGroupType(v)
+})
+const joinGroupApprovalType = computed((): GroupJoinOption => {
+	const gi = groupInfo.value
+	if (gi == null) return GroupJoinOption.FORBID
+	const giObj: UTSJSONObject = gi as UTSJSONObject
+	const v: any | null = giObj['joinOption']
+	return toJoinOption(v)
+})
+const inviteToGroupApprovalType = computed((): GroupInviteOption => {
+	const gi = groupInfo.value
+	if (gi == null) return GroupInviteOption.FORBID
+	const giObj: UTSJSONObject = gi as UTSJSONObject
+	const v: any | null = giObj['inviteOption']
+	return toInviteOption(v)
+})
+const selfNameCard = ref<string>('')
+const selfNameCardDisplay = computed((): string => {
+	return selfNameCard.value.length > 0 ? selfNameCard.value : '未设置'
+})
+const isNotDisturb = computed((): boolean => {
+	const conv = currentConversation.value
+	if (conv == null) return false
+	const convObj: UTSJSONObject = conv as UTSJSONObject
+	const optRaw: any | null = convObj['receiveOption']
+	if (optRaw == null) return false
+	return optRaw !== 0
+})
+const isPinned = computed((): boolean => {
+	const conv = currentConversation.value
+	if (conv == null) return false
+	const convObj: UTSJSONObject = conv as UTSJSONObject
+	return convObj['isPinned'] == true
+})
+
+// 弹窗状态
+const showGroupNamePopup = ref<boolean>(false)
+const showNicknamePopup = ref<boolean>(false)
+const showJoinOptionSheet = ref<boolean>(false)
+const showInviteOptionSheet = ref<boolean>(false)
+const showQuitConfirm = ref<boolean>(false)
+const showDismissConfirm = ref<boolean>(false)
+const showNoticePopup = ref<boolean>(false)
+const showClearMessageConfirm = ref<boolean>(false)
+
+/**
+ * ActionSheet 选项（值对齐底层 GroupJoinOption / GroupInviteOption 枚举）
+ */
+const joinOptions: ActionSheetOption[] = [
+	{ label: '自由加入', value: 2 },   // GroupJoinOption.ANY = 2
+	{ label: '需要审批', value: 1 },   // GroupJoinOption.AUTH = 1
+	{ label: '禁止加入', value: 0 },   // GroupJoinOption.FORBID = 0
+]
+
+const inviteOptions: ActionSheetOption[] = [
+	{ label: '自由加入', value: 2 },   // GroupInviteOption.ANY = 2
+	{ label: '需要审批', value: 1 },   // GroupInviteOption.AUTH = 1
+	{ label: '禁止加入', value: 0 },   // GroupInviteOption.FORBID = 0
+]
+
+// ============================================================================
+// 权限计算属性
+// ============================================================================
+
+const toFilterRole = (role: GroupMemberRole): GroupMemberFilterRole => {
+  // 用 enum 的 ordinal 数值比较（避免 `role == enum` 跨 enum 类型比较歧义）
+  if (role == GroupMemberRole.UNDEFINED) return GroupMemberFilterRole.ALL
+  if (role == GroupMemberRole.MEMBER) return GroupMemberFilterRole.MEMBER
+  if (role == GroupMemberRole.ADMIN) return GroupMemberFilterRole.ADMIN
+  if (role == GroupMemberRole.OWNER) return GroupMemberFilterRole.OWNER
+  return GroupMemberFilterRole.ALL
+}
+
+// 是否可编辑群名称
+const canEditGroupName = computed((): boolean => {
+	return hasPermission(groupType.value, toFilterRole(selfRole.value), GroupPermission.EDIT_GROUP_PROFILE_NAME)
+})
+
+const canEditGroupNotice = computed((): boolean => {
+	return hasPermission(groupType.value, toFilterRole(selfRole.value), GroupPermission.EDIT_GROUP_PROFILE_NOTIFICATION)
+})
+
+// 是否可编辑群资料（加群方式等）
+const canEditGroupProfile = computed((): boolean => {
+	return hasPermission(groupType.value, toFilterRole(selfRole.value), GroupPermission.EDIT_GROUP_PROFILE_ELSE)
+})
+
+// 是否可删除成员
+const canRemoveMember = computed((): boolean => {
+	return hasPermission(groupType.value, toFilterRole(selfRole.value), GroupPermission.REMOVE_MEMBER)
+})
+
+// 是否可邀请成员（邀请模式为"禁止加入"时不显示添加按钮）
+const canInviteMember = computed((): boolean => {
+	return inviteOptionValue(inviteToGroupApprovalType.value) !== 0
+})
+
+// 是否显示群管理入口
+const showGroupManagementEntry = computed((): boolean => {
+	return showGroupManagement(groupType.value, toFilterRole(selfRole.value))
+})
+
+// 是否可转让群主
+const canTransferOwnership = computed((): boolean => {
+	return hasPermission(groupType.value, toFilterRole(selfRole.value), GroupPermission.TRANSFER_OWNERSHIP)
+})
+
+// 是否可解散群
+const canDismissGroup = computed((): boolean => {
+	return hasPermission(groupType.value, toFilterRole(selfRole.value), GroupPermission.DISMISS_GROUP)
+})
+
+// 是否可退出群
+const canQuitGroup = computed((): boolean => {
+	return hasPermission(groupType.value, toFilterRole(selfRole.value), GroupPermission.QUIT_GROUP)
+})
+
+// ============================================================================
+// 显示相关计算属性
+// ============================================================================
+
+// 显示的成员列表
+const displayMembers = computed((): GroupMember[] => {
+	return (allMembers.value ?? []) as GroupMember[]
+})
+
+const groupTypeTextMap: UTSJSONObject = new UTSJSONObject()
+groupTypeTextMap.set('Work', '工作群')
+groupTypeTextMap.set('Public', '公开群')
+groupTypeTextMap.set('Meeting', '会议群')
+groupTypeTextMap.set('AVChatRoom', '直播群')
+groupTypeTextMap.set('Community', '社群')
+
+const getGroupTypeText = (gt: GroupType): string => {
+  // 真实值比对：GroupType.WORK='Work' / PUBLIC='Public' / MEETING='Meeting' / AV_CHAT_ROOM='AVChatRoom' / COMMUNITY='Community'
+  if (gt == GroupType.WORK) {
+    const v = groupTypeTextMap.get('Work')
+    return typeof v == 'string' ? v : '暂无'
+  }
+  if (gt == GroupType.PUBLIC) {
+    const v = groupTypeTextMap.get('Public')
+    return typeof v == 'string' ? v : '暂无'
+  }
+  if (gt == GroupType.MEETING) {
+    const v = groupTypeTextMap.get('Meeting')
+    return typeof v == 'string' ? v : '暂无'
+  }
+  if (gt == GroupType.AV_CHAT_ROOM) {
+    const v = groupTypeTextMap.get('AVChatRoom')
+    return typeof v == 'string' ? v : '暂无'
+  }
+  if (gt == GroupType.COMMUNITY) {
+    const v = groupTypeTextMap.get('Community')
+    return typeof v == 'string' ? v : '暂无'
+  }
+  return '暂无'
+}
+
+// 群类型文字
+const groupTypeText = computed((): string => {
+	return getGroupTypeText(groupType.value)
+})
+
+const joinOptionTextMap: UTSJSONObject = new UTSJSONObject()
+joinOptionTextMap.set('0', '禁止加入')
+joinOptionTextMap.set('1', '需要审批')
+joinOptionTextMap.set('2', '自由加入')
+
+// 加群方式文字
+const joinOptionText = computed((): string => {
+	const v = joinOptionTextMap.get(`${joinOptionValue(joinGroupApprovalType.value)}`)
+	return typeof v == 'string' ? v : '暂无'
+})
+
+const inviteOptionTextMap: UTSJSONObject = new UTSJSONObject()
+inviteOptionTextMap.set('0', '禁止加入')
+inviteOptionTextMap.set('1', '需要审批')
+inviteOptionTextMap.set('2', '自由加入')
+
+// 邀请入群方式文字
+const inviteOptionText = computed((): string => {
+	const v = inviteOptionTextMap.get(`${inviteOptionValue(inviteToGroupApprovalType.value)}`)
+	return typeof v == 'string' ? v : '暂无'
+})
+
+// ============================================================================
+// 生命周期
+// ============================================================================
+
+/**
+ * 拉取自己的群名片
+ */
+async function fetchSelfNameCard(): Promise<void> {
+	if (groupID.length == 0) return
+	try {
+		const loginUser = loginState.loginUserInfo.value
+		if (loginUser?.userID != null) {
+			const groupMemberList = await groupMemberState.getMemberInfo([loginUser.userID])
+			const selfMemberInfoRaw: any | null = groupMemberList[0]
+			if (selfMemberInfoRaw != null) {
+				const obj: UTSJSONObject = selfMemberInfoRaw as UTSJSONObject
+				const nc: any | null = obj['nameCard']
+				if (typeof nc == 'string' && nc.length > 0) {
+					selfNameCard.value = nc
+				}
+			}
+		} else {
+			console.error('[GroupChatSetting] Failed to fetch login user info')
+		}
+	} catch (error: any) {
+		const errObj: UTSJSONObject = error as UTSJSONObject
+		const errCode: any | null = errObj['errCode']
+		if (errCode == 10010) {
+			isGroupNotExist.value = true
+			return
+		}
+		console.error('[GroupChatSetting] Failed to fetch self name card:', `${error}`)
+	}
+}
+
+// 拉取群信息（按需刷新）
+const fetchGroupInfo = async (): Promise<void> => {
+	if (groupID.length == 0) return
+	try {
+		const info = await groupState.getGroupInfo(groupID)
+		if (info != null) {
+			groupInfo.value = info
+			console.warn('[GroupChatSetting] fetchGroupInfo success', info)
+		}
+	} catch (error: any) {
+		const errObj: UTSJSONObject = error as UTSJSONObject
+		const errCode: any | null = errObj['errCode']
+		if (errCode == 10010) {
+			isGroupNotExist.value = true
+			return
+		}
+		console.error('[GroupChatSetting] fetchGroupInfo failed:', `${error}`)
+	}
+}
+
+// 获取会话信息
+const fetchConversationInfo = async (): Promise<void> => {
+	if (props.conversationID.length == 0) return
+	try {
+		const info = await conversationListState.getConversationInfo(props.conversationID)
+		if (info != null) {
+			currentConversation.value = info
+		}
+	} catch (error: any) {
+		console.error('[GroupChatSetting] fetchConversationInfo failed:', `${error}`)
+	}
+}
+
+onBeforeMount((): void => {
+	if (groupID.length == 0) return
+	void (async (): Promise<void> => {
+		// 拉取群信息（按需刷新）
+		await fetchGroupInfo()
+		// 拉取会话置顶状态
+		await fetchConversationInfo()
+		// 拉取群名片
+		await fetchSelfNameCard()
+	})()
+})
+
+onUnmounted((): void => {
+	groupMemberState.destroyStore()
+})
+
+// ============================================================================
+// 事件处理
+// ============================================================================
+
+// 返回
+const handleBack = (): void => {
+	uni.navigateBack()
+}
+
+// 编辑群名称
+const handleEditGroupName = (): void => {
+	if (canEditGroupName.value) {
+		showGroupNamePopup.value = true
+	}
+}
+
+// 复制群ID
+const handleCopyGroupID = (): void => {
+	try {
+		setClipboardText(groupID)
+		uni.showToast({ title: '已复制', icon: 'none' })
+	} catch (error: any) {
+		uni.showToast({ title: '复制失败', icon: 'none' })
+	}
+}
+
+// 确认修改群名称
+const handleGroupNameConfirm = async (newName: string): Promise<void> => {
+	const newGroupName: string = newName.trim()
+	if (newGroupName.length == 0) {
+		uni.showToast({
+			title: '群名称不能为空',
+			icon: 'none',
+		})
+		return
+	}
+	if (newGroupName !== groupName.value) {
+		try {
+			const profile: UTSJSONObject = { groupID: groupID, groupName: newGroupName }
+			await groupState.updateProfile(profile)
+			await fetchGroupInfo()
+		} catch (error: any) {
+			const errObj: UTSJSONObject = error as UTSJSONObject
+			const msgRaw: any | null = errObj['message']
+			const rawMsg: string = typeof msgRaw == 'string' ? msgRaw as string : ''
+			let errMsg: string = rawMsg.length > 0 ? rawMsg : '创建群组失败，请重试'
+			// 安全打击词识别：错误码 80001
+			// message 形如：'group info secure check fail! beat word: xxx |requestid:...|tcloudapirequestid:...'
+			// 提取 'beat word:' 后到 '|' 前的内容作为被打击词展示
+			const errCodeRaw: any | null = errObj['errCode']
+			if (errCodeRaw == 80001) {
+				const matchResult: RegExpMatchArray | null = rawMsg.match(/beat word:\s*([^|]+?)\s*(\||$)/i)
+				const beatGroup: any | null = matchResult != null ? matchResult[1] : null
+				const beatWord: string = typeof beatGroup == 'string' ? (beatGroup as string).trim() : ''
+				errMsg = beatWord.length > 0
+					? `创建群组失败，存在被打击词汇：${beatWord}`
+					: '创建群组失败，存在被打击词汇'
+			}
+			uni.showToast({ title: errMsg, icon: 'none' })
+		}
+	}
+}
+
+// 点击群成员列表
+const handleMemberListClick = (): void => {
+	uni.navigateTo({
+		url: `/pages/scenes/chat/groupMemberList/index?conversationID=${props.conversationID}`,
+	})
+}
+
+// 添加成员
+const handleAddMember = (): void => {
+	uni.$off('onGroupMemberChanged')
+	uni.$once('onGroupMemberChanged', (): void => {
+		setTimeout((): void => {
+			fetchGroupInfo()
+		}, 500)
+	})
+	uni.navigateTo({
+		url: `/pages/scenes/chat/userPicker/userPicker?businessType=${4}&conversationID=${props.conversationID}`,
+		fail: (): void => { uni.$off('onGroupMemberChanged') },
+	})
+}
+
+// 删除成员
+const handleRemoveMember = (): void => {
+	uni.$off('onGroupMemberChanged')
+	uni.$once('onGroupMemberChanged', (): void => {
+		setTimeout((): void => {
+			fetchGroupInfo()
+		}, 500)
+	})
+	uni.navigateTo({
+		url: `/pages/scenes/chat/userPicker/userPicker?businessType=${3}&conversationID=${props.conversationID}`,
+		fail: (): void => { uni.$off('onGroupMemberChanged') },
+	})
+}
+
+// 点击成员
+const handleMemberClick = (member: GroupMember): void => {
+	// TODO: 跳转到成员详情页面
+}
+
+// 点击群公告
+const handleNoticeClick = (): void => {
+	if (canEditGroupNotice.value) {
+		showNoticePopup.value = true
+	}
+}
+
+// 确认修改群公告
+const handleNoticeConfirm = async (newNotice: string): Promise<void> => {
+	const newGroupNotice: string = newNotice.trim()
+	if (newGroupNotice !== notice.value) {
+		const profile: UTSJSONObject = { groupID: groupID, notification: newGroupNotice }
+		await groupState.updateProfile(profile)
+		await fetchGroupInfo()
+	}
+}
+
+// 点击群管理
+const handleGroupManagementClick = (): void => {
+	uni.navigateTo({
+		url: `/pages/scenes/chat/groupManagement/index?conversationID=${props.conversationID}`,
+	})
+}
+
+// 点击加群方式
+const handleJoinGroupApprovalTypeClick = (): void => {
+	if (canEditGroupProfile.value) {
+		showJoinOptionSheet.value = true
+	}
+}
+
+const handleJoinOptionSelect = async (option: ActionSheetOption): Promise<void> => {
+	await groupState.setJoinOption(groupID, option.value)
+	await fetchGroupInfo()
+}
+
+// 点击邀请入群方式
+const handleInviteGroupApprovalTypeClick = (): void => {
+	if (canEditGroupProfile.value) {
+		showInviteOptionSheet.value = true
+	}
+}
+
+/**
+ * 同 handleJoinOptionSelect，直接按 ActionSheetOption 读取 value。
+ */
+const handleInviteOptionSelect = async (option: ActionSheetOption): Promise<void> => {
+	await groupState.setInviteOption(groupID, option.value)
+	await fetchGroupInfo()
+}
+
+// 编辑我的群昵称
+const handleEditNickname = (): void => {
+	showNicknamePopup.value = true
+}
+
+// 确认修改我的群昵称
+const handleNicknameConfirm = async (newNickname: string): Promise<void> => {
+	const newSelfNameCard: string = newNickname.trim()
+	if (newSelfNameCard !== selfNameCard.value) {
+		await groupMemberState.setSelfNameCard(newSelfNameCard)
+		// 修改群名片后需要重新拉取
+		await fetchSelfNameCard()
+	}
+}
+
+// 切换免打扰 (使用 throttle 防止限频，trailing: true 确保最后一次操作生效)
+const handleNotDisturbChange = throttle((arg: any | null): void => {
+	const value: boolean = arg as boolean
+	;(async (v: boolean): Promise<void> => {
+		try {
+			const opt: number = v ? 2 : 0
+			await conversationListState.setReceiveMessageOpt(`group_${groupID}`, opt)
+			fetchConversationInfo()
+		} catch (error: any) {
+			console.error('[GroupChatSetting] setReceiveMessageOpt failed:', `${error}`)
+		}
+	})(value).catch((e: any | null): void => {
+		// 静默：throttle callback 异常不影响主流程
+	})
+}, 1000, { leading: true, trailing: true })
+
+// 切换置顶
+const handlePinnedChange = throttle((arg: any | null): void => {
+	const value: boolean = arg as boolean
+	;(async (v: boolean): Promise<void> => {
+		if (props.conversationID.length == 0) return
+		try {
+			await conversationListState.pinConversation(props.conversationID, v)
+			fetchConversationInfo()
+		} catch (error: any) {
+			console.error('[GroupChatSetting] pinConversation failed:', `${error}`)
+		}
+	})(value).catch((e: any | null): void => {
+		// 静默：throttle callback 异常不影响主流程
+	})
+}, 1000, { leading: true, trailing: true })
+
+// 转让群主
+const handleTransferOwnership = (): void => {
+	uni.$off('onGroupOwnerChanged')
+	uni.$once('onGroupOwnerChanged', (): void => {
+		fetchGroupInfo()
+	})
+	uni.navigateTo({
+		url: `/pages/scenes/chat/userPicker/userPicker?businessType=${9}&conversationID=${props.conversationID}`,
+		fail: (): void => { uni.$off('onGroupOwnerChanged') },
+	})
+}
+
+// 点击退出群聊
+const handleQuitClick = (): void => {
+	showQuitConfirm.value = true
+}
+
+// 取消退出（ConfirmDialog 会自动关闭）
+const handleQuitCancel = (): void => {
+	// no-op: ConfirmDialog 关闭即结束
+}
+
+// 确认退出
+const handleQuitConfirm = (): void => {
+	groupState.quitGroup(groupID).then((): void => {
+		uni.navigateBack({ delta: 2 })
+	})
+}
+
+// 点击解散群
+const handleDismissClick = (): void => {
+	showDismissConfirm.value = true
+}
+
+// 取消解散（ConfirmDialog 会自动关闭）
+const handleDismissCancel = (): void => {
+	// no-op: ConfirmDialog 关闭即结束
+}
+
+// 确认解散
+const handleDismissConfirm = (): void => {
+	groupState.dismissGroup(groupID).then((): void => {
+		uni.navigateBack({ delta: 2 })
+	})
+}
+
+// 点击清除聊天记录
+const handleClearMessageClick = (): void => {
+	showClearMessageConfirm.value = true
+}
+
+// 取消清除聊天记录（ConfirmDialog 会自动关闭）
+const handleClearMessageCancel = (): void => {
+	// no-op: ConfirmDialog 关闭即结束
+}
+
+// 确认清除聊天记录
+const handleClearMessageConfirm = async (): Promise<void> => {
+	try {
+		await conversationListState.clearConversationMessages(props.conversationID)
+		uni.showToast({ title: '已清除', icon: 'none' })
+	} catch (error: any) {
+		uni.showToast({ title: '清除失败', icon: 'none' })
+	}
+}
+</script>
+
+<style scoped>
+.group-chat-setting {
+  flex: 1;
+  background-color: #F0F2F7;
+}
+
+.group-not-exist {
+  text-align: center;
+  color: rgba(0, 0, 0, 0.55);
+  font-size: 32rpx;
+  padding: 40rpx;
+}
+
+/* 内容区域 */
+.content {
+  flex: 1;
+}
+
+/* 分隔区 */
+.section-gap {
+  height: 20rpx;
+  background-color: #F0F2F7;
+}
+
+/* 群名称区 */
+.group-name-section {
+  background-color: #FFFFFF;
+  padding: 24rpx 32rpx;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.group-name-section__label {
+  font-size: 32rpx;
+  color: rgba(0, 0, 0, 0.55);
+}
+
+.group-name-section__row {
+  flex-direction: row;
+  align-items: center;
+}
+
+.group-name-section__value {
+  font-size: 32rpx;
+  color: rgba(0, 0, 0, 0.9);
+  lines: 1;
+  text-overflow: ellipsis;
+  max-width: 400rpx;
+}
+
+.group-name-section__edit {
+  width: 28rpx;
+  height: 28rpx;
+  margin-left: 12rpx;
+}
+
+/* 群ID区 */
+.group-id-section {
+  background-color: #FFFFFF;
+  padding: 24rpx 32rpx;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  border-top-width: 1rpx;
+  border-top-style: solid;
+  border-top-color: #F0F2F7;
+}
+
+.group-id-section__label {
+  font-size: 32rpx;
+  color: rgba(0, 0, 0, 0.55);
+}
+
+.group-id-section__row {
+  flex-direction: row;
+  align-items: center;
+}
+
+.group-id-section__value {
+  font-size: 32rpx;
+  color: rgba(0, 0, 0, 0.9);
+  lines: 1;
+  text-overflow: ellipsis;
+  max-width: 360rpx;
+}
+
+/* 群成员区 */
+.member-section {
+  background-color: #FFFFFF;
+}
+
+.member-section__header {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24rpx 32rpx 0;
+}
+
+.member-section__label {
+  font-size: 32rpx;
+  color: rgba(0, 0, 0, 0.55);
+}
+
+.member-section__right {
+  flex-direction: row;
+  align-items: center;
+}
+
+.member-section__count {
+  font-size: 32rpx;
+  color: rgba(0, 0, 0, 0.9);
+}
+
+.member-section__arrow {
+  width: 28rpx;
+  height: 28rpx;
+}
+
+/* 群公告区 */
+.notice-section {
+  background-color: #FFFFFF;
+  padding: 24rpx 32rpx;
+  border-bottom-width: 1rpx;
+  border-bottom-style: solid;
+  border-bottom-color: #E5E5E5;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.notice-section__label {
+  font-size: 32rpx;
+  color: rgba(0, 0, 0, 0.55);
+}
+
+.notice-section__content {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.notice-section__value {
+  font-size: 32rpx;
+  color: rgba(0, 0, 0, 0.9);
+  flex: 1;
+  lines: 1;
+  text-overflow: ellipsis;
+  max-width: 450rpx;
+}
+
+.notice-section__arrow {
+  margin-left: 12rpx;
+  width: 28rpx;
+  height: 28rpx;
+}
+
+/* 加群方式行 */
+.join-option-row {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  height: 100rpx;
+  padding: 0 32rpx;
+  background-color: #FFFFFF;
+  border-bottom-width: 1rpx;
+  border-bottom-style: solid;
+  border-bottom-color: #E5E5E5;
+}
+
+.join-option-row__label {
+  font-size: 32rpx;
+  color: #333333;
+}
+
+.join-option-row__right {
+  flex-direction: row;
+  align-items: center;
+}
+
+.join-option-row__value {
+  font-size: 32rpx;
+  color: #999999;
+  margin-right: 8rpx;
+}
+
+.join-option-row__arrow {
+  font-size: 32rpx;
+  color: #CCCCCC;
+}
+
+/* 我的群昵称行 */
+.nickname-row {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24rpx 32rpx;
+  background-color: #FFFFFF;
+  border-bottom-width: 1rpx;
+  border-bottom-style: solid;
+  border-bottom-color: #E5E5E5;
+}
+
+.nickname-row__label {
+  flex: 0 1 auto;
+  font-size: 32rpx;
+  color: rgba(0, 0, 0, 0.55);
+}
+
+.nickname-row__right {
+  flex-direction: row;
+  align-items: center;
+}
+
+.nickname-row__value {
+  font-size: 32rpx;
+  color: rgba(0, 0, 0, 0.9);
+  margin-right: 8rpx;
+  lines: 1;
+  text-overflow: ellipsis;
+  max-width: 400rpx;
+}
+
+.nickname-row__edit {
+  width: 28rpx;
+  height: 28rpx;
+}
+
+/* 底部安全区 */
+.safe-area-bottom {
+  height: 68rpx;
+}
+</style>

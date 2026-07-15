@@ -1,0 +1,23 @@
+import C2CChatSetting from './C2CChatSetting.uvue'
+import GroupChatSetting from './GroupChatSetting.uvue'
+import GroupManagement from './GroupManagement.uvue'
+import GroupMemberList from './GroupMemberList.uvue'
+import SettingRowToggle from './components/SettingRowToggle.uvue'
+import SettingRowNavigate from './components/SettingRowNavigate.uvue'
+import SettingRowButton from './components/SettingRowButton.uvue'
+import TextInputPopup from './components/TextInputPopup.uvue'
+import MemberAvatarList from './components/MemberAvatarList.uvue'
+
+export {
+  C2CChatSetting,
+  GroupChatSetting,
+  GroupManagement,
+  GroupMemberList,
+  SettingRowToggle,
+  SettingRowNavigate,
+  SettingRowButton,
+  TextInputPopup,
+  MemberAvatarList
+}
+
+export default C2CChatSetting
