@@ -26,7 +26,7 @@ import type { ContactInfo } from '@/uni_modules/tuikit-atomic-x/types/contact'
 const friendInfo = ref<ContactInfo | null>(null)
 
 const userID = computed(() => friendInfo.value?.userID || '')
-const remark = computed(() => friendInfo.value?.remark || '')
+const remark = computed(() => friendInfo.value?.friendRemark || '')
 
 onLoad(() => {
   const pages = getCurrentPages()

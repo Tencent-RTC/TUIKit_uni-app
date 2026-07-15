@@ -1,13 +1,31 @@
 /**
  * 消息操作状态管理
  * @module MessageActionState
+ *
+ * 对齐底层 atomicxcore.api.message.MessageActionStore.kt（HybridAPI: MessageActionAPI.kt）
+ *
+ * **本次升级关键调整：**
+ * - `deleteMessage` → `delete`
+ * - `recallMessage` → `revoke`
+ * - **大量新增 API**：pin / loadReadMembers / loadUnreadMembers / loadMoreMembers /
+ *   addReaction / removeReaction / loadReactionUsers / loadMoreReactionUsers /
+ *   setExtensions / deleteExtensions / translateText / downloadMedia / downloadMergedMessageList
+ * - **新增订阅字段**：readMemberList / hasMoreReadMembers / unreadMemberList /
+ *   hasMoreUnreadMembers / reactionUserList / hasMoreReactionUsers
+ * - createStore 必传 `message: MessageInfo` 参数
  */
 import { ref, type Ref } from 'vue'
-import type { MessageInfo } from '../types/message'
+import type {
+  MessageInfo,
+  MessageExtension,
+  MediaQuality as MediaQualityType,
+} from '../types/message'
+import { MediaQuality } from '../types/message'
+import type { GroupMember } from '../types/group'
+import type { UserProfile } from '../types/userProfile'
 import type { HybridCallOptions } from '../utssdk/interface.uts'
 import { callAPI, addListener, removeListener } from "@/uni_modules/tuikit-atomic-x";
 import { safeJsonParse } from '../utils/utsUtils';
-
 
 /**
  * 获取全局 InstanceMap
@@ -33,20 +51,33 @@ const InstanceMap = getGlobalInstanceMap();
  * 消息操作状态管理类
  */
 class MessageActionState {
-  /** Store 实例ID */
   public readonly instanceId: string;
-  /** 消息 */
   public readonly message: MessageInfo;
 
-  /**
-   * 私有构造函数，使用 getInstance 获取实例
-   * @param message 消息对象
-   */
+  /** 已读成员列表（**新增**） */
+  public readonly readMemberList: Ref<GroupMember[]>;
+  /** 是否有更多已读成员 */
+  public readonly hasMoreReadMembers: Ref<boolean>;
+  /** 未读成员列表 */
+  public readonly unreadMemberList: Ref<GroupMember[]>;
+  /** 是否有更多未读成员 */
+  public readonly hasMoreUnreadMembers: Ref<boolean>;
+  /** 表情回应用户列表 */
+  public readonly reactionUserList: Ref<UserProfile[]>;
+  /** 是否有更多表情回应用户 */
+  public readonly hasMoreReactionUsers: Ref<boolean>;
+
   private constructor(message: MessageInfo) {
-    console.log(`[MessageActionState] Constructor called, message.msgID: ${message.msgID}`);
     this.instanceId = MessageActionState.generateInstanceId(message);
     this.message = message;
-    // 初始化 Store
+
+    this.readMemberList = ref<GroupMember[]>([]);
+    this.hasMoreReadMembers = ref<boolean>(false);
+    this.unreadMemberList = ref<GroupMember[]>([]);
+    this.hasMoreUnreadMembers = ref<boolean>(false);
+    this.reactionUserList = ref<UserProfile[]>([]);
+    this.hasMoreReactionUsers = ref<boolean>(false);
+
     this.createStore();
   }
 
@@ -55,15 +86,15 @@ class MessageActionState {
       api: "createStore",
       params: {
         createStoreParams: this.instanceId,
-      }
+        message: JSON.stringify(this.message),
+      },
     };
-    
+
     callAPI(JSON.stringify(options), (response: string) => {
       try {
         const result = safeJsonParse<any>(response, {});
-        
         if (result.code === 0) {
-          // console.log(`[${this.instanceId}][createStore] Success`);
+          this.bindEvent();
         } else {
           console.error(`[${this.instanceId}][createStore] Failed:`, result.message);
         }
@@ -73,21 +104,13 @@ class MessageActionState {
     });
   }
 
-  /**
-   * 生成完整的实例 ID
-   * @param message 消息对象
-   */
   private static generateInstanceId(message: MessageInfo): string {
     return JSON.stringify({
       storeName: "MessageAction",
-      message: message
+      message,
     });
   }
 
-  /**
-   * 获取实例（单例模式）
-   * @param message 消息对象，默认为空对象
-   */
   public static getInstance(message: MessageInfo): MessageActionState {
     const instanceId = MessageActionState.generateInstanceId(message);
     if (!InstanceMap.has(instanceId)) {
@@ -97,120 +120,476 @@ class MessageActionState {
   }
 
   /**
-   * 删除消息
-   * @returns Promise<void>
+   * 绑定事件监听（订阅 6 个新字段）
    */
-  deleteMessage = async(): Promise<void> => {
+  private bindEvent(): void {
+    const storeName = "MessageAction";
+
+    const dataHandlers: Record<string, (result: any) => void> = {
+      readMemberList: (r) => {
+        this.readMemberList.value = safeJsonParse<GroupMember[]>(r.readMemberList, []);
+      },
+      hasMoreReadMembers: (r) => {
+        this.hasMoreReadMembers.value = Boolean(r.hasMoreReadMembers);
+      },
+      unreadMemberList: (r) => {
+        this.unreadMemberList.value = safeJsonParse<GroupMember[]>(r.unreadMemberList, []);
+      },
+      hasMoreUnreadMembers: (r) => {
+        this.hasMoreUnreadMembers.value = Boolean(r.hasMoreUnreadMembers);
+      },
+      reactionUserList: (r) => {
+        this.reactionUserList.value = safeJsonParse<UserProfile[]>(r.reactionUserList, []);
+      },
+      hasMoreReactionUsers: (r) => {
+        this.hasMoreReactionUsers.value = Boolean(r.hasMoreReactionUsers);
+      },
+    };
+
+    Object.keys(dataHandlers).forEach((dataName) => {
+      addListener({
+        type: "",
+        store: storeName,
+        name: dataName,
+        params: { createStoreParams: this.instanceId },
+      }, (data: string) => {
+        try {
+          const result = safeJsonParse<any>(data, {});
+          dataHandlers[dataName]?.(result);
+        } catch (error) {
+          console.error(`[${this.instanceId}][${dataName} listener] Error:`, error);
+        }
+      });
+    });
+  }
+
+  // ============================================================================
+  // Actions
+  // ============================================================================
+
+  /**
+   * 撤回消息（旧名 recallMessage）
+   */
+  revoke = async (): Promise<void> => {
     return new Promise((resolve, reject) => {
       const options: HybridCallOptions = {
-        api: 'deleteMessage',
+        api: 'revoke',
         params: {
           createStoreParams: this.instanceId,
-        }
-      }
+        },
+      };
+
       callAPI(JSON.stringify(options), (data: string) => {
         try {
           const result = safeJsonParse(data, {}) as any;
           if (result.code === 0) {
-            resolve()
+            resolve();
           } else {
-            reject(new Error(result.message || 'deleteMessage failed'))
+            reject(new Error(result.message || 'revoke failed'));
           }
         } catch (error) {
-          reject(error)
+          reject(error);
         }
-      })
-    })
-  }
+      });
+    });
+  };
 
   /**
-   * 撤回消息
-   * @returns Promise<void>
+   * 删除消息（单条；旧名 deleteMessage）
    */
-  recallMessage = async(): Promise<void> => {
+  delete = async (): Promise<void> => {
     return new Promise((resolve, reject) => {
       const options: HybridCallOptions = {
-        api: 'recallMessage',
+        api: 'delete',
         params: {
           createStoreParams: this.instanceId,
-        }
-      }
-
+        },
+      };
       callAPI(JSON.stringify(options), (data: string) => {
         try {
           const result = safeJsonParse(data, {}) as any;
           if (result.code === 0) {
-            resolve()
+            resolve();
           } else {
-            reject(new Error(result.message || 'recallMessage failed'))
+            reject(new Error(result.message || 'delete failed'));
           }
         } catch (error) {
-          reject(error)
+          reject(error);
         }
-      })
-    })
-  }
+      });
+    });
+  };
 
   /**
-   * 语音转文字
-   *
-   * 透传到底层 Native Store 已实现的 convertVoiceToText 接口，
-   * 触发当前 SOUND 类型消息的语音转文本。
-   *
-   * 注意：转换结果由 SDK 异步更新到 message.messageBody.asrText，
-   * 通过 MessageList 的响应式数据流刷新到 AudioMessage 组件，
-   * 本接口的 Promise 仅表示 "调用是否成功触发"，无需等待返回文本。
-   *
-   * @param language 转换语言，如 'zh' / 'en'，由 Native 侧定义并校验
-   * @returns Promise<void> 调用是否成功
+   * 置顶/取消置顶消息（**新增**）
    */
-  convertVoiceToText = async(language: string): Promise<void> => {
+  pin = async (isPinned: boolean): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      const options: HybridCallOptions = {
+        api: 'pin',
+        params: {
+          createStoreParams: this.instanceId,
+          isPinned,
+        },
+      };
+      callAPI(JSON.stringify(options), (data: string) => {
+        try {
+          const result = safeJsonParse(data, {}) as any;
+          if (result.code === 0) {
+            resolve();
+          } else {
+            reject(new Error(result.message || 'pin failed'));
+          }
+        } catch (error) {
+          reject(error);
+        }
+      });
+    });
+  };
+
+  /**
+   * 加载已读成员列表（**新增**）
+   */
+  loadReadMembers = async (count: number = 0): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      const options: HybridCallOptions = {
+        api: 'loadReadMembers',
+        params: {
+          createStoreParams: this.instanceId,
+          count,
+        },
+      };
+      callAPI(JSON.stringify(options), (data: string) => {
+        try {
+          const result = safeJsonParse(data, {}) as any;
+          if (result.code === 0) resolve();
+          else reject(new Error(result.message || 'loadReadMembers failed'));
+        } catch (error) { reject(error); }
+      });
+    });
+  };
+
+  /**
+   * 加载未读成员列表（**新增**）
+   */
+  loadUnreadMembers = async (count: number = 0): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      const options: HybridCallOptions = {
+        api: 'loadUnreadMembers',
+        params: {
+          createStoreParams: this.instanceId,
+          count,
+        },
+      };
+      callAPI(JSON.stringify(options), (data: string) => {
+        try {
+          const result = safeJsonParse(data, {}) as any;
+          if (result.code === 0) resolve();
+          else reject(new Error(result.message || 'loadUnreadMembers failed'));
+        } catch (error) { reject(error); }
+      });
+    });
+  };
+
+  /**
+   * 加载更多成员（已读/未读，由 isRead 切换；**新增**）
+   */
+  loadMoreMembers = async (isRead: boolean): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      const options: HybridCallOptions = {
+        api: 'loadMoreMembers',
+        params: {
+          createStoreParams: this.instanceId,
+          isRead,
+        },
+      };
+      callAPI(JSON.stringify(options), (data: string) => {
+        try {
+          const result = safeJsonParse(data, {}) as any;
+          if (result.code === 0) resolve();
+          else reject(new Error(result.message || 'loadMoreMembers failed'));
+        } catch (error) { reject(error); }
+      });
+    });
+  };
+
+  /**
+   * 添加表情回应（**新增**；从 MessageList 迁入）
+   */
+  addReaction = async (reactionID: string): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      const options: HybridCallOptions = {
+        api: 'addReaction',
+        params: {
+          createStoreParams: this.instanceId,
+          reactionID,
+        },
+      };
+      callAPI(JSON.stringify(options), (data: string) => {
+        try {
+          const result = safeJsonParse(data, {}) as any;
+          if (result.code === 0) resolve();
+          else reject(new Error(result.message || 'addReaction failed'));
+        } catch (error) { reject(error); }
+      });
+    });
+  };
+
+  /**
+   * 移除表情回应（**新增**）
+   */
+  removeReaction = async (reactionID: string): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      const options: HybridCallOptions = {
+        api: 'removeReaction',
+        params: {
+          createStoreParams: this.instanceId,
+          reactionID,
+        },
+      };
+      callAPI(JSON.stringify(options), (data: string) => {
+        try {
+          const result = safeJsonParse(data, {}) as any;
+          if (result.code === 0) resolve();
+          else reject(new Error(result.message || 'removeReaction failed'));
+        } catch (error) { reject(error); }
+      });
+    });
+  };
+
+  /**
+   * 加载表情回应用户列表（**新增**）
+   */
+  loadReactionUsers = async (reactionID: string, count: number = 0): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      const options: HybridCallOptions = {
+        api: 'loadReactionUsers',
+        params: {
+          createStoreParams: this.instanceId,
+          reactionID,
+          count,
+        },
+      };
+      callAPI(JSON.stringify(options), (data: string) => {
+        try {
+          const result = safeJsonParse(data, {}) as any;
+          if (result.code === 0) resolve();
+          else reject(new Error(result.message || 'loadReactionUsers failed'));
+        } catch (error) { reject(error); }
+      });
+    });
+  };
+
+  /**
+   * 加载更多表情回应用户（**新增**）
+   */
+  loadMoreReactionUsers = async (): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      const options: HybridCallOptions = {
+        api: 'loadMoreReactionUsers',
+        params: {
+          createStoreParams: this.instanceId,
+        },
+      };
+      callAPI(JSON.stringify(options), (data: string) => {
+        try {
+          const result = safeJsonParse(data, {}) as any;
+          if (result.code === 0) resolve();
+          else reject(new Error(result.message || 'loadMoreReactionUsers failed'));
+        } catch (error) { reject(error); }
+      });
+    });
+  };
+
+  /**
+   * 设置消息扩展（**新增**）
+   */
+  setExtensions = async (extensions: MessageExtension[]): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      const options: HybridCallOptions = {
+        api: 'setExtensions',
+        params: {
+          createStoreParams: this.instanceId,
+          extensions: JSON.stringify(extensions),
+        },
+      };
+      callAPI(JSON.stringify(options), (data: string) => {
+        try {
+          const result = safeJsonParse(data, {}) as any;
+          if (result.code === 0) resolve();
+          else reject(new Error(result.message || 'setExtensions failed'));
+        } catch (error) { reject(error); }
+      });
+    });
+  };
+
+  /**
+   * 删除消息扩展（**新增**）
+   */
+  deleteExtensions = async (keys?: string[]): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      const options: HybridCallOptions = {
+        api: 'deleteExtensions',
+        params: {
+          createStoreParams: this.instanceId,
+          keys,
+        },
+      };
+      callAPI(JSON.stringify(options), (data: string) => {
+        try {
+          const result = safeJsonParse(data, {}) as any;
+          if (result.code === 0) resolve();
+          else reject(new Error(result.message || 'deleteExtensions failed'));
+        } catch (error) { reject(error); }
+      });
+    });
+  };
+
+  /**
+   * 翻译文本（**新增**）
+   *
+   * 对齐底层 `MessageActionStore.translateText(sourceTextList, sourceLanguage, targetLanguage)`
+   */
+  translateText = async (
+    sourceTextList: string[],
+    sourceLanguage: string | undefined,
+    targetLanguage: string
+  ): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      const options: HybridCallOptions = {
+        api: 'translateText',
+        params: {
+          createStoreParams: this.instanceId,
+          sourceTextList,
+          sourceLanguage,
+          targetLanguage,
+        },
+      };
+      callAPI(JSON.stringify(options), (data: string) => {
+        try {
+          const result = safeJsonParse(data, {}) as any;
+          if (result.code === 0) resolve();
+          else reject(new Error(result.message || 'translateText failed'));
+        } catch (error) { reject(error); }
+      });
+    });
+  };
+
+  /**
+   * 语音转文字（参数不变）
+   */
+  convertVoiceToText = async (language: string): Promise<void> => {
     return new Promise((resolve, reject) => {
       const options: HybridCallOptions = {
         api: 'convertVoiceToText',
         params: {
           createStoreParams: this.instanceId,
-          language: language,
-        }
-      }
+          language,
+        },
+      };
 
       callAPI(JSON.stringify(options), (data: string) => {
         try {
           const result = safeJsonParse(data, {}) as any;
           if (result.code === 0) {
-            resolve()
+            resolve();
           } else {
-            const err = new Error(result.message || 'convertVoiceToText failed') as Error & { code?: number }
-            err.code = result.code
-            reject(err)
+            const err = new Error(result.message || 'convertVoiceToText failed') as Error & { code?: number };
+            err.code = result.code;
+            reject(err);
           }
         } catch (error) {
-          reject(error)
+          reject(error);
         }
-      })
-    })
-  }
+      });
+    });
+  };
 
   /**
-   * 移除事件监听
+   * 下载媒体资源（**新增**；从 MessageListStore.downloadMessageResource 迁入）
+   *
+   * @param quality 下载画质（仅图片消息有意义；视频/音频/文件忽略此参数）
    */
+  downloadMedia = async (quality?: MediaQualityType): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      const params: any = { createStoreParams: this.instanceId };
+      if (quality !== undefined) params.quality = quality;
+
+      const options: HybridCallOptions = {
+        api: 'downloadMedia',
+        params,
+      };
+      callAPI(JSON.stringify(options), (data: string) => {
+        try {
+          const result = safeJsonParse(data, {}) as any;
+          if (result.code === 0) resolve();
+          else reject(new Error(result.message || 'downloadMedia failed'));
+        } catch (error) { reject(error); }
+      });
+    });
+  };
+
+  /**
+   * 下载合并转发消息列表（**新增**）
+   */
+  downloadMergedMessageList = async (): Promise<MessageInfo[]> => {
+    return new Promise((resolve, reject) => {
+      const options: HybridCallOptions = {
+        api: 'downloadMergedMessageList',
+        params: {
+          createStoreParams: this.instanceId,
+        },
+      };
+      callAPI(JSON.stringify(options), (data: string) => {
+        try {
+          const result = safeJsonParse(data, {}) as any;
+          if (result.code === 0) {
+            const list = safeJsonParse<MessageInfo[]>(result.data?.data?.messageList, []);
+            resolve(list);
+          } else {
+            reject(new Error(result.message || 'downloadMergedMessageList failed'));
+          }
+        } catch (error) { reject(error); }
+      });
+    });
+  };
+
+  // ============================================================================
+  // 销毁
+  // ============================================================================
+
   private unbindEvent(): void {
-    // MessageAction 暂时没有需要解绑的事件
-    console.log(`[${this.instanceId}][unbindEvent] No events to unbind for MessageAction`);
+    const dataNames = [
+      "readMemberList",
+      "hasMoreReadMembers",
+      "unreadMemberList",
+      "hasMoreUnreadMembers",
+      "reactionUserList",
+      "hasMoreReactionUsers",
+    ];
+
+    dataNames.forEach((name) => {
+      removeListener({
+        type: "",
+        store: "MessageAction",
+        name,
+        params: { createStoreParams: this.instanceId },
+      });
+    });
   }
 
-  /**
-   * 重置数据
-   */
   private resetData(): void {
-    // MessageAction 暂时没有需要重置的数据
-    console.log(`[${this.instanceId}][resetData] No data to reset for MessageAction`);
+    this.readMemberList.value = [];
+    this.hasMoreReadMembers.value = false;
+    this.unreadMemberList.value = [];
+    this.hasMoreUnreadMembers.value = false;
+    this.reactionUserList.value = [];
+    this.hasMoreReactionUsers.value = false;
   }
 
-  /**
-   * 销毁 Store
-   */
   destroyStore = (): void => {
+    // 幂等：实例已被销毁过，直接 return
+    if (!InstanceMap.has(this.instanceId)) return;
     this.unbindEvent();
     this.resetData();
     InstanceMap.delete(this.instanceId);
@@ -218,45 +597,27 @@ class MessageActionState {
     const options: HybridCallOptions = {
       api: "destroyStore",
       params: {
-        createStoreParams: this.instanceId
-      }
+        createStoreParams: this.instanceId,
+      },
     };
 
-    callAPI(JSON.stringify(options), (response: string) => {
-      try {
-        const result = safeJsonParse(response, {}) as any;
-        console.log(`[${this.instanceId}][destroyStore] Response:`, result);
-
-        if (result.code === 0) {
-          console.log(`[${this.instanceId}][destroyStore] Success`);
-        } else {
-          console.error(`[${this.instanceId}][destroyStore] Failed:`, result.message);
-        }
-      } catch (error) {
-        console.error(`[${this.instanceId}][destroyStore] Parse error:`, error);
-      }
-    });
-  }
+    callAPI(JSON.stringify(options), () => {});
+  };
 }
 
 /**
  * useMessageActionState 参数选项
  */
 export interface UseMessageActionStateOptions {
-  /** 消息对象 */
   message: MessageInfo;
 }
 
-/**
- * 导出消息操作状态管理 Hook
- * @param options 配置选项
- */
 export function useMessageActionState(options: UseMessageActionStateOptions) {
   const { message } = options;
-  
   return MessageActionState.getInstance(message);
 }
 
 export {
   MessageActionState,
-}
+  MediaQuality,
+};

@@ -68,13 +68,13 @@ export default {
       uni.hideKeyboard(); this.hasSearched = true; this.isSearching = true; this.searchResultList = []
       this.$emit('search', userID)
       var self = this
-      this.contactState.fetchUserInfo([userID]).then(function(list) { if (list && list.length > 0) self.searchResultList = list }).catch(function(e) { console.error('搜索用户失败:', e) }).finally(function() { self.isSearching = false })
+      this.contactState.getContactInfo([userID]).then(function(list) { if (list && list.length > 0) self.searchResultList = list }).catch(function(e) { console.error('搜索用户失败:', e) }).finally(function() { self.isSearching = false })
     },
     handleUserClick(user) { uni.hideKeyboard(); this.$emit('userSelect', user) },
     silentRefreshSearch() {
       var userID = this.searchValue.trim(); if (!userID) return
       var self = this
-      this.contactState.fetchUserInfo([userID]).then(function(list) { if (list && list.length > 0) self.searchResultList = list }).catch(function(e) { console.error('[AddFriend] silentRefreshSearch failed:', e) })
+      this.contactState.getContactInfo([userID]).then(function(list) { if (list && list.length > 0) self.searchResultList = list }).catch(function(e) { console.error('[AddFriend] silentRefreshSearch failed:', e) })
     },
   },
 }

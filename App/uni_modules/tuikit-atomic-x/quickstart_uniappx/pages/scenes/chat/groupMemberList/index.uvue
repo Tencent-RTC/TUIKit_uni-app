@@ -1,0 +1,30 @@
+<template>
+  <GroupMemberList :conversationID="conversationID" :hideMember="hideMember" />
+</template>
+
+<script setup lang="uts">
+
+import { ref } from 'vue'
+import { onLoad } from '@dcloudio/uni-app'
+import GroupMemberList from '@/uni_modules/tuikit-atomic-x/components/ChatSetting/GroupMemberList.uvue'
+
+const conversationID = ref<string>('')
+const hideMember = ref<boolean>(false)
+
+onLoad((options: OnLoadOptions): void => {
+  const opt = options as UTSJSONObject
+  const cid = opt['conversationID']
+  if (typeof cid === 'string' && cid.length > 0) {
+    conversationID.value = cid
+  } else {
+    console.error('groupMemberList page 未接收到 conversationID 参数')
+  }
+  const hm = opt['hideMember']
+  if (typeof hm === 'string' && (hm === 'true' || hm === '1')) {
+    hideMember.value = true
+  }
+})
+</script>
+
+<style scoped>
+</style>

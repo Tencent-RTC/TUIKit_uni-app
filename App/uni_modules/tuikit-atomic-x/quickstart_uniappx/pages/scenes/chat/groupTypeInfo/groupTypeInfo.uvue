@@ -1,0 +1,22 @@
+<template>
+  <view>
+    <GroupTypeInfo @selectType="handleSelectType" :showDocumentationLink="true" />
+  </view>
+</template>
+
+<script setup lang="uts">
+
+import { getGroupTypeById } from '@/uni_modules/tuikit-atomic-x/constants/groupTypes'
+import GroupTypeInfo from '@/uni_modules/tuikit-atomic-x/components/GroupTypeInfo/GroupTypeInfo.uvue'
+
+/**
+ * 处理群类型选择
+ */
+const handleSelectType = (groupTypeId: string): void => {
+  const groupType = getGroupTypeById(groupTypeId)
+  if (groupType != null) {
+    uni.$emit('groupTypeSelected', groupType)
+    uni.navigateBack()
+  }
+}
+</script>

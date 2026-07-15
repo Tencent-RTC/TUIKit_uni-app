@@ -69,7 +69,7 @@
   } from "@/uni_modules/tuikit-atomic-x/utils/callPermission";
 
   const {
-    fetchUserInfo,
+    getContactInfo,
     destroyStore
   } = useContactState()
   const {
@@ -120,7 +120,7 @@
     const newSearch = userIDToSearch.value.trim();
     userIDToSearch.value = newSearch;
     try {
-      const userList = await fetchUserInfo([userIDToSearch.value])
+      const userList = await getContactInfo([userIDToSearch.value])
       if (userList.length === 0) {
         uni.showToast({
           icon: "none",

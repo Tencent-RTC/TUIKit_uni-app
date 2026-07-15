@@ -1,0 +1,47 @@
+<template>
+  <C2CChatSetting v-if="isC2C" :conversationID="conversationID" :showType="showType" />
+  <GroupChatSetting v-else-if="isGroup" :conversationID="conversationID" />
+</template>
+
+<script setup lang="uts">
+
+import { ref, computed } from 'vue'
+import { onLoad } from '@dcloudio/uni-app'
+import C2CChatSetting from '@/uni_modules/tuikit-atomic-x/components/ChatSetting/C2CChatSetting.uvue'
+import GroupChatSetting from '@/uni_modules/tuikit-atomic-x/components/ChatSetting/GroupChatSetting.uvue'
+
+const conversationID = ref<string>('')
+const showType = ref<number>(0)
+
+const isC2C = computed<boolean>((): boolean =>
+  (conversationID.value?.length ?? 0) > 0 && conversationID.value.startsWith('c2c_')
+)
+
+const isGroup = computed<boolean>((): boolean =>
+  (conversationID.value?.length ?? 0) > 0 && conversationID.value.startsWith('group_')
+)
+
+onLoad((options: OnLoadOptions): void => {
+  const opt = options as UTSJSONObject
+  const cid = opt['conversationID']
+  if (typeof cid === 'string' && cid.length > 0) {
+    conversationID.value = cid
+  } else {
+    console.error('未接收到 conversationID 参数')
+  }
+  const st = opt['showType']
+  if (typeof st === 'string' && st.length > 0) {
+    const parsed = parseInt(st, 10)
+    if (!Number.isNaN(parsed)) {
+      showType.value = parsed
+    } else {
+      console.error('未接收到 showType 参数')
+    }
+  } else {
+    console.error('未接收到 showType 参数')
+  }
+})
+</script>
+
+<style scoped>
+</style>

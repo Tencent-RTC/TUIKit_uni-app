@@ -41,7 +41,6 @@
             :highlight="item.message && item.message.msgID === currentHighlightID"
             :customCenterChecker="customCenterChecker"
             :customMessageRender="customMessageRender"
-            @reEdit="handleReEdit"
             @onMessageListTap="handleMessageListTap"
             @onMessageTap="handleMessageTap"
           />
@@ -69,7 +68,7 @@ import Message from './Message/Message.nvue'
 import MessageTimeDivider from './MessageTimeDivider/MessageTimeDivider.nvue'
 import { useMessageListState } from '../../state/MessageListState'
 import { useConversationListState } from '../../state/ConversationListState'
-import { MessageStatus, MessageType, MessageListType, MessageFetchDirection } from '../../types/message'
+import { MessageStatus, MessageType, MessageListType, MessageLoadDirection } from '../../types/message'
 import { rpxToPx } from '../../utils/unitUtils'
 
 export default {
@@ -94,8 +93,7 @@ export default {
   },
   data() {
     var msgState = useMessageListState({
-      conversationID: this.conversationID,
-      messageListType: this.messageListType
+      conversationID: this.conversationID
     })
     var convState = useConversationListState()
     return {
@@ -127,7 +125,7 @@ export default {
       for (var i = 0; i < filteredMessages.length; i++) {
         var message = filteredMessages[i]
         var prevMessage = i > 0 ? filteredMessages[i - 1] : null
-        var isCenterMessage = message.status === MessageStatus.RECALLED || message.messageType === MessageType.SYSTEM
+        var isCenterMessage = message.status === MessageStatus.REVOKED || message.messageType === MessageType.TIPS
         var showTimeDivider = i === 0 || (prevMessage && message.timestamp && prevMessage.timestamp && (message.timestamp - prevMessage.timestamp) > aggregationTime)
         if (showTimeDivider) {
           items.push({ key: 'divider-' + message.msgID, type: 'divider', timestamp: message.timestamp })
@@ -141,7 +139,7 @@ export default {
           type: 'message',
           message: message,
           showAvatar: true,
-          showNickname: convID.startsWith('group_') && !message.isSelf
+          showNickname: convID.startsWith('group_') && !message.isSentBySelf
         })
       }
       return items
@@ -153,19 +151,10 @@ export default {
         if (!newMessages || newMessages.length === 0) return
         var self = this
         if (this.isFirstLoad && newMessages.length > 0) {
+          // 首屏：cell-ready 信号 + 800ms 保底，替代盲等魔术数字
+          // vue2 字符串 ref 无挂载回调，用 nextTick + raf 轮询 $refs.cell_* 计数
           this.$nextTick(function() {
-            var t1 = setTimeout(function() {
-              var locateMsg = self.locateMessage
-              if (locateMsg && locateMsg.msgID) {
-                self.isLocating = true
-                self.scrollToMessage(locateMsg, false)
-              } else {
-                self.scrollToBottom(false)
-              }
-              var t2 = setTimeout(function() { self.isFirstLoad = false }, 50)
-              self.pendingTimers.push(t2)
-            }, 100)
-            self.pendingTimers.push(t1)
+            self._startFirstLoadFinalize()
           })
           return
         }
@@ -181,7 +170,7 @@ export default {
         var hasNewMessage = !oldMessages || oldMessages.length === 0 || newMessages.length > oldMessages.length
         if (hasNewMessage) {
           var lastMessage = newMessages[newMessages.length - 1]
-          var isMyMessage = lastMessage.isSelf
+          var isMyMessage = lastMessage.isSentBySelf
           if (!isMyMessage) {
             this.convState.clearConversationUnreadCount(this.conversationID)
           }
@@ -224,18 +213,7 @@ export default {
     var self = this
     if (this.msgState.messageList.value && this.msgState.messageList.value.length > 0) {
       this.$nextTick(function() {
-        var t1 = setTimeout(function() {
-          var locateMsg = self.locateMessage
-          if (locateMsg && locateMsg.msgID) {
-            self.isLocating = true
-            self.scrollToMessage(locateMsg, false)
-          } else {
-            self.scrollToBottom(false)
-          }
-          var t2 = setTimeout(function() { self.isFirstLoad = false }, 50)
-          self.pendingTimers.push(t2)
-        }, 100)
-        self.pendingTimers.push(t1)
+        self._startFirstLoadFinalize()
       })
     }
     // 监听 AudioMessage "转写文本入场"事件
@@ -313,6 +291,68 @@ export default {
   beforeDestroy() { this._cleanup() },
   beforeUnmount() { this._cleanup() },
   methods: {
+    /**
+     * 首屏 cell-ready 信号 + 800ms 保底（vue2 适配版）
+     *
+     * vue3 主版用响应式 readyCellCount + 函数式 ref 精确感知 cell 挂载；
+     * vue2 字符串 ref 无挂载回调，改用 raf 轮询 $refs.cell_* 计数（每次轮询代价 < 1ms）
+     *
+     * 收尾函数 __finalize：滚动到底部 / 定位消息 → nextTick 后置 isFirstLoad=false 放开 opacity
+     */
+    _startFirstLoadFinalize() {
+      var self = this
+      var __finished = false
+      var __finalize = function() {
+        if (__finished) return
+        __finished = true
+        var locateMsg = self.locateMessage
+        if (locateMsg && locateMsg.msgID) {
+          self.isLocating = true
+          self.scrollToMessage(locateMsg, false)
+        } else {
+          self.scrollToBottom(false)
+        }
+        // 让 scrollToElement 的 native 调用先执行，再放开 opacity
+        self.$nextTick(function() { self.isFirstLoad = false })
+      }
+
+      var __getReadyCount = function() {
+        var refs = self.$refs || {}
+        var count = 0
+        for (var i = 0; i < self.messageItems.length; i++) {
+          var ref = refs['cell_' + i]
+          if (ref) count++
+        }
+        return count
+      }
+
+      // 单次同步检查（cell 可能在当前 nextTick 已就绪）
+      if (__getReadyCount() >= self.messageItems.length) {
+        __finalize()
+        return
+      }
+
+      // 轮询：每帧检查一次（约 16ms 间隔），cell 全就绪即收尾
+      var __polling = true
+      var __poll = function() {
+        if (!__polling || __finished) return
+        if (__getReadyCount() >= self.messageItems.length) {
+          __finalize()
+          return
+        }
+        // 用 setTimeout 而非 requestAnimationFrame：nvue 没有标准 raf
+        var pt = setTimeout(__poll, 16)
+        self.pendingTimers.push(pt)
+      }
+      __poll()
+
+      // 800ms 保底：避免某条 cell 卡住导致永久白屏
+      var __fallbackTimer = setTimeout(function() {
+        __polling = false
+        __finalize()
+      }, 800)
+      self.pendingTimers.push(__fallbackTimer)
+    },
     _cleanup() {
       if (this.isCleaned) return
       this.isCleaned = true
@@ -377,7 +417,7 @@ export default {
       }
       if (!found) {
         try {
-          await this.msgState.fetchMessageList({ message: message, direction: MessageFetchDirection.BOTH, pageCount: 20 })
+          await this.msgState.loadMessages({ message: message, direction: MessageLoadDirection.BOTH, pageCount: 20 })
         } catch (error) {
           console.error('[MessageList] locateToMessage failed:', error)
         }
@@ -402,7 +442,7 @@ export default {
     async onRefresh(e) {
       if (this.refreshing) return
       this.refreshing = true
-      if (!this.msgState.hasMoreOlderMessage.value) {
+      if (!this.msgState.hasOlderMessages.value) {
         this.refreshText = '没有更多历史消息'
         var self = this
         var t = setTimeout(function() { self.refreshing = false }, 500)
@@ -414,7 +454,7 @@ export default {
         ? this.msgState.messageList.value[0] : null
       if (firstMessage) this.pendingScrollMessage = firstMessage
       try {
-        await this.msgState.fetchMoreMessageList(MessageFetchDirection.OLDER)
+        await this.msgState.loadOlderMessages()
         this.refreshText = '加载完成'
       } catch (error) {
         this.refreshText = '加载失败'
@@ -426,9 +466,9 @@ export default {
       }
     },
     async onLoadMore() {
-      if (!this.msgState.hasMoreNewerMessage.value) return
+      if (!this.msgState.hasNewerMessages.value) return
       try {
-        await this.msgState.fetchMoreMessageList(MessageFetchDirection.NEWER)
+        await this.msgState.loadNewerMessages()
       } catch (error) {
         console.error('[MessageList] loadMoreNewerMessage failed:', error)
       }
@@ -445,7 +485,6 @@ export default {
     handleMsgListTouchStart() {
       this.$emit('onMessageListTap')
     },
-    handleReEdit(data) { this.$emit('reEdit', data) },
     handleMessageListTap() { this.$emit('onMessageListTap') },
     handleMessageTap(message) { this.$emit('onMessageTap', message) }
   }

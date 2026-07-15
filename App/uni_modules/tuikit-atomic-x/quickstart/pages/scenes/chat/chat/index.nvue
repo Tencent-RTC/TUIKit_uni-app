@@ -42,6 +42,7 @@ import MessageInput, { DEFAULT_TOOLS } from '@/uni_modules/tuikit-atomic-x/compo
 import CustomNavbar from '@/uni_modules/tuikit-atomic-x/components/CustomNavbar/CustomNavbar.nvue'
 import { useConversationListState } from '@/uni_modules/tuikit-atomic-x/state/ConversationListState'
 import { useGroupState } from '@/uni_modules/tuikit-atomic-x/state/GroupState'
+import { useLoginState } from '@/uni_modules/tuikit-atomic-x/state/LoginState'
 import { MessageType } from '@/uni_modules/tuikit-atomic-x/types/message'
 import type { OfflinePushContext, OfflinePushInfo } from '@/uni_modules/tuikit-atomic-x/types/message'
 import voiceIcon from '@/uni_modules/tuikit-atomic-x/components/MessageList/assets/voice.png'
@@ -50,8 +51,9 @@ import videoIcon from '@/uni_modules/tuikit-atomic-x/components/MessageList/asse
 // ==================== State ====================
 const {
   joinedGroupList,
-  fetchJoinedGroupList,
+  loadJoinedGroups,
 } = useGroupState();
+const { loginUserInfo } = useLoginState();
 
 // ==================== 状态 ====================
 const conversationID = ref('')
@@ -61,7 +63,7 @@ const messageInputRef = ref(null)
 const inputToolbarHeight = ref(0)
 const inputPanelHeight = ref(0)
 
-const { fetchConversationInfo, conversationList } = useConversationListState('chat')
+const { getConversationInfo, conversationList } = useConversationListState('chat')
 
 // ==================== 计算属性 ====================
 const isC2CConversation = computed(() => conversationID.value.startsWith('c2c_'))
@@ -99,13 +101,16 @@ const closeSoftKeyboard = () => messageInputRef.value?.collapse()
 
 // ==================== 离线推送 ====================
 const setOfflinePushInfo = (ctx: OfflinePushContext): OfflinePushInfo | null => {
-  const title = currentConversation.value?.title || '新消息'
+  // 群组会话用群名；C2C 会话用当前登录用户的昵称（消息发送者本人），fallback userID
+  const title = isC2CConversation.value
+    ? (loginUserInfo.value?.nickname || loginUserInfo.value?.userID || '新消息')
+    : (currentConversation.value?.title || '新消息')
   const conv = ctx.conversationID
 
   let description = '[新消息]'
   switch (ctx.messageType) {
     case MessageType.TEXT:
-      description = (ctx.messageBody as { text?: string })?.text || '[文本消息]'
+      description = (ctx.messagePayload as { text?: string })?.text || '[文本消息]'
       break
     case MessageType.IMAGE:
       description = '[图片]'
@@ -113,7 +118,7 @@ const setOfflinePushInfo = (ctx: OfflinePushContext): OfflinePushInfo | null => 
     case MessageType.VIDEO:
       description = '[视频]'
       break
-    case MessageType.SOUND:
+    case MessageType.AUDIO:
       description = '[语音]'
       break
     case MessageType.FILE:
@@ -145,8 +150,8 @@ onLoad((options) => {
   }
   
   conversationID.value = options.conversationID
-  fetchConversationInfo(conversationID.value);
-  fetchJoinedGroupList();
+  getConversationInfo(conversationID.value);
+  loadJoinedGroups();
   
   // 处理定位消息
   if (uni.$locateMessage) {
@@ -155,7 +160,7 @@ onLoad((options) => {
   }
 })
 
-onShow(() => fetchConversationInfo(conversationID.value))
+onShow(() => getConversationInfo(conversationID.value))
 </script>
 
 <style>

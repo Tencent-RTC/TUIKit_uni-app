@@ -1,0 +1,236 @@
+<template>
+  <view class="group-list">
+    <scroll-view class="group-list__scroll" scroll-y="true" :show-scrollbar="false">
+      <view v-if="showEmpty" key="empty">
+        <view class="group-list__placeholder">
+          <component :is="resolvedPlaceholderEmptyList" text="暂无群组" />
+        </view>
+      </view>
+
+      <template v-else>
+        <template v-for="section in groupedGroupList" :key="section.letter">
+          <view>
+            <view class="group-list__index">
+              <text class="group-list__index-text">{{ section.letter }}</text>
+            </view>
+          </view>
+
+          <view v-for="group in section.groups" :key="(group as UTSJSONObject)['groupID'] as string">
+            <view
+              class="group-list__item"
+              @click="handleGroupClick(group)"
+            >
+              <component
+                :is="resolvedAvatar"
+                :src="(group as UTSJSONObject)['avatarURL'] as string ?? ''"
+                :name="(group as UTSJSONObject)['groupName'] as string ?? (group as UTSJSONObject)['groupID'] as string"
+                :size="80"
+                shape="square"
+                :defaultAvatarType="getGroupTypeLower((group as UTSJSONObject)['groupType'] as string | null)"
+                :pureMode="true"
+              />
+              <view class="group-list__item-content">
+                <view class="group-list__item-info">
+                  <text class="group-list__item-name" :numberOfLines="1">{{ (group as UTSJSONObject)['groupName'] as string ?? (group as UTSJSONObject)['groupID'] as string }}</text>
+                </view>
+              </view>
+            </view>
+          </view>
+        </template>
+      </template>
+    </scroll-view>
+  </view>
+</template>
+
+<script setup lang="uts">
+
+import { ref, computed, onMounted } from 'vue'
+import AvatarComponent from '../../Avatar/Avatar.uvue'
+import DefaultEmptyList from '../placeholders/EmptyList.uvue'
+import DefaultLoading from '../placeholders/Loading.uvue'
+import { useGroupState } from '../../../state/GroupState'
+import { sortByFirstChar } from '../../../utils/sortByFirstChar'
+
+import { onShow } from '@dcloudio/uni-app'
+
+type Props = {
+  Avatar?: any
+  PlaceholderEmptyList?: any
+  PlaceholderLoading?: any
+}
+
+type Emits = {
+  groupSelect: any
+}
+
+const props = withDefaults(defineProps<Props>(), {
+})
+
+const resolvedAvatar = computed<any>((): any => props.Avatar ?? AvatarComponent)
+const resolvedPlaceholderLoading = computed<any>((): any => props.PlaceholderLoading ?? DefaultLoading)
+const resolvedPlaceholderEmptyList = computed<any>((): any => props.PlaceholderEmptyList ?? DefaultEmptyList)
+
+const emit = defineEmits<Emits>()
+
+const { loadJoinedGroups, joinedGroupList } = useGroupState()
+
+const selectedGroupID = ref<string>('')
+
+type GroupedGroups = {
+  letter: string
+  groups: any[]
+}
+
+const groupedGroupList = computed<GroupedGroups[]>(() => {
+  let safeList: any[] = []
+  try {
+    const ml: any = Array.from(joinedGroupList.value ?? ([] as any[])) as any[]
+    const parsed: any[] | null = JSON.parse<any[]>(JSON.stringify(ml))
+    if (parsed != null) {
+      safeList = parsed
+    }
+  } catch (e: any) {
+    console.error('[GroupList] safeList serialize failed:', `${e}`)
+  }
+  const { groups: rawGroups } = sortByFirstChar(
+    safeList,
+    (item: any): string => {
+      try {
+        const obj = item as UTSJSONObject
+        const gname: any | null = obj['groupName']
+        const gid: any | null = obj['groupID']
+        if (typeof gname == 'string' && gname.length > 0) return gname as string
+        if (typeof gid == 'string' && gid.length > 0) return gid as string
+        return '#'
+      } catch (e: any) {
+        console.error('[GroupList] getDisplayName throw:', `${e}`)
+        return '#'
+      }
+    }
+  )
+
+  return rawGroups.map((g: any): GroupedGroups => {
+    let letter: string = ''
+    let groups: any[] = []
+    try {
+      const obj: UTSJSONObject = JSON.parse<UTSJSONObject>(JSON.stringify(g) ?? '{}') ?? new UTSJSONObject()
+      const letterRaw: any | null = obj['letter']
+      const friendsRaw: any | null = obj['friends']
+      letter = typeof letterRaw === 'string' ? (letterRaw as string) : ''
+      groups = friendsRaw != null ? (friendsRaw as any[]) : []
+    } catch (e: any) {
+      console.error('[GroupList] rawGroups.map parse failed:', `${e}`)
+    }
+    return {
+      letter: letter,
+      groups: groups
+    }
+  })
+})
+
+const showEmpty = computed<boolean>((): boolean => joinedGroupList.value.length == 0)
+
+const getGroupTypeLower = (gt: string | null): string => {
+  if (gt == null) return 'group'
+  switch (gt) {
+    case 'Work':
+      return 'work'
+    case 'Public':
+      return 'public'
+    case 'Meeting':
+      return 'meeting'
+    case 'AVChatRoom':
+      return 'avchatroom'
+    case 'Community':
+      return 'community'
+    default:
+      return 'group'
+  }
+}
+
+const handleGroupClick = (group: any): void => {
+  const obj = group as UTSJSONObject
+  selectedGroupID.value = obj['groupID'] as string
+  emit('groupSelect', group)
+}
+
+onMounted((): void => {
+  loadJoinedGroups().catch((e: any | null): void => {
+    console.error(`[GroupList] loadJoinedGroups failed: ${e}`)
+  })
+})
+
+// 页面显示时刷新数据
+onShow((): void => {
+  loadJoinedGroups().catch((e: any | null): void => {
+    console.error(`[GroupList] loadJoinedGroups (onShow) failed: ${e}`)
+  })
+})
+</script>
+
+<style>
+.group-list {
+  flex: 1;
+  background-color: #FFFFFF;
+}
+
+.group-list__scroll {
+  flex: 1;
+}
+
+.group-list__placeholder {
+  padding-top: 100rpx;
+  padding-bottom: 100rpx;
+  justify-content: center;
+  align-items: center;
+}
+
+/* 字母索引 */
+.group-list__index {
+  flex-direction: row;
+  align-items: center;
+  padding: 12rpx 32rpx;
+  background-color: #F0F2F7;
+}
+
+.group-list__index-text {
+  font-size: 28rpx;
+  color: rgba(0, 0, 0, 0.4);
+  font-weight: 400;
+  line-height: 40rpx;
+}
+
+/* 群组项 */
+.group-list__item {
+  flex-direction: row;
+  align-items: center;
+  padding: 0 32rpx;
+  background-color: #FFFFFF;
+}
+
+.group-list__item-content {
+  flex: 1;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  margin-left: 24rpx;
+  padding: 36rpx 0;
+  border-bottom: 1rpx solid #DBDBDB;
+}
+
+.group-list__item-info {
+  flex: 1;
+  flex-direction: row;
+  align-items: center;
+}
+
+.group-list__item-name {
+  flex: 1;
+  font-size: 36rpx;
+  font-weight: 400;
+  line-height: 48rpx;
+  color: #111111;
+  lines: 1;
+  text-overflow: ellipsis;
+}
+</style>

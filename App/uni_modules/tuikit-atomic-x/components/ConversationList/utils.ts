@@ -1,4 +1,5 @@
 import { MessageInfo, MessageStatus, MessageType } from "../../types/message";
+import { ConversationType } from "../../types/conversation";
 import { parseEmojiToNodes, type RichTextNode } from "../../utils/emojiUtils";
 import { emojiUrlMap, emojiBaseUrl } from "../../constants/emoji";
 import { isCallMessage, parseCallMessageData, isVideoCall } from "../../utils/callMessageUtils";
@@ -17,18 +18,25 @@ export interface MessageSegment {
  * @returns 发送者名称，如果不是群聊或无法获取则返回空字符串
  */
 export const getSenderName = (message: MessageInfo): string => {
-  if (!message.groupID) {
+  // 新版 MessageInfo.conversationType 是 ConversationType 整数枚举（GROUP=2），不是字符串 'Group'
+  // 兜底兼容旧版字段：(message as any).groupID / (message as any).conversationID
+  const m = message as any;
+  const isGroup = m.conversationType === ConversationType.GROUP
+    || !!m.groupID
+    || (m.conversationID || '').startsWith('group_')
+    || (m.to || '').length > 0 && !!m.groupID;
+  if (!isGroup) {
     return '';
   }
   
-  if (message.isSelf) {
+  if (message.isSentBySelf) {
     return '我';
   }
   
-  return message.sender.friendRemark
-    || message.sender.nameCard
-    || message.sender.nickname
-    || message.sender.userID;
+  return message.from.friendRemark
+    || message.from.nameCard
+    || message.from.nickname
+    || message.from.userID;
 }
 
 /**
@@ -180,8 +188,8 @@ export const truncateSegments = (segments: MessageSegment[], maxLength: number =
  * @returns rich-text 组件的 nodes 数组
  */
 export const parseMessageToRichTextNodes = (message: MessageInfo): RichTextNode[] => {
-  if (message.messageType === MessageType.TEXT && message.messageBody?.text) {
-    const text = message.messageBody.text;
+  if (message.messageType === MessageType.TEXT && (message.messagePayload as any)?.text) {
+    const text = (message.messagePayload as any).text;
     let contentNodes = parseEmojiToNodes(text);
     
     const senderName = getSenderName(message);
@@ -200,7 +208,7 @@ export const parseMessageToRichTextNodes = (message: MessageInfo): RichTextNode[
 }
 
 const getMessageAbstract = (message: MessageInfo): string => {
-  if (message.status === MessageStatus.RECALLED) {
+  if (message.status === MessageStatus.REVOKED) {
     return '[消息已撤回]'
   }
   
@@ -208,12 +216,12 @@ const getMessageAbstract = (message: MessageInfo): string => {
     return '[消息已删除]'
   }
   
-  const messageBody = message.messageBody;
+  const messagePayload = message.messagePayload as any;
   let messageContent = '';
   
   switch (message.messageType) {
     case MessageType.TEXT:
-      messageContent = messageBody?.text || '[文本消息]'
+      messageContent = messagePayload?.text || '[文本消息]'
       break;
       
     case MessageType.IMAGE:
@@ -224,12 +232,12 @@ const getMessageAbstract = (message: MessageInfo): string => {
       messageContent ='[视频]'
       break;
       
-    case MessageType.SOUND:
+    case MessageType.AUDIO:
       messageContent ='[语音]'
       break;
       
     case MessageType.FILE:
-      messageContent =`[文件] ${messageBody?.fileName || ''}`
+      messageContent =`[文件] ${messagePayload?.fileName || ''}`
       break;
       
     case MessageType.FACE:
@@ -242,15 +250,15 @@ const getMessageAbstract = (message: MessageInfo): string => {
         const callData = parseCallMessageData(message)
         messageContent = isVideoCall(callData) ? '[视频通话]' : '[语音通话]'
       } else {
-        messageContent = messageBody?.customMessage?.description || '[自定义消息]'
+        messageContent = messagePayload?.description || '[自定义消息]'
       }
       break;
       
     case MessageType.MERGED:
-      messageContent =  `[聊天记录] ${messageBody?.mergedMessage?.title || ''}`
+      messageContent =  `[聊天记录] ${messagePayload?.title || ''}`
       break;
       
-    case MessageType.SYSTEM:
+    case MessageType.TIPS:
       messageContent = '[系统消息]'
       break;
       
@@ -258,7 +266,11 @@ const getMessageAbstract = (message: MessageInfo): string => {
       messageContent = '[未知消息]'
   }
 
-  if (message.groupID && message.messageType !== MessageType.SYSTEM && !isCallMessage(message)) {
+  const m = message as any;
+  const isGroup = m.conversationType === ConversationType.GROUP
+    || !!m.groupID
+    || (m.conversationID || '').startsWith('group_');
+  if (isGroup && message.messageType !== MessageType.TIPS && !isCallMessage(message)) {
     const senderName = getSenderName(message);
     return senderName ? `${senderName}: ${messageContent}` : messageContent;
   }

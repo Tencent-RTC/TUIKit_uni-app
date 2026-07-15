@@ -1,0 +1,21 @@
+/**
+ * 安全的JSON解析函数
+ * @param jsonString JSON字符串
+ * @param defaultValue 解析失败时的默认值
+ *
+ *    推荐调用方直接用 JSON.parse<T>(str) ?? defaultValue 模式。
+ */
+export function safeJsonParse<T>(jsonString: string, defaultValue: T): T {
+    if (jsonString == null) {
+        return defaultValue;
+    }
+    let result: T;
+    try {
+        result = JSON.parse<T>(jsonString) ?? defaultValue;
+    } catch (error: any) {
+        const errMsg = error instanceof Error ? (error as Error).message : `${error}`
+        console.warn(`[utsUtils.safeJsonParse] parse failed: ${errMsg}`);
+        result = defaultValue;
+    }
+    return result;
+}

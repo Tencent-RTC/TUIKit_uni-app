@@ -1,0 +1,127 @@
+<template>
+  <view class="recalled-message">
+    <text class="recalled-text">{{ recalledText }}</text>
+    <view 
+      v-if="canReEdit"
+      class="re-edit-button"
+      @tap="handleReEdit"
+    >
+      <text class="re-edit-text">重新编辑</text>
+    </view>
+  </view>
+</template>
+
+<script setup lang="uts">
+import { computed } from 'vue'
+import { MessageType } from '../../../../types/message'
+
+type Props = {
+  message: any | null
+  conversationID: string}
+
+const props = defineProps<Props>()
+
+const recalledText = computed((): string => {
+  const messageObj: UTSJSONObject = props.message as UTSJSONObject
+  const isSelfVal: any | null = messageObj['isSentBySelf']
+  const isSelf: boolean = isSelfVal == true
+  const sender: any | null = messageObj['from']
+  let displayName: string = ''
+  if (sender != null) {
+    const sObj: UTSJSONObject = sender as UTSJSONObject
+    const nc: any | null = sObj['nameCard']
+    if (typeof nc == 'string' && (nc as string).length > 0) displayName = nc as string
+    else {
+      const fr: any | null = sObj['friendRemark']
+      if (typeof fr == 'string' && (fr as string).length > 0) displayName = fr as string
+      else {
+        const nn: any | null = sObj['nickname']
+        if (typeof nn == 'string' && (nn as string).length > 0) displayName = nn as string
+        else {
+          const uid: any | null = sObj['userID']
+          if (typeof uid == 'string') displayName = uid as string
+        }
+      }
+    }
+  }
+
+  if (isSelf) {
+    return '你撤回了一条消息'
+  } else {
+    return `${displayName} 撤回了一条消息`
+  }
+})
+
+const canReEdit = computed((): boolean => {
+  const messageObj: UTSJSONObject = props.message as UTSJSONObject
+  const isSelfVal: any | null = messageObj['isSentBySelf']
+  if (isSelfVal !== true) {
+    return false
+  }
+
+  const mt: any | null = messageObj['messageType']
+  if (mt !== 1) {
+    return false
+  }
+
+  const now = Date.now()
+  const ts: any | null = messageObj['timestamp']
+  const recallTime = typeof ts == 'number' ? (ts as number) * 1000 : now
+  const twoMinutes = 2 * 60 * 1000
+
+  return true
+})
+
+const getOriginalText = (): string => {
+  try {
+    const messageObj: UTSJSONObject = props.message as UTSJSONObject
+    const body: any | null = messageObj['messagePayload']
+    if (body == null) return ''
+    const bodyObj: UTSJSONObject = body as UTSJSONObject
+    const v: any | null = bodyObj['text']
+    return typeof v == 'string' ? (v as string) : ''
+  } catch (e: any) {
+    console.error('获取撤回消息内容失败:', e)
+    return ''
+  }
+}
+
+const handleReEdit = () => {
+  const originalText = getOriginalText()
+
+  uni.$emit('atomicx-reEdit', {
+    conversationID: props.conversationID,
+    text: originalText
+  })
+}
+</script>
+
+<style>
+.recalled-message {
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  padding: 16rpx 0;
+}
+
+.recalled-text {
+  font-size: 24rpx;
+  line-height: 34rpx;
+  font-weight: 400;
+  color: rgba(0, 0, 0, 0.4);
+  margin-left: 8rpx;
+}
+
+.re-edit-button {
+  align-items: center;
+  justify-content: center;
+}
+
+.re-edit-text {
+  font-size: 24rpx;
+  line-height: 34rpx;
+  font-weight: 400;
+  margin-left: 8rpx;
+  color: #1C66E5;
+}
+</style>

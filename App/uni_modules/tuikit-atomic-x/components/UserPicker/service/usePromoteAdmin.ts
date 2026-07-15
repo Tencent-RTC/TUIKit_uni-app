@@ -18,22 +18,22 @@ export function usePromoteAdmin(routeParams?: any): UserPickerHookResult {
   
   // ======================== 数据源 ========================
   const { 
-    groupMemberList: allMembers, 
-    hasMoreGroupMembers, 
-    setGroupMemberRole, 
-    fetchMoreGroupMemberList,
+    memberList: allMembers, 
+    hasMoreMembers, 
+    setMemberRole, 
+    loadMoreMembers,
   } = useGroupMemberState({ groupID });
 
   const {
-    fetchGroupMemberList
-  } = useGroupMemberState({ groupID, role: GroupMemberRole.Admin});
+    loadMembers
+  } = useGroupMemberState({ groupID, role: GroupMemberRole.ADMIN});
   
   // ======================== 响应式状态 ========================
   
   /** 用户列表：只显示普通成员 */
   const userList = computed<User[]>(() => {
     return (allMembers.value || [])
-      .filter(member => member.role === GroupMemberRole.Member)
+      .filter(member => member.role === GroupMemberRole.MEMBER)
       .map(member => ({
         userID: member.userID,
         nickname: member.nameCard || member.nickname || member.userID,
@@ -45,7 +45,7 @@ export function usePromoteAdmin(routeParams?: any): UserPickerHookResult {
   const lockedItems = computed<string[]>(() => [])
 
   /** 是否有更多数据 */
-  const hasMore = computed(() => hasMoreGroupMembers.value)
+  const hasMore = computed(() => hasMoreMembers.value)
 
   // ======================== 方法 ========================
 
@@ -58,12 +58,12 @@ export function usePromoteAdmin(routeParams?: any): UserPickerHookResult {
     
     try {
       for (const user of selectedUsers) {
-        await setGroupMemberRole(user.userID, GroupMemberRole.Admin)
+        await setMemberRole(user.userID, GroupMemberRole.ADMIN)
       }
       
       uni.showToast({ title: '设置成功', icon: 'success' })
       setTimeout(() => {
-        fetchGroupMemberList();
+        loadMembers();
         uni.navigateBack()
       }, 300);
     } catch (error) {
@@ -74,9 +74,9 @@ export function usePromoteAdmin(routeParams?: any): UserPickerHookResult {
 
   /** 触底加载更多 */
   const onReachEnd = async (): Promise<void> => {
-    if (!hasMoreGroupMembers.value) return
+    if (!hasMoreMembers.value) return
     try {
-      await fetchMoreGroupMemberList()
+      await loadMoreMembers()
     } catch (error) {
       console.error('[usePromoteAdmin] onReachEnd failed:', error)
     }

@@ -125,7 +125,7 @@ const props = withDefaults(defineProps<AddGroupProps>(), {
 
 const emit = defineEmits<AddGroupEmits>()
 
-const { fetchGroupInfo } = useGroupState()
+const { getGroupInfo } = useGroupState()
 
 // 搜索值
 const searchValue = ref('')
@@ -236,8 +236,8 @@ const handleSearch = async () => {
   emit('search', groupID)
 
   try {
-    const result = await fetchGroupInfo([groupID])
-    searchResultList.value = result
+    const info = await getGroupInfo(groupID)
+    searchResultList.value = info ? [info] : []
   } catch (error) {
     console.error('[AddGroup] Search failed:', error)
     searchResultList.value = []
@@ -265,8 +265,8 @@ const silentRefreshSearch = async () => {
   if (!groupID) return
 
   try {
-    const result = await fetchGroupInfo([groupID])
-    searchResultList.value = result
+    const info = await getGroupInfo(groupID)
+    searchResultList.value = info ? [info] : []
   } catch (error) {
     console.error('[AddGroup] silentRefreshSearch failed:', error)
   }

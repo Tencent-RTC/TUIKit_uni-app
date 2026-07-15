@@ -1,0 +1,186 @@
+/* eslint-disable */
+
+type IDebounceOptions = UTSJSONObject
+
+type IThrottleOptions = IDebounceOptions;
+
+type AnyFunc = (arg: any | null) => any
+
+function throttle(
+  func: AnyFunc,
+  wait: number,
+  options: IThrottleOptions | null = null
+): AnyFunc {
+  let leading: boolean = true;
+  let trailing: boolean = true;
+
+  if (func == null) {
+    console.error(`[lodash] throttle called with non-function: ${func}`)
+    const fallback: AnyFunc = (_arg: any | null): any => { return 0 }
+    return fallback
+  }
+  if (options != null && isObject(options)) {
+    const leadingVal = options['leading']
+    if (typeof leadingVal == 'boolean') {
+      leading = leadingVal
+    }
+    const trailingVal = options['trailing']
+    if (typeof trailingVal == 'boolean') {
+      trailing = trailingVal
+    }
+  }
+  return debounce(func, wait, {
+    leading: leading,
+    maxWait: wait,
+    trailing: trailing,
+  });
+}
+
+function debounce(
+  func: AnyFunc,
+  wait: number,
+  options: IDebounceOptions | null = null
+): AnyFunc {
+  let lastArg: any | null = null;
+  let maxWait: number = 0;
+  let result: any | null = null;
+  let timerId: number = 0;
+  let lastCallTime: number | null = null;
+  let lastInvokeTime: number = 0;
+  let leading: boolean = false;
+  let maxing: boolean = false;
+  let trailing: boolean = true;
+
+  if (func == null) {
+    console.error(`[lodash] debounce called with non-function: ${func}`)
+    const fallback: AnyFunc = (_arg: any | null): any => { return 0 }
+    return fallback
+  }
+  wait = wait ?? 0;
+  if (options != null && isObject(options)) {
+    const leadingVal = options['leading']
+    if (typeof leadingVal == 'boolean') {
+      leading = leadingVal
+    }
+    const maxWaitVal = options['maxWait']
+    maxing = typeof maxWaitVal == 'number'
+    maxWait = maxing ? Math.max((maxWaitVal as number) ?? 0, wait) : maxWait
+    const trailingVal = options['trailing']
+    if (typeof trailingVal == 'boolean') {
+      trailing = trailingVal
+    }
+  }
+
+  const invokeFunc = (time: number): any => {
+    const arg: any | null = lastArg
+
+    lastArg = null;
+    lastInvokeTime = time;
+    const invoked: any | null = func(arg);
+    result = invoked ?? 0;
+    return result as any;
+  }
+
+  // remainingWait / shouldInvoke 独立
+  const remainingWait = (time: number): number => {
+    const timeSinceLastCall: number = time - (lastCallTime ?? 0);
+    const timeSinceLastInvoke: number = time - lastInvokeTime;
+    const timeWaiting: number = wait - timeSinceLastCall;
+
+    return maxing
+      ? Math.min(timeWaiting, maxWait - timeSinceLastInvoke)
+      : timeWaiting;
+  }
+
+  const shouldInvoke = (time: number): boolean => {
+    const timeSinceLastCall: number = time - (lastCallTime ?? 0);
+    const timeSinceLastInvoke: number = time - lastInvokeTime;
+
+    return (lastCallTime == null || (timeSinceLastCall >= wait)
+      || (timeSinceLastCall < 0) || (maxing && timeSinceLastInvoke >= maxWait));
+  }
+
+  // trailingEdge 引用 invokeFunc（已定义）
+  const trailingEdge = (time: number): any => {
+    timerId = 0;
+    if (trailing && lastArg != null) {
+      return invokeFunc(time);
+    }
+    lastArg = null;
+    return result ?? 0;
+  }
+
+  function timerExpired(): void {
+    const time: number = Date.now();
+    if (shouldInvoke(time)) {
+      trailingEdge(time);
+      return;
+    }
+    timerId = setTimeout((): void => timerExpired(), remainingWait(time));
+  }
+
+  // leadingEdge 引用 timerExpired（已定义）+ invokeFunc
+  const leadingEdge = (time: number): any => {
+    lastInvokeTime = time;
+    timerId = setTimeout((): void => timerExpired(), wait);
+    return leading ? invokeFunc(time) : (result ?? 0);
+  }
+
+  const runDebounced: AnyFunc = (arg: any | null): any => {
+    const time: number = Date.now();
+    const isInvoking: boolean = shouldInvoke(time);
+    lastArg = arg;
+    lastCallTime = time;
+    if (isInvoking) {
+      if (timerId == 0) {
+        return leadingEdge(lastCallTime ?? 0);
+      }
+      if (maxing) {
+        clearTimeout(timerId);
+        timerId = setTimeout((): void => timerExpired(), wait);
+        return invokeFunc(lastCallTime ?? 0);
+      }
+    }
+    if (timerId == 0) {
+      timerId = setTimeout((): void => timerExpired(), wait);
+    }
+    return result ?? 0;
+  };
+  return runDebounced;
+}
+
+function isObject(value: any): boolean {
+  const type: string = typeof value;
+  return value != null && (type == 'object' || type == 'function');
+}
+
+function debouncePromise<T extends (arg: any | null) => Promise<any>>(
+  fn: T,
+  delay: number
+): AnyFunc {
+  let timeoutId: number = 0;
+
+  const runDebouncedPromise: AnyFunc = (arg: any | null): any => {
+    return new Promise<any>((resolve, reject): void => {
+      if (timeoutId !== 0) {
+        clearTimeout(timeoutId);
+      }
+      timeoutId = setTimeout((): void => {
+        fn(arg)
+          .then((value: any): void => {
+            resolve(value);
+          })
+          .catch((error: any | null): void => {
+            reject(error);
+          });
+      }, delay);
+    });
+  };
+  return runDebouncedPromise;
+}
+
+export {
+  debounce,
+  debouncePromise,
+  throttle,
+};

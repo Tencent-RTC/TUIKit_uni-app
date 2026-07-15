@@ -1,0 +1,133 @@
+/**
+* 解析群提示消息文本（uvue 版）
+*
+*/
+
+/** 取 any 的展示名 */
+const memberName = (m?: any | null): string => {
+	if (m == null) return ''
+	const mObj: UTSJSONObject = m as UTSJSONObject
+	const fields: string[] = ['nameCard', 'friendRemark', 'nickname', 'userID']
+	for (let i = 0; i < fields.length; i++) {
+		const k: string = fields[i] as string
+		const v: any | null = mObj[k]
+		if (typeof v === 'string' && (v as string).length > 0) return v as string
+	}
+	return ''
+}
+
+/** 取多 any 的展示名拼接 */
+const membersName = (list?: any[] | null): string => {
+	if (list == null || list.length == 0) return ''
+	return list.map(memberName).filter((name: string, _index: number): boolean => name.length > 0).join('、')
+}
+
+/** 格式化禁言时长（秒） */
+const formatMuteDuration = (seconds: number): string => {
+	if (seconds == 0 || seconds <= 0) return ''
+	const h = Math.floor(seconds / 3600)
+	const m = Math.floor((seconds % 3600) / 60)
+	const s = seconds % 60
+	if (h > 0) return m > 0 ? `${h}小时${m}分钟` : `${h}小时`
+	if (m > 0) return s > 0 ? `${m}分钟${s}秒` : `${m}分钟`
+	return `${s}秒`
+}
+
+type GroupTip = {
+	type?: string
+	_type?: string
+	opUser?: any | null
+	joinMember?: any | null
+	inviter?: any | null
+	invitees?: any[] | null
+	quitMember?: any | null
+	kickedMembers?: any[] | null
+	setAdminMembers?: any[] | null
+	cancelAdminMembers?: any[] | null
+	groupName?: string
+	groupOwner?: string
+	isMuteAll?: boolean
+	isSelfMuted?: boolean
+	mutedGroupMembers?: any[] | null
+	muteTime?: number
+}
+
+export const resolveGroupTipMessage = (message: any): string => {
+	const msgObj: UTSJSONObject = message as UTSJSONObject
+	const payload: any | null = msgObj['messagePayload']
+	const payloadObj: UTSJSONObject = payload != null ? (payload as UTSJSONObject) : (new UTSJSONObject())
+	const tipsRaw: any | null = payloadObj['groupTips']
+	const groupTips: GroupTip[] = Array.isArray(tipsRaw) ? (tipsRaw as GroupTip[]) : []
+	if (groupTips.length == 0) {
+		return '系统消息'
+	}
+
+	const tip: UTSJSONObject = groupTips[0] as UTSJSONObject
+	const tipType: string | null = (tip['type'] as string | null) ?? (tip['_type'] as string | null)
+
+	switch (tipType) {
+		case 'JoinGroup':
+			return `${memberName(tip['joinMember'] as any | null)} 加入了群聊`
+
+		case 'InviteToGroup':
+			return `${memberName(tip['inviter'] as any | null)} 邀请 ${membersName(tip['invitees'] as any[] | null)} 加入了群聊`
+
+		case 'QuitGroup':
+			return `${memberName(tip['quitMember'] as any | null)} 退出了群聊`
+
+		case 'KickedFromGroup':
+			return `${memberName(tip['opUser'] as any | null)} 将 ${membersName(tip['kickedMembers'] as any[] | null)} 移出了群聊`
+
+		case 'SetGroupAdmin':
+			return `${memberName(tip['opUser'] as any | null)} 设置 ${membersName(tip['setAdminMembers'] as any[] | null)} 为管理员`
+
+		case 'CancelGroupAdmin':
+			return `${memberName(tip['opUser'] as any | null)} 取消了 ${membersName(tip['cancelAdminMembers'] as any[] | null)} 的管理员身份`
+
+		case 'ChangeGroupName':
+			return `${memberName(tip['opUser'] as any | null)} 修改了群名称为 ${(tip['groupName'] as string | null) ?? ''}`
+
+		case 'ChangeGroupAvatar':
+			return `${memberName(tip['opUser'] as any | null)} 修改了群头像`
+
+		case 'ChangeGroupNotification':
+			return `${memberName(tip['opUser'] as any | null)} 修改了群公告`
+
+		case 'ChangeGroupIntroduction':
+			return `${memberName(tip['opUser'] as any | null)} 修改了群简介`
+
+		case 'ChangeGroupOwner':
+			return `${memberName(tip['opUser'] as any | null)} 将群主转让给 ${(tip['groupOwner'] as string | null) ?? ''}`
+
+		case 'ChangeGroupMuteAll':
+			return tip['isMuteAll'] == true
+				? `${memberName(tip['opUser'] as any | null)} 开启了全员禁言`
+				: `${memberName(tip['opUser'] as any | null)} 关闭了全员禁言`
+
+		case 'ChangeJoinGroupApproval':
+			return `${memberName(tip['opUser'] as any | null)} 修改了群加入审批方式`
+
+		case 'ChangeInviteToGroupApproval':
+			return `${memberName(tip['opUser'] as any | null)} 修改了群邀请审批方式`
+
+		case 'MuteGroupMember': {
+			const op: string = memberName(tip['opUser'] as any | null)
+			const target: string = tip['isSelfMuted'] == true ? '你' : membersName(tip['mutedGroupMembers'] as any[] | null)
+			if (target.length == 0) return '系统消息'
+			const duration: string = formatMuteDuration(+((tip['muteTime'] as number | null) ?? 0))
+			return duration.length > 0
+				? `${op} 禁言了 ${target} ${duration}`
+				: `${op} 解除了 ${target} 的禁言`
+		}
+
+		case 'PinGroupMessage':
+			return `${memberName(tip['opUser'] as any | null)} 置顶了一条消息`
+
+		case 'UnpinGroupMessage':
+			return `${memberName(tip['opUser'] as any | null)} 取消置顶了一条消息`
+
+		case 'Unknown':
+		default:
+			return '系统消息'
+	}
+}

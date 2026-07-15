@@ -80,7 +80,9 @@ import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useLoginState } from '../../state/LoginState';
 import { useGroupState } from '../../state/GroupState'
 import { useMessageInputState } from '../../state/MessageInputState';
+import type { SendMessagePayload } from '../../types/message';
 import { GROUP_TYPES, DEFAULT_GROUP_AVATARS, getGroupTypeById, type GroupType } from '../../constants/groupTypes';
+import { safeJsonParse } from '../../utils/utsUtils';
 
 const { loginUserInfo } = useLoginState();
 const { createGroup } = useGroupState()
@@ -215,30 +217,38 @@ const handleAvatarSelect = (index: number) => {
  *
  * @param groupID 创建成功的群组ID
  */
-const handleGroupCreatedSuccess = (groupID: string) => {
+const handleGroupCreatedSuccess = async (groupID: string) => {
   const conversationID = `group_${groupID}`
 
   const messageInputState = useMessageInputState({
     conversationID: conversationID
   });
 
-  messageInputState?.sendCustomMessage({
-    version: 1,
-    businessID: 'group_create',
-    opUser: loginUserInfo.value?.userID || '',
-    content: '创建群聊',
-    cmd: 0
-  })
-    .finally(() => {
-      uni.navigateBack({
-        delta: 2,
-        success: () => {
-          uni.navigateTo({
-            url: `/pages/scenes/chat/chat/index?conversationID=${conversationID}`
-          })
-        }
+  try {
+    // 等待入群提示消息发送完成（含落库），避免 chat 页 loadMessages 拉不到这条消息
+    const customPayload: SendMessagePayload = {
+      type: 'custom',
+      customData: JSON.stringify({
+        version: 1,
+        businessID: 'group_create',
+        opUser: loginUserInfo.value?.userID || '',
+        content: '创建群聊',
+        cmd: 0,
+      }),
+    };
+    await messageInputState?.sendMessage(customPayload);
+  } catch (e) {
+    console.error('[CreateGroup] sendMessage(custom) failed:', e);
+  }
+
+  uni.navigateBack({
+    delta: 2,
+    success: () => {
+      uni.navigateTo({
+        url: `/pages/scenes/chat/chat/index?conversationID=${conversationID}`
       })
-    });
+    }
+  });
 }
 
 /**
@@ -253,12 +263,15 @@ const handleCreate = async () => {
   isCreating.value = true
 
   try {
+    // uni.$selectedUserData 由 UserPicker 序列化为 JSON 字符串传递；
+    // GroupCreateParams.memberList 期望是 string[]，需先 parse
+    const memberList = safeJsonParse<string[]>(uni.$selectedUserData, []);
     const createdGroupID = await createGroup({
       groupType: selectedGroupType.value?.id,
       groupName: groupName.value,
       groupID: groupID.value,
       avatarURL: DEFAULT_GROUP_AVATARS[selectedAvatarIndex.value],
-      memberList: uni.$selectedUserData
+      memberList
     })
     
     // 检查群组ID是否有效
@@ -276,10 +289,21 @@ const handleCreate = async () => {
     handleGroupCreatedSuccess(createdGroupID)
     
   } catch (error) {
-    console.error('[CreateGroup] 创建群组失败:', error)
-    
+    let errMsg = error.message || '创建群组失败，请重试'
+    // 安全打击词识别：错误码 80001
+    // message 形如：'group info secure check fail! beat word: xxx |requestid:...|tcloudapirequestid:...'
+    // 提取 'beat word:' 后到 '|' 前的内容作为被打击词展示
+    const rawMsg = String(error.message || '')
+    if (error && error.errCode === 80001) {
+      const match = rawMsg.match(/beat word:\s*([^|]+?)\s*(\||$)/i)
+      const beatWord = match ? match[1].trim() : ''
+      errMsg = beatWord
+        ? `创建群组失败，存在被打击词汇：${beatWord}`
+        : '创建群组失败，存在被打击词汇'
+    }
+
     uni.showToast({
-      title: error?.message,
+      title: errMsg,
       icon: 'none'
     })
     // 失败可重试，释放

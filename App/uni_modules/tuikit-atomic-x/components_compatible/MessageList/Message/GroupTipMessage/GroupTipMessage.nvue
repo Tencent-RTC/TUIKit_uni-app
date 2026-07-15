@@ -13,8 +13,8 @@ export default {
   computed: {
     tipText() {
       if (this.message.messageType === MessageType.CUSTOM) {
-        var data = safeJsonParse((this.message.messageBody.customMessage && this.message.messageBody.customMessage.data), { businessID: '', content: '', opUser: '' })
-        if (data.businessID === 'group_create') return (this.message.sender.nickname || '') + ' ' + (data.content || '创建了群组')
+        var data = safeJsonParse((this.message.messagePayload && this.message.messagePayload.customData), { businessID: '', content: '', opUser: '' })
+        if (data.businessID === 'group_create') return (this.message.from.nickname || '') + ' ' + (data.content || '创建了群组')
         return '群组创建成功'
       }
       return resolveGroupTipMessage(this.message)

@@ -1,0 +1,339 @@
+<template>
+  <view class="group-member-list">
+    <CustomNavbar
+      title="群成员列表"
+      :showBack="true"
+      @back="handleBack"
+    />
+
+    <!-- 成员列表 -->
+    <scroll-view class="content" scroll-y="true" @scrolltolower="handleLoadMore">
+      <!-- 群主 header -->
+      <view v-if="owner" class="section">
+        <text class="section__title">群主</text>
+      </view>
+
+      <!-- 群主 -->
+      
+      <view v-if="owner" class="member-item" @tap="handleMemberClick(owner)">
+        <Avatar
+          :src="(owner as UTSJSONObject)['avatarURL'] as string"
+          :name="getMemberName(owner)"
+          :size="80"
+          :shape="(((owner as UTSJSONObject)['avatarURL'] as string) != null && ((owner as UTSJSONObject)['avatarURL'] as string).length > 0) ? 'square' : 'circle'"
+          :defaultAvatarType="'none'"
+          :pureMode="true"
+        />
+        <view class="member-item__info">
+          <text class="member-item__name">{{ getMemberName(owner) }}</text>
+        </view>
+      </view>
+
+      <!-- 管理员 header -->
+      <view v-if="admins.length > 0" class="section">
+        <text class="section__title">管理员({{ admins.length }})</text>
+      </view>
+
+      <!-- 管理员列表 -->
+      <view
+        v-for="member in admins"
+        :key="`admin-${(member as UTSJSONObject)['userID'] as string}`"
+        class="member-item"
+        @tap="handleMemberClick(member)"
+      >
+        <Avatar
+          :src="(member as UTSJSONObject)['avatarURL'] as string"
+          :name="getMemberName(member)"
+          :size="80"
+          :shape="(((member as UTSJSONObject)['avatarURL'] as string) != null && ((member as UTSJSONObject)['avatarURL'] as string).length > 0) ? 'square' : 'circle'"
+          :defaultAvatarType="'none'"
+          :pureMode="true"
+        />
+        <view class="member-item__info">
+          <text class="member-item__name">{{ getMemberName(member) }}</text>
+        </view>
+      </view>
+
+      <!-- 普通成员 header -->
+      <view v-if="!hideMember && members.length > 0" class="section">
+        <text class="section__title">群成员({{ members.length }})</text>
+      </view>
+
+      <!-- 普通成员列表 -->
+      <view
+        v-if="!hideMember && members.length > 0"
+        v-for="member in members"
+        :key="`member-${(member as UTSJSONObject)['userID'] as string}`"
+        class="member-item"
+        @tap="handleMemberClick(member)"
+      >
+        <Avatar
+          :src="(member as UTSJSONObject)['avatarURL'] as string"
+          :name="getMemberName(member)"
+          :size="80"
+          :shape="'square'"
+          :defaultAvatarType="'user'"
+          :pureMode="true"
+        />
+        <view class="member-item__info">
+          <text class="member-item__name">{{ getMemberName(member) }}</text>
+        </view>
+      </view>
+
+      <!-- 加载更多 -->
+      <view v-if="hasMore && !hideMember" class="load-more">
+        <text class="load-more__text">{{ isLoading ? '加载中...' : '上拉加载更多' }}</text>
+      </view>
+
+      <!-- 底部安全区 -->
+      <view class="safe-area-bottom"></view>
+    </scroll-view>
+  </view>
+</template>
+
+<script setup lang="uts">
+
+import { ref, computed, onBeforeMount, onUnmounted } from 'vue'
+import CustomNavbar from '../CustomNavbar/CustomNavbar.uvue'
+import { Avatar } from '../Avatar'
+import { useGroupMemberState } from '../../state/GroupMemberState'
+
+type Props = {
+	conversationID: string
+	hideMember?: boolean
+}
+
+type Emits = {
+	'member-click': any
+}
+
+const props = withDefaults(defineProps<Props>(), {
+	hideMember: false
+})
+
+const emit = defineEmits<Emits>()
+
+// 获取 groupID
+const groupID: string = props.conversationID.startsWith('group_') ? props.conversationID.replace('group_', '') : ''
+
+// 获取状态
+const {
+	memberList: allMembers,
+	hasMoreMembers,
+	loadMoreMembers,
+} = useGroupMemberState({
+	groupID: groupID,
+})
+
+const isLoading = ref<boolean>(false)
+
+// 群主
+const owner = computed((): any | null => {
+	const found: any | null = allMembers.value.find((member: any, _index: number): boolean => {
+		const mObj: UTSJSONObject = member as UTSJSONObject
+		const role: any | null = mObj['role']
+		return role == 400
+	}) ?? null
+	return found
+})
+
+// 管理员
+// 真实值: GroupMemberRole.ADMIN = 300
+const admins = computed((): any[] => {
+	return (allMembers.value).filter((m: any, _index: number): boolean => {
+		const mObj: UTSJSONObject = m as UTSJSONObject
+		const role: any | null = mObj['role']
+		return role == 300
+	})
+})
+
+// 普通成员
+// 真实值: GroupMemberRole.MEMBER = 200
+const members = computed((): any[] => {
+	return (allMembers.value).filter((m: any, _index: number): boolean => {
+		const mObj: UTSJSONObject = m as UTSJSONObject
+		const role: any | null = mObj['role']
+		return role == 200
+	})
+})
+
+// 是否有更多
+const hasMore = computed((): boolean => hasMoreMembers.value)
+
+// 获取成员显示名称
+const getMemberName = (member: any | null): string => {
+	if (member == null) return ''
+	const mObj: UTSJSONObject = member as UTSJSONObject
+	const nameCard: any | null = mObj['nameCard']
+	const nickname: any | null = mObj['nickname']
+	const userID: any | null = mObj['userID']
+	const nc: string = typeof nameCard == 'string' && (nameCard as string).length > 0 ? (nameCard as string) : ''
+	if (nc.length > 0) return nc
+	const nn: string = typeof nickname == 'string' && (nickname as string).length > 0 ? (nickname as string) : ''
+	if (nn.length > 0) return nn
+	return typeof userID == 'string' ? (userID as string) : ''
+}
+
+// 返回
+const handleBack = (): void => {
+	uni.navigateBack()
+}
+
+// 点击成员
+const handleMemberClick = (member: any | null): void => {
+	if (member == null) return
+	emit('member-click', member)
+}
+
+// 加载更多
+const handleLoadMore = async (): Promise<void> => {
+	if (isLoading.value || !hasMore.value) return
+
+	isLoading.value = true
+	try {
+		await loadMoreMembers()
+	} finally {
+		isLoading.value = false
+	}
+}
+</script>
+
+<style scoped>
+.group-member-list {
+  flex: 1;
+  background-color: #F5F5F5;
+}
+
+/* 导航栏 */
+.navbar {
+  background-color: #FFFFFF;
+  border-bottom-width: 1rpx;
+  border-bottom-style: solid;
+  border-bottom-color: #E5E5E5;
+}
+
+.navbar__content {
+  height: 88rpx;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 32rpx;
+}
+
+.navbar__back {
+  width: 60rpx;
+  height: 60rpx;
+  justify-content: center;
+  align-items: center;
+}
+
+.navbar__back-icon {
+  font-size: 48rpx;
+  color: #333333;
+}
+
+.navbar__title {
+  font-size: 36rpx;
+  font-weight: 500;
+  color: #333333;
+}
+
+.navbar__placeholder {
+  width: 60rpx;
+}
+
+/* 内容区域 */
+.content {
+  flex: 1;
+}
+
+/* 分组 */
+.section {
+  margin-top: 20rpx;
+  background-color: #FFFFFF;
+  padding-top: 24rpx;
+  padding-bottom: 12rpx;
+  padding-left: 32rpx;
+  padding-right: 32rpx;
+}
+
+.section__title {
+  font-size: 24rpx;
+  color: #999999;
+}
+
+/* 成员项 */
+.member-item {
+  flex-direction: row;
+  align-items: center;
+  padding-top: 24rpx;
+  padding-bottom: 24rpx;
+  padding-left: 32rpx;
+  padding-right: 32rpx;
+  background-color: #FFFFFF;
+  border-bottom-width: 1rpx;
+  border-bottom-style: solid;
+  border-bottom-color: #F0F0F0;
+}
+
+.member-item__avatar {
+  width: 80rpx;
+  height: 80rpx;
+  border-radius: 8rpx;
+}
+
+.member-item__avatar--default {
+  justify-content: center;
+  align-items: center;
+  background-color: #CCCCCC;
+}
+
+.member-item__avatar-text {
+  font-size: 32rpx;
+  color: #FFFFFF;
+  font-weight: 500;
+}
+
+.member-item__info {
+  flex: 1;
+  margin-left: 24rpx;
+}
+
+.member-item__name {
+  font-size: 30rpx;
+  color: #333333;
+  font-weight: 500;
+}
+
+.member-item__id {
+  font-size: 24rpx;
+  color: #999999;
+  margin-top: 8rpx;
+}
+
+.member-item__arrow {
+  font-size: 32rpx;
+  color: #CCCCCC;
+}
+
+/* 加载更多 */
+.load-more {
+  padding-top: 32rpx;
+  padding-bottom: 32rpx;
+  padding-left: 32rpx;
+  padding-right: 32rpx;
+  align-items: center;
+  background-color: #F5F5F5;
+}
+
+.load-more__text {
+  font-size: 26rpx;
+  color: #999999;
+}
+
+/* 底部安全区 */
+.safe-area-bottom {
+  height: 68rpx;
+  background-color: #F5F5F5;
+}
+</style>

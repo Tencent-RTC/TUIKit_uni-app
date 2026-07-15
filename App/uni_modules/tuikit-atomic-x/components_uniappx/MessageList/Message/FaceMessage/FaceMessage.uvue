@@ -1,0 +1,101 @@
+<template>
+  <view class="face-message">
+    <view class="face-highlight">
+      <image
+        class="face-image"
+        :src="faceImageUrl"
+        :style="faceImageStyle"
+        mode="aspectFit"
+      />
+    </view>
+  </view>
+</template>
+
+<script setup lang="uts">
+import { computed } from 'vue'
+
+type Props = {
+  message: any | null}
+
+const props = defineProps<Props>()
+
+const DEFAULT_FACE_SIZE = 120
+
+/**
+ * 表情包索引 → 图片 URL 映射
+ * 优先按 name 匹配（语义化），其次按 index
+ *   必须上移到所有引用点之前——此处放最顶部（defineProps 之后）
+ *   改 if-else 链 + 字面量直接 return
+ */
+function getFaceUrlByIndex(index: number, name: string): string {
+  if (name.length > 0) {
+    if (name == 'smile') return '/static/emoji/smile.png'
+    if (name == 'laugh') return '/static/emoji/laugh.png'
+    if (name == 'cry') return '/static/emoji/cry.png'
+    if (name == 'angry') return '/static/emoji/angry.png'
+    if (name == 'surprise') return '/static/emoji/surprise.png'
+    if (name == 'love') return '/static/emoji/love.png'
+    if (name == 'sad') return '/static/emoji/sad.png'
+    if (name == 'cool') return '/static/emoji/cool.png'
+    if (name == 'wink') return '/static/emoji/wink.png'
+    if (name == 'kiss') return '/static/emoji/kiss.png'
+  }
+  // 按 index 兜底
+  if (index == 0) return '/static/emoji/smile.png'
+  if (index == 1) return '/static/emoji/laugh.png'
+  if (index == 2) return '/static/emoji/cry.png'
+  if (index == 3) return '/static/emoji/angry.png'
+  if (index == 4) return '/static/emoji/surprise.png'
+  if (index == 5) return '/static/emoji/love.png'
+  if (index == 6) return '/static/emoji/sad.png'
+  if (index == 7) return '/static/emoji/cool.png'
+  if (index == 8) return '/static/emoji/wink.png'
+  if (index == 9) return '/static/emoji/kiss.png'
+  return '/static/emoji/smile.png'
+}
+
+const faceIndex = computed((): number => {
+  const messageObj: UTSJSONObject = props.message as UTSJSONObject
+  const body: any | null = messageObj['messagePayload']
+  if (body == null) return 0
+  const bodyObj: UTSJSONObject = body as UTSJSONObject
+  const v: any | null = bodyObj['faceIndex']
+  return typeof v == 'number' ? (v as number) : 0
+})
+
+const faceName = computed((): string => {
+  const messageObj: UTSJSONObject = props.message as UTSJSONObject
+  const body: any | null = messageObj['messagePayload']
+  if (body == null) return ''
+  const bodyObj: UTSJSONObject = body as UTSJSONObject
+  const v: any | null = bodyObj['faceData']
+  return typeof v == 'string' ? (v as string) : ''
+})
+
+const faceImageUrl = computed((): string => {
+  return getFaceUrlByIndex(faceIndex.value, faceName.value)
+})
+
+const faceImageStyle = computed((): UTSJSONObject => {
+  return {
+    width: `${DEFAULT_FACE_SIZE}rpx`,
+    height: `${DEFAULT_FACE_SIZE}rpx`
+  }
+})
+</script>
+
+<style>
+.face-message {
+  align-items: center;
+  justify-content: center;
+}
+
+.face-highlight {
+  align-items: center;
+  justify-content: center;
+}
+
+.face-image {
+  border-radius: 8rpx;
+}
+</style>

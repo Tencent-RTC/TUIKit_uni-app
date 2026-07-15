@@ -1,0 +1,70 @@
+
+import { ref } from 'vue'
+import type { Ref } from 'vue'
+
+// ==================== 类型定义 ====================
+
+/** 通话状态: 0=空闲, 1=呼叫中/待接听, 2=通话中 */
+export type CallStatus = 0 | 1 | 2
+
+/** 通话组件框架类型（与 utssdk/app-android/app-ios 的 setCallFramework 一致） */
+export type CallFrameworkType = number
+
+/** 自身通话信息 */
+export type CallSelfInfo = {
+	status: CallStatus
+	// 其他字段由 SDK 桥接，本 stub 仅暴露 status 满足消费方判空需求
+}
+
+/** 发起通话选项（与未来 SDK 桥接的 CallsOptions 形态一致） */
+export type CallsOptions = {
+	participantIds: string[]
+	mediaType: number
+	params?: UTSJSONObject
+	success: () => void
+	fail: (error: any) => void
+}
+
+/** Hook 返回值 */
+export type CallStateReturn = {
+	selfInfo: Ref<CallSelfInfo>
+	calls: (options: CallsOptions) => Promise<void>
+	setCallFramework: (component: CallFrameworkType) => void
+}
+
+// ==================== 错误码 ====================
+
+export enum CallErrorCode {
+	PACKAGE_NOT_PURCHASED = 0,
+	CALL_TIMEOUT = 1,
+	CALL_REJECTED = 2,
+	CALL_BUSY = 3,
+	CALL_LINE_BUSY = 4,
+}
+
+// ==================== 状态存储 ====================
+
+const selfInfoRef: Ref<CallSelfInfo> = ref<CallSelfInfo>({ status: 0 } as CallSelfInfo)
+
+// ==================== Hook ====================
+
+/**
+ * 通话状态 Hook
+ *
+ * @returns { selfInfo, calls, setCallFramework }
+ *   - selfInfo: 当前自身通话状态 ref（status: 0=空闲, 1=呼叫中, 2=通话中）
+ *   - calls: 发起通话函数（占位 stub）；调用后内部不真发起，仅 console.warn
+ *   - setCallFramework: 初始化通话组件框架（占位 stub）
+ */
+export const useCallState = (): CallStateReturn => {
+	return {
+		selfInfo: selfInfoRef,
+		calls: async (_options: CallsOptions): Promise<void> => {
+			// stub: SDK 接入后此处调用 utssdk/app-android 或 app-ios 的通话桥接
+			console.warn('[CallState] calls is a stub - SDK not yet integrated')
+		},
+		setCallFramework: (_component: CallFrameworkType): void => {
+			// stub: SDK 接入后此处调用 utssdk/app-android 或 app-ios 的 setCallFramework
+		}
+	}
+}

@@ -1,0 +1,69 @@
+import { computed } from 'vue'
+import { type UserPickerHookResult, type User, toMap } from './types'
+import { useContactState } from '../../../state/ContactState'
+
+/**
+ * 发起 C2C 会话 Hook（uvue 版）
+ *
+ */
+export function useStartC2CConversation(_routeParams?: any): UserPickerHookResult {
+	const { friendList, destroyStore } = useContactState('startC2CConversation')
+
+	const userList = computed<User[]>((): User[] => {
+		return (friendList.value ?? []).map((item: any): User => {
+			const itemObj: UTSJSONObject = toMap(item)
+			const idRaw: any | null = itemObj['userID']
+			const remarkRaw: any | null = itemObj['friendRemark']
+			const nickRaw: any | null = itemObj['nickname']
+			const avatarRaw: any | null = itemObj['avatarURL']
+			const id: string = typeof idRaw == 'string' ? idRaw as string : ''
+			const remark: string = typeof remarkRaw == 'string' ? remarkRaw as string : ''
+			const nick: string = typeof nickRaw == 'string' ? nickRaw as string : ''
+			const avatar: string = typeof avatarRaw == 'string' ? avatarRaw as string : ''
+			return {
+				userID: id,
+				nickname: remark.length > 0 ? remark : nick.length > 0 ? nick : id,
+				avatarURL: avatar
+			}
+		})
+	})
+
+	const lockedItems = computed<string[]>((): string[] => [])
+	const hasMore = computed((): boolean => false)
+
+	const handleConfirm = async (selectedUsers: any[]): Promise<void> => {
+		if (selectedUsers.length == 0) {
+			uni.showToast({ title: '请选择联系人', icon: 'none' })
+			return
+		}
+
+		//   User[] 元素 typed cast 失败 → 形参改 any + UTSJSONObject 下标
+		const firstObj: UTSJSONObject = toMap(selectedUsers[0])
+		const uidRaw: any | null = firstObj['userID']
+		const userID: string = typeof uidRaw == 'string' ? (uidRaw as string) : ''
+		const conversationID = `c2c_${userID}`
+		await destroyStore()
+
+		uni.redirectTo({
+			url: `/pages/scenes/chat/chat/index?conversationID=${conversationID}`
+		})
+	}
+
+	const handleCancel = async (): Promise<void> => {
+		try {
+			await destroyStore()
+		} catch (error: any) {
+			console.error('[useStartC2CConversation] handleCancel failed:', `${error}`)
+		}
+	}
+
+	return {
+		userList,
+		lockedItems,
+		maxCount: 1,
+		title: '选择联系人',
+		hasMore,
+		handleConfirm,
+		handleCancel
+	}
+}

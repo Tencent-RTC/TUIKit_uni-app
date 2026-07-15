@@ -1,0 +1,19 @@
+import ContactInfo from './ContactInfo.uvue'
+import AddFriendInfo from './AddFriendInfo.uvue'
+import NewContactInfo from './NewContactInfo.uvue'
+import FriendInfo from './FriendInfo.uvue'
+import ApplicationVerify from './ApplicationVerify.uvue'
+import SetRemark from './SetRemark.uvue'
+
+export type { ContactInfoType } from './ContactInfoType.uts'
+
+export {
+  ContactInfo,
+  AddFriendInfo,
+  NewContactInfo,
+  FriendInfo,
+  ApplicationVerify,
+  SetRemark
+}
+
+export default ContactInfo

@@ -23,10 +23,10 @@ export function useMuteGroupMember(routeParams?: any): UserPickerHookResult {
   // ======================== 数据源 ========================
   const groupMemberState = useGroupMemberState({ groupID })
   const { 
-    groupMemberList: allMembers, 
-    hasMoreGroupMembers, 
-    setGroupMemberMuteTime, 
-    fetchMoreGroupMemberList, 
+    memberList: allMembers, 
+    hasMoreMembers, 
+    muteMember, 
+    loadMoreMembers, 
   } = groupMemberState
   
   // ======================== 响应式状态 ========================
@@ -38,7 +38,7 @@ export function useMuteGroupMember(routeParams?: any): UserPickerHookResult {
     return (allMembers.value || [])
       .filter(member => {
         // 只能禁言普通成员
-        if (member.role !== GroupMemberRole.Member) return false
+        if (member.role !== GroupMemberRole.MEMBER) return false
         // 过滤已被禁言的成员
         if (member.muteUntil && member.muteUntil > now) return false
         return true
@@ -54,7 +54,7 @@ export function useMuteGroupMember(routeParams?: any): UserPickerHookResult {
   const lockedItems = computed<string[]>(() => [])
 
   /** 是否有更多数据 */
-  const hasMore = computed(() => hasMoreGroupMembers.value)
+  const hasMore = computed(() => hasMoreMembers.value)
 
   // ======================== 方法 ========================
 
@@ -67,7 +67,7 @@ export function useMuteGroupMember(routeParams?: any): UserPickerHookResult {
     
     try {      
       for (const user of selectedUsers) {
-        await setGroupMemberMuteTime(user.userID, muteDuration)
+        await muteMember(user.userID, muteDuration)
       }
       uni.showToast({ title: '禁言成功', icon: 'success' })
       setTimeout(() => {
@@ -81,9 +81,9 @@ export function useMuteGroupMember(routeParams?: any): UserPickerHookResult {
 
   /** 触底加载更多 */
   const onReachEnd = async (): Promise<void> => {
-    if (!hasMoreGroupMembers.value) return
+    if (!hasMoreMembers.value) return
     try {
-      await fetchMoreGroupMemberList()
+      await loadMoreMembers()
     } catch (error) {
       console.error('[useMuteGroupMember] onReachEnd failed:', error)
     }

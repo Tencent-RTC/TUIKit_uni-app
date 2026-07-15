@@ -18,7 +18,7 @@
   import { UserPickerType } from '../../types/userpicker';
   import { useMessageInputState } from '../../state/MessageInputState';
   import { MessageType } from '../../types/message';
-  import type { OfflinePushInfoResolver } from '../../types/message';
+  import type { OfflinePushInfoResolver, SendMessagePayload, SendMessageOption } from '../../types/message';
   import { buildOfflinePushInfo } from '../../utils/buildOfflinePushInfo';
   import { chooseFile } from '../../hooks/useFilePicker';
   import { DEFAULT_TOOLS } from './types';
@@ -93,6 +93,8 @@
           maxSelectionCount: 9,
           itemsPerRow: 3,
           showsCameraItem: true,
+        }, {
+          setOfflinePushInfo: props.setOfflinePushInfo,
         });
         break;
       case 'video':
@@ -101,6 +103,8 @@
           maxSelectionCount: 9,
           itemsPerRow: 3,
           showsCameraItem: true,
+        }, {
+          setOfflinePushInfo: props.setOfflinePushInfo,
         });
         break;
       case 'file':
@@ -130,16 +134,17 @@
           messageBody,
           conversationID: props.conversationID,
         });
-        const messageObj: any = {
-          messageType: MessageType.FILE,
-          messageBody,
+        const payload: SendMessagePayload = {
+          type: 'file',
+          filePath,
+          fileName,
+          fileSize,
         };
-        if (offlinePushInfo) {
-          messageObj.offlinePushInfo = offlinePushInfo;
-        }
-        const message: any = JSON.stringify(messageObj);
-        messageInputState.sendMessage(message).catch((err: any) => {
-          console.error('[ToolsPanel] sendFileMessage failed:', err);
+        const option: SendMessageOption = {};
+        if (offlinePushInfo) option.offlinePushInfo = offlinePushInfo;
+
+        messageInputState.sendMessage(payload, option).catch((err: any) => {
+          console.error('[ToolsPanel] sendMessage(file) failed:', err);
           uni.showToast({ title: '文件发送失败', icon: 'none' });
         });
       },

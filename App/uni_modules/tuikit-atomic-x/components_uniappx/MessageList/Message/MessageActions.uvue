@@ -1,0 +1,665 @@
+<template>
+  <view class="msg-actions">
+    <view class="msg-actions__mask" @touchend.stop="handleMaskTap"></view>
+    <view 
+      ref="panelRef"
+      class="msg-actions__panel"
+      :style="panelStyle"
+      @tap.stop
+      @touchstart.stop
+      @touchend.stop
+    >
+      <view 
+        v-if="canCopy"
+        class="msg-actions__item msg-actions__item--first"
+        @touchstart.stop
+        @touchend.stop="handleCopy"
+      >
+        <image class="msg-actions__icon" :src="copyIcon" mode="aspectFit"></image>
+        <text class="msg-actions__text">复制</text>
+      </view>
+      
+      <view 
+        class="msg-actions__item"
+        @touchstart.stop
+        @touchend.stop="handleDelete"
+      >
+        <image class="msg-actions__icon" :src="deleteIcon" mode="aspectFit"></image>
+        <text class="msg-actions__text">删除</text>
+      </view>
+      
+      <view 
+        v-if="canConvertVoice"
+        class="msg-actions__item"
+        @touchstart.stop
+        @touchend.stop="handleVoiceToText"
+      >
+        <image class="msg-actions__icon" :src="voiceToTextIcon" mode="aspectFit"></image>
+        <text class="msg-actions__text">{{ voiceActionLabel }}</text>
+      </view>
+      
+      <view 
+        v-if="canRecall"
+        class="msg-actions__item msg-actions__item--last"
+        @touchstart.stop
+        @touchend.stop="handleRecall"
+      >
+        <image class="msg-actions__icon" :src="recallIcon" mode="aspectFit"></image>
+        <text class="msg-actions__text">撤回</text>
+      </view>
+    </view>
+    
+    <view class="msg-actions__arrow" :style="arrowStyle" @tap.stop @touchstart.stop @touchend.stop></view>
+  </view>
+</template>
+
+<script setup lang="uts">
+import { computed, ref, onMounted, onUnmounted, nextTick, watch } from 'vue'
+import { MessageStatus, MessageType } from '../../../types/message'
+import type { MessageInfo } from '../../../types/message'
+import { useMessageActionState } from '../../../state/MessageActionState'
+import { throttle } from '../../../utils/lodash'
+import { getAudioConvertVisibleMap } from '@/uni_modules/tuikit-atomic-x/utils/audioConvertVisibleMapStore.uts'
+
+import copyIcon from '../assets/msg_copy.png'
+import deleteIcon from '../assets/msg_delete.png'
+import recallIcon from '../assets/msg_recall.png'
+import voiceToTextIcon from '../assets/msg_voice_to_text.png'
+
+function toUTSJSONObject(value: any | null): UTSJSONObject {
+  return JSON.parse<UTSJSONObject>(JSON.stringify(value ?? new UTSJSONObject())) ?? new UTSJSONObject()
+}
+
+function toUTSJSONObjectOrNull(value: any | null): UTSJSONObject | null {
+  if (value == null) return null
+  return JSON.parse<UTSJSONObject>(JSON.stringify(value)) ?? new UTSJSONObject()
+}
+
+type ShowLoadingOptions = {
+  title: string,
+  mask?: boolean
+}
+
+function safeShowLoading(options: ShowLoadingOptions): void {
+  try {
+    uni.showLoading({
+      title: options.title,
+      mask: options.mask ?? false
+    })
+  } catch (e: any) {
+    try {
+      uni.showToast({ title: options.title, icon: 'loading', duration: 3000 })
+    } catch (_e: any) {
+      console.warn('[MessageActions] showLoading + showToast both failed, ignore UI feedback:', `${e}`)
+    }
+  }
+}
+
+function safeHideLoading(): void {
+  try {
+    uni.hideLoading()
+  } catch (_e: any) {
+  }
+}
+
+// 箭头几何参数（rpx，与 .msg-actions__arrow width/height 保持一致）
+const ARROW_SIZE = 24
+// 面板与气泡的间距（rpx）
+const GAP = 20
+// 箭头距离面板左右边缘的最小内边距，避免视觉脱离
+const ARROW_INSET = 16
+
+let deleteAction: (() => Promise<void>) | null = null;
+let revokeAction: (() => Promise<void>) | null = null;
+let convertVoiceToText: ((language: string) => Promise<void>) | null = null;
+
+type Props = {
+  message: any
+  actions?: any[]
+  triggerPosition?: any | null
+}
+const props = withDefaults(defineProps<Props>(), {
+  actions: () => []
+})
+
+const emit = defineEmits(['close', 'action'])
+
+const panelRef = ref<any | null>(null)
+type TriggerPosition = {
+  x: number
+  y: number
+  messageX: number
+  messageWidth: number
+  messageHeight: number
+  isSentBySelf: boolean
+}
+const triggerPosition = ref<TriggerPosition>({
+  x: 0,
+  y: 0,
+  messageX: 0,
+  messageWidth: 0,
+  messageHeight: 0,
+  isSentBySelf: false
+} as TriggerPosition)
+
+// phase: 'measure' 先渲染到屏幕外测量真实尺寸；'ready' 测量完成后定位显示
+const phase = ref('measure')
+// 面板是否显示在气泡下方（顶部空间不够时）
+const showBelow = ref(false)
+// 测量得到的真实面板尺寸（rpx）
+const panelWidthRpx = ref(0)
+const panelHeightRpx = ref(0)
+
+onMounted(() => {
+  const obj = useMessageActionState({ message: toUTSJSONObject(props.message) })
+  deleteAction = obj.delete
+  revokeAction = obj.revoke
+  convertVoiceToText = obj.convertVoiceToText
+})
+
+// 通用的关闭处理函数，针对 iOS 14 进行特殊处理
+const safeClose = () => {
+  emit('close')
+}
+
+const canCopy = computed((): boolean => {
+  const messageObj: UTSJSONObject = toUTSJSONObject(props.message)
+  const mt: any | null = messageObj['messageType']
+  if (mt !== 1) return false
+  const body: any | null = messageObj['messagePayload']
+  if (body == null) return false
+  const bodyObj: UTSJSONObject = toUTSJSONObject(body)
+  const t: any | null = bodyObj['text']
+  return typeof t == 'string' && (t as string).length > 0
+})
+
+const canRecall = computed((): boolean => {
+  const messageObj: UTSJSONObject = toUTSJSONObject(props.message)
+  const isSelfVal: any | null = messageObj['isSentBySelf']
+  if (isSelfVal !== true) {
+    return false
+  }
+
+  const st: any | null = messageObj['status']
+  if (st == MessageStatus.REVOKED || st == MessageStatus.DELETED) {
+    return false
+  }
+
+  const ts: any | null = messageObj['timestamp']
+  if (typeof ts == 'number') {
+    const now = Math.floor(Date.now() / 1000)
+    const messageTime = ts as number
+    const timeDiff = now - messageTime
+    return timeDiff <= 120
+  }
+
+  return false
+})
+
+// 仅 SOUND 类型消息可触发"转文字"操作
+const canConvertVoice = computed((): boolean => {
+  const messageObj: UTSJSONObject = toUTSJSONObject(props.message)
+  const mt: any | null = messageObj['messageType']
+  return mt == 4
+})
+
+/**
+ * 语音转文字按钮的 label 与是否处于"隐藏文字"模式
+ *
+ * - 当前消息已有 asrText，且 AudioMessage 当前正在展示该文本 → 按钮显示"隐藏文字"，点击触发隐藏
+ * - 否则 → 按钮显示"转文字"，点击触发转换 / 重新展示已有 asrText
+ *
+ * 可见态来源（按优先级）：
+ * 1. 运行时 Map `uni.__audioConvertVisibleMap__`：当前会话内已挂载的 AudioMessage 写入，最准确
+ * 2. 本地存储 `tuikit_audio_convert_visible_v1`：跨会话/重启 App 持久化的"用户主动隐藏"记录
+ * 3. 默认 true：均无记录时按 AudioMessage 中 `showConvertedText` 默认值
+ */
+const STORAGE_KEY = 'tuikit_audio_convert_visible_v1'
+
+const voiceTextHasContent = computed((): boolean => {
+  const messageObj: UTSJSONObject = toUTSJSONObject(props.message)
+  const body: any | null = messageObj['messagePayload']
+  if (body == null) return false
+  const bodyObj: UTSJSONObject = toUTSJSONObject(body)
+  const text: any | null = bodyObj['asrText']
+  return typeof text == 'string' && (text as string).length > 0
+})
+
+const voiceTextVisible = computed((): boolean => {
+  if (!voiceTextHasContent.value) return false
+  const messageObj: UTSJSONObject = toUTSJSONObject(props.message)
+  const idVal: any | null = messageObj['msgID']
+  const msgID: string = idVal != null ? `${idVal}` : ''
+
+  const map = getAudioConvertVisibleMap()
+  if (map.has(msgID)) {
+    return map.get(msgID) == true
+  }
+
+  // 2. 本地存储（跨会话持久化"隐藏"记录；仅记录 false，缺省视为 true）
+  try {
+    const raw: any | null = uni.getStorageSync(STORAGE_KEY)
+    let store: any | null = null
+    if (raw != null && typeof raw == 'object') {
+      store = raw
+    } else if (typeof raw == 'string' && (raw as string).length > 0) {
+      store = JSON.parse(raw as string) as any | null
+    }
+    if (store != null) {
+      const storeObj: UTSJSONObject = store as UTSJSONObject
+      if (storeObj[msgID] == false) {
+        return false
+      }
+    }
+  } catch (e: any) {}
+
+  // 3. 默认可见
+  return true
+})
+
+const voiceActionLabel = computed(() => {
+  return voiceTextVisible.value ? '隐藏文字' : '转文字'
+})
+
+/**
+ * 面板样式
+ * - phase='measure'：渲染到屏幕外（top: -9999rpx, opacity: 0）以便测量真实尺寸
+ * - phase='ready'：根据 showBelow 定位到气泡上方或下方
+ */
+const panelStyle = computed(() => {
+  const tp = triggerPosition.value
+  if (phase.value == 'measure') {
+    return { top: '-9999rpx', left: '0rpx', opacity: 0 }
+  }
+  if (tp.x == 0 || tp.y == 0) return { visibility: 'hidden' }
+
+  const effectiveHeight = panelHeightRpx.value > 0 ? panelHeightRpx.value : 130
+
+  const pos = {}
+  if (showBelow.value) {
+    pos.top = `${tp.y + tp.messageHeight + GAP}rpx`
+  } else {
+    pos.top = `${tp.y - effectiveHeight - GAP}rpx`
+  }
+  if (tp.isSentBySelf) {
+    pos.right = `${tp.x}rpx`
+  } else {
+    pos.left = `${tp.x}rpx`
+  }
+  return pos
+})
+
+/**
+ * 箭头样式
+ * - 未 ready 时隐藏，避免未 clamp 的位置先闪现
+ * - left：默认指向气泡中心，用真实 panelWidth 做边界 clamp（防脱离面板）
+ * - top：让箭头跨在面板边缘上（-ARROW_SIZE/2），露出一半形成视觉三角
+ *
+ * 单位约定：所有 triggerPosition 字段统一 rpx（由 Message.uvue 传过来时已转好）
+ * - 之前 v6 错误地认为全是 px 做 `px / sw * 750` 二次转换，导致 arrow 飞出屏幕
+ * - 现在 Message.uvue 统一传 rpx（messageX/messageWidth/messageHeight 都转 rpx）
+ * - 这里直接用 rpx 做运算，与 panelStyle 行为一致
+ */
+const arrowStyle = computed((): UTSJSONObject => {
+  if (phase.value !== 'ready') return { visibility: 'hidden' }
+  const tp = triggerPosition.value
+  if (tp.x == 0 || tp.y == 0) return { visibility: 'hidden' }
+
+  const screenWidthRpx = 750
+
+  // 气泡中心 rpx 坐标 = messageX + messageWidth/2，减去箭头一半宽度让箭头视觉居中
+  let arrowLeft: number = tp.messageX + tp.messageWidth / 2 - ARROW_SIZE / 2
+
+  // 用真实测量的 panelWidth 做 clamp（防止 arrow 脱离 panel 边界）
+  const pw = panelWidthRpx.value > 0 ? panelWidthRpx.value : 480
+  if (pw > 0) {
+    let panelFinalLeft: number = 0
+    if (tp.isSentBySelf) {
+      // 面板用 right 定位：panelFinalLeft = 750 - right - panelWidth
+      panelFinalLeft = screenWidthRpx - tp.x - pw
+    } else {
+      panelFinalLeft = tp.x
+    }
+    const panelFinalRight = panelFinalLeft + pw
+    const minLeft = panelFinalLeft + ARROW_INSET
+    const maxLeft = panelFinalRight - ARROW_SIZE - ARROW_INSET
+    if (arrowLeft < minLeft) arrowLeft = minLeft
+    if (arrowLeft > maxLeft) arrowLeft = maxLeft
+  }
+
+  // 用 UTSJSONObject + 下标赋值（computed 返回 typed class 实例，模板 :style 接收安全）
+  const style: UTSJSONObject = new UTSJSONObject()
+  style['left'] = `${arrowLeft}rpx`
+  style['visibility'] = 'visible'
+  if (showBelow.value) {
+    // 面板在气泡下方：箭头位于面板顶边，跨在上边缘
+    style['top'] = `${tp.y + tp.messageHeight + GAP - ARROW_SIZE / 2}rpx`
+  } else {
+    // 面板在气泡上方：箭头位于面板底边，跨在下边缘
+    style['top'] = `${tp.y - GAP - ARROW_SIZE / 2}rpx`
+  }
+  return style
+})
+
+const handleMaskTap = () => {
+  safeClose()
+}
+
+const ACTION_THROTTLE_WAIT = 500
+
+const handleCopy = (_arg: any | null): any => {
+  console.log('[MessageActions] handleCopy:', props.message)
+  try {
+    const messageObj: UTSJSONObject = toUTSJSONObject(props.message)
+    const body: any | null = messageObj['messagePayload']
+    if (body != null) {
+      const bodyObj: UTSJSONObject = toUTSJSONObject(body)
+      const textVal: any | null = bodyObj['text']
+      if (typeof textVal == 'string' && (textVal as string).length > 0) {
+        uni.setClipboardData({
+          data: textVal as string,
+          success: (): void => {
+            uni.showToast({
+              title: '已复制',
+              icon: 'none'
+            })
+          },
+          fail: (): void => {
+            uni.showToast({ title: '复制失败', icon: 'none' })
+          }
+        })
+      } else {
+        uni.showToast({ title: '当前消息不支持复制', icon: 'none' })
+      }
+    } else {
+      uni.showToast({ title: '当前消息不支持复制', icon: 'none' })
+    }
+  } catch (e: any) {
+    console.error('[MessageActions] handleCopy failed:', `${e}`)
+    uni.showToast({ title: '复制失败', icon: 'none' })
+  }
+  emit('action', { key: 'copy', text: '复制' })
+  safeClose()
+  return 0
+}
+
+const handleDelete = (_arg: any | null): any => {
+  ;(async (): Promise<void> => {
+    if (deleteAction == null) {
+      uni.showToast({
+        title: '删除失败',
+        icon: 'none',
+        duration: 2000
+      })
+      return
+    }
+    safeShowLoading({ title: '删除中...', mask: true })
+    try {
+      await deleteAction()
+      safeHideLoading()
+      uni.showToast({ title: '已删除', icon: 'success', duration: 1500 })
+      safeClose()
+    } catch (error: any) {
+      safeHideLoading()
+      const errObj: UTSJSONObject = toUTSJSONObject(error)
+      const errMsgRaw: any | null = errObj['message']
+      const errMsg: string = typeof errMsgRaw == 'string' ? (errMsgRaw as string) : ''
+      uni.showToast({
+        title: errMsg.length > 0 ? errMsg : '删除失败',
+        icon: 'none',
+        duration: 2000
+      })
+      safeClose()
+    }
+  })().catch((e: any | null): void => {
+    console.error('[MessageActions] handleDelete rejection:', `${e}`)
+    uni.showToast({ title: '删除失败', icon: 'none', duration: 2000 })
+    safeClose()
+  })
+  return 0
+}
+
+const handleRecall = (_arg: any | null): any => {
+  ;(async (): Promise<void> => {
+    if (revokeAction == null) {
+      uni.showToast({
+        title: '撤回失败',
+        icon: 'none',
+        duration: 2000
+      })
+      return
+    }
+    safeShowLoading({ title: '撤回中...', mask: true })
+    try {
+      await revokeAction()
+      safeHideLoading()
+      uni.showToast({ title: '已撤回', icon: 'success', duration: 1500 })
+      safeClose()
+    } catch (error: any) {
+      safeHideLoading()
+      console.warn('revoke failed: ', error)
+      const errObj: UTSJSONObject = toUTSJSONObject(error)
+      const errMsgRaw: any | null = errObj['message']
+      const errMsg: string = typeof errMsgRaw == 'string' ? (errMsgRaw as string) : ''
+      uni.showToast({
+        title: errMsg.length > 0 ? errMsg : '撤回失败',
+        icon: 'none',
+        duration: 2000
+      })
+      safeClose()
+    }
+  })().catch((e: any | null): void => {
+    console.error('[MessageActions] handleRecall rejection:', `${e}`)
+    uni.showToast({ title: '撤回失败', icon: 'none', duration: 2000 })
+    safeClose()
+  })
+  return 0
+}
+
+/**
+ * 语音转文字 / 隐藏文字（toggle）
+ *
+ * 行为：
+ * - 当前未展示 asrText（首次转换 或 已隐藏）：触发转换流程，AudioMessage 进入 loading 态
+ *   * 若已有 asrText（之前转过），调用 Native 一般会立即返回缓存结果，AudioMessage 通过 watch 自动展示
+ * - 当前正展示 asrText：广播 audioConvertHide，AudioMessage 收到后将 showConvertedText 置 false 隐藏
+ *
+ * 失败时广播 audioConvertingError 释放 loading。
+ */
+const handleVoiceToText = (_arg: any | null): void => {
+  const messageObj: UTSJSONObject = toUTSJSONObject(props.message)
+  const idVal: any | null = messageObj['msgID']
+  const msgID: string = idVal != null ? `${idVal}` : ''
+  // 关闭面板
+  emit('action', { key: voiceTextVisible.value ? 'voiceTextHide' : 'voiceToText', text: voiceActionLabel.value })
+  safeClose()
+
+  // 已展示 → 触发隐藏
+  if (voiceTextVisible.value) {
+    uni.$emit('audioConvertHide', { msgID })
+    return
+  }
+
+  // 未展示 → 触发转换 / 重新展示
+  uni.$emit('audioConvertingStart', { msgID })
+
+  if (voiceTextHasContent.value) {
+    return
+  }
+
+  // 没有 asrText → 调 SDK 转换
+  // language 暂用默认 'zh'，后续可由 props / 配置注入
+  const language = 'zh'
+  if (convertVoiceToText == null) {
+    uni.$emit('audioConvertingError', { msgID })
+    uni.showToast({ title: '转换失败', icon: 'none' })
+    return
+  }
+  convertVoiceToText(language).catch((err: any | null): void => {
+    console.error('[MessageActions] convertVoiceToText failed:', `${err}`)
+    uni.$emit('audioConvertingError', { msgID })
+    let toastTitle = '转换失败'
+    if (err != null) {
+      const errForJson: any = err
+      const errStr: string = JSON.stringify(errForJson)
+      const errObj: UTSJSONObject = JSON.parse<UTSJSONObject>(errStr) ?? new UTSJSONObject()
+      const codeRaw: any | null = errObj['code']
+      const codeVal: number = typeof codeRaw === 'number' ? (codeRaw as number) : 0
+      const msgRaw: any | null = errObj['message']
+      const msgVal: string = typeof msgRaw === 'string' ? (msgRaw as string) : ''
+      if (codeVal == 140008) {
+        toastTitle = '当前 SDKAppID 尚未开通语音转文字（ASR）服务'
+      } else if (msgVal.length > 0) {
+        toastTitle = msgVal
+      }
+    }
+    uni.showToast({ title: toastTitle, icon: 'none' })
+  })
+}
+
+/**
+ * 测量真实 panel 尺寸 + 判定上下方向
+ * 用 uvue 标准的 UniElement.getBoundingClientRect() 同步获取渲染后的实际宽高
+ * - 文档：https://doc.dcloud.net.cn/uni-app-x/api/dom/unielement.html#getboundingclientrect
+ * - 返回 DOMRect { x, y, left, top, right, bottom, width, height }（单位 px）
+ * - panelRef.value 是 ref 绑定的 view 元素，uvue 中是 UniElement 实例
+ */
+const measureAndPosition = () => {
+  const panelEl = panelRef.value
+  if (panelEl == null) {
+    phase.value = 'ready'
+    return
+  }
+  try {
+    // uvue: panelEl 是 UniElement（ref<any> 静态推断不出具体类型，强转 UniElement）
+    const rect: DOMRect = (panelEl as UniElement).getBoundingClientRect()
+    const si = uni.getSystemInfoSync()
+    const sw = si.windowWidth ?? 375
+    // rect.width / height 是 px，转 rpx（px / sw * 750）
+    panelWidthRpx.value = Math.round(rect.width / sw * 750)
+    panelHeightRpx.value = Math.round(rect.height / sw * 750)
+    // 判定面板显示方向：顶部剩余空间不够就下方展示
+    const tp = triggerPosition.value
+    const navH = si.platform == 'android' ? 48 : 44
+    const safeTop = si.safeArea?.top ?? 0
+    const totalNavRpx = (safeTop + navH) / sw * 750
+    const effectiveHeight = panelHeightRpx.value > 0 ? panelHeightRpx.value : 130
+    showBelow.value = (tp.y - totalNavRpx) < (effectiveHeight + GAP)
+  } catch (e: any) {
+    console.error('[MessageActions] measureAndPosition failed:', e)
+  }
+  phase.value = 'ready'
+}
+
+const setTriggerPosition = (position: any) => {
+  const posObj: UTSJSONObject = toUTSJSONObject(position)
+  const xRaw: any | null = posObj['x']
+  const yRaw: any | null = posObj['y']
+  const mxRaw: any | null = posObj['messageX']
+  const mwRaw: any | null = posObj['messageWidth']
+  const mhRaw: any | null = posObj['messageHeight']
+  const isSelfRaw: any | null = posObj['isSentBySelf']
+  const tpVal: TriggerPosition = {
+    x: typeof xRaw == 'number' ? (xRaw as number) : 0,
+    y: typeof yRaw == 'number' ? (yRaw as number) : 0,
+    messageX: typeof mxRaw == 'number' ? (mxRaw as number) : 0,
+    messageWidth: typeof mwRaw == 'number' ? (mwRaw as number) : 0,
+    messageHeight: typeof mhRaw == 'number' ? (mhRaw as number) : 0,
+    isSentBySelf: isSelfRaw == true,
+  } as TriggerPosition
+  triggerPosition.value = tpVal
+  const si2 = uni.getSystemInfoSync()
+  const sw2 = si2.windowWidth ?? 375
+  const navH = si2.platform == 'android' ? 48 : 44
+  const safeTop = si2.safeArea?.top ?? 0
+  const totalNavRpx = (safeTop + navH) / sw2 * 750
+  // panel 实际高度 ~121 rpx + GAP 20 = 141 rpx, 留 buffer 用 150
+  const effectiveHeight = 150
+  showBelow.value = (tpVal.y - totalNavRpx) < (effectiveHeight + GAP)
+  // phase 1: 渲染到屏幕外测量真实尺寸
+  phase.value = 'measure'
+  nextTick(() => {
+    setTimeout(() => {
+      measureAndPosition()
+    }, 30)
+  })
+}
+
+watch((): any | null => props.triggerPosition ?? null, (position: any | null): void => {
+  if (position != null) {
+    setTriggerPosition(position)
+  }
+}, { immediate: true })
+
+</script>
+
+<style>
+.msg-actions {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(255, 255, 255, 0.01);
+  z-index: 999;
+}
+
+.msg-actions__mask {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+}
+
+.msg-actions__panel {
+  position: absolute;
+  flex-direction: row;
+  background-color: #FFFFFF;
+  border-radius: 12rpx;
+  box-shadow: 0 8rpx 24rpx rgba(0, 0, 0, 0.25);
+  padding: 33rpx 0 22rpx;
+  z-index: 1001;
+  justify-content: center;
+  align-items: center;
+  left: auto;
+  right: auto;
+}
+
+.msg-actions__item {
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 114rpx;
+  margin: 0rpx 16rpx;
+}
+
+.msg-actions__item--first {
+  margin-left: 0rpx;
+}
+
+.msg-actions__item--last {
+  margin-right: 0rpx;
+}
+
+.msg-actions__icon {
+  width: 36rpx;
+  height: 36rpx;
+  margin-bottom: 10rpx;
+}
+
+.msg-actions__text {
+  font-size: 20rpx;
+  color: rgba(0, 0, 0, 0.55);
+  text-align: center;
+}
+
+.msg-actions__arrow {
+  position: absolute;
+  width: 24rpx;
+  height: 24rpx;
+  background-color: #FFFFFF;
+  transform: rotate(45deg);
+  z-index: 1002;
+}
+</style>

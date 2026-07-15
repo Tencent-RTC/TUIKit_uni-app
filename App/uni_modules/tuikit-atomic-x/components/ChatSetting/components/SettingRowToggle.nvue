@@ -11,7 +11,7 @@
       <view 
         class="custom-switch__thumb"
         :class="{ 'custom-switch__thumb--animated': hasInteracted }"
-        :style="{ transform: modelValue ? 'translateX(19rpx)' : 'translateX(0)' }"
+        :style="{ transform: modelValue ? 'translateX(18rpx)' : 'translateX(0)' }"
       />
     </view>
   </view>

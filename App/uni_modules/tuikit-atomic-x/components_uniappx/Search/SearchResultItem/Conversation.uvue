@@ -1,0 +1,82 @@
+<template>
+  <ResultItem
+    :avatarURL="avatarURL"
+    :title="title"
+    :subtitle="subtitleText"
+    :keyword="keyword"
+    :Avatar="Avatar"
+    :defaultAvatarType="defaultAvatarType"
+  />
+</template>
+
+<script setup lang="uts">
+/**
+ * SearchResultItem/Conversation - 搜索结果项会话（uvue 版）
+ */
+import { computed } from 'vue'
+import AvatarComponent from '../../Avatar'
+import ResultItem from './ResultItem.uvue'
+import { getMessageAbstract } from '../../ConversationList/utils'
+import type { MessageInfo } from '../../ConversationList/types.uts'
+
+const props = withDefaults(defineProps<{
+	messageResult?: any,
+	keyword?: string,
+	Avatar?: any,
+}>(), {
+	keyword: '',
+	Avatar: (): any => AvatarComponent
+})
+
+const avatarURL = computed((): string | null => {
+	const msgRes: UTSJSONObject = (props.messageResult ?? new UTSJSONObject()) as UTSJSONObject
+	const raw: any | null = msgRes['conversationAvatarURL']
+	return typeof raw == 'string' ? (raw as string) : null
+})
+
+const title = computed((): string => {
+	const msgRes: UTSJSONObject = (props.messageResult ?? new UTSJSONObject()) as UTSJSONObject
+	const raw: any | null = msgRes['conversationShowName']
+	return typeof raw == 'string' ? (raw as string) : ''
+})
+
+const previewText = computed((): string => {
+	const msgRes: UTSJSONObject = (props.messageResult ?? new UTSJSONObject()) as UTSJSONObject
+	const messagesRaw: any | null = msgRes['messageList']
+	if (messagesRaw == null) return ''
+	const messagesArr: any[] = messagesRaw as any[]
+	if (messagesArr.length == 0) return ''
+
+	const firstMessage: any | null = messagesArr[0]
+	const firstMsgObj: UTSJSONObject = (firstMessage ?? new UTSJSONObject()) as UTSJSONObject
+	const payloadRaw: any | null = firstMsgObj['messagePayload']
+	if (payloadRaw != null) {
+		const payloadObj: UTSJSONObject = payloadRaw as UTSJSONObject
+		const textRaw: any | null = payloadObj['text']
+		if (typeof textRaw == 'string' && (textRaw as string).length > 0) {
+			return textRaw as string
+		}
+	}
+	return getMessageAbstract(firstMessage as MessageInfo)
+})
+
+const subtitleText = computed((): string => {
+	const msgRes: UTSJSONObject = (props.messageResult ?? new UTSJSONObject()) as UTSJSONObject
+	const countRaw: any | null = msgRes['messageCount']
+	const count: number = typeof countRaw == 'number' ? (countRaw as number) : 0
+	if (count == 1) {
+		return previewText.value
+	}
+	return `${count}条相关聊天记录`
+})
+
+const defaultAvatarType = computed((): string => {
+	const msgRes: UTSJSONObject = (props.messageResult ?? new UTSJSONObject()) as UTSJSONObject
+	const convIdRaw: any | null = msgRes['conversationID']
+	const convId: string = typeof convIdRaw == 'string' ? (convIdRaw as string) : ''
+	if (convId.startsWith('group_')) {
+		return 'public'
+	}
+	return 'user'
+})
+</script>

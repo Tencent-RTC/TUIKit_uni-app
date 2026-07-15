@@ -134,7 +134,14 @@ const handleAddFriend = async () => {
     showToast({ message: title, type: 'success' })
     emit('success', 'friend', props.userInfo)
   } catch (error: any) {
-    showToast({ message: error.message || '发送失败', type: 'error' })
+    console.warn('add friend error:', error)
+    // 对方已将本人加入黑名单：SDK 错误信息形如 'Err_SNS_FriendAdd_Exist_In_Reverse_Black_List'
+    const rawMsg = String(error?.message || '')
+    const isReverseBlacklisted = /Reverse_Black_List/i.test(rawMsg)
+    const errMsg = isReverseBlacklisted
+      ? '好友添加失败，对方已将您列入黑名单'
+      : (rawMsg || '发送失败')
+    showToast({ message: errMsg, type: 'error' })
     emit('fail', 'friend', error)
   } finally {
     isSubmitting.value = false

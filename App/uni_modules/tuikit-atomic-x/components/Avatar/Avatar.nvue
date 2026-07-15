@@ -26,7 +26,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 
 const props = defineProps({
   // 头像图片地址
@@ -74,11 +74,24 @@ const props = defineProps({
   pureMode: {
     type: Boolean,
     default: false
+  },
+  // 懒加载：mount 时不立即赋值 src，让出主线程后再加载远程图
+  lazy: {
+    type: Boolean,
+    default: false
   }
 })
 
-// 头像图片地址
-const avatarSrc = ref(props.src)
+// 头像图片地址；lazy 模式下 mount 时为空，下一个事件循环再赋值
+const avatarSrc = ref(props.lazy ? '' : props.src)
+
+onMounted(() => {
+  if (props.lazy && props.src) {
+    setTimeout(() => {
+      avatarSrc.value = props.src
+    }, 0)
+  }
+})
 
 watch(() => props.src, (newVal) => {
   avatarSrc.value = newVal;
@@ -211,6 +224,7 @@ const getDefaultBgColor = () => {
 }
 
 .badge-text {
+  min-width: 24rpx;
   font-weight: 500;
   font-size: 24rpx;
   line-height: 24rpx;

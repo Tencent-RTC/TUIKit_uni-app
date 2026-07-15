@@ -36,7 +36,16 @@
       <MembersButton :roomID="roomID" />
       <MicButton />
       <CameraButton />
+      <RecordingButton @request-start="onRequestStartRecording" @request-stop="onRequestStopRecording" />
     </view>
+
+    <RecordingFloatingView
+      v-if="roomID.length > 0"
+      class="recording-floating"
+      :style="{ top: ((systemInfo?.statusBarHeight || 0) + 53 + 12) + 'px' }"
+      :top="(systemInfo?.statusBarHeight || 0) + 53 + 12"
+      @request-stop="onRequestStopRecording"
+    />
 
     <RoomEnterPasswordSheet
       :visible="isPasswordSheetVisible"
@@ -53,13 +62,28 @@
       @confirm="tipsDialogRef.onConfirm"
       @cancel="tipsDialogRef.onCancel"
       @update:modelValue="(val: boolean) => { if (!val) tipsDialogRef.visible = false; }"
-    />
+    >
+      <text v-if="tipsDialogRef.content">{{ tipsDialogRef.content }}</text>
+    </RoomDialog>
+
+    <RoomDialog
+      :modelValue="recordingDialog.visible"
+      :title="recordingDialog.title"
+      :confirmButton="recordingDialog.confirmButton"
+      cancelButton="取消"
+      :modal="true"
+      @confirm="onRecordingDialogConfirm"
+      @cancel="onRecordingDialogCancel"
+      @update:modelValue="(val: boolean) => { if (!val) recordingDialog.visible = false; }"
+    >
+      <text v-if="recordingDialog.message">{{ recordingDialog.message }}</text>
+    </RoomDialog>
   </view>
 </template>
 
 <script setup lang="ts">
   import { onLoad, onBackPress, onShow, onHide, onUnload } from '@dcloudio/uni-app';
-  import { ref, computed, onMounted, onUnmounted } from 'vue';
+  import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
   import {
     useRoomState, RoomType,
     useRoomParticipantState, RoomParticipantRole,
@@ -76,6 +100,8 @@
   import MembersButton from '../components/MembersButton/index.nvue';
   import MicButton from '../components/MicButton/index.nvue';
   import CameraButton from '../components/CameraButton/index.nvue';
+  import RecordingButton from '../components/RecordingButton/index.nvue';
+  import RecordingFloatingView from '../components/RecordingFloatingView/index.nvue';
   import RoomEnterPasswordSheet from '../components/RoomEnterPasswordSheet/index.nvue';
   import RoomDialog from '../components/RoomDialog/index.vue';
 
@@ -104,6 +130,71 @@
   const isOwner = computed(() => localParticipant.value?.role === RoomParticipantRole.Owner);
 
   const isPasswordSheetVisible = ref(false);
+
+  const recordingDialog = ref({
+    visible: false,
+    mode: 'start' as 'start' | 'stop',
+    title: '',
+    message: '',
+    confirmButton: '',
+  });
+
+  function onRequestStartRecording() {
+    recordingDialog.value = {
+      visible: true,
+      mode: 'start',
+      title: '是否开启云端录制？',
+      message: '开启后，将录制房间中的音视频画面、共享屏幕内容到云端，并告知所有参会成员',
+      confirmButton: '开启录制',
+    };
+  }
+
+  function onRequestStopRecording() {
+    recordingDialog.value = {
+      visible: true,
+      mode: 'stop',
+      title: '结束云端录制？',
+      message: '结束录制后，将停止录制房间中的音视频画面、共享屏幕内容到云端，并告知所有参会成员',
+      confirmButton: '结束录制',
+    };
+  }
+
+  async function onRecordingDialogConfirm() {
+    const mode = recordingDialog.value.mode;
+    recordingDialog.value.visible = false;
+    try {
+      if (mode === 'start') {
+        await roomState.startRecording();
+      } else {
+        await roomState.stopRecording();
+      }
+    } catch (e) {
+      showErrorToast(e);
+    }
+  }
+
+  function onRecordingDialogCancel() {
+    recordingDialog.value.visible = false;
+  }
+
+  watch(
+    () => localParticipant.value?.role,
+    (role) => {
+      const canManage = role === RoomParticipantRole.Owner || role === RoomParticipantRole.Admin;
+      if (!canManage && recordingDialog.value.visible) {
+        recordingDialog.value.visible = false;
+      }
+    }
+  );
+
+  watch(
+    () => roomState.currentRoom.value?.recordingInfo?.status,
+    () => {
+      if (recordingDialog.value.visible) {
+        recordingDialog.value.visible = false;
+      }
+    }
+  );
 
   const { dialogState: tipsDialogRef } = useRoomTips({
     onExitConfirmed: () => {
@@ -337,5 +428,10 @@
     padding-left: 32rpx;
     padding-right: 32rpx;
     padding-bottom: 68rpx;
+  }
+
+  .recording-floating {
+    position: absolute;
+    left: 32rpx;
   }
 </style>

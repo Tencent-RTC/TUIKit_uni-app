@@ -1,0 +1,234 @@
+<template>
+  <view class="application-verify">
+    <scroll-view class="application-verify__scroll" scroll-y="true">
+      <!-- 表单区域 -->
+      <view class="application-verify__form">
+        <!-- 验证信息 -->
+        <view class="application-verify__form-item">
+          <text class="application-verify__form-label">验证信息</text>
+          <input
+            class="application-verify__form-input"
+            type="text"
+            v-model="verifyMessage"
+            :placeholder="defaultVerifyMessage"
+            :maxlength="100"
+          ></input>
+        </view>
+
+        <!-- 分隔线 -->
+        <view class="application-verify__form-divider" v-if="isFriendApply"/>
+
+        <!-- 备注 -->
+        <view class="application-verify__form-item" v-if="isFriendApply">
+          <text class="application-verify__form-label">备注名</text>
+          <input
+            class="application-verify__form-input"
+            type="text"
+            v-model="remark"
+            placeholder="请输入备注名"
+            :maxlength="50"
+          ></input>
+        </view>
+      </view>
+
+      <!-- 发送按钮 -->
+      <view class="application-verify__action">
+        <view
+          class="application-verify__action-btn"
+          :class="{ 'application-verify__action-btn--disabled': isSubmitting }"
+          @click="handleSubmit"
+        >
+          <text class="application-verify__action-btn-text">发送</text>
+        </view>
+      </view>
+    </scroll-view>
+  </view>
+</template>
+
+<script setup lang="uts">
+
+import { ref, computed } from 'vue'
+import { useGroupState } from '../../../state/GroupState'
+import { useContactState } from '../../../state/ContactState'
+import { useLoginState } from '../../../state/LoginState'
+import { showToast } from '../../../utils/toast'
+
+/** 申请类型 */
+type ApplicationType = 'friend' | 'group'
+
+/**
+ * 组件 props
+ */
+type Props = {
+  /** 申请类型：friend-添加好友，group-加入群组 */
+  type?: ApplicationType | null
+  /** 用户信息（添加好友时使用） */
+  userInfo?: any | null
+  /** 群信息（加入群组时使用） */
+  groupInfo?: any | null
+}
+
+type Emits = {
+  success: any
+  fail: any
+}
+
+const props = defineProps<Props>()
+
+// type 默认值在 script 兜底
+const applicationType = computed<ApplicationType>(() => props.type ?? 'friend')
+
+const emit = defineEmits<Emits>()
+
+const { joinGroup } = useGroupState()
+const { addFriend } = useContactState()
+const { loginUserInfo } = useLoginState()
+
+const isFriendApply = computed<boolean>((): boolean => applicationType.value == 'friend')
+
+// 默认验证信息
+const defaultVerifyMessage = computed<string>((): string => {
+  const loginInfo = loginUserInfo.value
+  const nicknameRaw: any | null = loginInfo?.nickname ?? null
+  const userIDRaw: any | null = loginInfo?.userID ?? null
+  const nickname: string = (typeof nicknameRaw == 'string' && (nicknameRaw as string).length > 0)
+    ? (nicknameRaw as string)
+    : (typeof userIDRaw == 'string' ? (userIDRaw as string) : '')
+  return nickname.length > 0 ? `我是${nickname}` : '请输入验证信息'
+})
+
+const verifyMessage = ref<string>('')
+const remark = ref<string>('')
+const isSubmitting = ref<boolean>(false)
+
+const handleJoinGroup = async (): Promise<void> => {
+  const info = props.groupInfo
+  if (info == null) return
+  const infoObj: UTSJSONObject = info as UTSJSONObject
+  const groupIDRaw: any | null = infoObj['groupID']
+  if (typeof groupIDRaw !== 'string' || (groupIDRaw as string).length == 0) return
+  const groupID: string = groupIDRaw as string
+
+  isSubmitting.value = true
+  try {
+    const message = verifyMessage.value.trim().length > 0 ? verifyMessage.value.trim() : defaultVerifyMessage.value
+    await joinGroup(groupID, message)
+    showToast({ message: '已发送申请', type: 'success' })
+    emit('success', { type: 'group', data: info })
+  } catch (error: any) {
+    showToast({ message: error.message ?? '发送失败', type: 'error' })
+    emit('fail', { type: 'group', error })
+  } finally {
+    isSubmitting.value = false
+  }
+}
+
+// 添加好友
+const handleAddFriend = async (): Promise<void> => {
+  const info = props.userInfo
+  if (info == null) return
+  const infoObj: UTSJSONObject = info as UTSJSONObject
+  const userIDRaw: any | null = infoObj['userID']
+  if (typeof userIDRaw !== 'string' || (userIDRaw as string).length == 0) return
+  const userID: string = userIDRaw as string
+
+  isSubmitting.value = true
+  try {
+    const message = verifyMessage.value.trim().length > 0 ? verifyMessage.value.trim() : defaultVerifyMessage.value
+    await addFriend(userID, remark.value.trim(), message)
+    showToast({ message: '添加好友成功', type: 'success' })
+    emit('success', { type: 'friend', data: info })
+  } catch (error: any) {
+    console.warn(`add friend error: ${error}`)
+    // 对方已将本人加入黑名单：SDK 错误信息形如 'Err_SNS_FriendAdd_Exist_In_Reverse_Black_List'
+    const rawMsg: string = typeof error?.message == 'string' ? (error.message as string) : ''
+    const isReverseBlacklisted: boolean = /Reverse_Black_List/i.test(rawMsg)
+    const errMsg: string = isReverseBlacklisted
+      ? '好友添加失败，对方已将您列入黑名单'
+      : (rawMsg.length > 0 ? rawMsg : '发送失败')
+    showToast({ message: errMsg, type: 'error' })
+    emit('fail', { type: 'friend', error })
+  } finally {
+    isSubmitting.value = false
+  }
+}
+
+const handleSubmit = async (): Promise<void> => {
+  if (isSubmitting.value) return
+
+  if (isFriendApply.value) {
+    await handleAddFriend()
+  } else {
+    await handleJoinGroup()
+  }
+}
+</script>
+
+<style>
+.application-verify {
+  flex: 1;
+  background-color: #F0F2F7;
+}
+
+.application-verify__scroll {
+  flex: 1;
+}
+
+/* 表单区域 */
+.application-verify__form {
+  margin: 120rpx 32rpx 88rpx;
+  background-color: #FFFFFF;
+  border-radius: 32rpx;
+}
+
+.application-verify__form-item {
+  flex-direction: row;
+  align-items: center;
+  padding: 32rpx;
+}
+
+.application-verify__form-label {
+  font-size: 32rpx;
+  font-weight: 400;
+  color: rgba(0, 0, 0, 0.9);
+  line-height: 40rpx;
+  width: 160rpx;
+}
+
+.application-verify__form-input {
+  flex: 1;
+  font-size: 32rpx;
+  color: rgba(0, 0, 0, 0.9);
+  line-height: 40rpx;
+}
+
+.application-verify__form-divider {
+  height: 1rpx;
+  background-color: #E5E5E5;
+  margin-left: 0;
+}
+
+/* 发送按钮 */
+.application-verify__action {
+  padding: 0 75rpx;
+}
+
+.application-verify__action-btn {
+  background-color: #1C66E5;
+  border-radius: 48rpx;
+  padding: 26rpx 0;
+  align-items: center;
+  justify-content: center;
+}
+
+.application-verify__action-btn--disabled {
+  opacity: 0.6;
+}
+
+.application-verify__action-btn-text {
+  font-size: 32rpx;
+  font-weight: 400;
+  color: #FFFFFF;
+  line-height: 44rpx;
+}
+</style>

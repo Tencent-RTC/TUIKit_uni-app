@@ -41,10 +41,10 @@
       :groupList="filteredGroupList"
       :groupMemberList="groupMemberList"
       :messageResults="filteredMessageResults"
-      :hasMoreUser="hasMoreUserList"
-      :hasMoreFriend="hasMoreFriendList"
-      :hasMoreGroup="hasMoreGroupList"
-      :hasMoreGroupMember="hasMoreGroupMemberList"
+      :hasMoreUser="hasMoreFriends"
+      :hasMoreFriend="hasMoreFriends"
+      :hasMoreGroup="hasMoreGroups"
+      :hasMoreGroupMember="hasMoreGroupMembers"
       :hasMoreMessage="hasMoreMessageResults"
       :searchHistory="searchHistory"
       :SearchResultItem="SearchResultItem"
@@ -66,7 +66,7 @@ import { ref, computed, watch, onBeforeUnmount, onMounted } from 'vue'
 import { useSearchState } from '../../state/SearchState'
 import { 
   SearchType, 
-  KeywordListMatchType,
+  KeywordListMatchMode,
   SearchTabValue
 } from '../../types/search'
 import AvatarComponent from '../Avatar'
@@ -118,15 +118,13 @@ const emit = defineEmits<SearchEmits>()
 const searchStoreID = props.conversationID || 'default_search_store'
 
 const {
-  userList,
   friendList,
   groupList,
   groupMemberList,
   messageResults,
-  hasMoreUserList,
-  hasMoreFriendList,
-  hasMoreGroupList,
-  hasMoreGroupMemberList,
+  hasMoreFriends,
+  hasMoreGroups,
+  hasMoreGroupMembers,
   hasMoreMessageResults,
   search,
   searchMore,
@@ -210,15 +208,12 @@ const tabList: SearchTabItem[] = [
 ]
 
 const currentSearchOption = computed<SearchOption>(() => {
-  const searchType = isCloudSearch.value
-    ? SearchType.User.or(SearchType.Group).or(SearchType.Message)
-    : SearchType.Friend.or(SearchType.Group).or(SearchType.Message)
-  
+  const searchScope: SearchType[] = [SearchType.FRIEND, SearchType.GROUP, SearchType.MESSAGE]
+
   return {
-    keywordListMatchType: KeywordListMatchType.OR,
-    isCloudSearch: isCloudSearch.value,
-    searchType,
-    searchCount: 20,
+    keywordListMatchMode: KeywordListMatchMode.OR,
+    searchScope,
+    pageSize: 20,
   }
 })
 
@@ -240,9 +235,7 @@ const filteredUserList = computed(() => {
   if (isConversationSearch.value) {
     return []
   }
-  if (currentTab.value === SearchTabValue.All || currentTab.value === SearchTabValue.Friend) {
-    return userList.value
-  }
+  // 注：底层 atomicxcore 已移除 user 搜索，这里返回空数组保留 props 接口不变；用户搜索请改为好友搜索（Friend）
   return []
 })
 
@@ -282,23 +275,22 @@ const doSearch = async (searchKeyword: string) => {
   showPresearch.value = false
   isLoading.value = true
   
-  let searchType = currentSearchOption.value.searchType
-  
+  // 计算本次搜索的 searchScope（数组形态，对齐 atomicxcore SearchOption.searchScope）
+  let searchScope: SearchType[] = currentSearchOption.value.searchScope || [SearchType.FRIEND, SearchType.GROUP, SearchType.MESSAGE]
+
   if (isConversationSearch.value) {
-    searchType = SearchType.Message
+    searchScope = [SearchType.MESSAGE]
   } else if (currentTab.value === SearchTabValue.Message) {
-    searchType = SearchType.Message
+    searchScope = [SearchType.MESSAGE]
   } else if (currentTab.value === SearchTabValue.Friend) {
-    searchType = isCloudSearch.value
-    ? SearchType.User
-    : SearchType.Friend
+    searchScope = [SearchType.FRIEND]
   } else if (currentTab.value === SearchTabValue.Group) {
-    searchType = SearchType.Group
+    searchScope = [SearchType.GROUP]
   }
   
   const option: SearchOption = {
     ...currentSearchOption.value,
-    searchType,
+    searchScope,
     userFilter: userFilter.value,
     messageFilter: messageFilter.value
   }

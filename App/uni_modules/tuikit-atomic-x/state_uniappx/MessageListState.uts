@@ -1,0 +1,736 @@
+
+import { ref, type Ref } from 'vue';
+import type { HybridListenerOptions } from "@/uni_modules/tuikit-atomic-x";
+import type { HybridCallOptions } from "./hybridCallOptions.uts";
+import { callAPI, addListener, removeListener } from "@/uni_modules/tuikit-atomic-x";
+import { useLoginState } from './LoginState';
+import { useContactState } from './ContactState';
+
+/**
+ * 桥接响应（参照 atomicx HybridResponse data class）
+ */
+type HybridResponse = {
+  api: string | null;
+  code: number;
+  message: string | null;
+  data: any | null;
+};
+
+/**
+ * 桥接响应默认值
+ */
+const DEFAULT_HYBRID_RESPONSE: HybridResponse = {
+  api: null,
+  code: -1,
+  message: null,
+  data: null
+};
+
+type DataPayload = UTSJSONObject;
+
+/**
+ * 模块级单例缓存
+ */
+const InstanceMap: Map<string, MessageListState> = new Map<string, MessageListState>();
+
+const { getLoginUserInfo } = useLoginState();
+const { getContactInfo } = useContactState('MessageListState');
+
+/**
+ * 消息列表状态管理类
+ */
+class MessageListState {
+  public readonly instanceId: string;
+  private readonly conversationID: string;
+
+  /** 消息列表 */
+  public readonly messageList: Ref<any[]>;
+  /** 是否有更早的消息（旧字段 hasMoreOlderMessage） */
+  public readonly hasOlderMessages: Ref<boolean>;
+  /** 是否有更新的消息（旧字段 hasMoreNewerMessage） */
+  public readonly hasNewerMessages: Ref<boolean>;
+  /** 置顶消息列表（**新增**） */
+  public readonly pinnedMessageList: Ref<any[]>;
+
+  /** C2C 会话对方用户信息（用于 Callkit 消息翻转） */
+  private peerUserInfo: any | null = null;
+  private _pendingAutoLoadOption: any | null = null;
+
+  /** messageEvent 订阅者列表 */
+  private messageEventHandlers: Set<(event: any) => void> = new Set();
+
+  private constructor(conversationID: string, initialLoadOption: any | null = null) {
+    this.instanceId = MessageListState.generateInstanceId(conversationID);
+    this.conversationID = conversationID;
+    this.messageList = ref<any[]>([]);
+    this.hasOlderMessages = ref<boolean>(true);
+    this.hasNewerMessages = ref<boolean>(false);
+    this.pinnedMessageList = ref<any[]>([]);
+    this._pendingAutoLoadOption = initialLoadOption;
+
+    this.createStore();
+    this.fetchPeerUserInfo();
+  }
+
+  /**
+   * 预先获取 C2C 会话对方用户信息
+   */
+  private async fetchPeerUserInfo(): Promise<void> {
+    if (!this.conversationID.startsWith('c2c_')) {
+      return;
+    }
+
+    const peerUserID = this.conversationID.replace('c2c_', '');
+
+    try {
+      const userInfoList: any[] = await getContactInfo([peerUserID])
+      if (userInfoList != null && userInfoList.length > 0) {
+        this.peerUserInfo = userInfoList[0]
+      }
+    } catch (error: any) {
+      const errMsg = error instanceof Error ? (error as Error).message : `${error}`;
+      console.warn(`[${this.instanceId}][fetchPeerUserInfo] Failed: ${errMsg}`);
+      this.peerUserInfo = null;
+    }
+  }
+
+  private createStore(): void {
+    const options: HybridCallOptions = {
+      api: "createStore",
+      params: {
+        createStoreParams: this.instanceId,
+        conversationID: this.conversationID,
+      },
+    };
+
+    callAPI(JSON.stringify(options), (response: string) => {
+      try {
+        const result = JSON.parse<HybridResponse>(response) ?? DEFAULT_HYBRID_RESPONSE;
+        if (result.code == 0) {
+          this.bindEvent();
+          if (this.conversationID.length > 0) {
+            const option: any = this._pendingAutoLoadOption ?? { pageCount: 20 }
+            this._pendingAutoLoadOption = null
+            this.loadMessages(option).catch((e: any | null): void => {
+              console.error(`[${this.instanceId}][loadMessages] Auto-load failed: ${e != null ? `${e}` : 'null'}`)
+            })
+          }
+        } else {
+          const msg = result.message ?? 'unknown';
+          console.error(`[${this.instanceId}][createStore] Failed: ${msg}`);
+        }
+      } catch (error: any) {
+        const errMsg = error instanceof Error ? (error as Error).message : `${error}`;
+        console.error(`[${this.instanceId}][createStore] Parse error: ${errMsg}`);
+      }
+    });
+  }
+
+  private static generateInstanceId(conversationID: string): string {
+    return JSON.stringify({
+      storeName: "MessageList",
+      conversationID,
+    });
+  }
+
+  public static getInstance(conversationID: string = "", initialLoadOption: any | null = null): MessageListState {
+    const instanceId = MessageListState.generateInstanceId(conversationID);
+    if (!InstanceMap.has(instanceId)) {
+      InstanceMap.set(instanceId, new MessageListState(conversationID, initialLoadOption));
+    }
+    return InstanceMap.get(instanceId) as MessageListState;
+  }
+
+    /**
+   * C2C Callkit 消息翻转
+   *
+   * 注：MessageInfo 字段已升级为 `from / to / isSentBySelf`（旧 `sender / receiver / isSelf`）
+   */
+  private handleC2CCallSignaling(messageList: any[]): any[] {
+    if (!this.conversationID.startsWith('c2c_')) {
+      return messageList;
+    }
+
+    const loginUser = getLoginUserInfo();
+    const myUserID = loginUser?.userID;
+
+    if (myUserID == null) {
+      return messageList;
+    }
+
+    const myUserInfo: UTSJSONObject = {
+      userID: myUserID,
+      avatarURL: loginUser?.avatarURL ?? '',
+      nickname: loginUser?.nickname ?? ''
+    } as UTSJSONObject
+
+    const peerUserID = this.conversationID.replace('c2c_', '')
+    const peerUserInfo: UTSJSONObject = this.peerUserInfo != null
+      ? this.peerUserInfo as UTSJSONObject
+      : ({ userID: peerUserID } as UTSJSONObject)
+
+    const result: any[] = [];
+
+    for (const message of messageList) {
+      const mObj: UTSJSONObject = message as UTSJSONObject
+      const msgTypeRaw: any | null = mObj['messageType']
+      const msgTypeNum: number = typeof msgTypeRaw == 'number' ? msgTypeRaw as number : 0
+      if (msgTypeNum !== 8) {
+        result.push(message);
+        continue;
+      }
+
+      const mObj2: UTSJSONObject = message as UTSJSONObject
+      const customPayloadRaw: any | null = mObj2['messagePayload']
+      if (customPayloadRaw == null) {
+        result.push(message);
+        continue;
+      }
+      const customPayload: DataPayload = customPayloadRaw as DataPayload
+      const customDataRaw: any | null = customPayload['customData']
+      if (customDataRaw == null) {
+        result.push(message);
+        continue;
+      }
+
+      try {
+        const callSignaling =  JSON.parse<DataPayload>(customDataRaw as string);
+
+        if (callSignaling == null) {
+          result.push(message);
+          continue;
+        }
+        const businessIDRaw: any | null = callSignaling['businessID']
+        const businessIDNum: number = typeof businessIDRaw == 'number' ? businessIDRaw as number : 0
+        if (businessIDNum !== 1) {
+          result.push(message);
+          continue;
+        }
+
+        const dataStrRaw: any | null = callSignaling['data']
+        if (dataStrRaw == null) {
+          result.push(message);
+          continue;
+        }
+        const innerData = JSON.parse<DataPayload>(dataStrRaw as string);
+
+        const rawMessageRaw: any | null = mObj2['rawMessage']
+        const rawMessage: any | null = rawMessageRaw != null ? rawMessageRaw as any : null
+        if (rawMessage == null) {
+          result.push(message);
+          continue;
+        }
+        const rmObj: UTSJSONObject = rawMessage as UTSJSONObject
+        const isExcludedFromUnreadCountRaw1: any | null = rmObj['_isExcludedFromUnreadCount']
+        const isExcludedFromUnreadCountRaw2: any | null = isExcludedFromUnreadCountRaw1 != null ? isExcludedFromUnreadCountRaw1 : rmObj['isExcludedFromUnreadCount']
+        const isExcludedFromUnreadCount: boolean = isExcludedFromUnreadCountRaw2 == true
+        const isExcludedFromLastMessageRaw1: any | null = rmObj['_isExcludedFromLastMessage']
+        const isExcludedFromLastMessageRaw2: any | null = isExcludedFromLastMessageRaw1 != null ? isExcludedFromLastMessageRaw1 : rmObj['isExcludedFromLastMessage']
+        const isExcludedFromLastMessage: boolean = isExcludedFromLastMessageRaw2 == true
+        const isDisplayInChat: boolean = !(isExcludedFromUnreadCount && isExcludedFromLastMessage)
+
+        if (!isDisplayInChat) {
+          result.push(message);
+          continue;
+        }
+
+        const innerDataObj: UTSJSONObject = innerData as UTSJSONObject
+        const innerDataDataRaw: any | null = innerDataObj['data']
+        const innerDataDataObj: UTSJSONObject = innerDataDataRaw != null ? innerDataDataRaw as UTSJSONObject : new UTSJSONObject()
+        const consumedRaw: any | null = innerDataDataObj['consumed']
+        if (consumedRaw == true) {
+          result.push(message);
+          continue;
+        }
+
+        let inviter: string | null = null
+        const inviterRaw: any | null = innerDataDataObj['inviter']
+        if (inviterRaw != null) {
+          inviter = inviterRaw.toString() as string
+        }
+        const lineBusyRaw: any | null = innerDataObj['line_busy']
+        const lineBusy: string | null = typeof lineBusyRaw == 'string' ? lineBusyRaw as string : null
+        const innerDataMessageRaw: any | null = innerDataDataObj['message']
+        const innerDataMessage: string | null = typeof innerDataMessageRaw == 'string' ? innerDataMessageRaw as string : null
+        if (lineBusy == 'line_busy' || innerDataMessage == 'lineBusy') {
+          const callSignalingInviterRaw: any | null = callSignaling['inviter']
+          inviter = callSignalingInviterRaw != null ? callSignalingInviterRaw.toString() as string : null
+        }
+
+        if (inviter == null || inviter.length == 0) {
+          result.push(message);
+          continue;
+        }
+
+        const copiedMessage: UTSJSONObject = JSON.parse<UTSJSONObject>(JSON.stringify(message)) ?? new UTSJSONObject()
+        const cmObj: UTSJSONObject = copiedMessage
+        const origMessageTypeRaw: any | null = mObj2['messageType']
+        if (origMessageTypeRaw != null && cmObj['messageType'] == null) {
+          cmObj['messageType'] = origMessageTypeRaw
+        }
+        const isSentBySelfRaw: any | null = cmObj['isSentBySelf']
+        const isSentBySelf: boolean = isSentBySelfRaw == true
+        if (inviter !== myUserID && isSentBySelf) {
+          // 当前用户不是发起者，消息应该显示为对方发送（来电）
+          cmObj['isSentBySelf'] = false
+          const toRaw: any | null = cmObj['to']
+          if (toRaw != null) {
+            const fromObjRaw: any | null = cmObj['from']
+            const fromObj: UTSJSONObject = fromObjRaw != null ? fromObjRaw as UTSJSONObject : new UTSJSONObject()
+            fromObj['userID'] = peerUserInfo['userID'] ?? ''
+            fromObj['avatarURL'] = peerUserInfo['avatarURL'] ?? ''
+            fromObj['nickname'] = peerUserInfo['nickname'] ?? ''
+            cmObj['from'] = fromObj
+            cmObj['to'] = myUserInfo['userID'] ?? ''
+          }
+        } else if (inviter == myUserID && !isSentBySelf) {
+          // 当前用户是发起者，消息应该显示为自己发送（呼出）
+          cmObj['isSentBySelf'] = true
+          const toRaw2: any | null = cmObj['to']
+          if (toRaw2 != null) {
+            const fromObjRaw2: any | null = cmObj['from']
+            const fromObj2: UTSJSONObject = fromObjRaw2 != null ? fromObjRaw2 as UTSJSONObject : new UTSJSONObject()
+            fromObj2['userID'] = myUserInfo['userID'] ?? ''
+            fromObj2['avatarURL'] = myUserInfo['avatarURL'] ?? ''
+            fromObj2['nickname'] = myUserInfo['nickname'] ?? ''
+            cmObj['from'] = fromObj2
+            cmObj['to'] = peerUserInfo['userID'] ?? ''
+          }
+        }
+
+        result.push(copiedMessage);
+      } catch (e) {
+        result.push(message);
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * 绑定事件监听
+   */
+  private bindEvent(): void {
+    // messageList
+    const makeListOptions = (): HybridListenerOptions => {
+      const opts: HybridListenerOptions = {
+        type: "",
+        store: "MessageList",
+        name: "messageList",
+        params: {
+          createStoreParams: this.instanceId,
+          conversationID: this.conversationID,
+        },
+      };
+      return opts;
+    };
+    addListener(makeListOptions(), (data: string) => {
+      try {
+        const result = JSON.parse<DataPayload>(data);
+        if (result != null) {
+          const listRaw = result['messageList']  as any[] | null;
+          if (listRaw != null) {
+            this.messageList.value = this.handleC2CCallSignaling(listRaw);
+          }
+        }
+      } catch (error: any) {
+        const errMsg = error instanceof Error ? (error as Error).message : `${error}`;
+        console.error(`[${this.instanceId}][messageList listener] Error: ${errMsg}`);
+      }
+    });
+
+    // hasOlderMessages
+    const makeOlderOptions = (): HybridListenerOptions => {
+      const opts: HybridListenerOptions = {
+        type: "",
+        store: "MessageList",
+        name: "hasOlderMessages",
+        params: {
+          createStoreParams: this.instanceId,
+          conversationID: this.conversationID,
+        },
+      };
+      return opts;
+    };
+    addListener(makeOlderOptions(), (data: string) => {
+      try {
+        const result = JSON.parse<DataPayload>(data);
+        if (result != null) {
+          this.hasOlderMessages.value = result['hasOlderMessages'] == true;
+        }
+      } catch (error: any) {
+        const errMsg = error instanceof Error ? (error as Error).message : `${error}`;
+        console.error(`[${this.instanceId}][hasOlderMessages listener] Error: ${errMsg}`);
+      }
+    });
+
+    // hasNewerMessages
+    const makeNewerOptions = (): HybridListenerOptions => {
+      const opts: HybridListenerOptions = {
+        type: "",
+        store: "MessageList",
+        name: "hasNewerMessages",
+        params: {
+          createStoreParams: this.instanceId,
+          conversationID: this.conversationID,
+        },
+      };
+      return opts;
+    };
+    addListener(makeNewerOptions(), (data: string) => {
+      try {
+        const result = JSON.parse<DataPayload>(data);
+        if (result != null) {
+          this.hasNewerMessages.value = result['hasNewerMessages'] == true;
+        }
+      } catch (error: any) {
+        const errMsg = error instanceof Error ? (error as Error).message : `${error}`;
+        console.error(`[${this.instanceId}][hasNewerMessages listener] Error: ${errMsg}`);
+      }
+    });
+
+    // pinnedMessageList
+    const makePinnedOptions = (): HybridListenerOptions => {
+      const opts: HybridListenerOptions = {
+        type: "",
+        store: "MessageList",
+        name: "pinnedMessageList",
+        params: {
+          createStoreParams: this.instanceId,
+          conversationID: this.conversationID,
+        },
+      };
+      return opts;
+    };
+    addListener(makePinnedOptions(), (data: string) => {
+      try {
+        const result = JSON.parse<DataPayload>(data);
+        if (result != null) {
+          const listRaw: any | null = result['pinnedMessageList']
+          if (Array.isArray(listRaw)) {
+            this.pinnedMessageList.value = listRaw as any[]
+          }
+        }
+      } catch (error: any) {
+        const errMsg = error instanceof Error ? (error as Error).message : `${error}`;
+        console.error(`[${this.instanceId}][pinnedMessageList listener] Error: ${errMsg}`);
+      }
+    });
+
+    // messageEvent（流式事件）
+    const makeEventOptions = (): HybridListenerOptions => {
+      const opts: HybridListenerOptions = {
+        type: "",
+        store: "MessageList",
+        name: "messageEvent",
+        params: {
+          createStoreParams: this.instanceId,
+          conversationID: this.conversationID,
+        },
+      };
+      return opts;
+    };
+    addListener(makeEventOptions(), (data: string) => {
+      try {
+        const result: UTSJSONObject = JSON.parse<UTSJSONObject>(data) ?? new UTSJSONObject()
+        this.messageEventHandlers.forEach((h) => {
+          try {
+            h(result);
+          } catch (handlerError: any) {
+            const errMsg = handlerError instanceof Error ? (handlerError as Error).message : `${handlerError}`;
+            console.error(`[messageEvent handler] Error: ${errMsg}`);
+          }
+        });
+      } catch (error: any) {
+        const errMsg = error instanceof Error ? (error as Error).message : `${error}`;
+        console.error(`[${this.instanceId}][messageEvent listener] Error: ${errMsg}`);
+      }
+    });
+  }
+
+  // ============================================================================
+  // Actions
+  // ============================================================================
+
+  /**
+   * 拉取消息列表（旧名 fetchMessageList）
+   *   内部 JSON.stringify(option) 序列化原对象传给 SDK 桥接（不构造新 UTSJSONObject，不拷贝断链）。
+   */
+  loadMessages = async (option: any | null): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      const options: HybridCallOptions = {
+        api: 'loadMessages',
+        params: {
+          createStoreParams: this.instanceId,
+          option: option != null ? JSON.stringify(option) : '',
+        },
+      };
+      callAPI(JSON.stringify(options), (data: string) => {
+        try {
+          const result = JSON.parse<HybridResponse>(data) ?? DEFAULT_HYBRID_RESPONSE;
+          if (result.code == 0) {
+            resolve();
+          } else {
+            const msg = result.message ?? 'loadMessages failed';
+            reject(new Error(msg));
+          }
+        } catch (error: any) {
+          const errMsg = error instanceof Error ? (error as Error).message : `${error}`;
+          reject(new Error(errMsg));
+        }
+      });
+    });
+  };
+
+  /**
+   * 加载更早消息
+   */
+  loadOlderMessages = (): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      const options: HybridCallOptions = {
+        api: 'loadOlderMessages',
+        params: {
+          createStoreParams: this.instanceId,
+        },
+      };
+
+      callAPI(JSON.stringify(options), (data: string) => {
+        try {
+          const result = JSON.parse<HybridResponse>(data) ?? DEFAULT_HYBRID_RESPONSE;
+          if (result.code == 0) {
+            resolve();
+          } else {
+            const msg = result.message ?? 'loadOlderMessages failed';
+            reject(new Error(msg));
+          }
+        } catch (error: any) {
+          const errMsg = error instanceof Error ? (error as Error).message : `${error}`;
+          reject(new Error(errMsg));
+        }
+      });
+    });
+  };
+
+  /**
+   * 加载更新消息
+   */
+  loadNewerMessages = (): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      const options: HybridCallOptions = {
+        api: 'loadNewerMessages',
+        params: {
+          createStoreParams: this.instanceId,
+        },
+      };
+
+      callAPI(JSON.stringify(options), (data: string) => {
+        try {
+          const result = JSON.parse<HybridResponse>(data) ?? DEFAULT_HYBRID_RESPONSE;
+          if (result.code == 0) {
+            resolve();
+          } else {
+            const msg = result.message ?? 'loadNewerMessages failed';
+            reject(new Error(msg));
+          }
+        } catch (error: any) {
+          const errMsg = error instanceof Error ? (error as Error).message : `${error}`;
+          reject(new Error(errMsg));
+        }
+      });
+    });
+  };
+
+  /**
+   * 发送消息已读回执
+   */
+  sendMessageReadReceipts = async (messageListParam: any[]): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      const options: HybridCallOptions = {
+        api: 'sendMessageReadReceipts',
+        params: {
+          createStoreParams: this.instanceId,
+          messageList: messageListParam,
+        },
+      };
+
+      callAPI(JSON.stringify(options), (data: string) => {
+        try {
+          const result = JSON.parse<HybridResponse>(data) ?? DEFAULT_HYBRID_RESPONSE;
+          if (result.code == 0) {
+            resolve();
+          } else {
+            const msg = result.message ?? 'sendMessageReadReceipts failed';
+            reject(new Error(msg));
+          }
+        } catch (error: any) {
+          const errMsg = error instanceof Error ? (error as Error).message : `${error}`;
+          reject(new Error(errMsg));
+        }
+      });
+    });
+  };
+
+  /**
+   * 删除消息（批量）
+   */
+  deleteMessages = async (messageListParam: any[]): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      const options: HybridCallOptions = {
+        api: 'deleteMessages',
+        params: {
+          createStoreParams: this.instanceId,
+          messageList: messageListParam,
+        },
+      };
+
+      callAPI(JSON.stringify(options), (data: string) => {
+        try {
+          const result = JSON.parse<HybridResponse>(data) ?? DEFAULT_HYBRID_RESPONSE;
+          if (result.code == 0) {
+            const messageIDsToDelete = messageListParam.map((msg: any): string => {
+              const m: UTSJSONObject = (msg ?? new UTSJSONObject()) as UTSJSONObject
+              const id: any | null = m['msgID']
+              return typeof id == 'string' ? (id as string) : ''
+            })
+            this.messageList.value = this.messageList.value.filter(
+              (msg: any): boolean => {
+                const m: UTSJSONObject = (msg ?? new UTSJSONObject()) as UTSJSONObject
+                const id: any | null = m['msgID']
+                const msgID: string = typeof id == 'string' ? (id as string) : ''
+                return !messageIDsToDelete.includes(msgID)
+              }
+            );
+            resolve();
+          } else {
+            const msg = result.message ?? 'deleteMessages failed';
+            reject(new Error(msg));
+          }
+        } catch (error: any) {
+          const errMsg = error instanceof Error ? (error as Error).message : `${error}`;
+          reject(new Error(errMsg));
+        }
+      });
+    });
+  };
+
+  /**
+   * 转发消息
+   *   内部 JSON.stringify 序列化原对象传给 SDK 桥接。
+   */
+  forwardMessages = async (
+    messageListParam: any[],
+    forwardOption: any,
+    conversationIDOrList: string | string[]
+  ): Promise<void> => {
+    const ids: string[] = Array.isArray(conversationIDOrList) ? conversationIDOrList : [conversationIDOrList]
+
+    const promises: Promise<void>[] = ids.map((cid: string): Promise<void> => {
+      return new Promise<void>((resolve, reject) => {
+        const options: HybridCallOptions = {
+          api: 'forwardMessages',
+          params: {
+            createStoreParams: this.instanceId,
+            messageList: messageListParam,
+            option: JSON.stringify(forwardOption),
+            conversationID: cid,
+          },
+        };
+
+        callAPI(JSON.stringify(options), (data: string) => {
+          try {
+            const result = JSON.parse<HybridResponse>(data) ?? DEFAULT_HYBRID_RESPONSE;
+            if (result.code == 0) {
+              resolve();
+            } else {
+              const msg = result.message ?? 'forwardMessages failed';
+              reject(new Error(msg));
+            }
+          } catch (error: any) {
+            const errMsg = error instanceof Error ? (error as Error).message : `${error}`;
+            reject(new Error(errMsg));
+          }
+        });
+      });
+    });
+
+    const results = await Promise.allSettled(promises);
+    const failed = results.filter((r) => r.status == 'rejected');
+    if (failed.length > 0) {
+      console.warn(`[forwardMessages] ${failed.length}/${results.length} failed`);
+    }
+  };
+
+  onMessageEvent = (handler: (event: any) => void): (() => void) => {
+    this.messageEventHandlers.add(handler);
+    return () => {
+      this.messageEventHandlers.delete(handler);
+    };
+  };
+
+  // ============================================================================
+  // 销毁
+  // ============================================================================
+
+  private unbindEvent(): void {
+    const dataNames: string[] = ["messageList", "hasOlderMessages", "hasNewerMessages", "pinnedMessageList", "messageEvent"];
+
+    dataNames.forEach((dataName: string) => {
+      const makeOptions = (name: string): HybridListenerOptions => {
+        const opts: HybridListenerOptions = {
+          type: "",
+          store: "MessageList",
+          name: name,
+          params: {
+            createStoreParams: this.instanceId,
+          },
+        };
+        return opts;
+      };
+      removeListener(makeOptions(dataName));
+    });
+    this.messageEventHandlers.clear();
+  }
+
+  private resetData(): void {
+    this.messageList.value = [];
+    this.hasOlderMessages.value = true;
+    this.hasNewerMessages.value = false;
+    this.pinnedMessageList.value = [];
+  }
+
+  destroyStore = (): void => {
+    // 幂等：实例已被销毁过，直接 return
+    if (!InstanceMap.has(this.instanceId)) return;
+    this.unbindEvent();
+    this.resetData();
+    InstanceMap.delete(this.instanceId);
+    const options: HybridCallOptions = {
+      api: "destroyStore",
+      params: {
+        createStoreParams: this.instanceId,
+        conversationID: this.conversationID,
+      },
+    };
+
+    callAPI(JSON.stringify(options), () => {});
+  };
+}
+
+export type UseMessageListStateOptions = {
+  conversationID?: string;
+  initialLoadOption?: any | null;
+};
+
+export type UseMessageListStateReturn = MessageListState;
+
+export function useMessageListState(options: UseMessageListStateOptions = {}): UseMessageListStateReturn {
+  const { conversationID = "", initialLoadOption = null } = options;
+  return MessageListState.getInstance(conversationID, initialLoadOption);
+}
+
+export {
+  MessageListState,
+  MessageLoadDirection,
+  MessageListType,
+};
+export default useMessageListState;

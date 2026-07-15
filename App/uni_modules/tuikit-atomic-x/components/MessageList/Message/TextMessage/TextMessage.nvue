@@ -1,7 +1,7 @@
 <template>
   <view
     class="text-msg text-msg--no-select"
-    :class="['text-msg__content', 'text-msg__content--'+ (message.isSelf ? 'out' : 'in')]"
+    :class="['text-msg__content', 'text-msg__content--'+ (message.isSentBySelf ? 'out' : 'in')]"
   >
     <view class="text-msg__highlight">
       <view
@@ -46,7 +46,7 @@ interface Props {
 const props = defineProps<Props>()
 
 const messageText = computed(() => {
-  return props.message.messageBody?.text || ''
+  return props.message.messagePayload?.text || ''
 })
 
 // 仅在含 emoji 时才走字符级切分，纯文本场景零开销

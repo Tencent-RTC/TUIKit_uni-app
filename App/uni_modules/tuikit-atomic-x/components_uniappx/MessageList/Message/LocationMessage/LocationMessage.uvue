@@ -1,0 +1,139 @@
+<template>
+  <view
+    class="location-message"
+    :class="['message-content', 'content-'+ (isOut ? 'out' : 'in')]"
+    @tap="handleLocationTap">
+    <view class="location-info">
+      <text class="location-title">{{ locationTitle }}</text>
+      <text class="location-description">{{ locationDescription }}</text>
+    </view>
+
+    <image
+      class="location-map"
+      :src="mapImageUrl"
+      :style="mapStyle"
+      mode="aspectFill"
+    />
+  </view>
+</template>
+
+<script setup lang="uts">
+import { computed } from 'vue'
+
+type Props = {
+  message: any | null
+}
+const props = defineProps<Props>()
+
+const messageContent = computed((): UTSJSONObject => {
+  const messageObj: UTSJSONObject = props.message as UTSJSONObject
+  const payload: any | null = messageObj['payload']
+  if (payload == null) return new UTSJSONObject()
+  return payload as UTSJSONObject
+})
+
+const isOut = computed((): boolean => {
+  const messageObj: UTSJSONObject = props.message as UTSJSONObject
+  const flow: any | null = messageObj['flow']
+  return flow == 'out'
+})
+
+const locationTitle = computed((): string => {
+  const mc: UTSJSONObject = messageContent.value
+  const t: any | null = mc['title']
+  if (typeof t == 'string' && (t as string).length > 0) return t as string
+  const n: any | null = mc['name']
+  if (typeof n == 'string' && (n as string).length > 0) return n as string
+  return '位置信息'
+})
+
+const locationDescription = computed((): string => {
+  const mc: UTSJSONObject = messageContent.value
+  const d: any | null = mc['description']
+  if (typeof d == 'string' && (d as string).length > 0) return d as string
+  const a: any | null = mc['address']
+  return typeof a == 'string' ? (a as string) : ''
+})
+
+const mapImageUrl = computed((): string => {
+  const mc: UTSJSONObject = messageContent.value
+  const lat: any | null = mc['latitude']
+  const lng: any | null = mc['longitude']
+
+  if (lat == null || lng == null) {
+    return 'https://picsum.photos/seed/location/400/240'
+  }
+
+  return `https://restapi.amap.com/v3/staticmap?location=${lng},${lat}&zoom=15&size=400*240&markers=mid,,A:${lng},${lat}&key=YOUR_KEY`
+})
+
+const mapStyle = computed((): UTSJSONObject => {
+  const defaultWidth = 400
+  const defaultHeight = 240
+
+  return {
+    width: `${defaultWidth}rpx`,
+    height: `${defaultHeight}rpx`
+  }
+})
+
+const handleLocationTap = (): void => {
+  const mc: UTSJSONObject = messageContent.value
+  uni.$emit('viewLocation', {
+    latitude: mc['latitude'],
+    longitude: mc['longitude'],
+    title: locationTitle.value,
+    description: locationDescription.value
+  })
+}
+</script>
+
+<style>
+.location-message {
+  overflow: hidden;
+  border: 2rpx solid #E6E9F0;
+  background-color: #FFFFFF;
+}
+
+.content-in {
+  border-radius: 4rpx 20rpx 20rpx 20rpx;
+}
+
+.content-out {
+  border-radius: 20rpx 4rpx 20rpx 20rpx;
+}
+
+.location-info {
+  flex-direction: column;
+  padding: 20rpx 24rpx;
+  border-bottom: 2rpx solid #E6E9F0;
+}
+
+.location-title {
+  font-size: 32rpx;
+  line-height: 42rpx;
+  color: rgba(0, 0, 0, 0.9);
+  font-weight: 400;
+  margin-bottom: 4rpx;
+  width: 352rpx;
+  lines: 1;
+  text-overflow: ellipsis;
+  overflow: hidden;
+}
+
+.location-description {
+  font-size: 24rpx;
+  line-height: 34rpx;
+  color: rgba(0, 0, 0, 0.4);
+  font-weight: 400;
+  width: 352rpx;
+  lines: 1;
+  text-overflow: ellipsis;
+  overflow: hidden;
+}
+
+.location-map {
+  width: 400rpx;
+  height: 240rpx;
+}
+</style>

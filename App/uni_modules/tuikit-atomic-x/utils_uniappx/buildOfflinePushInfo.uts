@@ -1,0 +1,43 @@
+/**
+ * 离线推送 (offlinePushInfo) 计算工具
+ *
+ * 由 MessageInput / ToolsPanel 在每次发送消息前调用，
+ * 让业务方通过 setOfflinePushInfo prop 注入的 resolver 回调计算 push 配置。
+ */
+
+import type {
+  OfflinePushInfo,
+  OfflinePushInfoResolver,
+  OfflinePushContext,
+} from '../types/message';
+
+/**
+ * 安全调用业务方注入的 resolver 计算 offlinePushInfo
+ *
+ * 使用约束：
+ * - 同步函数；resolver 不应做异步操作
+ * - 抛异常视为返回 null，组件不阻断 send
+ * - 返回 null / 任意 falsy 值 → 视为"不附带 push"
+ *
+ * @param resolver 业务方注入的 push 计算函数（可能为 null）
+ * @param ctx 当前发送上下文（messageType / messagePayload / conversationID）
+ * @returns 应附带的 offlinePushInfo；null 表示不附带
+ *
+ *   OfflinePushInfoResolver | undefined → OfflinePushInfoResolver | null
+ *   返回类型 OfflinePushInfo | undefined → OfflinePushInfo | null
+ *   返回值 undefined → null
+ */
+export const buildOfflinePushInfo = (
+  resolver: OfflinePushInfoResolver | null,
+  ctx: OfflinePushContext
+): OfflinePushInfo | null => {
+  if (resolver == null) return null;
+  try {
+    const result: OfflinePushInfo | null = resolver(ctx);
+    return result != null ? result : null;
+  } catch (e: any) {
+    const errMsg = e instanceof Error ? (e as Error).message : `${e}`
+    console.error(`[buildOfflinePushInfo] resolver threw, fallback to no push: ${errMsg}`);
+    return null;
+  }
+};

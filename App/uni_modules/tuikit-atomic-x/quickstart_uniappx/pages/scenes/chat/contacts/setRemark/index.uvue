@@ -1,0 +1,85 @@
+<template>
+  <view class="set-remark-page">
+    <CustomNavbar title="修改备注" :showBack="true" @back="handleBack" />
+
+    <!-- 页面内容 -->
+    <view class="page-content">
+      <SetRemark
+        :userID="userIDText"
+        :remark="remarkText"
+        @success="handleSuccess"
+        @fail="handleFail"
+        @cancel="handleCancel"
+      />
+    </view>
+  </view>
+</template>
+
+<script setup lang="uts">
+
+import { ref, computed } from 'vue'
+import { onLoad } from '@dcloudio/uni-app'
+import { SetRemark } from '@/uni_modules/tuikit-atomic-x/components/Contact/ContactInfo'
+import CustomNavbar from '@/uni_modules/tuikit-atomic-x/components/CustomNavbar/CustomNavbar.uvue'
+import { getPageData, clearPageData, REMARK_DATA } from '@/pages/utils/pageDataStore'
+
+const userID = ref<string>('')
+const remark = ref<string>('')
+
+const userIDText = computed<string>((): string => userID.value)
+const remarkText = computed<string>((): string => remark.value)
+
+onLoad((options: OnLoadOptions): void => {
+  const opts: UTSJSONObject = options as UTSJSONObject
+  const optionUserIDRaw: any | null = opts['userID']
+  const optionRemarkRaw: any | null = opts['remark']
+  const optionUserID: string = typeof optionUserIDRaw == 'string' ? (decodeURIComponent(optionUserIDRaw as string) ?? '') : ''
+  const optionRemark: string = typeof optionRemarkRaw == 'string' ? (decodeURIComponent(optionRemarkRaw as string) ?? '') : ''
+
+  if (optionUserID.length > 0) {
+    userID.value = optionUserID
+    remark.value = optionRemark
+    clearPageData(REMARK_DATA)
+    return
+  }
+
+  const remarkDataRaw: any | null = getPageData(REMARK_DATA)
+  if (remarkDataRaw != null) {
+    const dataObj: UTSJSONObject = remarkDataRaw as UTSJSONObject
+    const uidRaw: any | null = dataObj['userID']
+    const rmRaw: any | null = dataObj['friendRemark']
+    userID.value = typeof uidRaw === 'string' ? (uidRaw as string) : ''
+    remark.value = typeof rmRaw === 'string' ? (rmRaw as string) : ''
+    clearPageData(REMARK_DATA)
+  }
+})
+
+const handleBack = (): void => {
+  uni.navigateBack({ delta: 1 })
+}
+
+const handleSuccess = (_payload: any): void => {
+  setTimeout((): void => {
+    uni.navigateBack({ delta: 1 })
+  }, 1500)
+}
+
+const handleFail = (error: any): void => {
+  console.error(`设置备注失败: ${error}`)
+}
+
+const handleCancel = (): void => {
+  uni.navigateBack({ delta: 1 })
+}
+</script>
+
+<style>
+.set-remark-page {
+  flex: 1;
+  background-color: #F0F2F7;
+}
+
+.page-content {
+  flex: 1;
+}
+</style>

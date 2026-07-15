@@ -64,6 +64,7 @@ import type {
   ConversationListEmits
 } from '../../types/conversationList'
 import type { ConversationInfo } from '../../types/conversation'
+import { ReceiveMessageOpt } from '../../types/conversation'
 
 const props = withDefaults(defineProps<ConversationListProps>(), {
   actionsConfig: () => ({
@@ -84,7 +85,7 @@ const emit = defineEmits<ConversationListEmits>()
 const {
   conversationList,
   pinConversation,
-  muteConversation,
+  setReceiveMessageOpt,
   deleteConversation,
   clearConversationUnreadCount,
   destroyStore
@@ -191,7 +192,7 @@ const handlePin = async (conversationID: string, isPinned: boolean) => {
 const handleMute = async (conversationID: string, isMuted: boolean) => {
   try {
     emit('conversationMute', conversationID, isMuted)
-    await muteConversation(conversationID, isMuted)
+    await setReceiveMessageOpt(conversationID, isMuted ? ReceiveMessageOpt.NOT_NOTIFY : ReceiveMessageOpt.RECEIVE)
   } catch (error) {
     uni.showToast({
       title: isMuted ? '设置免打扰失败' : '取消免打扰失败',

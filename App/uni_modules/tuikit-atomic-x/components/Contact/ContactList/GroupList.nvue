@@ -69,7 +69,7 @@ const props = withDefaults(defineProps<GroupListProps>(), {
 
 const emit = defineEmits<GroupListEmits>()
 
-const { fetchJoinedGroupList, joinedGroupList } = useGroupState()
+const { loadJoinedGroups, joinedGroupList } = useGroupState()
 
 const selectedGroupID = ref<string>('')
 
@@ -97,12 +97,12 @@ const handleGroupClick = (group: GroupInfo) => {
 }
 
 onMounted(async () => {
-  await fetchJoinedGroupList()
+  await loadJoinedGroups()
 })
 
 // 页面显示时刷新数据
 onShow(async () => {
-  await fetchJoinedGroupList()
+  await loadJoinedGroups()
 })
 </script>
 

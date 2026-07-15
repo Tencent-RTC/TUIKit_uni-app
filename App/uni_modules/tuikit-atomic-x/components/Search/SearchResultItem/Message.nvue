@@ -51,17 +51,17 @@ const currentMessage = computed(() => {
 
 const avatarURL = computed(() => {
   if (isMessageMode.value) {
-    return props.message?.sender?.avatarURL || ''
+    return props.message?.from?.avatarURL || ''
   }
   return props.messageResult?.conversationAvatarURL || ''
 })
 
 const title = computed(() => {
   if (isMessageMode.value) {
-    return props.message?.sender?.friendRemark
-     || props.message?.sender?.nameCard
-     || props.message?.sender?.nickname
-     || props.message?.sender?.userID
+    return props.message?.from?.friendRemark
+     || props.message?.from?.nameCard
+     || props.message?.from?.nickname
+     || props.message?.from?.userID
      || ''
   }
   return props.messageResult?.conversationShowName || ''
@@ -103,7 +103,7 @@ const mediaSrc = computed(() => {
   const message = currentMessage.value
   if (!message) return ''
   
-  const body = message.messageBody
+  const body = message.messagePayload as any
   const messageType = message.messageType as MessageType
   
   switch (messageType) {
@@ -123,7 +123,7 @@ const mediaInfo = computed(() => {
   const message = currentMessage.value
   if (!message) return {}
   
-  const body = message.messageBody
+  const body = message.messagePayload as any
   const messageType = message.messageType as MessageType
   
   switch (messageType) {
@@ -157,7 +157,7 @@ const getMessageDisplayText = (message: MessageInfo | undefined): string => {
   if (!message) return ''
   
   const messageType = message.messageType as MessageType
-  const body = message.messageBody
+  const body = message.messagePayload
   
   switch (messageType) {
     case 1: // TEXT

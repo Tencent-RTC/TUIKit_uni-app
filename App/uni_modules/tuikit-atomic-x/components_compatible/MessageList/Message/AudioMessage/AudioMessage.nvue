@@ -1,14 +1,14 @@
 <template>
-  <view class="audio-message-wrapper" :class="{ 'audio-message-wrapper--self': message.isSelf }">
+  <view class="audio-message-wrapper" :class="{ 'audio-message-wrapper--self': message.isSentBySelf }">
     <view 
       class="audio-message" 
-      :class="'content-'+ (message.isSelf ? 'out' : 'in')" 
+      :class="'content-'+ (message.isSentBySelf ? 'out' : 'in')" 
       :style="{ width: audioWidth + 'rpx' }"
       @touchstart="handleTouchStart"
       @tap="handlePlayTap"
     >
       <view class="audio-highlight">
-        <view class="audio-wave-container" :class="'wave-'+ (message.isSelf ? 'out' : 'in')">
+        <view class="audio-wave-container" :class="'wave-'+ (message.isSentBySelf ? 'out' : 'in')">
           <view class="audio-wave-clip" :style="{ width: '12rpx', opacity: waveOpacity0 }">
             <image src="/uni_modules/tuikit-atomic-x/static/icon/audio.png" class="audio-wave-icon" mode="aspectFit" />
           </view>
@@ -38,8 +38,9 @@
 </template>
 
 <script>
-import { MessageMediaFileType } from '../../../../types/message'
+import { MediaQuality } from '../../../../types/message'
 import { useMessageListState } from '../../../../state/MessageListState'
+import { useMessageActionState } from '../../../../state/MessageActionState'
 import { useAudioPlayer, stopGlobalAudioPlayer } from '../../../../hooks/useAudioPlayer'
 import { useCallState } from '../../../../state/CallState'
 
@@ -98,7 +99,7 @@ export default {
       waveTimer: null,
       playingFlag: false,
       touchStartTime: 0,
-      // 语音转文字 loading 状态（仅本地控制，转换结果走 SDK 推送 message.messageBody.asrText）
+      // 语音转文字 loading 状态（仅本地控制，转换结果走 SDK 推送 message.messagePayload.asrText）
       isConverting: false,
       // 当前是否展示转换文本框；初值从本地存储恢复，"隐藏文字"会置 false 并持久化
       showConvertedText: visible,
@@ -132,10 +133,10 @@ export default {
       return this.playingFlag
     },
     soundUrl: function() {
-      return (this.message.messageBody && this.message.messageBody.soundPath) || ''
+      return (this.message.messagePayload && this.message.messagePayload.audioPath) || ''
     },
     soundDuration: function() {
-      return (this.message.messageBody && this.message.messageBody.soundDuration) || 0
+      return (this.message.messagePayload && this.message.messagePayload.audioDuration) || 0
     },
     audioWidth: function() {
       var d = this.soundDuration
@@ -156,11 +157,11 @@ export default {
       return this.waveStep === 2 ? 1 : 0
     },
     /**
-     * 语音转文字结果：直接读 message.messageBody.asrText
+     * 语音转文字结果：直接读 message.messagePayload.asrText
      * SDK 转换完成后会更新整条 message，由 MessageList 响应式刷新
      */
     asrText: function() {
-      return (this.message && this.message.messageBody && this.message.messageBody.asrText) || ''
+      return (this.message && this.message.messagePayload && this.message.messagePayload.asrText) || ''
     },
     /**
      * 转写容器是否显示：loading 中 或 已有结果且未被用户隐藏
@@ -236,7 +237,7 @@ export default {
   mounted: function() {
     this._audioPlayer.setup()
     uni.$on('audioPlayerStart', this._handleGlobalAudioStart)
-    // 转文字事件订阅（开始/失败/隐藏；成功结果通过 SDK 更新 message.messageBody.asrText）
+    // 转文字事件订阅（开始/失败/隐藏；成功结果通过 SDK 更新 message.messagePayload.asrText）
     uni.$on('audioConvertingStart', this._handleConvertingStart)
     uni.$on('audioConvertingError', this._handleConvertingError)
     uni.$on('audioConvertHide', this._handleConvertHide)
@@ -408,7 +409,7 @@ export default {
      * 幕布动画的 transform-origin：接收消息从左上角，自己发送从右上角
      */
     _curtainOrigin: function() {
-      return (this.message && this.message.isSelf) ? '100% 0' : '0 0'
+      return (this.message && this.message.isSentBySelf) ? '100% 0' : '0 0'
     },
     /**
      * 播放"幕布从角拉开"入场动画（同 Vue3 实现）
@@ -532,7 +533,7 @@ export default {
       }
       if (this.isDownloading) return
       this.isDownloading = true
-      this.msgState.downloadMessageResource(this.message, MessageMediaFileType.SOUND).then(function() {
+      useMessageActionState({ message: this.message }).downloadMedia(MediaQuality.ORIGINAL).then(function() {
         if (self.pendingPlay && self.soundUrl) {
           self.pendingPlay = false
           self._handlePlay()

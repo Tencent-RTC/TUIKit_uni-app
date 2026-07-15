@@ -24,11 +24,11 @@ const props = defineProps<Props>()
 const DEFAULT_FACE_SIZE = 120
 
 const faceIndex = computed(() => {
-  return props.message.messageBody?.faceIndex || 0
+  return props.message.messagePayload?.faceIndex || 0
 })
 
 const faceName = computed(() => {
-  return props.message.messageBody?.faceName || ''
+  return props.message.messagePayload?.faceData || ''
 })
 
 const faceImageUrl = computed(() => {

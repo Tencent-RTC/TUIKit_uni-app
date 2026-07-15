@@ -1,0 +1,100 @@
+<template>
+  <view class="search-result-item" @click="handleClick">
+    <component
+      :is="ItemComponent"
+      v-bind="itemProps"
+      :keyword="keyword"
+      :Avatar="AvatarComp"
+    />
+  </view>
+</template>
+
+<script setup lang="uts">
+/**
+ * SearchResultItem/index - 搜索结果项容器（uvue 版）
+ *
+ */
+import { computed } from 'vue'
+import AvatarComponent from '../../Avatar'
+import UserItem from './User.uvue'
+import GroupItem from './Group.uvue'
+import MessageItem from './Message.uvue'
+import ConversationItem from './Conversation.uvue'
+import type { SearchResultItemEmits, FriendSearchInfo, MessageSearchResultItem } from '../../../types/search.uts'
+import type { GroupSearchInfo, GroupMember } from '../../../types/group'
+import type { UserProfile } from '../../../types/userProfile'
+import type { MessageInfo } from '../../../types/message'
+
+const props = withDefaults(defineProps<{
+	type?: string,
+	data?: any,
+	keyword?: string,
+	Avatar?: any,
+}>(), {
+	type: '',
+	data: null,
+	keyword: '',
+	Avatar: null
+})
+
+const emit = defineEmits<SearchResultItemEmits>()
+
+const AvatarComp = computed((): any => props.Avatar ?? AvatarComponent)
+
+const ItemComponent = computed((): any => {
+	switch (props.type) {
+		case 'user':
+		case 'friend':
+			return UserItem
+		case 'group':
+			return GroupItem
+		case 'groupMember':
+			return UserItem
+		case 'message':
+			return MessageItem
+		case 'conversation':
+			return ConversationItem
+		default:
+			return UserItem
+	}
+})
+
+/**
+ * 各分支 itemProps
+ */
+type UserItemProps = { type: string, user: any }
+type FriendItemProps = { type: string, user: any }
+type GroupItemProps = { group: any }
+type GroupMemberItemProps = { type: string, user: any }
+type MessageItemProps = { message: any }
+type ConversationItemProps = { messageResult: any }
+
+const itemProps = computed((): UTSJSONObject => {
+	switch (props.type) {
+		case 'user':
+			return { type: props.type, user: props.data as any } as UTSJSONObject
+		case 'friend':
+			return { type: props.type, user: props.data as any } as UTSJSONObject
+		case 'group':
+			return { group: props.data as any } as UTSJSONObject
+		case 'groupMember':
+			return { type: props.type, user: props.data as any } as UTSJSONObject
+		case 'message':
+			return { message: props.data as any } as UTSJSONObject
+		case 'conversation':
+			return { messageResult: props.data as any } as UTSJSONObject
+		default:
+			return {}
+	}
+})
+
+const handleClick = (): void => {
+	emit('click', props.type, props.data)
+}
+</script>
+
+<style>
+.search-result-item {
+  flex: 1;
+}
+</style>

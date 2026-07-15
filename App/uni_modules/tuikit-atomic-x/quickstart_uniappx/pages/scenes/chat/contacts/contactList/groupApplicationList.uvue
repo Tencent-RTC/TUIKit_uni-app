@@ -1,0 +1,51 @@
+<template>
+	<view class="page">
+		<CustomNavbar title="群通知" :showBack="true" @back="handleBack" />
+		<view class="page-content">
+			<GroupApplicationList
+				@itemClick="handleItemClick"
+				@accept="handleAccept"
+				@reject="handleReject"
+			/>
+		</view>
+	</view>
+</template>
+
+<script setup lang="uts">
+
+import CustomNavbar from '@/uni_modules/tuikit-atomic-x/components/CustomNavbar/CustomNavbar.uvue'
+import { GroupApplicationList } from '@/uni_modules/tuikit-atomic-x/components/Contact'
+
+const handleBack = (): void => {
+	uni.navigateBack({
+		delta: 1
+	})
+}
+
+const handleItemClick = (_item: any): void => {
+	// 占位：群申请点击逻辑（如有）由业务方补充
+}
+
+const handleAccept = (_item: any): void => {
+	uni.navigateBack({
+		delta: 1
+	})
+}
+
+const handleReject = (_item: any): void => {
+	uni.navigateBack({
+		delta: 1
+	})
+}
+</script>
+
+<style>
+.page {
+	flex: 1;
+	background-color: #f5f5f5;
+}
+
+.page-content {
+	flex: 1;
+}
+</style>

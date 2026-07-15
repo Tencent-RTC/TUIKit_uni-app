@@ -1,0 +1,25 @@
+
+export function getMessageObj(message: any | null): any {
+  if (message == null) return new UTSJSONObject()
+  return message
+}
+
+export function getMessageAny(message: any | null, key: string): any | null {
+  const v = getMessageObj(message)[key]
+  return v ?? null
+}
+
+export function getMessageString(message: any | null, key: string, fallback: string = ''): string {
+  const v = getMessageObj(message)[key]
+  return typeof v == 'string' ? (v as string) : fallback
+}
+
+export function getMessageNumber(message: any | null, key: string, fallback: number = 0): number {
+  const v = getMessageObj(message)[key]
+  return typeof v == 'number' ? (v as number) : fallback
+}
+
+export function getMessageBool(message: any | null, key: string): boolean {
+  const v = getMessageObj(message)[key]
+  return v == true
+}

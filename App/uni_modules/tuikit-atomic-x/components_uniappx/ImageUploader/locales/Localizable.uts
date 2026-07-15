@@ -1,0 +1,39 @@
+
+import { zhCN } from './zh-CN'
+import { en } from './en'
+
+const languageData: Map<string, Map<string, string>> = new Map()
+languageData.set('zh-CN', zhCN)
+languageData.set('zh-Hans', zhCN)
+languageData.set('zh', zhCN)
+languageData.set('en', en)
+
+function getSystemLanguage(): string {
+	try {
+		const systemInfo = uni.getSystemInfoSync()
+		const lang = systemInfo.language
+		return typeof lang == 'string' && lang.length > 0 ? lang : 'zh-CN'
+	} catch (e: any) {
+		return 'zh-CN'
+	}
+}
+
+export function localizedString(key: string): string {
+	const lang = getSystemLanguage()
+
+	const direct = languageData.get(lang)?.get(key)
+	if (direct != null) {
+		return direct
+	}
+
+	const parts: string[] = lang.split('-')
+	for (let i = parts.length - 1; i >= 1; i--) {
+		const prefix = parts.slice(0, i).join('-')
+		const v = languageData.get(prefix)?.get(key)
+		if (v != null) {
+			return v
+		}
+	}
+
+	return zhCN.get(key) ?? key
+}

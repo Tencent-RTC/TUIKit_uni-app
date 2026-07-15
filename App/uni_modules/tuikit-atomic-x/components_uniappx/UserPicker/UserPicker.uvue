@@ -1,0 +1,98 @@
+<template>
+  <view class="user-picker-page">
+    <UserPickerList
+      :maxCount="maxCount"
+      :dataSource="userList"
+      :lockedItems="lockedItems"
+      :title="title"
+      :singleSelect="singleSelect"
+      :pinnedTopItems="pinnedTopItems"
+      :remoteSearch="remoteSearch"
+      :enableSearch="enableSearch"
+      @confirm="handleConfirm"
+      @searchChange="handleSearchChange"
+    />
+  </view>
+</template>
+
+<script setup lang="uts">
+
+import { onBeforeUnmount, computed } from 'vue'
+import UserPickerList from './components/UserPickerList.uvue'
+import { useUserPicker, type User } from './service/index.uts'
+
+type Props = {
+	businessType: number
+	routeParams?: UTSJSONObject
+}
+
+const props = withDefaults(defineProps<Props>(), {
+	businessType: -1,
+	routeParams: (): UTSJSONObject => new UTSJSONObject()
+})
+
+type Emits = {
+	confirm: any[]
+}
+
+const emit = defineEmits<Emits>()
+
+// 调用 Hook
+const pickerResult = useUserPicker(props.businessType, props.routeParams)
+
+const {
+	userList,
+	lockedItems,
+	maxCount,
+	title,
+	hasMore,
+	handleConfirm: confirmHandler,
+	handleCancel: cancelHandler,
+	onReachEnd
+} = pickerResult
+
+const singleSelect = computed<boolean>((): boolean => pickerResult.singleSelect == true)
+const pinnedTopItems = computed<User[]>((): User[] => (pickerResult.pinnedTopItems?.value ?? []) as User[])
+const remoteSearch = computed<boolean>((): boolean => typeof pickerResult.onSearchChange == 'function')
+
+const enableSearch = computed<boolean>((): boolean => {
+	if (pickerResult.enableSearch == true) return true
+	if (pickerResult.enableSearch == false) return false
+	const rp: UTSJSONObject = props.routeParams ?? new UTSJSONObject()
+	const v: any | null = rp['enableSearch']
+	if (v == null) return true
+	return !(v == false || v == 'false' || v == 0 || v == '0')
+})
+
+const handleConfirm = async (selectedUsers: any[]): Promise<void> => {
+	emit('confirm', selectedUsers)
+	await confirmHandler(selectedUsers)
+}
+
+const handleSearchChange = (keyword: string): void => {
+	if (pickerResult.onSearchChange != null) {
+		pickerResult.onSearchChange(keyword)
+	}
+}
+
+const handleReachEnd = async (): Promise<void> => {
+	if (onReachEnd != null) {
+		await onReachEnd()
+	}
+}
+
+onBeforeUnmount((): void => {
+	if (cancelHandler != null) {
+		cancelHandler().catch((e: any | null): void => {
+			console.warn(`[UserPicker] cancelHandler failed: ${e}`)
+		})
+	}
+})
+</script>
+
+<style>
+.user-picker-page {
+  flex: 1;
+  background-color: #f5f5f5;
+}
+</style>

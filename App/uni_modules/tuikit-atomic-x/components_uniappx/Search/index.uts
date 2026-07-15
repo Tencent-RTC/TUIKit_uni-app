@@ -1,0 +1,34 @@
+import Search from './Search.uvue'
+import SearchBar from './SearchBar.uvue'
+import SearchResults from './SearchResults.uvue'
+import SearchTab from './SearchTab.uvue'
+
+import MessageAdvanced from './SearchAdvanced/MessageAdvanced.uvue'
+import UserAdvanced from './SearchAdvanced/UserAdvanced.uvue'
+
+import SearchResultsPresearch from './placeholders/SearchResultsPresearch.uvue'
+import SearchResultsLoading from './placeholders/SearchResultsLoading.uvue'
+import SearchResultsEmpty from './placeholders/SearchResultsEmpty.uvue'
+
+import SearchResultItemUser from './SearchResultItem/User.uvue'
+import SearchResultItemGroup from './SearchResultItem/Group.uvue'
+import SearchResultItemMessage from './SearchResultItem/Message.uvue'
+import SearchResultItemConversation from './SearchResultItem/Conversation.uvue'
+
+export {
+  Search,
+  SearchBar,
+  SearchResults,
+  SearchTab,
+  MessageAdvanced,
+  UserAdvanced,
+  SearchResultsPresearch,
+  SearchResultsLoading,
+  SearchResultsEmpty,
+  SearchResultItemUser,
+  SearchResultItemGroup,
+  SearchResultItemMessage,
+  SearchResultItemConversation
+}
+
+export default Search

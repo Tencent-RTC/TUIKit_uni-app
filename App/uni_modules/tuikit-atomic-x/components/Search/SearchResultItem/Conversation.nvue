@@ -26,8 +26,8 @@ const previewText = computed(() => {
   if (!messages || messages.length === 0) return ''
   
   const firstMessage = messages[0]
-  if (firstMessage.messageBody?.text) {
-    return firstMessage.messageBody.text
+  if (firstMessage.messagePayload?.text) {
+    return firstMessage.messagePayload.text
   }
   return getMessageAbstract(firstMessage);
 })

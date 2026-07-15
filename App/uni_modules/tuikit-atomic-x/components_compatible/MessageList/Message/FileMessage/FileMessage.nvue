@@ -1,7 +1,7 @@
 <template>
   <view
     class="file-message"
-    :class="['content-'+ (message.isSelf ? 'out' : 'in')]"
+    :class="['content-'+ (message.isSentBySelf ? 'out' : 'in')]"
     @touchstart="handleTouchStart"
     @touchend="handleTouchEnd"
     @tap="handleFileTap"
@@ -19,13 +19,14 @@
         </view>
       </view>
     </view>
-    <view v-if="isDownloading" class="downloading" :class="['content-'+ (message.isSelf ? 'out' : 'in')]"></view>
+    <view v-if="isDownloading" class="downloading" :class="['content-'+ (message.isSentBySelf ? 'out' : 'in')]"></view>
   </view>
 </template>
 
 <script>
-import { MessageMediaFileType } from '../../../../types/message'
+import { MediaQuality } from '../../../../types/message'
 import { useMessageListState } from '../../../../state/MessageListState'
+import { useMessageActionState } from '../../../../state/MessageActionState'
 
 import wordIcon from '../../../../static/icon/file-types/word_icon.png'
 import excelIcon from '../../../../static/icon/file-types/excel_icon.png'
@@ -67,9 +68,9 @@ export default {
     }
   },
   computed: {
-    fileName() { return (this.message.messageBody && this.message.messageBody.fileName) || '未知文件' },
-    fileSize() { return (this.message.messageBody && this.message.messageBody.fileSize) || 0 },
-    filePath() { return (this.message.messageBody && this.message.messageBody.filePath) || '' },
+    fileName() { return (this.message.messagePayload && this.message.messagePayload.fileName) || '未知文件' },
+    fileSize() { return (this.message.messagePayload && this.message.messagePayload.fileSize) || 0 },
+    filePath() { return (this.message.messagePayload && this.message.messagePayload.filePath) || '' },
     isDownloaded() { return !!this.filePath },
     // 下载进度（0-100），与 VideoMessage 一致：SDK 下载时通过 message.progress 推送
     downloadProgress() { return (this.message && this.message.progress) != null ? this.message.progress : 0 },
@@ -163,7 +164,7 @@ export default {
 
       if (!this.msgState) return
       this.isDownloading = true
-      this.msgState.downloadMessageResource(this.message, MessageMediaFileType.FILE).then(function() {
+      useMessageActionState({ message: this.message }).downloadMedia(MediaQuality.ORIGINAL).then(function() {
       }).catch(function(err) {
         console.error('[FileMessage] download failed:', err)
         uni.showToast({ title: '下载失败', icon: 'none' })

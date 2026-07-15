@@ -1,0 +1,250 @@
+<template>
+  <view
+    class="text-msg text-msg--no-select"
+    :class="['text-msg__content', 'text-msg__content--'+ (isSelf ? 'out' : 'in')]"
+  >
+    <view class="text-msg__highlight">
+      <view
+        v-if="quoteMessage"
+        class="text-msg__quote text-msg__quote--no-select"
+        @tap="handleReferenceTap"
+      >
+        <view class="text-msg__quote-header">
+          
+          <text class="text-msg__quote-sender text-msg__text--no-select">{{ quoteSender }}</text>
+        </view>
+        <view class="text-msg__quote-body">
+          
+          <text class="text-msg__quote-text text-msg__text--no-select">{{ quoteAbstract }}</text>
+        </view>
+      </view>
+
+      <!-- 渲染策略：
+           - 纯文本（不含 [TUIEmoji_*]）：单个 <text> 节点，性能最优 + 自动换行 + 原生字号控制
+           - 含 emoji：字符级 view + flex-wrap，每个字符 / emoji 独立节点，align-items:center 强制居中
+             代价是节点数增加，仅在 ~20% 含 emoji 消息中付出 -->
+      <view class="text-msg__body text-msg__body--no-select">
+        <text v-if="!hasEmojiInText" class="text-msg__plain text-msg__text--no-select">{{ messageText }}</text>
+        <view v-else class="text-msg__line">
+          <template v-for="(seg, idx) in segments" :key="idx">
+            <text v-if="seg.type == 'char'" class="text-msg__char text-msg__text--no-select">{{ seg.text }}</text>
+            <image v-else class="text-msg__emoji" :src="seg.src" mode="aspectFit" resize="contain" />
+          </template>
+        </view>
+      </view>
+    </view>
+  </view>
+</template>
+
+<script setup lang="uts">
+import { computed } from 'vue'
+import { parseTextToSegments, hasEmoji, type TextOrEmojiSegment } from '../../../../utils/emojiUtils'
+
+import { MessageType } from '../../../../types/message'
+
+type Props = {
+  message: any | null
+}
+
+const props = defineProps<Props>()
+
+function getCurrentMessage(): any | null {
+  const raw: any | null = props.message
+  if (raw == null) return null
+  return raw
+}
+
+function getPayloadText(obj: any | null): string {
+  if (obj == null) return ''
+  try {
+    const payload: UTSJSONObject = obj as UTSJSONObject
+    const value = payload['text'];
+    return typeof value == 'string' ? (value as string) : ''
+  } catch (_e: any) {
+    return ''
+  }
+}
+
+function getSenderName(sender: any | null): string {
+  if (sender == null) return ''
+  const s: UTSJSONObject = sender as UTSJSONObject
+  const nameCard: any | null = s['nameCard']
+  const friendRemark: any | null = s['friendRemark']
+  const nickname: any | null = s['nickname']
+  const userID: any | null = s['userID']
+  if (typeof nameCard == 'string' && (nameCard as string).length > 0) return nameCard as string
+  if (typeof friendRemark == 'string' && (friendRemark as string).length > 0) return friendRemark as string
+  if (typeof nickname == 'string' && (nickname as string).length > 0) return nickname as string
+  return typeof userID == 'string' ? userID as string : ''
+}
+
+function getQuoteAbstractText(quote: any | null): string {
+  if (quote == null) return ''
+  const q: UTSJSONObject = quote as UTSJSONObject
+  const type: any | null = q['messageType']
+  if (type == MessageType.TEXT) {
+    return getPayloadText(q['messagePayload'] ?? null)
+  }
+  if (type == MessageType.IMAGE) return '[图片]'
+  if (type == MessageType.VIDEO) return '[视频]'
+  if (type == MessageType.AUDIO) return '[语音]'
+  if (type == MessageType.FILE) return '[文件]'
+  if (type == MessageType.FACE) return '[表情]'
+  if (type == MessageType.CUSTOM) return '[自定义消息]'
+  if (type == MessageType.MERGED) return '[聊天记录]'
+  if (type == MessageType.TIPS) return '[系统消息]'
+  if (type == MessageType.STREAM) return '[流式消息]'
+  return '[消息]'
+}
+
+const messageText = computed((): string => {
+  const message = getCurrentMessage()
+  if (message == null) return ''
+  const mObj: UTSJSONObject = message as UTSJSONObject
+  const payloadRaw: any | null = mObj['messagePayload']
+  const payload: any | null = payloadRaw != null ? payloadRaw : null
+  return getPayloadText(payload)
+})
+
+const isSelf = computed((): boolean => {
+  const message = getCurrentMessage()
+  if (message == null) return false
+  const mObj: UTSJSONObject = message as UTSJSONObject
+  const isSelfRaw: any | null = mObj['isSentBySelf']
+  return isSelfRaw == true
+})
+
+// 仅在含 emoji 时才走字符级切分，纯文本场景零开销
+const hasEmojiInText = computed(() => hasEmoji(messageText.value))
+const segments = computed((): TextOrEmojiSegment[] => (hasEmojiInText.value ? parseTextToSegments(messageText.value) : []) as TextOrEmojiSegment[])
+
+const quoteMessage = computed((): any | null => {
+  const message = getCurrentMessage()
+  if (message == null) return null
+  const mObj: UTSJSONObject = message as UTSJSONObject
+  const qm: any | null = mObj['quoteInfo']
+  if (qm == null) return null
+  return qm
+})
+
+const quoteSender = computed((): string => {
+  const quote = quoteMessage.value
+  if (quote == null) return ''
+  const q: UTSJSONObject = quote as UTSJSONObject
+  return getSenderName(q['sender'] ?? null)
+})
+
+const quoteAbstract = computed((): string => {
+  return getQuoteAbstractText(quoteMessage.value)
+})
+
+const handleReferenceTap = () => {
+  const quote = quoteMessage.value
+  if (quote == null) return
+  const q: UTSJSONObject = quote as UTSJSONObject
+  const idRaw: any | null = q['msgID']
+  const id: string = typeof idRaw == 'string' ? (idRaw as string) : ''
+  if (id.length > 0) {
+    uni.$emit('scrollToMessage', id)
+  }
+}
+</script>
+
+<style>
+.text-msg {
+  flex-direction: column;
+  max-width: 500rpx;
+}
+
+/* 禁用整个文本消息的选择 */
+.text-msg--no-select {
+}
+
+.text-msg__content {
+  flex: 1;
+}
+
+.text-msg__content--in {
+  background-color: #F0F2F7;
+  border-radius: 4rpx 20rpx 20rpx 20rpx;
+}
+
+.text-msg__content--out {
+  background-color: #CCE2FF;
+  border-radius: 20rpx 4rpx 20rpx 20rpx;
+}
+
+.text-msg__highlight {
+  flex: 1;
+  padding: 20rpx 24rpx;
+  background-color: transparent;
+}
+
+.text-msg__quote {
+  background-color: rgba(0, 0, 0, 0.05);
+  border-left-width: 4rpx;
+  border-left-color: #999;
+  border-radius: 8rpx;
+  padding: 16rpx;
+  margin-bottom: 12rpx;
+}
+
+.text-msg__quote--no-select {
+}
+
+.text-msg__quote-header {
+  margin-bottom: 8rpx;
+}
+
+.text-msg__quote-sender {
+  font-size: 24rpx;
+  color: #333;
+  font-weight: 500;
+}
+
+.text-msg__quote-body {
+  flex-direction: column;
+}
+
+.text-msg__quote-text {
+  font-size: 26rpx;
+  color: #666;
+}
+
+.text-msg__text--no-select {
+}
+
+.text-msg__body {
+  flex-direction: column;
+}
+
+.text-msg__body--no-select {
+}
+
+/* 纯文本路径：单个 text 节点，原生 lines / 自动换行，最优性能
+   word-break/word-wrap 让超长英文单词、URL 等到达边界时强制断字换行（避免溢出气泡） */
+.text-msg__plain {
+  font-size: 32rpx;
+  line-height: 44rpx;
+  color: #1A1A1A;
+  white-space: normal;
+}
+
+/* 字符级 flex-wrap 容器：图文混排 + 自动换行 + 垂直居中 */
+.text-msg__line {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.text-msg__char {
+  font-size: 32rpx;
+  line-height: 44rpx;
+  color: #1A1A1A;
+}
+
+.text-msg__emoji {
+  width: 40rpx;
+  height: 40rpx;
+}
+</style>

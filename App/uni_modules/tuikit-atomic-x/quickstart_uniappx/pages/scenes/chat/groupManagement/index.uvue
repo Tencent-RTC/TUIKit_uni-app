@@ -1,0 +1,25 @@
+<template>
+  <GroupManagement :conversationID="conversationID" />
+</template>
+
+<script setup lang="uts">
+
+import { ref } from 'vue'
+import { onLoad } from '@dcloudio/uni-app'
+import GroupManagement from '@/uni_modules/tuikit-atomic-x/components/ChatSetting/GroupManagement.uvue'
+
+const conversationID = ref<string>('')
+
+onLoad((options: OnLoadOptions): void => {
+  const opt = options as UTSJSONObject
+  const cid = opt['conversationID']
+  if (typeof cid === 'string' && cid.length > 0) {
+    conversationID.value = cid
+  } else {
+    console.error('groupManagement page 未接收到 conversationID 参数')
+  }
+})
+</script>
+
+<style scoped>
+</style>

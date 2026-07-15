@@ -1,0 +1,7 @@
+/**
+ * MessageInput 组件导出
+ */
+import MessageInput from './MessageInput.uvue'
+
+export default MessageInput
+export { MessageInput }

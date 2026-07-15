@@ -1,0 +1,385 @@
+<template>
+  <view class="search-results">
+    <!-- 预搜索状态 -->
+    <view v-if="showPresearch && !isConversationSearch" class="search-results__content">
+      <component
+        :is="PresearchComponent"
+        :searchHistory="searchHistory"
+        :keyword="keyword"
+        :showCloudSearch="showCloudSearch"
+        @historyClick="handleHistoryClick"
+        @clearHistory="handleClearHistory"
+        @cloudSearchClick="handleCloudSearchClick"
+      />
+    </view>
+    <!-- 加载状态 -->
+    <view v-else-if="isLoading" class="search-results__content">
+      <component
+        :is="LoadingComponent"
+      />
+    </view>
+    <!-- 空状态 -->
+    <view v-else-if="isEmpty" class="search-results__content">
+      <component
+        :is="EmptyComponent"
+        :keyword="keyword"
+      />
+    </view>
+    <!-- 结果列表 -->
+    <scroll-view v-else class="search-results__list" scroll-y="true">
+      <template v-if="!isConversationSearch">
+        <view v-if="hasFriends" class="search-results__section-header">
+          <text class="search-results__section-title">用户</text>
+        </view>
+        <view
+          class="search-results__section-item"
+          v-for="item in friendItems"
+          :key="item.key"
+        >
+          <view class="search-results__item-wrapper">
+            <component
+              :is="SearchResultItemComponent"
+              type="friend"
+              :data="item.data"
+              :keyword="keyword"
+              :Avatar="AvatarComp"
+              @click="handleItemClick"
+            />
+          </view>
+        </view>
+        <view v-if="showMoreFriend" class="search-results__section-more" @click="handleViewMore('friend')">
+          <text class="search-results__section-more-text">查看更多用户</text>
+        </view>
+        <view v-if="hasFriends" class="search-results__section-gap"></view>
+        <view v-if="hasGroups" class="search-results__section-header">
+          <text class="search-results__section-title">群聊</text>
+        </view>
+        <view
+          class="search-results__section-item"
+          v-for="item in groupItems"
+          :key="item.key"
+        >
+          <view class="search-results__item-wrapper">
+            <component
+              :is="SearchResultItemComponent"
+              type="group"
+              :data="item.data"
+              :keyword="keyword"
+              :Avatar="AvatarComp"
+              @click="handleItemClick"
+            />
+          </view>
+        </view>
+        <view v-if="showMoreGroup" class="search-results__section-more" @click="handleViewMore('group')">
+          <text class="search-results__section-more-text">查看更多群聊</text>
+        </view>
+        <view v-if="hasGroups" class="search-results__section-gap"></view>
+      </template>
+      <view v-if="hasMessages" class="search-results__section-header">
+        <text class="search-results__section-title">聊天记录</text>
+      </view>
+      <template v-if="isConversationSearch">
+        <view
+          v-for="pair in messagePairs"
+          :key="pair.messageKey"
+          class="search-results__section-item"
+        >
+          <view class="search-results__item-wrapper">
+            <component
+              :is="SearchResultItemComponent"
+              type="message"
+              :data="pair.data"
+              :keyword="keyword"
+              :Avatar="AvatarComp"
+              @click="handleItemClick"
+            />
+          </view>
+        </view>
+      </template>
+      <template v-else>
+        <view
+          class="search-results__section-item"
+          v-for="item in messageResultItems"
+          :key="item.key"
+        >
+          <view class="search-results__item-wrapper">
+            <component
+              :is="SearchResultItemComponent"
+              type="conversation"
+              :data="item.data"
+              :keyword="keyword"
+              :Avatar="AvatarComp"
+              @click="handleItemClick"
+            />
+          </view>
+        </view>
+      </template>
+      <view v-if="showMoreMessage" class="search-results__section-more" @click="handleViewMore('message')">
+        <text class="search-results__section-more-text">查看更多消息</text>
+      </view>
+    </scroll-view>
+  </view>
+</template>
+
+<script setup lang="uts">
+
+import { computed } from 'vue'
+import AvatarComponent from '../Avatar'
+import DefaultSearchResultItem from './SearchResultItem/index.uvue'
+import DefaultPresearch from './placeholders/SearchResultsPresearch.uvue'
+import DefaultLoading from './placeholders/SearchResultsLoading.uvue'
+import DefaultEmpty from './placeholders/SearchResultsEmpty.uvue'
+import {
+  type SearchResultsProps,
+  type SearchResultsEmits,
+  type SearchResultType,
+} from '../../types/search.uts'
+
+const props = withDefaults(defineProps<SearchResultsProps>(), {
+	keyword: '',
+	conversationID: '',
+	currentTab: 'all',
+	isLoading: false,
+	showPresearch: true,
+	friendList: (): any[] => [],
+	groupList: (): any[] => [],
+	groupMemberList: (): UTSJSONObject => ({}),
+	messageResults: (): any[] => [],
+	conversationList: (): any[] => [],
+	hasMoreFriend: false,
+	hasMoreGroup: false,
+	hasMoreGroupMember: false,
+	hasMoreMessage: false,
+	searchHistory: (): string[] => [],
+	showCloudSearch: false,
+	SearchResultItem: null,
+	PlaceholderEmpty: null,
+	PlaceholderLoading: null,
+	PlaceholderPresearch: null,
+	Avatar: null
+})
+
+const emit = defineEmits<SearchResultsEmits>()
+
+const defaultDisplayCount = 3
+
+const isAllTab = computed((): boolean => props.currentTab == 'all')
+
+const isConversationSearch = computed((): boolean => props.conversationID.length > 0)
+
+const SearchResultItemComponent = computed((): any => props.SearchResultItem ?? DefaultSearchResultItem)
+const PresearchComponent = computed((): any => props.PlaceholderPresearch ?? DefaultPresearch)
+const LoadingComponent = computed((): any => props.PlaceholderLoading ?? DefaultLoading)
+const EmptyComponent = computed((): any => props.PlaceholderEmpty ?? DefaultEmpty)
+const AvatarComp = computed((): any => props.Avatar ?? AvatarComponent)
+
+const isEmpty = computed((): boolean => {
+	if (isConversationSearch.value) {
+		// 会话内搜索：只需要 messageResults 为空即展示
+		return props.messageResults == null || props.messageResults.length == 0
+	}
+	// 全局搜索：三个列表都为空时展示
+	return (props.friendList == null || props.friendList.length == 0) &&
+		(props.groupList == null || props.groupList.length == 0) &&
+		(props.messageResults == null || props.messageResults.length == 0)
+})
+
+const hasFriends = computed((): boolean => props.friendList != null && props.friendList.length > 0)
+const hasGroups = computed((): boolean => props.groupList != null && props.groupList.length > 0)
+const hasMessages = computed((): boolean => props.messageResults != null && props.messageResults.length > 0)
+
+const displayFriendList = computed((): any[] => {
+	const all: any[] = props.friendList != null ? (props.friendList as any[]) : ([] as any[])
+	if (isAllTab.value) {
+		return all.slice(0, defaultDisplayCount)
+	}
+	return all
+})
+
+const displayGroupList = computed((): any[] => {
+	const all: any[] = props.groupList != null ? (props.groupList as any[]) : ([] as any[])
+	if (isAllTab.value) {
+		return all.slice(0, defaultDisplayCount)
+	}
+	return all
+})
+
+const displayMessageResults = computed((): any[] => {
+	const all: any[] = props.messageResults != null ? (props.messageResults as any[]) : ([] as any[])
+	if (isAllTab.value) {
+		return all.slice(0, defaultDisplayCount)
+	}
+	return all
+})
+
+type FriendItemWithKey = { key: string, data: any | null }
+type GroupItemWithKey = { key: string, data: any | null }
+type MessageResultWithKey = { key: string, data: any | null }
+type MessagePair = { messageResultKey: string, messageKey: string, data: any | null }
+
+const friendItems = computed((): FriendItemWithKey[] => {
+	const result: FriendItemWithKey[] = []
+	for (let i = 0; i < displayFriendList.value.length; i++) {
+		const f: any | null = displayFriendList.value[i]
+		const obj: UTSJSONObject = (f ?? new UTSJSONObject()) as UTSJSONObject
+		const uidRaw: any | null = obj['userID']
+		const uid: string = typeof uidRaw == 'string' ? (uidRaw as string) : '' + i
+		result.push({ key: `friend-${uid}`, data: f })
+	}
+	return result
+})
+
+const groupItems = computed((): GroupItemWithKey[] => {
+	const result: GroupItemWithKey[] = []
+	for (let i = 0; i < displayGroupList.value.length; i++) {
+		const g: any | null = displayGroupList.value[i]
+		const obj: UTSJSONObject = (g ?? new UTSJSONObject()) as UTSJSONObject
+		const gidRaw: any | null = obj['groupID']
+		const gid: string = typeof gidRaw == 'string' ? (gidRaw as string) : '' + i
+		result.push({ key: `group-${gid}`, data: g })
+	}
+	return result
+})
+
+const messageResultItems = computed((): MessageResultWithKey[] => {
+	const result: MessageResultWithKey[] = []
+	for (let i = 0; i < displayMessageResults.value.length; i++) {
+		const mr: any | null = displayMessageResults.value[i]
+		const obj: UTSJSONObject = (mr ?? new UTSJSONObject()) as UTSJSONObject
+		const cidRaw: any | null = obj['conversationID']
+		const cid: string = typeof cidRaw == 'string' ? (cidRaw as string) : '' + i
+		result.push({ key: `message-${cid}`, data: mr })
+	}
+	return result
+})
+
+// 嵌套场景：messageResult 内含 messageList（typed array），双层 v-for
+const messagePairs = computed((): MessagePair[] => {
+	const result: MessagePair[] = []
+	for (let i = 0; i < displayMessageResults.value.length; i++) {
+		const mr: any | null = displayMessageResults.value[i]
+		const obj: UTSJSONObject = (mr ?? new UTSJSONObject()) as UTSJSONObject
+		const mlRaw: any | null = obj['messageList']
+		const cidRaw: any | null = obj['conversationID']
+		const cid: string = typeof cidRaw == 'string' ? (cidRaw as string) : '' + i
+		if (mlRaw == null) continue
+		const ml: any[] = mlRaw as any[]
+		for (let j = 0; j < ml.length; j++) {
+			const m: any | null = ml[j]
+			const mObj: UTSJSONObject = (m ?? new UTSJSONObject()) as UTSJSONObject
+			const midRaw: any | null = mObj['messageID']
+			const mid: string = typeof midRaw == 'string' ? (midRaw as string) : `${cid}-${j}`
+			result.push({ messageResultKey: `conv-${cid}`, messageKey: `message-${mid}`, data: m })
+		}
+	}
+	return result
+})
+
+const showMoreFriend = computed((): boolean => {
+	if (isConversationSearch.value) {
+		return false
+	}
+	if (isAllTab.value) {
+		return props.hasMoreFriend || (props.friendList != null && props.friendList.length > defaultDisplayCount)
+	}
+	return props.hasMoreFriend
+})
+
+const showMoreGroup = computed((): boolean => {
+	if (isConversationSearch.value) {
+		return false
+	}
+	if (isAllTab.value) {
+		return props.hasMoreGroup || (props.groupList != null && props.groupList.length > defaultDisplayCount)
+	}
+	return props.hasMoreGroup
+})
+
+const showMoreMessage = computed((): boolean => {
+	if (isAllTab.value && !isConversationSearch.value) {
+		return props.hasMoreMessage || (props.messageResults != null && props.messageResults.length > defaultDisplayCount)
+	}
+	return props.hasMoreMessage
+})
+
+const handleItemClick = (type: SearchResultType | 'conversation', data: any | null): void => {
+	emit('resultItemClick', type, data)
+}
+
+const handleViewMore = (type: SearchResultType): void => {
+	emit('viewMore', type)
+}
+
+const handleHistoryClick = (keyword: string): void => {
+	emit('historyClick', keyword)
+}
+
+const handleClearHistory = (): void => {
+	emit('clearHistory')
+}
+
+const handleCloudSearchClick = (): void => {
+	emit('cloudSearchClick')
+}
+</script>
+
+<style>
+.search-results {
+  flex: 1;
+  border-top: 3rpx solid #E6E9F0;
+  background-color: #ffffff;
+}
+
+.search-results__content {
+  flex: 1;
+}
+
+.search-results__list {
+  flex: 1;
+}
+
+.search-results__section-header {
+  flex-direction: row;
+  align-items: center;
+  padding: 20rpx 40rpx 3rpx;
+  background-color: #ffffff;
+}
+
+.search-results__section-title {
+  font-size: 28rpx;
+  line-height: 48rpx;
+  font-weight: 500;
+  color: #333333;
+}
+
+.search-results__section-more {
+  justify-content: center;
+  padding: 26rpx 40rpx 11rpx;
+  background-color: #ffffff;
+}
+
+.search-results__section-more-text {
+  font-size: 28rpx;
+  font-weight: 400;
+  line-height: 40rpx;
+  color: #1C66E5;
+}
+
+.search-results__section-gap {
+  height: 2rpx;
+  background-color: #F5F6F7;
+}
+
+.search-results__section-item {
+  padding: 0 30rpx;
+}
+
+.search-results__item-wrapper {
+  flex: 1;
+  padding: 12rpx 0;
+  border-bottom: 1rpx solid #E6E9F0;
+}
+.search-results__item-wrapper:last-child {
+  border-bottom: none;
+}
+</style>

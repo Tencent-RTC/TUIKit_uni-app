@@ -1,0 +1,329 @@
+/**
+ * 群组权限管理
+ * @module permissions
+ * @description 基于群类型和成员角色的权限矩阵
+ */
+
+import { GroupType, GroupMemberFilterRole } from "../../../types/group";
+
+// ============================================================================
+// 权限枚举
+// ============================================================================
+
+/**
+ * 群组权限类型
+ */
+export enum GroupPermission {
+	/** 编辑群名称 */
+	EDIT_GROUP_PROFILE_NAME = "EDIT_GROUP_PROFILE_NAME",
+	/** 编辑群头像 */
+	EDIT_GROUP_PROFILE_AVATAR = "EDIT_GROUP_PROFILE_AVATAR",
+	/** 编辑群简介 */
+	EDIT_GROUP_PROFILE_INTRODUCTION = "EDIT_GROUP_PROFILE_INTRODUCTION",
+	/** 编辑群公告 */
+	EDIT_GROUP_PROFILE_NOTIFICATION = "EDIT_GROUP_PROFILE_NOTIFICATION",
+	/** 编辑群其他资料 */
+	EDIT_GROUP_PROFILE_ELSE = "EDIT_GROUP_PROFILE_ELSE",
+	/** 移除成员 */
+	REMOVE_MEMBER = "REMOVE_MEMBER",
+	/** 设置成员角色 */
+	SET_MEMBER_ROLE = "SET_MEMBER_ROLE",
+	/** 禁言成员 */
+	MUTE_MEMBER = "MUTE_MEMBER",
+	/** 全员禁言 */
+	MUTE_ALL_MEMBERS = "MUTE_ALL_MEMBERS",
+	/** 转让群主 */
+	TRANSFER_OWNERSHIP = "TRANSFER_OWNERSHIP",
+	/** 解散群 */
+	DISMISS_GROUP = "DISMISS_GROUP",
+	/** 退出群 */
+	QUIT_GROUP = "QUIT_GROUP",
+}
+
+// ============================================================================
+// 类型定义
+// ============================================================================
+
+type RoleFlags = {
+	name: boolean,
+	avatar: boolean,
+	intro: boolean,
+	notif: boolean,
+	prof: boolean,
+	remove: boolean,
+	setRole: boolean,
+	mute: boolean,
+	muteAll: boolean,
+	transfer: boolean,
+	dismiss: boolean,
+	quit: boolean,
+}
+
+/** 群组 4 个角色的权限数据 */
+type GroupRoles = {
+	owner: RoleFlags,
+	admin: RoleFlags,
+	member: RoleFlags,
+	all: RoleFlags,
+}
+
+// ============================================================================
+
+const groupTypeKey = (t: GroupType): string => {
+	if (t == GroupType.WORK || t == GroupType.Work) return 'Work'
+	if (t == GroupType.PUBLIC || t == GroupType.Public) return 'Public'
+	if (t == GroupType.MEETING || t == GroupType.Meeting) return 'Meeting'
+	if (t == GroupType.AV_CHAT_ROOM || t == GroupType.AVChatRoom) return 'AVChatRoom'
+	if (t == GroupType.COMMUNITY || t == GroupType.Community) return 'Community'
+	return 'Work'
+}
+
+const filterRoleKey = (r: GroupMemberFilterRole): string => {
+	if (r == GroupMemberFilterRole.ALL) return '0'
+	if (r == GroupMemberFilterRole.MEMBER) return '200'
+	if (r == GroupMemberFilterRole.ADMIN) return '300'
+	if (r == GroupMemberFilterRole.OWNER) return '400'
+	return '0'
+}
+
+const permissionKey = (p: GroupPermission): string => {
+	if (p == GroupPermission.EDIT_GROUP_PROFILE_NAME) return 'EDIT_GROUP_PROFILE_NAME'
+	if (p == GroupPermission.EDIT_GROUP_PROFILE_AVATAR) return 'EDIT_GROUP_PROFILE_AVATAR'
+	if (p == GroupPermission.EDIT_GROUP_PROFILE_INTRODUCTION) return 'EDIT_GROUP_PROFILE_INTRODUCTION'
+	if (p == GroupPermission.EDIT_GROUP_PROFILE_NOTIFICATION) return 'EDIT_GROUP_PROFILE_NOTIFICATION'
+	if (p == GroupPermission.EDIT_GROUP_PROFILE_ELSE) return 'EDIT_GROUP_PROFILE_ELSE'
+	if (p == GroupPermission.REMOVE_MEMBER) return 'REMOVE_MEMBER'
+	if (p == GroupPermission.SET_MEMBER_ROLE) return 'SET_MEMBER_ROLE'
+	if (p == GroupPermission.MUTE_MEMBER) return 'MUTE_MEMBER'
+	if (p == GroupPermission.MUTE_ALL_MEMBERS) return 'MUTE_ALL_MEMBERS'
+	if (p == GroupPermission.TRANSFER_OWNERSHIP) return 'TRANSFER_OWNERSHIP'
+	if (p == GroupPermission.DISMISS_GROUP) return 'DISMISS_GROUP'
+	if (p == GroupPermission.QUIT_GROUP) return 'QUIT_GROUP'
+	return ''
+}
+
+// ============================================================================
+// 辅助函数
+// ============================================================================
+
+/**
+ * 将 RoleFlags 对象字面量转换为 UTSJSONObject
+ *   12 个 set 调用保留 enum 作 key + boolean 作 value
+ */
+const createRolePerms = (f: RoleFlags): UTSJSONObject => {
+	const obj: UTSJSONObject = new UTSJSONObject()
+	obj.set(permissionKey(GroupPermission.EDIT_GROUP_PROFILE_NAME), f.name)
+	obj.set(permissionKey(GroupPermission.EDIT_GROUP_PROFILE_AVATAR), f.avatar)
+	obj.set(permissionKey(GroupPermission.EDIT_GROUP_PROFILE_INTRODUCTION), f.intro)
+	obj.set(permissionKey(GroupPermission.EDIT_GROUP_PROFILE_NOTIFICATION), f.notif)
+	obj.set(permissionKey(GroupPermission.EDIT_GROUP_PROFILE_ELSE), f.prof)
+	obj.set(permissionKey(GroupPermission.REMOVE_MEMBER), f.remove)
+	obj.set(permissionKey(GroupPermission.SET_MEMBER_ROLE), f.setRole)
+	obj.set(permissionKey(GroupPermission.MUTE_MEMBER), f.mute)
+	obj.set(permissionKey(GroupPermission.MUTE_ALL_MEMBERS), f.muteAll)
+	obj.set(permissionKey(GroupPermission.TRANSFER_OWNERSHIP), f.transfer)
+	obj.set(permissionKey(GroupPermission.DISMISS_GROUP), f.dismiss)
+	obj.set(permissionKey(GroupPermission.QUIT_GROUP), f.quit)
+	return obj
+}
+
+/**
+ * 将 4 个角色的 RoleFlags 转换为权限矩阵 UTSJSONObject
+ */
+const createGroupMatrix = (r: GroupRoles): UTSJSONObject => {
+	const matrix: UTSJSONObject = new UTSJSONObject()
+	matrix.set(filterRoleKey(GroupMemberFilterRole.OWNER), createRolePerms(r.owner))
+	matrix.set(filterRoleKey(GroupMemberFilterRole.ADMIN), createRolePerms(r.admin))
+	matrix.set(filterRoleKey(GroupMemberFilterRole.MEMBER), createRolePerms(r.member))
+	matrix.set(filterRoleKey(GroupMemberFilterRole.ALL), createRolePerms(r.all))
+	return matrix
+}
+
+/** 全部 false（用于 ALL 角色） */
+const allFalse: RoleFlags = {
+	name: false, avatar: false, intro: false, notif: false, prof: false,
+	remove: false, setRole: false, mute: false, muteAll: false,
+	transfer: false, dismiss: false, quit: false,
+}
+
+// ============================================================================
+// 权限矩阵数据
+// ============================================================================
+
+/**
+ * 完整权限矩阵（5 群类型 × 4 角色 × 12 权限）
+ *   避免 300+ 行 set 嵌套，让代码结构贴近 TS 标准 PERMISSION_MATRIX 字面量风格
+ */
+const PERMISSION_MATRIX: UTSJSONObject = new UTSJSONObject()
+
+// Work 群
+PERMISSION_MATRIX.set(
+	groupTypeKey(GroupType.WORK),
+	createGroupMatrix({
+		// OWNER: Work 群不支持角色管理/禁言，但可编辑资料/转让/退群
+		owner: {
+			name: true, avatar: true, intro: true, notif: true, prof: true,
+			remove: true, setRole: false, mute: false, muteAll: false,
+			transfer: true, dismiss: false, quit: true,
+		},
+		// ADMIN/MEMBER: Work 群普通成员可编辑基础资料
+		admin: {
+			name: true, avatar: true, intro: true, notif: true, prof: false,
+			remove: false, setRole: false, mute: false, muteAll: false,
+			transfer: false, dismiss: false, quit: true,
+		},
+		member: {
+			name: true, avatar: true, intro: true, notif: true, prof: false,
+			remove: false, setRole: false, mute: false, muteAll: false,
+			transfer: false, dismiss: false, quit: true,
+		},
+		all: allFalse,
+	})
+)
+
+// Public 群
+PERMISSION_MATRIX.set(
+	groupTypeKey(GroupType.PUBLIC),
+	createGroupMatrix({
+		owner: {
+			name: true, avatar: true, intro: true, notif: true, prof: true,
+			remove: true, setRole: true, mute: true, muteAll: true,
+			transfer: true, dismiss: true, quit: false, // Owner 不能退群，需先转让
+		},
+		admin: {
+			name: true, avatar: true, intro: true, notif: true, prof: false,
+			remove: true, setRole: false, // 仅 Owner 可设置角色
+			mute: true, muteAll: false,
+			transfer: false, dismiss: false, quit: true,
+		},
+		member: {
+			name: false, avatar: false, intro: false, notif: false, prof: false,
+			remove: false, setRole: false, mute: false, muteAll: false,
+			transfer: false, dismiss: false, quit: true,
+		},
+		all: allFalse,
+	})
+)
+
+// Meeting 群
+PERMISSION_MATRIX.set(
+	groupTypeKey(GroupType.MEETING),
+	createGroupMatrix({
+		owner: {
+			name: true, avatar: true, intro: true, notif: true, prof: true,
+			remove: true, setRole: true, mute: true, muteAll: true,
+			transfer: true, dismiss: true, quit: false, // Owner 不能退群，需先转让
+		},
+		// Meeting 群 Admin 可全员禁言
+		admin: {
+			name: true, avatar: true, intro: true, notif: true, prof: false,
+			remove: true, setRole: false, mute: true, muteAll: true,
+			transfer: false, dismiss: false, quit: true,
+		},
+		member: {
+			name: false, avatar: false, intro: false, notif: false, prof: false,
+			remove: false, setRole: false, mute: false, muteAll: false,
+			transfer: false, dismiss: false, quit: true,
+		},
+		all: allFalse,
+	})
+)
+
+// Community 群
+PERMISSION_MATRIX.set(
+	groupTypeKey(GroupType.COMMUNITY),
+	createGroupMatrix({
+		owner: {
+			name: true, avatar: true, intro: true, notif: true, prof: true,
+			remove: true, setRole: true, mute: true, muteAll: true,
+			transfer: true, dismiss: true, quit: false, // Owner 不能退群，需先转让
+		},
+		// Community 群 Admin 可全员禁言
+		admin: {
+			name: true, avatar: true, intro: true, notif: true, prof: false,
+			remove: true, setRole: false, mute: true, muteAll: true,
+			transfer: false, dismiss: false, quit: true,
+		},
+		member: {
+			name: false, avatar: false, intro: false, notif: false, prof: false,
+			remove: false, setRole: false, mute: false, muteAll: false,
+			transfer: false, dismiss: false, quit: true,
+		},
+		all: allFalse,
+	})
+)
+
+// AVChatRoom 群
+PERMISSION_MATRIX.set(
+	groupTypeKey(GroupType.AV_CHAT_ROOM),
+	createGroupMatrix({
+		// AVChatRoom 不支持移除成员/角色管理/转让/解散
+		owner: {
+			name: true, avatar: true, intro: true, notif: true, prof: true,
+			remove: false, setRole: false,
+			mute: true, muteAll: true,
+			transfer: false, dismiss: false, quit: true,
+		},
+		admin: {
+			name: false, avatar: false, intro: false, notif: false, prof: false,
+			remove: false, setRole: false, mute: false, muteAll: false,
+			transfer: false, dismiss: false, quit: true,
+		},
+		member: {
+			name: false, avatar: false, intro: false, notif: false, prof: false,
+			remove: false, setRole: false, mute: false, muteAll: false,
+			transfer: false, dismiss: false, quit: true,
+		},
+		all: allFalse,
+	})
+)
+
+// ============================================================================
+// 权限查询函数
+// ============================================================================
+
+/**
+ * 检查是否拥有指定权限
+ *   typed enum 形参先转 underlying value 再做 UTSJSONObject key 查找
+ */
+export function hasPermission(
+	groupType: GroupType,
+	role: GroupMemberFilterRole,
+	permission: GroupPermission
+): boolean {
+	const typeRow = PERMISSION_MATRIX.get(groupTypeKey(groupType)) as UTSJSONObject | null
+	if (typeRow == null) return false
+	const roleRow = typeRow.get(filterRoleKey(role)) as UTSJSONObject | null
+	if (roleRow == null) return false
+	const v = roleRow.get(permissionKey(permission))
+	return v == true
+}
+
+/**
+ * 获取指定群类型和角色的所有权限
+ */
+export function getPermissions(
+	groupType: GroupType,
+	role: GroupMemberFilterRole
+): UTSJSONObject | null {
+	const typeRow = PERMISSION_MATRIX.get(groupTypeKey(groupType)) as UTSJSONObject | null
+	if (typeRow == null) return null
+	const roleRow = typeRow.get(filterRoleKey(role)) as UTSJSONObject | null
+	return roleRow
+}
+
+/**
+ * 检查是否显示群管理入口
+ */
+export function showGroupManagement(
+	groupType: GroupType,
+	role: GroupMemberFilterRole
+): boolean {
+	console.log('showGroupManagement', groupType, role)
+	console.log('showGroupManagement', hasPermission(groupType, role, GroupPermission.MUTE_MEMBER))
+	console.log('showGroupManagement', hasPermission(groupType, role, GroupPermission.MUTE_ALL_MEMBERS))
+	return (
+		hasPermission(groupType, role, GroupPermission.MUTE_MEMBER) ||
+		hasPermission(groupType, role, GroupPermission.MUTE_ALL_MEMBERS)
+	)
+}

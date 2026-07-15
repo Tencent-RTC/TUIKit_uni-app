@@ -1,0 +1,243 @@
+<template>
+  <ResultItem
+    :avatarURL="avatarURL"
+    :title="title"
+    :subtitle="subtitleText"
+    :keyword="keyword"
+    :Avatar="Avatar"
+    :mediaType="mediaType"
+    :mediaSrc="mediaSrc"
+    :mediaInfo="mediaInfo"
+    defaultAvatarType="user"
+  />
+</template>
+
+<script setup lang="uts">
+/**
+ * SearchResultItem/Message - 搜索结果项消息（uvue 版）
+ *
+ */
+import { computed } from 'vue'
+import AvatarComponent from '../../Avatar'
+import ResultItem from './ResultItem.uvue'
+import type { MessageSearchResultItem } from '../../../types/search.uts'
+import { MessageInfo } from '../../../types/message'
+
+type Props = {
+	/** 消息搜索结果（会话聚合模式） */
+	messageResult?: MessageSearchResultItem
+	/** 单条消息（会话内搜索模式） */
+	message?: UTSJSONObject
+	/** 搜索关键词（用于高亮） */
+	keyword?: string
+	/** 自定义头像组件 */
+	Avatar?: any
+}
+
+const props = withDefaults(defineProps<Props>(), {
+	keyword: '',
+	Avatar: (): any => AvatarComponent
+})
+
+const isMessageMode = computed((): boolean => {
+	const m: any | null = props.message
+	return m != null
+})
+
+const currentMessage = computed((): UTSJSONObject | null => {
+	if (isMessageMode.value) {
+		return props.message
+	}
+	const mr: UTSJSONObject = (props.messageResult ?? new UTSJSONObject()) as UTSJSONObject
+	const messagesRaw: any | null = mr['messageList']
+	if (messagesRaw == null) return null
+	const messagesArr: any[] = messagesRaw as any[]
+	if (messagesArr.length == 0) return null
+	return messagesArr[0] as UTSJSONObject
+})
+
+const avatarURL = computed((): string => {
+	if (isMessageMode.value) {
+		const m: UTSJSONObject = (props.message ?? new UTSJSONObject()) as UTSJSONObject
+		const fromRaw: any | null = m['from']
+		if (fromRaw == null) return ''
+		const fromObj: UTSJSONObject = fromRaw as UTSJSONObject
+		const avatarRaw: any | null = fromObj['avatarURL']
+		return typeof avatarRaw == 'string' ? (avatarRaw as string) : ''
+	}
+	const mr: UTSJSONObject = (props.messageResult ?? new UTSJSONObject()) as UTSJSONObject
+	const convAvatarRaw: any | null = mr['conversationAvatarURL']
+	return typeof convAvatarRaw == 'string' ? (convAvatarRaw as string) : ''
+})
+
+const title = computed((): string => {
+	if (isMessageMode.value) {
+		const m: UTSJSONObject = (props.message ?? new UTSJSONObject()) as UTSJSONObject
+		const fromRaw: any | null = m['from']
+		if (fromRaw == null) return ''
+		const fromObj: UTSJSONObject = fromRaw as UTSJSONObject
+		const fields: string[] = ['friendRemark', 'nameCard', 'nickname', 'userID']
+		for (let i = 0; i < fields.length; i++) {
+			const v: any | null = fromObj[fields[i]]
+			if (typeof v == 'string' && (v as string).length > 0) {
+				return v as string
+			}
+		}
+		return ''
+	}
+	const mr: UTSJSONObject = (props.messageResult ?? new UTSJSONObject()) as UTSJSONObject
+	const convNameRaw: any | null = mr['conversationShowName']
+	return typeof convNameRaw == 'string' ? (convNameRaw as string) : ''
+})
+
+/**
+ * 媒体类型字面量
+ */
+type MediaTypeLiteral = 'image' | 'video' | 'file' | 'sound' | 'face' | ''
+
+/**
+ * 获取媒体类型
+ */
+const mediaType = computed((): MediaTypeLiteral => {
+	const message = currentMessage.value
+	if (message == null) return ''
+
+	// 会话聚合模式下，多条消息不显示媒体预览
+	if (!isMessageMode.value && (props.messageResult?.messageCount ?? 0) > 1) {
+		return ''
+	}
+
+	const messageObj: UTSJSONObject = (message ?? new UTSJSONObject()) as UTSJSONObject
+	const messageTypeRaw: any | null = messageObj['messageType']
+	const messageType: number = typeof messageTypeRaw == 'number' ? (messageTypeRaw as number) : 0
+	switch (messageType) {
+		case 2:  // IMAGE
+			return 'image'
+		case 3:  // VIDEO
+			return 'video'
+		case 4:  // AUDIO
+			return 'sound'
+		case 5:  // FILE
+			return 'file'
+		case 6:  // FACE
+			return 'face'
+		default:
+			return ''
+	}
+})
+
+/**
+ * 获取媒体资源URL
+ */
+const mediaSrc = computed((): string => {
+	const message = currentMessage.value
+	if (message == null) return ''
+
+	const messageObj: UTSJSONObject = (message ?? new UTSJSONObject()) as UTSJSONObject
+	const bodyRaw: any | null = messageObj['messagePayload']
+	const body: UTSJSONObject = (bodyRaw ?? new UTSJSONObject()) as UTSJSONObject
+	const messageTypeRaw: any | null = messageObj['messageType']
+	const messageType: number = typeof messageTypeRaw == 'number' ? (messageTypeRaw as number) : 0
+
+	switch (messageType) {
+		case 2:  // IMAGE
+			return (body['thumbImagePath'] as string) ?? (body['originalImagePath'] as string) ?? ''
+		case 3:  // VIDEO
+			return (body['videoSnapshotPath'] as string) ?? ''
+		default:
+			return ''
+	}
+})
+
+/**
+ * 媒体信息类型
+ */
+type MediaInfo = {
+	duration?: number
+	fileName?: string
+	fileSize?: number
+	faceIndex?: number
+	faceName?: string
+}
+
+/**
+ * 获取媒体附加信息（与MessageList保持一致）
+ */
+const mediaInfo = computed((): MediaInfo => {
+	const message = currentMessage.value
+	if (message == null) return {}
+
+	const messageObj: UTSJSONObject = (message ?? new UTSJSONObject()) as UTSJSONObject
+	const bodyRaw: any | null = messageObj['messagePayload']
+	const body: UTSJSONObject = (bodyRaw ?? new UTSJSONObject()) as UTSJSONObject
+	const messageTypeRaw: any | null = messageObj['messageType']
+	const messageType: number = typeof messageTypeRaw == 'number' ? (messageTypeRaw as number) : 0
+
+	switch (messageType) {
+		case 3:  // VIDEO
+			return { duration: (body['videoDuration'] as number) ?? 0 }
+		case 4:  // AUDIO
+			return { duration: (body['soundDuration'] as number) ?? 0 }
+		case 5:  // FILE
+			return {
+				fileName: (body['fileName'] as string) ?? '',
+				fileSize: (body['fileSize'] as number) ?? 0
+			}
+		case 6:  // FACE
+			return {
+				faceIndex: (body['faceIndex'] as number) ?? 0,
+				faceName: (body['faceName'] as string) ?? ''
+			}
+		default:
+			return {}
+	}
+})
+
+/**
+ * 根据消息类型获取展示文本
+ */
+const getMessageDisplayText = (message: UTSJSONObject | null): string => {
+	if (message == null) return ''
+
+	const messageObj: UTSJSONObject = (message ?? new UTSJSONObject()) as UTSJSONObject
+	const bodyRaw: any | null = messageObj['messagePayload']
+	const body: UTSJSONObject = (bodyRaw ?? new UTSJSONObject()) as UTSJSONObject
+	const messageTypeRaw: any | null = messageObj['messageType']
+	const messageType: number = typeof messageTypeRaw == 'number' ? (messageTypeRaw as number) : 0
+
+	switch (messageType) {
+		case 1:  // TEXT
+			return (body['text'] as string) ?? ''
+		case 2:  // IMAGE
+		case 3:  // VIDEO
+		case 4:  // AUDIO
+		case 5:  // FILE
+		case 6:  // FACE
+			// 媒体消息不显示文本，由 mediaType 渲染
+			return ''
+		case 7:  // TIPS
+			return '[系统消息]'
+		case 8:  // CUSTOM
+			return '[自定义消息]'
+		case 9:  // MERGED
+			return '[聊天记录]'
+		default:
+			return '[未知消息]'
+	}
+}
+
+const subtitleText = computed((): string => {
+	if (isMessageMode.value) {
+		return getMessageDisplayText(props.message ?? null)
+	}
+
+	const count = props.messageResult?.messageCount ?? 0
+	if (count == 1) {
+		const messages = props.messageResult?.messageList
+		if (messages != null && messages.length > 0) {
+			return getMessageDisplayText(messages[0] as UTSJSONObject | null)
+		}
+	}
+	return `${count}条相关聊天记录`
+})
+</script>

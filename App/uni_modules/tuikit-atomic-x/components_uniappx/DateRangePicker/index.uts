@@ -1,0 +1,4 @@
+import DateRangePicker from './DateRangePicker.uvue'
+
+export default DateRangePicker
+export { DateRangePicker }

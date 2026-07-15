@@ -7,7 +7,7 @@
 
 <script>
 import { safeJsonParse } from '../../../../utils/utsUtils'
-import { isGroupCallMessage } from '../../../../utils/callMessageUtils'
+import { isCallMessage, isGroupCallMessage } from '../../../../utils/callMessageUtils'
 import CallMessage from './CallMessage.nvue'
 
 export default {
@@ -18,14 +18,23 @@ export default {
     conversationID: { type: String, default: '' }
   },
   computed: {
-    customMessage() { return this.message.messageBody && this.message.messageBody.customMessage },
-    isCallMsg() {
-      var data = this.customMessage && this.customMessage.data; if (!data) return false
-      try { var dc = safeJsonParse(data, null); if (dc && dc.businessID === 1 && dc.data) { var ci = safeJsonParse(dc.data, null); if (ci && (ci.businessID === 'av_call' || ci.businessID === 'rtc_call')) return true } } catch (e) {}
-      return false
+    customMessage() { return this.message.messagePayload },
+    customDataContent() {
+      var raw = this.customMessage && this.customMessage.customData
+      if (!raw) return null
+      return safeJsonParse(raw, null)
     },
+    isCallMsg() { return isCallMessage(this.message) },
     isCustomCenter() { return isGroupCallMessage(this.message, this.conversationID) },
-    customText() { return (this.customMessage && this.customMessage.description) || '自定义消息' }
+    customText() {
+      // 1. 业务侧 customData.content（如 group_create 的"创建群聊"）
+      var content = this.customDataContent && this.customDataContent.content
+      if (content) return String(content)
+      // 2. payload.description 兜底
+      var desc = this.customMessage && this.customMessage.description
+      if (desc) return desc
+      return '自定义消息'
+    }
   }
 }
 </script>

@@ -1,0 +1,154 @@
+import { computed, ref, watch } from 'vue'
+import { type UserPickerHookResult, type User, toMap } from './types'
+import { useGroupMemberState, type UseGroupMemberStateOptions } from '../../../state/GroupMemberState'
+import { GroupMemberRole } from '../../../types/group'
+
+/**
+ * 晋升管理员 Hook（uvue 版）
+ *
+ */
+export function usePromoteAdmin(routeParams?: any): UserPickerHookResult {
+	const rp: UTSJSONObject = toMap(routeParams ?? null)
+	const conversationID: string = (rp['conversationID'] as string) ?? ''
+	const groupID: string = conversationID.startsWith('group_') ? conversationID.replace('group_', '') : ''
+
+	const memberOpts: UseGroupMemberStateOptions = { groupID: groupID } as UseGroupMemberStateOptions
+	const {
+		memberList: allMembers,
+		hasMoreMembers,
+		setMemberRole,
+		loadMoreMembers,
+		getMemberInfo
+	} = useGroupMemberState(memberOpts)
+
+	const adminOpts: UseGroupMemberStateOptions = { groupID: groupID, role: GroupMemberRole.ADMIN } as UseGroupMemberStateOptions
+	const {
+		loadMembers
+	} = useGroupMemberState(adminOpts)
+
+	const profileMap = ref<Map<string, UTSJSONObject>>(new Map<string, UTSJSONObject>())
+	const fetchingSet = ref<Set<string>>(new Set<string>())
+
+	watch((): any[] => allMembers.value, (newList: any[] | null): void => {
+		if (newList == null) return
+		const idArr: string[] = []
+		for (let i: number = 0; i < newList.length; i++) {
+			const m: any = newList[i] as any
+			const mObj: UTSJSONObject = toMap(m ?? null)
+			const uidRaw: any | null = mObj['userID']
+			const uid: string = typeof uidRaw == 'string' ? uidRaw as string : ''
+			if (uid.length > 0 && !profileMap.value.has(uid) && !fetchingSet.value.has(uid)) {
+				idArr.push(uid)
+			}
+		}
+		if (idArr.length == 0) return
+		for (let i: number = 0; i < idArr.length; i++) {
+			fetchingSet.value.add(idArr[i])
+		}
+		;(async (): Promise<void> => {
+			try {
+				const list: any[] = await getMemberInfo(idArr)
+				for (let i: number = 0; i < list.length; i++) {
+					const info: any | null = list[i] as any
+					if (info == null) continue
+					const infoObj: UTSJSONObject = toMap(info ?? null)
+					const uidRaw: any | null = infoObj['userID']
+					const uid: string = typeof uidRaw == 'string' ? uidRaw as string : ''
+					if (uid.length > 0) {
+						const newMap: Map<string, UTSJSONObject> = new Map<string, UTSJSONObject>(profileMap.value)
+						newMap.set(uid, infoObj)
+						profileMap.value = newMap
+					}
+				}
+			} catch (e: any) {
+				console.warn('[usePromoteAdmin] fetch profiles failed:', `${e}`)
+			} finally {
+				for (let i: number = 0; i < idArr.length; i++) {
+					fetchingSet.value.delete(idArr[i])
+				}
+			}
+		})()
+	}, { immediate: true })
+
+	const userList = computed<User[]>((): User[] => {
+		return (allMembers.value ?? [])
+			.filter((member: any): boolean => {
+				const mObj: UTSJSONObject = toMap(member)
+				const roleRaw: any | null = mObj['role']
+				const roleNum: number = typeof roleRaw == 'number' ? roleRaw as number : 0
+				return roleNum == (200)
+			})
+			.map((item: any): User => {
+				const member: UTSJSONObject = toMap(item)
+				const uid: string = (member['userID'] as string) ?? ''
+				const profile: UTSJSONObject | null = profileMap.value.get(uid) ?? null
+				const profileNameCard: string = profile != null && typeof (profile['nameCard'] as any) == 'string' ? (profile['nameCard'] as string) : ''
+				const profileNickname: string = profile != null && typeof (profile['nickname'] as any) == 'string' ? (profile['nickname'] as string) : ''
+				const profileAvatarURL: string = profile != null && typeof (profile['avatarURL'] as any) == 'string' ? (profile['avatarURL'] as string) : ''
+				const topNickname: string = (member['nameCard'] as string) ?? (member['nickname'] as string) ?? (member['displayName'] as string) ?? ''
+				let nestedNickname: string = ''
+				const profileRaw: any | null = member['userProfile']
+				if (profileRaw != null) {
+					const profObj: UTSJSONObject = toMap(profileRaw)
+					nestedNickname = (profObj['nameCard'] as string) ?? (profObj['nickname'] as string) ?? (profObj['userID'] as string) ?? ''
+				}
+				const finalNickname: string = profileNameCard.length > 0 ? profileNameCard
+					: profileNickname.length > 0 ? profileNickname
+					: topNickname.length > 0 ? topNickname
+					: nestedNickname.length > 0 ? nestedNickname
+					: uid
+				const finalAvatarURL: string = profileAvatarURL.length > 0 ? profileAvatarURL : ((member['avatarURL'] as string) ?? '')
+				return {
+					userID: uid,
+					nickname: finalNickname,
+					avatarURL: finalAvatarURL
+				}
+			})
+	})
+
+	const lockedItems = computed<string[]>((): string[] => [])
+	const hasMore = computed((): boolean => hasMoreMembers.value)
+
+	const handleConfirm = async (selectedUsers: any[]): Promise<void> => {
+		if (selectedUsers.length == 0) {
+			uni.showToast({ title: '请选择要添加的管理员', icon: 'none' })
+			return
+		}
+
+		try {
+			for (let i: number = 0; i < selectedUsers.length; i++) {
+				const u: UTSJSONObject = toMap(selectedUsers[i])
+				const uid: any | null = u['userID']
+				await setMemberRole(typeof uid == 'string' ? (uid as string) : '', 300)
+			}
+
+			uni.showToast({ title: '设置成功', icon: 'success' })
+			setTimeout((): void => {
+				loadMembers(null)
+				uni.navigateBack()
+			}, 300)
+		} catch (error: any) {
+			uni.showToast({ title: '设置失败', icon: 'none' })
+			console.error('[usePromoteAdmin] handleConfirm failed:', `${error}`)
+		}
+	}
+
+	const onReachEnd = async (): Promise<void> => {
+		if (!hasMoreMembers.value) return
+		try {
+			await loadMoreMembers()
+		} catch (error: any) {
+			console.error('[usePromoteAdmin] onReachEnd failed:', `${error}`)
+		}
+	}
+
+	return {
+		userList,
+		lockedItems,
+		maxCount: 10,
+		title: '添加管理员',
+		hasMore,
+		handleConfirm,
+		onReachEnd
+	}
+}

@@ -6,7 +6,7 @@
         <view class="add-friend-info__header-content">
           <text class="add-friend-info__name" :numberOfLines="1">{{ (userInfo && userInfo.nickname) || (userInfo && userInfo.userID) }}</text>
           <text class="add-friend-info__id" :numberOfLines="1">ID：{{ (userInfo && userInfo.userID) }}</text>
-          <text v-if="(userInfo && userInfo.signature)" class="add-friend-info__signature" :numberOfLines="2">个性签名：{{ userInfo.signature }}</text>
+          <text v-if="(userInfo && userInfo.aboutMe)" class="add-friend-info__signature" :numberOfLines="2">个性签名：{{ userInfo.aboutMe }}</text>
         </view>
       </view>
       <view v-if="!(userInfo && userInfo.isFriend)" class="add-friend-info__action" @tap="handleAddFriend"><text class="add-friend-info__action-text">添加好友</text></view>

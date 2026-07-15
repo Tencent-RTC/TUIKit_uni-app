@@ -18,6 +18,7 @@ import type {
   RoomCallResult,
   RoomEvent,
   RoomEventHandlers,
+  StartRecordingOptions,
 } from '../../types/room';
 
 /**
@@ -129,6 +130,24 @@ export interface IRoomState {
    * @returns 房间信息
    */
   getRoomInfo(options: { roomID: string }): Promise<RoomInfo>;
+
+  /**
+   * 开始云端录制
+   *
+   * 仅 Owner / Admin 有权限调用。
+   * 调用成功仅代表请求被原生层接收，真正录制开始的事实通过 onRecordingStarted 事件下发。
+   *
+   * @param options.options - 录制配置，预留扩展
+   */
+  startRecording(options?: { options?: StartRecordingOptions }): Promise<void>;
+
+  /**
+   * 停止云端录制
+   *
+   * 仅 Owner / Admin 有权限调用。
+   * 调用成功仅代表请求被原生层接收，真正录制停止的事实通过 onRecordingStopped 事件下发。
+   */
+  stopRecording(): Promise<void>;
 
   /**
    * 获取房间的待处理呼叫

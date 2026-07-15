@@ -4,7 +4,7 @@
     <scroll-view class="content" scroll-y="true">
       <view class="user-info">
         <view class="user-info__avatar-wrapper">
-          <Avatar :src="avatarURL" :name="remark || nickname || userID || ''" :size="96" :shape="'square'" :defaultAvatarType="'user'" pureMode />
+          <Avatar :src="avatarURL" :name="friendRemark || nickname || userID || ''" :size="96" :shape="'square'" :defaultAvatarType="'user'" pureMode />
         </view>
         <view class="user-info__detail">
           <text class="user-info__nickname">{{ nickname || userID }}</text>
@@ -13,7 +13,7 @@
         </view>
       </view>
       <view class="section-gap"></view>
-      <SettingRowNavigate v-if="isFriend" label="备注名" :value="remark || ''" @tap="handleRemarkClick" />
+      <SettingRowNavigate v-if="isFriend" label="备注名" :value="friendRemark || ''" @tap="handleRemarkClick" />
       <view class="section-gap"></view>
       <SettingRowToggle label="消息免打扰" :modelValue="isNotDisturb || false" @change="handleNotDisturbChange" />
       <SettingRowToggle label="置顶聊天" :modelValue="isPinned || false" @change="handlePinnedChange" />
@@ -23,7 +23,7 @@
       <SettingRowButton label="发送消息" color="#0066FF" @press="handleSendMessage" />
       <SettingRowButton v-if="isFriend" label="删除好友" color="#FF3B30" @press="handleDeleteFriendClick" />
     </scroll-view>
-    <TextInputPopup :visible="showRemarkPopup" @update:visible="showRemarkPopup = $event" title="修改备注" :value="remark || ''" placeholder="请输入备注名" :maxLength="15" :maxByteLength="50" @confirm="handleRemarkConfirm" />
+    <TextInputPopup :visible="showRemarkPopup" @update:visible="showRemarkPopup = $event" title="修改备注" :value="friendRemark || ''" placeholder="请输入备注名" :maxLength="15" :maxByteLength="50" @confirm="handleRemarkConfirm" />
     <ConfirmDialog :visible="showDeleteConfirm" @update:visible="showDeleteConfirm = $event" title="确定删除该好友？" confirmText="删除" @confirm="handleDeleteConfirm" @cancel="handleDeleteCancel" />
   </view>
 </template>
@@ -38,7 +38,7 @@ import CustomNavbar from '../CustomNavbar/CustomNavbar.nvue';
 import { Avatar } from '../Avatar';
 import { useContactState } from '../../state/ContactState';
 import { useConversationListState } from '../../state/ConversationListState';
-import { ReceiveMessageOpt } from '../../types/group';
+import { ReceiveMessageOpt } from '../../types/contact';
 import { throttle } from '../../utils/lodash';
 
 export default {
@@ -52,6 +52,7 @@ export default {
       contactState: null,
       convState: null,
       userInfo: null,
+      currentConversation: null,
       statusBarHeight: 44,
       showRemarkPopup: false,
       showDeleteConfirm: false,
@@ -61,20 +62,34 @@ export default {
     userID() { return this.conversationID.startsWith('c2c_') ? this.conversationID.replace('c2c_', '') : '' },
     nickname() { return (this.userInfo && this.userInfo.nickname) || '' },
     avatarURL() { return (this.userInfo && this.userInfo.avatarURL) || '' },
-    signature() { return (this.userInfo && this.userInfo.signature) || '' },
-    remark() { return (this.userInfo && this.userInfo.remark) || '' },
+    signature() { return (this.userInfo && this.userInfo.aboutMe) || '' },
+    friendRemark() {
+      // friendRemark 仅在 V2TIMFriendInfo（friendList）上有值，V2TIMUserFullInfo（getContactInfo）路径不会带；
+      // 优先从 friendList 取，再 fallback 到 userInfo
+      var list = (this.contactState && this.contactState.friendList && this.contactState.friendList.value) || []
+      var uid = this.userID
+      var fromFriend = list.find(function(f) { return f.userID === uid })
+      var remark = fromFriend && fromFriend.friendRemark
+      if (remark) return remark
+      return (this.userInfo && this.userInfo.friendRemark) || ''
+    },
     isFriend() { return ((this.userInfo && this.userInfo.isFriend) != null ? (this.userInfo && this.userInfo.isFriend) : false) },
-    isInBlacklist() { return ((this.userInfo && this.userInfo.isInBlacklist) != null ? (this.userInfo && this.userInfo.isInBlacklist) : false) },
+    isInBlacklist() {
+      var blackList = (this.contactState && this.contactState.blackList && this.contactState.blackList.value) || []
+      var uid = this.userID
+      var hit = blackList.find(function(f) { return f.userID === uid })
+      return !!hit || !!(this.userInfo && this.userInfo.isInBlacklist)
+    },
     isNotDisturb() {
-      if (!this.userInfo) return false
-      return this.userInfo.receiveMessageOpt !== undefined && this.userInfo.receiveMessageOpt !== ReceiveMessageOpt.Receive
+      var conv = this.currentConversation
+      var opt = conv && conv.receiveOption
+      // 数据未加载时默认关闭免打扰，避免误显示为开启
+      if (opt === undefined || opt === null) return false
+      return opt !== ReceiveMessageOpt.RECEIVE
     },
     isPinned() {
-      if (!this.convState || !this.convState.state) return false
-      var list = this.convState.state.conversationList || []
-      var cid = this.conversationID
-      var conv = list.find(function(c) { return c.conversationID === cid })
-      return ((conv && conv.isPinned) != null ? (conv && conv.isPinned) : false)
+      var conv = this.currentConversation
+      return !!(conv && conv.isPinned)
     },
     navTitle() { return this.showType === 0 ? '个人设置' : '设置' },
   },
@@ -84,33 +99,49 @@ export default {
     var systemInfo = uni.getSystemInfoSync()
     this.statusBarHeight = systemInfo.statusBarHeight || 44
     this.fetchPeerUserInfo()
-    this.convState.fetchConversationInfo(this.conversationID)
+    this.fetchConversationInfo()
   },
   methods: {
     fetchPeerUserInfo() {
       if (!this.userID) return
       var self = this
-      this.contactState.fetchUserInfo([this.userID]).then(function(list) {
+      this.contactState.getContactInfo([this.userID]).then(function(list) {
         if (list && list.length > 0) self.userInfo = list[0]
       }).catch(function(err) { console.error('[C2CChatSetting] fetchPeerUserInfo failed:', err) })
+    },
+    fetchConversationInfo() {
+      if (!this.conversationID) return
+      var self = this
+      this.convState.getConversationInfo(this.conversationID).then(function(info) {
+        if (info) self.currentConversation = info
+      }).catch(function(err) { console.error('[C2CChatSetting] fetchConversationInfo failed:', err) })
     },
     handleRemarkClick() { this.showRemarkPopup = true },
     handleRemarkConfirm(newRemark) {
       if (!this.userID) return
-      var self = this
-      this.contactState.setUserRemark(this.userID, newRemark).then(function() {
-        if (self.userInfo) self.userInfo.remark = newRemark
-      }).catch(function(err) { console.error('[C2CChatSetting] setUserRemark failed:', err) })
+      this.contactState.setFriendRemark(this.userID, newRemark).catch(function(err) {
+        console.error('[C2CChatSetting] setFriendRemark failed:', err)
+      })
     },
     handleNotDisturbChange: throttle(function(value) {
       if (!this.userID) return
-      var opt = value ? ReceiveMessageOpt.NotNotify : ReceiveMessageOpt.Receive
       var self = this
-      this.contactState.setReceiveMessageOpt(this.userID, opt).then(function() {
-        if (self.userInfo) self.userInfo.receiveMessageOpt = value ? ReceiveMessageOpt.NotNotify : ReceiveMessageOpt.Receive
-      }).catch(function(err) { console.error('[C2CChatSetting] setReceiveMessageOpt failed:', err) })
+      var opt = value ? ReceiveMessageOpt.NOT_NOTIFY : ReceiveMessageOpt.RECEIVE
+      this.convState.setReceiveMessageOpt('c2c_' + this.userID, opt).then(function() {
+        self.fetchConversationInfo()
+      }).catch(function(err) {
+        console.error('[C2CChatSetting] setReceiveMessageOpt failed:', err)
+      })
     }, 1000, { leading: true, trailing: true }),
-    handlePinnedChange(value) { this.convState.pinConversation(this.conversationID, value) },
+    handlePinnedChange: throttle(function(value) {
+      if (!this.conversationID) return
+      var self = this
+      this.convState.pinConversation(this.conversationID, value).then(function() {
+        self.fetchConversationInfo()
+      }).catch(function(err) {
+        console.error('[C2CChatSetting] pinConversation failed:', err)
+      })
+    }, 1000, { leading: true, trailing: true }),
     handleBlacklistChange(value) {
       if (!this.userID) return
       var self = this

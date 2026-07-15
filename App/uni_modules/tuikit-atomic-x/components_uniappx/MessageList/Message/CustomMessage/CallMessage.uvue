@@ -1,0 +1,106 @@
+<template>
+  <view v-if="isGroupCall" class="group-call-message">
+    <text class="group-call-text">{{ callText }}</text>
+  </view>
+  <view v-else :class="['call-message', 'call-msg__content--'+ (isSelf ? 'out' : 'in')]">
+    <text class="call-text">{{ callText }}</text>
+    <image :class="['call-icon--'+ (isVideo ? 'video' : 'voice'), 'call-icon--'+ (isSelf ? 'out' : 'in')]" :src="isVideo ? videoIcon : voiceIcon" />
+  </view>
+</template>
+
+<script setup lang="uts">
+import { computed } from 'vue'
+import {
+  parseCallMessageData,
+  isVideoCall,
+  getCallMessageText
+} from '../../../../utils/callMessageUtils'
+import type { CallMessageData } from '../../../../utils/callMessageUtils'
+
+import voiceIcon from '../../assets/voice-icon.png'
+import videoIcon from '../../assets/video-icon.png'
+
+type Props = {
+  message: any | null
+  isGroupCall?: boolean}
+
+const props = withDefaults(defineProps<Props>(), {
+  isGroupCall: false
+})
+
+const callData = computed((): CallMessageData | null => parseCallMessageData(props.message as any))
+const isVideo = computed((): boolean => isVideoCall(callData.value))
+const callText = computed((): string => getCallMessageText(props.message as any))
+
+const isSelf = computed((): boolean => {
+  const messageObj: UTSJSONObject = props.message as UTSJSONObject
+  const v: any | null = messageObj['isSentBySelf']
+  return v == true
+})
+</script>
+
+<style>
+/* 群组通话消息样式 */
+.group-call-message {
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+}
+
+.group-call-text {
+  font-size: 24rpx;
+  font-weight: 400;
+  line-height: 34rpx;
+  color: rgba(0, 0, 0, 0.4);
+}
+
+/* 1v1通话消息样式 */
+.call-message {
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12rpx;
+  padding: 20rpx 24rpx;
+  min-width: 160rpx;
+}
+
+.call-msg__content--in {
+  flex-direction: row-reverse;
+  background-color: #F0F2F7;
+  border-radius: 4rpx 20rpx 20rpx 20rpx;
+}
+
+.call-msg__content--out {
+  background-color: #CCE2FF;
+  border-radius: 20rpx 4rpx 20rpx 20rpx;
+}
+
+.call-text {
+  font-size: 24rpx;
+  font-weight: 400;
+  line-height: 34rpx;
+  color: rgba(0, 0, 0, 0.9);
+}
+
+.call-icon--video {
+  width: 32rpx;
+  height: 22rpx;
+}
+
+.call-icon--voice {
+  width: 32rpx;
+  height: 12rpx;
+}
+
+.call-icon--out {
+  margin-left: 10rpx;
+}
+
+.call-icon--in {
+  margin-right: 10rpx;
+}
+
+.call-icon--video.call-icon--in {
+  transform: rotate(180deg);
+}
+</style>

@@ -17,7 +17,7 @@
         <view class="friend-info__row" @click="handleRemarkEdit">
           <text class="friend-info__label">备注名</text>
           <view class="friend-info__row-value">
-            <text class="friend-info__value" :numberOfLines="1">{{ currentFriendInfo?.remark || '未设置' }}</text>
+            <text class="friend-info__value" :numberOfLines="1">{{ currentFriendInfo?.friendRemark || '未设置' }}</text>
             <image class="friend-info__arrow" src="../../../static/icon/arrow-right.png" />
           </view>
         </view>
@@ -52,6 +52,7 @@
 
 <script setup lang="ts">
   import { ref, computed, watch, onMounted } from 'vue'
+  import { ReceiveMessageOpt } from '../../../types/conversation'
   import AvatarComponent from '../../Avatar'
   import ConfirmDialog from '../../ConfirmDialog/ConfirmDialog.nvue'
   import { useContactState } from '../../../state/ContactState'
@@ -93,11 +94,11 @@
 
   const emit = defineEmits<FriendInfoEmits>()
 
-  const { deleteFriend, addToBlacklist, removeFromBlacklist, fetchUserInfo, friendList } = useContactState()
+  const { deleteFriend, addToBlacklist, removeFromBlacklist, getContactInfo, friendList } = useContactState()
   const {
     conversationList,
-    fetchConversationInfo,
-    muteConversation,
+    getConversationInfo,
+    setReceiveMessageOpt,
     pinConversation,
   } = useConversationListState('FriendInfo')
   const { calls, selfInfo, setCallFramework } = useCallState()
@@ -110,7 +111,7 @@
   // 呼叫防抖锁，防止频繁点击呼叫按钮
   const isCalling = ref(false)
 
-  // 用户信息（通过 fetchUserInfo 获取）
+  // 用户信息（通过 getContactInfo 获取）
   const fetchedUserInfo = ref<ContactInfo | null>(null)
 
   // 从 friendList 中查找当前用户信息
@@ -168,7 +169,7 @@
   watch(() => props.friendInfo?.userID, () => {
     if (conversationID.value) {
       fetchPeerUserInfo()
-      fetchConversationInfo(conversationID.value)
+      getConversationInfo(conversationID.value)
     }
   }, { immediate: true })
 
@@ -176,7 +177,7 @@
   const fetchPeerUserInfo = async () => {
     if (!props.friendInfo?.userID) return
     try {
-      const list = await fetchUserInfo([props.friendInfo.userID])
+      const list = await getContactInfo([props.friendInfo.userID])
       console.warn('[FriendInfo] fetchPeerUserInfo success', list)
       if (list && list.length > 0) {
         fetchedUserInfo.value = list[0]
@@ -207,7 +208,7 @@
     if (!conversationID.value) return
 
     try {
-      await muteConversation(conversationID.value, value)
+      await setReceiveMessageOpt(conversationID.value, value ? ReceiveMessageOpt.NOT_NOTIFY : ReceiveMessageOpt.RECEIVE)
       emit('muteChange', value)
     } catch (error: any) {
       showToast({ message: error.message || '设置失败', type: 'error' })

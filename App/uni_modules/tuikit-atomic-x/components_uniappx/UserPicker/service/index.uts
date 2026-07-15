@@ -1,0 +1,128 @@
+import { computed } from 'vue'
+import { type User, type UserPickerHook, type UserPickerHookResult, toMap } from './types'
+
+// Hook 导入
+import { useStartC2CConversation } from './useStartC2CConversation'
+import { useCreateGroup } from './useCreateGroup'
+import { useInviteGroupMember } from './useInviteGroupMember'
+import { useRemoveGroupMember } from './useRemoveGroupMember'
+import { usePromoteAdmin } from './usePromoteAdmin'
+import { useDemoteAdmin } from './useDemoteAdmin'
+import { useMuteGroupMember } from './useMuteGroupMember'
+import { useUnmuteGroupMember } from './useUnmuteGroupMember'
+import { useTransferGroupOwner } from './useTransferGroupOwner'
+import { useSelectGroupMember } from './useSelectGroupMember'
+
+// ============================================================================
+// Hook 注册表
+// ============================================================================
+
+const hooks: Map<number, UserPickerHook> = new Map<number, UserPickerHook>([
+	[1, (rp?: any): UserPickerHookResult => useStartC2CConversation(rp)],     // C2C_CONVERSATION = 1
+	[2, (rp?: any): UserPickerHookResult => useCreateGroup(rp)],              // CREATE_GROUP = 2
+	[4, (rp?: any): UserPickerHookResult => useInviteGroupMember(rp)],        // INVITE_GROUP_MEMBER = 4
+	[3, (rp?: any): UserPickerHookResult => useRemoveGroupMember(rp)],        // REMOVE_GROUP_MEMBER = 3
+	[5, (rp?: any): UserPickerHookResult => usePromoteAdmin(rp)],             // PROMOTE_ADMIN = 5
+	[6, (rp?: any): UserPickerHookResult => useDemoteAdmin(rp)],              // DEMOTE_ADMIN = 6
+	[7, (rp?: any): UserPickerHookResult => useMuteGroupMember(rp)],          // MUTE_GROUP_MEMBER = 7
+	[8, (rp?: any): UserPickerHookResult => useUnmuteGroupMember(rp)],        // UNMUTE_GROUP_MEMBER = 8
+	[9, (rp?: any): UserPickerHookResult => useTransferGroupOwner(rp)],       // TRANSFER_GROUP_OWNER = 9
+	[10, (rp?: any): UserPickerHookResult => useSelectGroupMember(rp)],       // SELECT_GROUP_MEMBER = 10
+	[11, (rp?: any): UserPickerHookResult => useSelectGroupMember(rp)],       // SELECT_GROUP_AT_USER = 11
+])
+
+// ============================================================================
+// 类型 → 默认 routeParams
+// ============================================================================
+
+// iOS 上 UTSJSONObject.set(key, booleanValue) 行为异常（forEach 遍历时 value 被当 key 重复），
+//   用 toMap（JSON 序列化）构造避开 iOS 桥接 NSDictionary 的 set 坑
+const atAllDefaults: UTSJSONObject = toMap({
+	singleSelect: true,
+	enableAtAll: true,
+	enableRemoteSearch: true,
+	excludeSelf: true,
+	maxCount: 1,
+	title: '选择提醒的人'
+})
+const typeDefaults: UTSJSONObject = toMap({
+	'11': atAllDefaults  // SELECT_GROUP_AT_USER = 11
+})
+
+// ============================================================================
+// 核心 API
+// ============================================================================
+
+const createDefaultHookResult = (): UserPickerHookResult => ({
+	userList: computed((): User[] => [] as User[]),
+	lockedItems: computed((): string[] => []),
+	maxCount: 500,
+	title: '选择用户',
+	hasMore: computed((): boolean => false),
+	handleConfirm: async (_selectedUsers: any[]): Promise<void> => {
+		uni.showToast({ title: '不支持的操作类型', icon: 'none' })
+	},
+	handleCancel: async (): Promise<void> => {}
+})
+
+export function useUserPicker(type: number, routeParams?: any): UserPickerHookResult {
+	const hook = hooks.get(type)
+
+	if (hook == null) {
+		console.warn(`[useUserPicker] Unknown type: ${type}`)
+		return createDefaultHookResult()
+	}
+
+	const defaults = typeDefaults.get(`${type}`) as UTSJSONObject | null
+	const defaultsObj: UTSJSONObject = defaults ?? new UTSJSONObject()
+	const routeParamsObj: UTSJSONObject = routeParams != null ? toMap(routeParams) : new UTSJSONObject()
+	// iOS 上 UTSJSONObject.forEach 行为异常（value 被当 key 遍历），改用 known keys 显式合并
+	//   routeParams 优先，fallback 到 defaults
+	const knownKeys: string[] = [
+		'conversationID', 'groupID',
+		'singleSelect', 'enableAtAll', 'enableRemoteSearch', 'excludeSelf', 'maxCount', 'title',
+		'enableSearch', 'lockedItems'
+	]
+	const mergedParams: UTSJSONObject = new UTSJSONObject()
+	for (let i: number = 0; i < knownKeys.length; i++) {
+		const k: string = knownKeys[i]
+		const vrp: any | null = routeParamsObj.get(k)
+		if (vrp != null) {
+			mergedParams.set(k, vrp)
+			continue
+		}
+		const vd: any | null = defaultsObj.get(k)
+		if (vd != null) {
+			mergedParams.set(k, vd)
+		}
+	}
+	return hook(mergedParams)
+}
+
+// ============================================================================
+// 工具函数
+// ============================================================================
+
+const typeNames: UTSJSONObject = new UTSJSONObject()
+typeNames.set(1, '单聊会话')           // C2C_CONVERSATION = 1
+typeNames.set(2, '创建群聊')           // CREATE_GROUP = 2
+typeNames.set(3, '删除群成员')         // REMOVE_GROUP_MEMBER = 3
+typeNames.set(4, '邀请群成员')         // INVITE_GROUP_MEMBER = 4
+typeNames.set(5, '晋升管理员')         // PROMOTE_ADMIN = 5
+typeNames.set(6, '降级管理员')         // DEMOTE_ADMIN = 6
+typeNames.set(7, '禁言群成员')         // MUTE_GROUP_MEMBER = 7
+typeNames.set(8, '取消禁言群成员')     // UNMUTE_GROUP_MEMBER = 8
+typeNames.set(9, '转交群主')           // TRANSFER_GROUP_OWNER = 9
+typeNames.set(10, '选择群成员')        // SELECT_GROUP_MEMBER = 10
+typeNames.set(11, '选择 @ 群成员')     // SELECT_GROUP_AT_USER = 11
+
+export function getTypeName(type: number): string {
+	const v = typeNames.get(type)
+	return typeof v == 'string' ? v : `未知类型(${type})`
+}
+
+// ============================================================================
+// 类型导出
+// ============================================================================
+
+export { type User, type UserPickerHookResult, type UserPickerHook } from './types'

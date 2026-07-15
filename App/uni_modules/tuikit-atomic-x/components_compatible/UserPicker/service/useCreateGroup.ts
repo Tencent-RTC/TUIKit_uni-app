@@ -11,7 +11,7 @@ export function useCreateGroup(_routeParams?: any): UserPickerHookResult {
     get value(): User[] {
       return (friendList.value || []).map((contact: ContactInfo) => ({
         userID: contact.userID,
-        nickname: (contact && contact.remark) || (contact && contact.nickname) || contact.userID,
+        nickname: (contact && contact.friendRemark) || (contact && contact.nickname) || contact.userID,
         avatarURL: contact.avatarURL || ''
       }))
     }

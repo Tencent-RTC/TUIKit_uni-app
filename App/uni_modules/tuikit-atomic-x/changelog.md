@@ -1,3 +1,25 @@
+## 4.2.4（2026-07-15）
+### 新特性
+- Room 支持 云端录制
+
+## 4.2.2（2026-07-14）
+### 优化
+- Chat 优化 uni-app x 平台 MessageActions 操作体验
+- Chat 优化 uni-app x 平台 MessageList 滚动与高亮消息体验
+- Chat 优化 uni-app 平台图片预览体验
+- Chat 优化 uni-app vue2 相册选择器交互与性能
+
+## 4.2.1（2026-07-10）
+### 优化
+- Chat 优化 uniappx 上的体验
+
+## 4.2.0（2026-07-08）
+### 新特性
+- Chat 支持 uni-app x 项目
+
+### 优化
+- Chat 优化 state，升级原生依赖
+
 ## 4.1.1（2026-06-16）
 ### 新特性
 - Room 新增Room场景

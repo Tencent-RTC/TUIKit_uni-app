@@ -63,14 +63,14 @@
             <component 
               :is="Avatar"
               :src="friend.avatarURL || ''"
-              :name="friend?.remark || friend.nickname || friend.userID"
+              :name="friend?.friendRemark || friend.nickname || friend.userID"
               :size="80"
               shape="square"
               defaultAvatarType="user"
               pureMode
             />
             <view class="contact-list__friend-info">
-              <text class="contact-list__friend-name" :numberOfLines="1">{{ friend?.remark || friend.nickname || friend.userID }}</text>
+              <text class="contact-list__friend-name" :numberOfLines="1">{{ friend?.friendRemark || friend.nickname || friend.userID }}</text>
             </view>
           </view>
         </cell>
@@ -136,8 +136,8 @@ const {
 } = useContactState()
 
 const {
-  groupApplicationUnreadCount,
-  fetchGroupApplicationList,
+  unreadApplicationCount,
+  loadApplications,
 } = useGroupState()
 
 const dom = uni.requireNativePlugin('dom')
@@ -161,7 +161,7 @@ const entryList = computed<EntryItem[]>(() => [
     label: '群聊通知',
     icon: iconGroupNotifications,
     visible: props.showGroupNotification,
-    badge: groupApplicationUnreadCount.value
+    badge: unreadApplicationCount.value
   },
   {
     type: 'myGroups',
@@ -192,7 +192,7 @@ const sidebarTopPx = computed(() => {
 const groupedFriendList = computed(() => {
   const { groupedList } = sortByFirstChar(
     friendList.value,
-    (item: ContactInfo) => item.remark || item.nickname || item.userID || ''
+    (item: ContactInfo) => item.friendRemark || item.nickname || item.userID || ''
   )
   
   const letters = Object.keys(groupedList).sort((a, b) => {
@@ -270,7 +270,7 @@ watch(() => indexLetters.value, (letters) => {
 }, { immediate: true })
 
 onMounted(async () => {
-  await fetchGroupApplicationList()
+  await loadApplications()
 })
 
 

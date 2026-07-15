@@ -1,0 +1,43 @@
+enum UserPickerType {
+    // 发起C2C会话
+    C2C_CONVERSATION = 1,
+    // 创建群聊
+    CREATE_GROUP = 2,
+    // 删除群成员
+    REMOVE_GROUP_MEMBER = 3,
+    // 邀请群成员
+    INVITE_GROUP_MEMBER = 4,
+    // 晋升管理员
+    PROMOTE_ADMIN = 5,
+    // 降级管理员
+    DEMOTE_ADMIN = 6,
+    // 禁言群成员
+    MUTE_GROUP_MEMBER = 7,
+    // 取消禁言群成员
+    UNMUTE_GROUP_MEMBER = 8,
+    // 转交群主
+    TRANSFER_GROUP_OWNER = 9,
+    // 选择群成员
+    SELECT_GROUP_MEMBER = 10,
+    // 选择 @ 提及的群成员（单选 + @所有人 + 服务端搜索）
+    SELECT_GROUP_AT_USER = 11
+};
+
+export { UserPickerType }
+
+/**
+ * SelectGroupMemberPayload 共享类型
+ *
+ * 跨 uni.$emit 传输的 selectGroupMember 事件 payload。
+ *
+ * 重要：发送端（userPicker.uvue）与接收端（MessageInput.uvue）必须 import **同一个** type alias
+ *  —— 不能在两个文件独立定义同名 type alias，UTS 视为不同类型（nominal typing），
+ *   跨 emit 强转会抛 `ClassCastException: XxxType cannot be cast to XxxType`。
+ *
+ * 元素 selectedUsers 是 any[]：跨 emit 传过来的元素是 UTSJSONObject 包装（iOS UTS 内部序列化），
+ * typed 数组元素 `Array<SelectedUserItem>` 接收时触发 Kotlin 元素 cast 失败。
+ * 接收端用 UTSJSONObject 下标 + typeof 收窄访问每个元素（见 toMap helper）。
+ */
+export type SelectGroupMemberPayload = {
+  selectedUsers: any[],
+}

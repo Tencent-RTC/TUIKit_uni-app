@@ -36,7 +36,7 @@ import MemberAvatarList from './components/MemberAvatarList.nvue';
 import SettingRowToggle from './components/SettingRowToggle.nvue';
 import { useGroupMemberState } from '../../state/GroupMemberState';
 import { useGroupState } from '../../state/GroupState';
-import { GroupMemberRole, GroupType } from '../../types/group';
+import { GroupMemberRole, GroupType, GroupMemberFilterRole } from '../../types/group';
 import { hasPermission, GroupPermission } from './utils/groupPermission';
 import { UserPickerType } from '../../types/userpicker';
 
@@ -50,8 +50,8 @@ export default {
   },
   data() {
     var groupID = this.conversationID.startsWith('group_') ? this.conversationID.replace('group_', '') : ''
-    var adminState = useGroupMemberState({ groupID: groupID, role: GroupMemberRole.Admin })
-    var ownerState = useGroupMemberState({ groupID: groupID, role: GroupMemberRole.Owner })
+    var adminState = useGroupMemberState({ groupID: groupID, role: GroupMemberFilterRole.ADMIN })
+    var ownerState = useGroupMemberState({ groupID: groupID, role: GroupMemberFilterRole.OWNER })
     var allState = useGroupMemberState({ groupID: groupID })
     var groupState = useGroupState()
     return {
@@ -69,23 +69,23 @@ export default {
   computed: {
     groupType() { return ((this.groupInfo && this.groupInfo.groupType) != null ? (this.groupInfo && this.groupInfo.groupType) : GroupType.Work) },
     isAllMuted() { return ((this.groupInfo && this.groupInfo.isAllMuted) != null ? (this.groupInfo && this.groupInfo.isAllMuted) : false) },
-    selfRole() { return ((this.groupInfo && this.groupInfo.selfRole) != null ? (this.groupInfo && this.groupInfo.selfRole) : GroupMemberRole.Member) },
-    canPromoteAdmin() { return this.selfRole === GroupMemberRole.Owner },
-    canDemoteAdmin() { return this.selfRole === GroupMemberRole.Owner },
+    selfRole() { return ((this.groupInfo && this.groupInfo.selfRole) != null ? (this.groupInfo && this.groupInfo.selfRole) : GroupMemberRole.MEMBER) },
+    canPromoteAdmin() { return this.selfRole === GroupMemberRole.OWNER },
+    canDemoteAdmin() { return this.selfRole === GroupMemberRole.OWNER },
     canMuteMember() { return hasPermission(this.groupType, this.selfRole, GroupPermission.MUTE_MEMBER) },
     canMuteAllMembers() { return hasPermission(this.groupType, this.selfRole, GroupPermission.MUTE_ALL_MEMBERS) },
     adminAndOwnerMembers() {
-      var combined = [].concat(this.adminState.groupMemberList.value, this.ownerState.groupMemberList.value).filter(function(m) { return m !== null })
+      var combined = [].concat(this.adminState.memberList.value, this.ownerState.memberList.value).filter(function(m) { return m !== null })
       var seen = {}
       return combined.filter(function(m) {
         if (seen[m.userID]) return false
-        if (m.role === GroupMemberRole.Owner || m.role === GroupMemberRole.Admin) { seen[m.userID] = true; return true }
+        if (m.role === GroupMemberRole.OWNER || m.role === GroupMemberRole.ADMIN) { seen[m.userID] = true; return true }
         return false
       })
     },
     mutedMembers() {
       var now = Date.now() / 1000
-      return this.allState.groupMemberList.value.filter(function(m) { return m.muteUntil > now })
+      return this.allState.memberList.value.filter(function(m) { return m.muteUntil > now })
     },
   },
   mounted() {
@@ -93,15 +93,15 @@ export default {
     this.statusBarHeight = systemInfo.statusBarHeight || 44
     this.loadGroupInfo()
     this.fetchAllAdmin()
-    this.ownerState.fetchGroupMemberList(GroupMemberRole.Owner)
-    this.allState.fetchGroupMemberList(GroupMemberRole.All)
+    this.ownerState.loadMembers([GroupMemberFilterRole.OWNER])
+    this.allState.loadMembers([GroupMemberFilterRole.ALL])
   },
   methods: {
     fetchAllAdmin() {
       var self = this
       function loop() {
-        if (self.adminState.hasMoreGroupMembers.value) {
-          self.adminState.fetchGroupMemberList(GroupMemberRole.Admin).then(loop)
+        if (self.adminState.hasMoreMembers.value) {
+          self.adminState.loadMembers([GroupMemberFilterRole.ADMIN]).then(loop)
         }
       }
       loop()
@@ -109,8 +109,8 @@ export default {
     loadGroupInfo() {
       if (!this.groupID) return
       var self = this
-      this.groupState.fetchGroupInfo([this.groupID]).then(function(list) {
-        if (list.length > 0) self.groupInfo = list[0]
+      this.groupState.getGroupInfo(this.groupID).then(function(info) {
+        if (info) self.groupInfo = info
       }).catch(function(err) { console.error('[GroupManagement] Failed to fetch group info:', err) })
     },
     handleBack() { uni.navigateBack() },
@@ -120,7 +120,7 @@ export default {
     handleMemberClick(member) {},
     handleMuteAllChange(value) {
       var self = this
-      this.allState.setMuteAllMembers(value).then(function() { self.loadGroupInfo() })
+      this.groupState.muteAllMembers(this.groupID, value).then(function() { self.loadGroupInfo() })
     },
     handleAddMuteMember() { uni.navigateTo({ url: '/pages/scenes/chat/userPicker/userPicker?businessType=' + UserPickerType.MUTE_GROUP_MEMBER + '&conversationID=' + this.conversationID }) },
     handleRemoveMuteMember() { uni.navigateTo({ url: '/pages/scenes/chat/userPicker/userPicker?businessType=' + UserPickerType.UNMUTE_GROUP_MEMBER + '&conversationID=' + this.conversationID }) },

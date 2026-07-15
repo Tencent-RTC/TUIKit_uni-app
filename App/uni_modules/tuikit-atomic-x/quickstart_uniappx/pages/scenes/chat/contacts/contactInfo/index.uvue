@@ -1,0 +1,162 @@
+<template>
+  <view class="contact-info-page">
+    <CustomNavbar :title="navTitle" :showBack="true" @back="handleBack" />
+
+    <!-- 页面内容 -->
+    <view class="page-content">
+      <!-- 联系人详情组件 -->
+      <ContactInfo
+        :type="type"
+        :userInfo="userInfo"
+        :friendInfo="friendInfo"
+        :friendApplication="friendApplication"
+        :canAddFriend="canAddFriend"
+        @addFriend="handleAddFriend"
+        @acceptFriend="handleAcceptFriend"
+        @rejectFriend="handleRejectFriend"
+        @sendMessage="handleSendMessage"
+        @remarkEdit="handleRemarkChange"
+        @deleteFriend="handleDeleteFriend"
+      />
+    </view>
+  </view>
+</template>
+
+<script setup lang="uts">
+
+import { ref, computed } from 'vue'
+import { onLoad, onShow } from '@dcloudio/uni-app'
+import ContactInfo from '@/uni_modules/tuikit-atomic-x/components/Contact/ContactInfo'
+import CustomNavbar from '@/uni_modules/tuikit-atomic-x/components/CustomNavbar/CustomNavbar.uvue'
+import type { ContactInfoType } from '@/uni_modules/tuikit-atomic-x/components/Contact'
+import { useContactState } from '@/uni_modules/tuikit-atomic-x/state/ContactState'
+import { getPageData, clearPageData, setPageData, INFO_DATA, VERIFY_DATA, REMARK_DATA } from '@/pages/utils/pageDataStore'
+// import { useCallState } from '@/uni_modules/tuikit-atomic-x/state/CallState';
+// import { getCurrentPageFullPath } from "../../../../../../server/callService"
+
+const type = ref<ContactInfoType | null>(null)
+const userInfo = ref<any | null>(null)
+const friendInfo = ref<any | null>(null)
+const friendApplication = ref<any | null>(null)
+const canAddFriend = ref<boolean>(true)
+
+const navTitle = computed<string>((): string => {
+  const t = type.value
+  if (t === 'addFriend') return '添加好友'
+  if (t === 'newContact') return '新的联系人'
+  if (t === 'friend') return '好友详情'
+  return '联系人详情'
+})
+
+const handleInfoData = (data: UTSJSONObject): void => {
+  const u = data['userInfo']
+  const f = data['friendInfo']
+  const appInfo = data['applicationInfo']
+  if (u != null) {
+    userInfo.value = u
+  }
+  if (f != null) {
+    friendInfo.value = f
+  }
+  if (appInfo != null) {
+    friendApplication.value = appInfo
+  }
+}
+
+onLoad((options: OnLoadOptions): void => {
+  const opt = options as UTSJSONObject
+  const t = opt['type']
+  if (typeof t === 'string') {
+    type.value = t as ContactInfoType;
+  }
+  const infoDataRaw: any | null = getPageData(INFO_DATA)
+  if (infoDataRaw != null) {
+    handleInfoData(infoDataRaw as UTSJSONObject)
+    clearPageData(INFO_DATA)
+  }
+})
+
+const contactState = useContactState()
+const refreshingFriend = ref<boolean>(false)
+const refreshFriendInfo = async (): Promise<void> => {
+  // 仅好友详情才需要刷新 friendInfo
+  if (type.value !== 'friend') return
+  const cur = friendInfo.value
+  if (cur == null) return
+  const curObj: UTSJSONObject = cur as UTSJSONObject
+  const uidRaw: any | null = curObj['userID']
+  const uid: string = typeof uidRaw === 'string' ? (uidRaw as string) : ''
+  if (uid.length == 0) return
+  // 防止并发触发(用户连续 navigateBack 多次)
+  if (refreshingFriend.value) return
+  refreshingFriend.value = true
+  try {
+    const list = await contactState.getContactInfo([uid])
+    if (list != null && list.length > 0) {
+      friendInfo.value = list[0] as any
+    }
+  } catch (error: any) {
+    console.error(`[contactInfo] refreshFriendInfo failed: ${error}`)
+  } finally {
+    refreshingFriend.value = false
+  }
+}
+onShow((): void => {
+  refreshFriendInfo()
+})
+
+const handleBack = (): void => {
+  uni.navigateBack({ delta: 1 })
+}
+
+const handleAddFriend = (user: any): void => {
+	const uObj: UTSJSONObject = user as UTSJSONObject
+	setPageData(VERIFY_DATA, {
+		type: 'friend',
+		userInfo: uObj
+	})
+	uni.navigateTo({
+		url: '/pages/scenes/chat/contacts/applicationVerify/index?type=friend'
+	})
+}
+
+const handleAcceptFriend = (_application: any): void => {
+  uni.navigateBack({ delta: 2 })
+}
+
+const handleRejectFriend = (_application: any): void => {
+  uni.navigateBack({ delta: 2 })
+}
+
+const handleSendMessage = (userID: string): void => {
+  uni.navigateTo({
+    url: `/pages/scenes/chat/chat/index?conversationID=c2c_${userID}`
+  })
+}
+
+const handleRemarkChange = (data: any): void => {
+	const infoObj: UTSJSONObject = data as UTSJSONObject
+	const uid: string = (infoObj['userID'] as string) ?? ''
+	const rm: string = (infoObj['friendRemark'] as string) ?? ''
+	setPageData(REMARK_DATA, { userID: uid, friendRemark: rm })
+	uni.navigateTo({
+		url: `/pages/scenes/chat/contacts/setRemark/index?userID=${encodeURIComponent(uid)}&remark=${encodeURIComponent(rm)}`
+	})
+}
+
+const handleDeleteFriend = (userID: string): void => {
+  console.log(`删除好友: ${userID}`)
+  uni.navigateBack({ delta: 1 })
+}
+</script>
+
+<style>
+.contact-info-page {
+  flex: 1;
+  background-color: #f5f5f5;
+}
+
+.page-content {
+  flex: 1;
+}
+</style>

@@ -1,0 +1,732 @@
+
+import { ref, type Ref } from "vue";
+import type { HybridListenerOptions } from "@/uni_modules/tuikit-atomic-x";
+import type { HybridCallOptions } from "./hybridCallOptions.uts";
+import { callAPI, addListener, removeListener } from "@/uni_modules/tuikit-atomic-x";
+import type {
+  MediaQuality as MediaQualityType,
+} from "../types/message";
+import { MediaQuality } from "../types/message";
+
+/**
+ * 桥接响应（参照 atomicx HybridResponse data class）
+ */
+type HybridResponse = {
+  api: string | null;
+  code: number;
+  message: string | null;
+  data: any | null;
+};
+
+/**
+ * 桥接响应默认值
+ */
+const DEFAULT_HYBRID_RESPONSE: HybridResponse = {
+  api: null,
+  code: -1,
+  message: null,
+  data: null
+};
+
+type DataPayload = UTSJSONObject;
+
+/**
+ * 模块级单例缓存
+ */
+const InstanceMap: Map<string, MessageActionState> = new Map<string, MessageActionState>();
+
+/**
+ * 消息操作状态管理类
+ */
+class MessageActionState {
+  public readonly instanceId: string;
+  public readonly message: UTSJSONObject;
+
+  /** 已读成员列表（**新增**） */
+  public readonly readMemberList: Ref<any[]>;
+  /** 是否有更多已读成员 */
+  public readonly hasMoreReadMembers: Ref<boolean>;
+  /** 未读成员列表 */
+  public readonly unreadMemberList: Ref<any[]>;
+  /** 是否有更多未读成员 */
+  public readonly hasMoreUnreadMembers: Ref<boolean>;
+  /** 表情回应用户列表 */
+  public readonly reactionUserList: Ref<any[]>;
+  /** 是否有更多表情回应用户 */
+  public readonly hasMoreReactionUsers: Ref<boolean>;
+
+  private constructor(message: UTSJSONObject) {
+    this.instanceId = MessageActionState.generateInstanceId(message);
+    this.message = message;
+
+    this.readMemberList = ref<any[]>([]);
+    this.hasMoreReadMembers = ref<boolean>(false);
+    this.unreadMemberList = ref<any[]>([]);
+    this.hasMoreUnreadMembers = ref<boolean>(false);
+    this.reactionUserList = ref<any[]>([]);
+    this.hasMoreReactionUsers = ref<boolean>(false);
+
+    this.createStore();
+  }
+
+  private createStore(): void {
+    const options: HybridCallOptions = {
+      api: "createStore",
+      params: {
+        createStoreParams: this.instanceId,
+        message: JSON.stringify(this.message),
+      },
+    };
+
+    callAPI(JSON.stringify(options), (response: string) => {
+      try {
+        const result = JSON.parse<HybridResponse>(response) ?? DEFAULT_HYBRID_RESPONSE;
+        if (result.code == 0) {
+          this.bindEvent();
+        } else {
+          const msg = result.message ?? 'unknown';
+          console.error(`[${this.instanceId}][createStore] Failed: ${msg}`);
+        }
+      } catch (error: any) {
+        const errMsg = error instanceof Error ? (error as Error).message : `${error}`;
+        console.error(`[${this.instanceId}][createStore] Parse error: ${errMsg}`);
+      }
+    });
+  }
+
+  private static generateInstanceId(message: UTSJSONObject): string {
+    return JSON.stringify({
+      storeName: "MessageAction",
+      message,
+    });
+  }
+
+  public static getInstance(message: UTSJSONObject): MessageActionState {
+    const instanceId = MessageActionState.generateInstanceId(message);
+    if (!InstanceMap.has(instanceId)) {
+      InstanceMap.set(instanceId, new MessageActionState(message));
+    }
+    return InstanceMap.get(instanceId) as MessageActionState;
+  }
+
+  /**
+   * 绑定事件监听（订阅 6 个新字段）
+   */
+  private bindEvent(): void {
+    const storeName = "MessageAction";
+
+    const dataHandlers: Map<string, (result: any) => void> = new Map();
+    dataHandlers.set("readMemberList", (r: any): void => {
+      const rObj: UTSJSONObject = r as UTSJSONObject
+      const rawList: any | null = rObj['readMemberList']
+      if (rawList != null) {
+        this.readMemberList.value = rawList as any[]
+      }
+    });
+    dataHandlers.set("hasMoreReadMembers", (r: any): void => {
+      const rObj: UTSJSONObject = r as UTSJSONObject
+      this.hasMoreReadMembers.value = rObj['hasMoreReadMembers'] == true;
+    });
+    dataHandlers.set("unreadMemberList", (r: any): void => {
+      const rObj: UTSJSONObject = r as UTSJSONObject
+      const rawList: any | null = rObj['unreadMemberList']
+      if (rawList != null) {
+        this.unreadMemberList.value = rawList as any[]
+      }
+    });
+    dataHandlers.set("hasMoreUnreadMembers", (r: any): void => {
+      const rObj: UTSJSONObject = r as UTSJSONObject
+      this.hasMoreUnreadMembers.value = rObj['hasMoreUnreadMembers'] == true;
+    });
+    dataHandlers.set("reactionUserList", (r: any): void => {
+      const rObj: UTSJSONObject = r as UTSJSONObject
+      const rawList: any | null = rObj['reactionUserList']
+      if (rawList != null) {
+        this.reactionUserList.value = rawList as any[]
+      }
+    });
+    dataHandlers.set("hasMoreReactionUsers", (r: any): void => {
+      const rObj: UTSJSONObject = r as UTSJSONObject
+      this.hasMoreReactionUsers.value = rObj['hasMoreReactionUsers'] == true;
+    });
+
+    const dataNames: string[] = [
+      "readMemberList",
+      "hasMoreReadMembers",
+      "unreadMemberList",
+      "hasMoreUnreadMembers",
+      "reactionUserList",
+      "hasMoreReactionUsers",
+    ];
+
+    dataNames.forEach((dataName: string) => {
+      const makeOptions = (name: string): HybridListenerOptions => {
+        const opts: HybridListenerOptions = {
+          type: "",
+          store: storeName,
+          name: name,
+          params: { createStoreParams: this.instanceId },
+        };
+        return opts;
+      };
+      addListener(makeOptions(dataName), (data: string) => {
+        try {
+          const result = JSON.parse<DataPayload>(data);
+          if (result != null) {
+            const handler = dataHandlers.get(dataName);
+            if (handler != null) {
+              handler(result);
+            }
+          }
+        } catch (error: any) {
+          const errMsg = error instanceof Error ? (error as Error).message : `${error}`;
+          console.error(`[${this.instanceId}][${dataName} listener] Error: ${errMsg}`);
+        }
+      });
+    });
+  }
+
+  // ============================================================================
+  // Actions
+  // ============================================================================
+
+  /**
+   * 撤回消息（旧名 recallMessage）
+   */
+  revoke = async (): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      const options: HybridCallOptions = {
+        api: 'revoke',
+        params: {
+          createStoreParams: this.instanceId,
+        },
+      };
+
+      callAPI(JSON.stringify(options), (data: string) => {
+        try {
+          const result = JSON.parse<HybridResponse>(data) ?? DEFAULT_HYBRID_RESPONSE;
+          if (result.code == 0) {
+            resolve();
+          } else {
+            const msg = result.message ?? 'revoke failed';
+            reject(new Error(msg));
+          }
+        } catch (error: any) {
+          const errMsg = error instanceof Error ? (error as Error).message : `${error}`;
+          reject(new Error(errMsg));
+        }
+      });
+    });
+  };
+
+  /**
+   * 删除消息（单条；旧名 deleteMessage）
+   */
+  delete = async (): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      const options: HybridCallOptions = {
+        api: 'delete',
+        params: {
+          createStoreParams: this.instanceId,
+        },
+      };
+      callAPI(JSON.stringify(options), (data: string) => {
+        try {
+          const result = JSON.parse<HybridResponse>(data) ?? DEFAULT_HYBRID_RESPONSE;
+          if (result.code == 0) {
+            resolve();
+          } else {
+            const msg = result.message ?? 'delete failed';
+            reject(new Error(msg));
+          }
+        } catch (error: any) {
+          const errMsg = error instanceof Error ? (error as Error).message : `${error}`;
+          reject(new Error(errMsg));
+        }
+      });
+    });
+  };
+
+  /**
+   * 置顶/取消置顶消息（**新增**）
+   */
+  pin = async (isPinned: boolean): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      const options: HybridCallOptions = {
+        api: 'pin',
+        params: {
+          createStoreParams: this.instanceId,
+          isPinned,
+        },
+      };
+      callAPI(JSON.stringify(options), (data: string) => {
+        try {
+          const result = JSON.parse<HybridResponse>(data) ?? DEFAULT_HYBRID_RESPONSE;
+          if (result.code == 0) {
+            resolve();
+          } else {
+            const msg = result.message ?? 'pin failed';
+            reject(new Error(msg));
+          }
+        } catch (error: any) {
+          const errMsg = error instanceof Error ? (error as Error).message : `${error}`;
+          reject(new Error(errMsg));
+        }
+      });
+    });
+  };
+
+  /**
+   * 加载已读成员列表（**新增**）
+   */
+  loadReadMembers = async (count: number | null): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      const options: HybridCallOptions = {
+        api: 'loadReadMembers',
+        params: {
+          createStoreParams: this.instanceId,
+          count: count ?? 0,
+        },
+      };
+      callAPI(JSON.stringify(options), (data: string) => {
+        try {
+          const result = JSON.parse<HybridResponse>(data) ?? DEFAULT_HYBRID_RESPONSE;
+          if (result.code == 0) resolve();
+          else {
+            const msg = result.message ?? 'loadReadMembers failed';
+            reject(new Error(msg));
+          }
+        } catch (error: any) {
+          const errMsg = error instanceof Error ? (error as Error).message : `${error}`;
+          reject(new Error(errMsg));
+        }
+      });
+    });
+  };
+
+  /**
+   * 加载未读成员列表（**新增**）
+   */
+  loadUnreadMembers = async (count: number | null): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      const options: HybridCallOptions = {
+        api: 'loadUnreadMembers',
+        params: {
+          createStoreParams: this.instanceId,
+          count: count ?? 0,
+        },
+      };
+      callAPI(JSON.stringify(options), (data: string) => {
+        try {
+          const result = JSON.parse<HybridResponse>(data) ?? DEFAULT_HYBRID_RESPONSE;
+          if (result.code == 0) resolve();
+          else {
+            const msg = result.message ?? 'loadUnreadMembers failed';
+            reject(new Error(msg));
+          }
+        } catch (error: any) {
+          const errMsg = error instanceof Error ? (error as Error).message : `${error}`;
+          reject(new Error(errMsg));
+        }
+      });
+    });
+  };
+
+  /**
+   * 加载更多成员（已读/未读，由 isRead 切换；**新增**）
+   */
+  loadMoreMembers = async (isRead: boolean): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      const options: HybridCallOptions = {
+        api: 'loadMoreMembers',
+        params: {
+          createStoreParams: this.instanceId,
+          isRead,
+        },
+      };
+      callAPI(JSON.stringify(options), (data: string) => {
+        try {
+          const result = JSON.parse<HybridResponse>(data) ?? DEFAULT_HYBRID_RESPONSE;
+          if (result.code == 0) resolve();
+          else {
+            const msg = result.message ?? 'loadMoreMembers failed';
+            reject(new Error(msg));
+          }
+        } catch (error: any) {
+          const errMsg = error instanceof Error ? (error as Error).message : `${error}`;
+          reject(new Error(errMsg));
+        }
+      });
+    });
+  };
+
+  /**
+   * 添加表情回应（**新增**；从 MessageList 迁入）
+   */
+  addReaction = async (reactionID: string): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      const options: HybridCallOptions = {
+        api: 'addReaction',
+        params: {
+          createStoreParams: this.instanceId,
+          reactionID,
+        },
+      };
+      callAPI(JSON.stringify(options), (data: string) => {
+        try {
+          const result = JSON.parse<HybridResponse>(data) ?? DEFAULT_HYBRID_RESPONSE;
+          if (result.code == 0) resolve();
+          else {
+            const msg = result.message ?? 'addReaction failed';
+            reject(new Error(msg));
+          }
+        } catch (error: any) {
+          const errMsg = error instanceof Error ? (error as Error).message : `${error}`;
+          reject(new Error(errMsg));
+        }
+      });
+    });
+  };
+
+  /**
+   * 移除表情回应（**新增**）
+   */
+  removeReaction = async (reactionID: string): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      const options: HybridCallOptions = {
+        api: 'removeReaction',
+        params: {
+          createStoreParams: this.instanceId,
+          reactionID,
+        },
+      };
+      callAPI(JSON.stringify(options), (data: string) => {
+        try {
+          const result = JSON.parse<HybridResponse>(data) ?? DEFAULT_HYBRID_RESPONSE;
+          if (result.code == 0) resolve();
+          else {
+            const msg = result.message ?? 'removeReaction failed';
+            reject(new Error(msg));
+          }
+        } catch (error: any) {
+          const errMsg = error instanceof Error ? (error as Error).message : `${error}`;
+          reject(new Error(errMsg));
+        }
+      });
+    });
+  };
+
+  /**
+   * 加载表情回应用户列表（**新增**）
+   */
+  loadReactionUsers = async (reactionID: string, count: number | null): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      const options: HybridCallOptions = {
+        api: 'loadReactionUsers',
+        params: {
+          createStoreParams: this.instanceId,
+          reactionID,
+          count: count ?? 0,
+        },
+      };
+      callAPI(JSON.stringify(options), (data: string) => {
+        try {
+          const result = JSON.parse<HybridResponse>(data) ?? DEFAULT_HYBRID_RESPONSE;
+          if (result.code == 0) resolve();
+          else {
+            const msg = result.message ?? 'loadReactionUsers failed';
+            reject(new Error(msg));
+          }
+        } catch (error: any) {
+          const errMsg = error instanceof Error ? (error as Error).message : `${error}`;
+          reject(new Error(errMsg));
+        }
+      });
+    });
+  };
+
+  /**
+   * 加载更多表情回应用户（**新增**）
+   */
+  loadMoreReactionUsers = async (): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      const options: HybridCallOptions = {
+        api: 'loadMoreReactionUsers',
+        params: {
+          createStoreParams: this.instanceId,
+        },
+      };
+      callAPI(JSON.stringify(options), (data: string) => {
+        try {
+          const result = JSON.parse<HybridResponse>(data) ?? DEFAULT_HYBRID_RESPONSE;
+          if (result.code == 0) resolve();
+          else {
+            const msg = result.message ?? 'loadMoreReactionUsers failed';
+            reject(new Error(msg));
+          }
+        } catch (error: any) {
+          const errMsg = error instanceof Error ? (error as Error).message : `${error}`;
+          reject(new Error(errMsg));
+        }
+      });
+    });
+  };
+
+  /**
+   * 设置消息扩展（**新增**）
+   *   内部 JSON.stringify 序列化传给 SDK 桥接。
+   */
+  setExtensions = async (extensions: any[]): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      const options: HybridCallOptions = {
+        api: 'setExtensions',
+        params: {
+          createStoreParams: this.instanceId,
+          extensions: JSON.stringify(extensions),
+        },
+      };
+      callAPI(JSON.stringify(options), (data: string) => {
+        try {
+          const result = JSON.parse<HybridResponse>(data) ?? DEFAULT_HYBRID_RESPONSE;
+          if (result.code == 0) resolve();
+          else {
+            const msg = result.message ?? 'setExtensions failed';
+            reject(new Error(msg));
+          }
+        } catch (error: any) {
+          const errMsg = error instanceof Error ? (error as Error).message : `${error}`;
+          reject(new Error(errMsg));
+        }
+      });
+    });
+  };
+
+  /**
+   * 删除消息扩展（**新增**）
+   */
+  deleteExtensions = async (keys?: string[]): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      const options: HybridCallOptions = {
+        api: 'deleteExtensions',
+        params: {
+          createStoreParams: this.instanceId,
+          keys,
+        },
+      };
+      callAPI(JSON.stringify(options), (data: string) => {
+        try {
+          const result = JSON.parse<HybridResponse>(data) ?? DEFAULT_HYBRID_RESPONSE;
+          if (result.code == 0) resolve();
+          else {
+            const msg = result.message ?? 'deleteExtensions failed';
+            reject(new Error(msg));
+          }
+        } catch (error: any) {
+          const errMsg = error instanceof Error ? (error as Error).message : `${error}`;
+          reject(new Error(errMsg));
+        }
+      });
+    });
+  };
+
+  /**
+   * 翻译文本（**新增**）
+   */
+  translateText = async (
+    sourceTextList: string[],
+    sourceLanguage: string | null,
+    targetLanguage: string
+  ): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      const options: HybridCallOptions = {
+        api: 'translateText',
+        params: {
+          createStoreParams: this.instanceId,
+          sourceTextList,
+          sourceLanguage,
+          targetLanguage,
+        },
+      };
+      callAPI(JSON.stringify(options), (data: string) => {
+        try {
+          const result = JSON.parse<HybridResponse>(data) ?? DEFAULT_HYBRID_RESPONSE;
+          if (result.code == 0) resolve();
+          else {
+            const msg = result.message ?? 'translateText failed';
+            reject(new Error(msg));
+          }
+        } catch (error: any) {
+          const errMsg = error instanceof Error ? (error as Error).message : `${error}`;
+          reject(new Error(errMsg));
+        }
+      });
+    });
+  };
+
+  /**
+   * 语音转文字（参数不变）
+   */
+  convertVoiceToText = async (language: string): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      const options: HybridCallOptions = {
+        api: 'convertVoiceToText',
+        params: {
+          createStoreParams: this.instanceId,
+          language,
+        },
+      };
+
+      callAPI(JSON.stringify(options), (data: string) => {
+        try {
+          const result = JSON.parse<HybridResponse>(data) ?? DEFAULT_HYBRID_RESPONSE;
+          if (result.code == 0) {
+            resolve();
+          } else {
+            const msg = result.message ?? 'convertVoiceToText failed';
+            reject(new Error(msg));
+          }
+        } catch (error: any) {
+          const errMsg = error instanceof Error ? (error as Error).message : `${error}`;
+          reject(new Error(errMsg));
+        }
+      });
+    });
+  };
+
+  /**
+   * 下载媒体资源（**新增**）
+   */
+  downloadMedia = async (quality: MediaQualityType | null): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      const params: UTSJSONObject = new UTSJSONObject()
+      params['createStoreParams'] = this.instanceId
+      if (quality != null) params['quality'] = quality
+
+      const options: HybridCallOptions = {
+        api: 'downloadMedia',
+        params,
+      };
+      callAPI(JSON.stringify(options), (data: string) => {
+        try {
+          const result = JSON.parse<HybridResponse>(data) ?? DEFAULT_HYBRID_RESPONSE;
+          if (result.code == 0) resolve();
+          else {
+            const msg = result.message ?? 'downloadMedia failed';
+            reject(new Error(msg));
+          }
+        } catch (error: any) {
+          const errMsg = error instanceof Error ? (error as Error).message : `${error}`;
+          reject(new Error(errMsg));
+        }
+      });
+    });
+  };
+
+  downloadMergedMessageList = async (): Promise<any[]> => {
+    return new Promise((resolve, reject) => {
+      const options: HybridCallOptions = {
+        api: 'downloadMergedMessageList',
+        params: {
+          createStoreParams: this.instanceId,
+        },
+      };
+      callAPI(JSON.stringify(options), (data: string) => {
+        try {
+          const result = JSON.parse<HybridResponse>(data) ?? DEFAULT_HYBRID_RESPONSE;
+          if (result.code == 0) {
+            const dataObj: UTSJSONObject = (result.data ?? {}) as UTSJSONObject
+            const inner: any | null = dataObj['data']
+            const innerObj: UTSJSONObject = ((inner != null ? inner : {}) as UTSJSONObject)
+            const listRaw: any | null = innerObj['messageList']
+            const list: any[] = Array.isArray(listRaw) ? (listRaw as any[]) : []
+            resolve(list);
+          } else {
+            const msg = result.message ?? 'downloadMergedMessageList failed';
+            reject(new Error(msg));
+          }
+        } catch (error: any) {
+          const errMsg = error instanceof Error ? (error as Error).message : `${error}`;
+          reject(new Error(errMsg));
+        }
+      });
+    });
+  };
+
+  // ============================================================================
+  // 销毁
+  // ============================================================================
+
+  private unbindEvent(): void {
+    const dataNames: string[] = [
+      "readMemberList",
+      "hasMoreReadMembers",
+      "unreadMemberList",
+      "hasMoreUnreadMembers",
+      "reactionUserList",
+      "hasMoreReactionUsers",
+    ];
+
+    dataNames.forEach((name: string) => {
+      const makeOptions = (n: string): HybridListenerOptions => {
+        const opts: HybridListenerOptions = {
+          type: "",
+          store: "MessageAction",
+          name: n,
+          params: { createStoreParams: this.instanceId },
+        };
+        return opts;
+      };
+      removeListener(makeOptions(name));
+    });
+  }
+
+  private resetData(): void {
+    this.readMemberList.value = [];
+    this.hasMoreReadMembers.value = false;
+    this.unreadMemberList.value = [];
+    this.hasMoreUnreadMembers.value = false;
+    this.reactionUserList.value = [];
+    this.hasMoreReactionUsers.value = false;
+  }
+
+  destroyStore = (): void => {
+    // 幂等：实例已被销毁过，直接 return
+    if (!InstanceMap.has(this.instanceId)) return;
+    this.unbindEvent();
+    this.resetData();
+    InstanceMap.delete(this.instanceId);
+
+    const options: HybridCallOptions = {
+      api: "destroyStore",
+      params: {
+        createStoreParams: this.instanceId,
+      },
+    };
+
+    callAPI(JSON.stringify(options), () => {});
+  };
+}
+
+/**
+ * useMessageActionState 参数选项
+ *   message 形参改 UTSJSONObject（替代 MessageInfo）
+ */
+export type UseMessageActionStateOptions = {
+  message: UTSJSONObject;
+};
+
+/**
+ * useMessageActionState 返回类型
+ */
+export type UseMessageActionStateReturn = MessageActionState;
+
+export function useMessageActionState(options: UseMessageActionStateOptions): UseMessageActionStateReturn {
+  const { message } = options;
+  return MessageActionState.getInstance(message);
+}
+
+export {
+  MessageActionState,
+  MediaQuality,
+};
+export default useMessageActionState;

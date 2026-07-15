@@ -1,0 +1,153 @@
+/*
+ * Copyright (c) 2025 Tencent
+ * All rights reserved.
+ *
+ * Author: eddardliu
+ */
+
+import { pickSingleImageFromAlbum } from '@/uni_modules/tuikit-atomic-x'
+import { localizedString } from '../locales/Localizable'
+import { CropOverlayShape, ImageUploaderConfig, ImageUploaderListener } from '../ImageUploader'
+import { ImageCosUploaderManager } from './ImageCosUploaderManager'
+
+/**
+ * 上传实现所需配置（手写 Required 等价，UTS 不支持映射类型）
+ */
+type RequiredImageUploaderConfig = {
+	showsCameraItem: boolean
+	cropOverlayShape: CropOverlayShape
+}
+
+/**
+ * 裁剪结果数据
+ */
+type CropResultData = {
+	localPath: string | null
+}
+
+export class ImageUploaderImpl {
+	private listener : ImageUploaderListener | null
+	private cosUploadURL : string | null = null
+	private cosUploaderManager : ImageCosUploaderManager = new ImageCosUploaderManager()
+
+	constructor(listener : ImageUploaderListener | null) {
+		this.listener = listener
+	}
+
+	pick(config : ImageUploaderConfig, cosUploadURL ?: string | null) : void {
+		this.cosUploadURL = cosUploadURL ?? null
+
+		const finalConfig: RequiredImageUploaderConfig = {
+			showsCameraItem: config.showsCameraItem ?? false,
+			cropOverlayShape: config.cropOverlayShape ?? CropOverlayShape.CIRCLE
+		}
+
+		this.showImageSourcePicker(finalConfig)
+	}
+
+	private showImageSourcePicker(config : RequiredImageUploaderConfig) : void {
+		if (config.showsCameraItem) {
+			uni.showActionSheet({
+				itemList: [localizedString('take_photo'), localizedString('choose_from_album')],
+				success: (res: any) => {
+					if (res.tapIndex == 0) {
+						this.launchCamera(config)
+					} else if (res.tapIndex == 1) {
+						this.launchImagePicker(config)
+					}
+				},
+				fail: (): void => {
+					this.handlePickResult(null)
+				}
+			})
+		} else {
+			this.launchImagePicker(config)
+		}
+	}
+
+	private launchCamera(config : RequiredImageUploaderConfig) : void {
+		uni.chooseImage({
+			count: 1,
+			sizeType: ['original'],
+			sourceType: ['camera'],
+			success: (res: any) => {
+				const tempFilePath: string = res.tempFilePaths[0]
+				this.handleImageSelected(tempFilePath, config)
+			},
+			fail: (): void => {
+				this.handlePickResult(null)
+			}
+		})
+	}
+
+	private launchImagePicker(config : RequiredImageUploaderConfig) : void {
+		pickSingleImageFromAlbum(
+			(tempFilePath: string): void => {
+				this.handleImageSelected(tempFilePath, config)
+			},
+			(): void => {
+				this.handlePickResult(null)
+			}
+		)
+	}
+
+	private handleImageSelected(
+		imagePath : string,
+		config : RequiredImageUploaderConfig
+	) : void {
+		let normalizedPath: string = imagePath
+		if (
+			!imagePath.startsWith('file://') &&
+			!imagePath.startsWith('http://') &&
+			!imagePath.startsWith('https://') &&
+			imagePath.startsWith('/')
+		) {
+			normalizedPath = 'file://' + imagePath
+		}
+		this.showCropView(normalizedPath, config)
+	}
+
+	private showCropView(
+		imagePath : string,
+		config : RequiredImageUploaderConfig
+	) : void {
+		const cropParams: UTSJSONObject = {
+			imagePath: imagePath,
+			cropShape: config.cropOverlayShape
+		}
+		const basePath = '/uni_modules/tuikit-atomic-x/components' +
+			'/ImageUploader/impl/ImageUploaderCropView'
+		const params = encodeURIComponent(JSON.stringify(cropParams))
+
+		uni.navigateTo({
+			url: `${basePath}?params=${params}`,
+			events: {
+				cropResult: (data: CropResultData): void => {
+					this.handlePickResult(data.localPath)
+				}
+			}
+		} as any)
+	}
+
+	private handlePickResult(localPath : string | null) : void {
+		if (this.listener != null) {
+			this.listener.onPickCompleted(localPath)
+		}
+
+		if (localPath != null && localPath.length > 0 && this.cosUploadURL != null && this.cosUploadURL.length > 0) {
+			this.uploadToCos(localPath, this.cosUploadURL)
+		}
+	}
+
+	private async uploadToCos(
+		localPath : string,
+		cosUploadURL : string
+	) : Promise<void> {
+		const statusCode = await this.cosUploaderManager.uploadFile(
+			localPath, cosUploadURL
+		)
+		if (this.listener != null && this.listener.onCosUploadCompleted != null) {
+			this.listener.onCosUploadCompleted(statusCode)
+		}
+	}
+}

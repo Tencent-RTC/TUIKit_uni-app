@@ -1,0 +1,44 @@
+
+let pageDataMap: Map<string, any> = new Map()
+
+/**
+ * 设置跨页数据
+ * @param key 数据 key（推荐使用独立 export const 常量: LOCATE_MESSAGE / INFO_DATA 等）
+ * @param data 数据内容（传 null 表示清空该 key）
+ */
+export function setPageData(key: string, data: any | null): void {
+  if (data == null) {
+    pageDataMap.delete(key)
+  } else {
+    pageDataMap.set(key, data)
+  }
+}
+
+/**
+ * 读取跨页数据
+ * @param key 数据 key
+ * @returns 数据内容，未设置返回 null
+ */
+export function getPageData(key: string): any | null {
+  return pageDataMap.has(key) ? (pageDataMap.get(key) ?? null) : null
+}
+
+/**
+ * 清空指定 key 的跨页数据
+ * @param key 数据 key
+ */
+export function clearPageData(key: string): void {
+  pageDataMap.delete(key)
+}
+
+/**
+ * 检查指定 key 是否已设置数据
+ * @param key 数据 key
+ * @returns true=已设置, false=未设置
+ */
+export function hasPageData(key: string): boolean {
+  return pageDataMap.has(key)
+}
+
+// 重新导出 key 常量，方便消费方一处 import
+export { LOCATE_MESSAGE, INFO_DATA, REMARK_DATA, VERIFY_DATA, type PageDataKey } from './pageDataStoreKeys.uts'

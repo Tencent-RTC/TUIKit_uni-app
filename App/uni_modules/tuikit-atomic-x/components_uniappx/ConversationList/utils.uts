@@ -1,0 +1,346 @@
+
+import {
+  MessageStatus,
+  MessageType,
+  type MessageInfo,
+  type MessageSegment,
+  type MessageBody,
+  type MessageSenderInfo
+} from "./types";
+import { emojiBaseUrl, getEmojiFileName } from "./emojiMap";
+import { isCallMessage, parseCallMessageData, isVideoCall } from "../../utils/callMessageUtils";
+
+export type { MessageSegment } from "./types";
+
+/**
+ * 获取群聊消息的发送者名称
+ *
+ * 适配新版 MessageInfo：使用 from 字段（替代旧版 sender）
+ * 兼容：若 from 为空则回退到 sender（适配旧 payload）
+ *
+ * @param message 消息对象
+ * @returns 发送者名称，非群聊或无法获取则返回空字符串
+ */
+export function getSenderName(message: MessageInfo): string {
+  const isGroup = message.groupID != null && message.groupID.length > 0;
+  if (!isGroup) {
+    return '';
+  }
+
+  if (message.isSelf) {
+    return '我';
+  }
+
+  // 用 typed from 字段（非空 MessageSenderInfo）
+  const sender: MessageSenderInfo = message.from;
+  const friendRemark: string | null = sender.friendRemark;
+  if (friendRemark != null && friendRemark.length > 0) {
+    return friendRemark;
+  }
+  const nameCard: string | null = sender.nameCard;
+  if (nameCard != null && nameCard.length > 0) {
+    return nameCard;
+  }
+  const nickname: string | null = sender.nickname;
+  if (nickname != null && nickname.length > 0) {
+    return nickname;
+  }
+  return `${sender.userID}`;
+}
+
+/**
+ * 将字符串按"用户感知字符"（code point）切分为数组。
+ * UTS String 索引按 UTF-16 char，emoji 占 2 个 char（surrogate pair），需手动合并。
+ */
+function toCodePointArray(text: string): string[] {
+  const chars: string[] = [];
+  let i = 0;
+  const len = text.length;
+  while (i < len) {
+    const code = text.charCodeAt(i) ?? 0;
+    if (code >= 0xD800 && code <= 0xDBFF && i + 1 < len) {
+      // 高位代理，合并后续低位代理
+      chars.push(text.substring(i, i + 2));
+      i += 2;
+    } else {
+      chars.push(text.substring(i, i + 1));
+      i += 1;
+    }
+  }
+  return chars;
+}
+
+/** 计算单个 code-point 字符串的 code point 值（避免依赖 codePointAt） */
+function codePointOf(s: string): number {
+  if (s.length == 0) {
+    return 0;
+  }
+  const c0 = s.charCodeAt(0) ?? 0;
+  if (s.length >= 2 && c0 >= 0xD800 && c0 <= 0xDBFF) {
+    const c1 = s.charCodeAt(1) ?? 0;
+    return (c0 - 0xD800) * 0x400 + (c1 - 0xDC00) + 0x10000;
+  }
+  return c0;
+}
+
+/**
+ * 将文本解析为片段数组（文本 + 表情）
+ * 手动扫描 [TUIEmoji_xxx]，命中本地表情映射则生成 emoji 片段。
+ *
+ * @param text 要解析的文本
+ * @returns 消息片段数组
+ */
+export function parseTextToSegments(text: string): MessageSegment[] {
+  const segments: MessageSegment[] = [];
+  const len = text.length;
+  let i = 0;
+  let lastIndex = 0;
+
+  while (i < len) {
+    const start = text.indexOf('[TUIEmoji_', i);
+    if (start == -1) {
+      break;
+    }
+    const end = text.indexOf(']', start);
+    if (end == -1) {
+      break;
+    }
+    const emojiKey = text.substring(start, end + 1);
+    const fileName = getEmojiFileName(emojiKey);
+    if (fileName != null) {
+      if (start > lastIndex) {
+        segments.push({
+          type: 'text',
+          content: text.substring(lastIndex, start),
+          src: '',
+        } as MessageSegment);
+      }
+      segments.push({
+        type: 'emoji',
+        content: '',
+        src: emojiBaseUrl + (fileName as string),
+      } as MessageSegment);
+      lastIndex = end + 1;
+      i = end + 1;
+    } else {
+      // 非有效表情，跳过当前 '[' 继续扫描
+      i = start + 1;
+    }
+  }
+
+  if (lastIndex < len) {
+    segments.push({
+      type: 'text',
+      content: text.substring(lastIndex),
+      src: '',
+    } as MessageSegment);
+  }
+
+  if (segments.length == 0) {
+    segments.push({
+      type: 'text',
+      content: text,
+      src: '',
+    } as MessageSegment);
+  }
+
+  return segments;
+}
+
+/**
+ * 安全截取字符串前 N 个"用户感知字符"（code point），并对 ZWJ/variation selector/肤色修饰回溯，
+ * 避免切到 surrogate pair 中间或 emoji 组合序列中间导致渲染异常。
+ *
+ * @param text 源字符串
+ * @param n 期望保留的字符数（按 code point 计算）
+ */
+function safeTruncateText(text: string, n: number): string {
+  if (n <= 0) {
+    return '';
+  }
+  const chars = toCodePointArray(text);
+  if (chars.length <= n) {
+    return text;
+  }
+
+  let cut = n;
+  while (cut > 0) {
+    const prev = chars[cut - 1];
+    const next = cut < chars.length ? chars[cut] : '';
+    const cp = next.length > 0 ? codePointOf(next) : 0;
+    const prevCp = prev.length > 0 ? codePointOf(prev) : 0;
+    // 切点之后是 ZWJ / variation selector / skin tone → 切点前 emoji 是不完整序列
+    const nextIsCombiner = cp == 0x200D || cp == 0xFE0F || (cp >= 0x1F3FB && cp <= 0x1F3FF);
+    // 切点之前是 ZWJ → 切点前 emoji 序列被截断
+    const prevIsZwj = prevCp == 0x200D;
+    if (nextIsCombiner || prevIsZwj) {
+      cut--;
+      continue;
+    }
+    break;
+  }
+
+  let result = '';
+  for (let k = 0; k < cut; k++) {
+    result += chars[k];
+  }
+  return result;
+}
+
+/**
+ * 截断片段数组，控制总长度并添加省略号
+ *
+ * @param segments 消息片段数组
+ * @param maxLength 最大长度，默认 15
+ * @returns 截断后的片段数组
+ */
+export function truncateSegments(segments: MessageSegment[], maxLength: number = 15): MessageSegment[] {
+  let totalLength = 0;
+  const result: MessageSegment[] = [];
+
+  for (let i = 0; i < segments.length; i++) {
+    const segment = segments[i];
+
+    if (segment.type == 'text') {
+      // 文本长度按 code point 计算（一个 emoji 视为 1 个长度），与肉眼感知一致
+      const chars = toCodePointArray(segment.content);
+      const textLength = chars.length;
+
+      if (totalLength + textLength <= maxLength) {
+        result.push(segment);
+        totalLength += textLength;
+      } else {
+        const remainingLength = maxLength - totalLength;
+        if (remainingLength > 0) {
+          result.push({
+            type: 'text',
+            content: safeTruncateText(segment.content, remainingLength) + '...',
+            src: '',
+          } as MessageSegment);
+        } else {
+          result.push({
+            type: 'text',
+            content: '...',
+            src: '',
+          } as MessageSegment);
+        }
+        return result;
+      }
+    } else if (segment.type == 'emoji') {
+      if (totalLength + 1 <= maxLength) {
+        result.push(segment);
+        totalLength += 1;
+      } else {
+        result.push({
+          type: 'text',
+          content: '...',
+          src: '',
+        } as MessageSegment);
+        return result;
+      }
+    }
+  }
+
+  return result;
+}
+
+/**
+ * 安全获取消息 payload（适配新旧字段名）
+ *
+ * @param message 消息对象
+ * @returns MessageBody 或 null
+ */
+function getMessageBody(message: MessageInfo): MessageBody | null {
+  return message.messagePayload;
+}
+
+/**
+ * 判断消息是否在群聊中
+ */
+function isGroupMessage(message: MessageInfo): boolean {
+  return message.groupID != null && message.groupID.length > 0;
+}
+
+/**
+ * 获取消息摘要（用于会话预览的"最后一条消息"展示）
+ *
+ * 适配新版 MessageType 枚举：AUDIO=4（旧 SOUND=4）、TIPS=7（旧 SYSTEM=7）、新增 STREAM=10。
+ * 适配新版 MessageStatus：REVOKED=4（旧 RECALLED=4）。
+ *
+ * @param message 消息对象
+ * @returns 摘要文本
+ */
+export function getMessageAbstract(message: MessageInfo): string {
+  // 已撤回/已删除判断
+  if (message.status == MessageStatus.REVOKED) {
+    return '[消息已撤回]';
+  }
+  if (message.status == MessageStatus.DELETED) {
+    return '[消息已删除]';
+  }
+
+  const messageBody = getMessageBody(message);
+  let messageContent = '';
+
+  switch (message.messageType) {
+    case MessageType.TEXT: {
+      const text = messageBody != null ? messageBody.text : null;
+      messageContent = (text != null && text.length > 0) ? (text as string) : '[文本消息]';
+      break;
+    }
+    case MessageType.IMAGE:
+      messageContent = '[图片]';
+      break;
+    case MessageType.VIDEO:
+      messageContent = '[视频]';
+      break;
+    case MessageType.AUDIO:
+      // 新版 AUDIO（兼容旧 SOUND）
+      messageContent = '[语音]';
+      break;
+    case MessageType.FILE: {
+      const fileName = messageBody != null && messageBody.fileName != null ? (messageBody.fileName as string) : '';
+      messageContent = `[文件] ${fileName}`;
+      break;
+    }
+    case MessageType.FACE:
+      messageContent = '[表情]';
+      break;
+    case MessageType.CUSTOM: {
+      if (isCallMessage(message)) {
+        const callData = parseCallMessageData(message);
+        messageContent = isVideoCall(callData) ? '[视频通话]' : '[语音通话]';
+      } else {
+        // 新版 customMessage 是平铺到 messagePayload 的字段，body 上有 customMessage 子对象
+        const custom = messageBody != null ? messageBody.customMessage : null;
+        const desc = custom != null ? custom.description : null;
+        messageContent = (desc != null && desc.length > 0) ? (desc as string) : '[自定义消息]';
+      }
+      break;
+    }
+    case MessageType.MERGED: {
+      const merged = messageBody != null ? messageBody.mergedMessage : null;
+      const title = merged != null && merged.title.length > 0 ? merged.title : '';
+      messageContent = `[聊天记录] ${title}`;
+      break;
+    }
+    case MessageType.TIPS:
+      // 新版 TIPS（兼容旧 SYSTEM）
+      messageContent = '[系统消息]';
+      break;
+    case MessageType.STREAM:
+      messageContent = '[流式消息]';
+      break;
+    default:
+      messageContent = '[未知消息]';
+  }
+
+  // 群聊场景下追加发送者前缀（system 提示消息/通话消息除外）
+  if (isGroupMessage(message)
+      && message.messageType !== MessageType.TIPS
+      && !isCallMessage(message)) {
+    const senderName = getSenderName(message);
+    return senderName.length > 0 ? `${senderName}: ${messageContent}` : messageContent;
+  }
+  return messageContent;
+}

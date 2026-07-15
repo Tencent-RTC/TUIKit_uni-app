@@ -130,9 +130,9 @@ const groupID = props.conversationID.startsWith('group_') ? props.conversationID
 
 // 获取状态
 const {
-  groupMemberList: allMembers,
-  hasMoreGroupMembers,
-  fetchMoreGroupMemberList,
+  memberList: allMembers,
+  hasMoreMembers,
+  loadMoreMembers,
 } = useGroupMemberState({
   groupID,
 });
@@ -141,21 +141,21 @@ const isLoading = ref(false);
 
 // 群主
 const owner = computed(() => {
-  return allMembers.value.find((member: GroupMember) => member.role === GroupMemberRole.Owner) || null;
+  return allMembers.value.find((member: GroupMember) => member.role === GroupMemberRole.OWNER) || null;
 });
 
 // 管理员
 const admins = computed(() => {
-  return allMembers.value.filter(m => m.role === GroupMemberRole.Admin);
+  return allMembers.value.filter(m => m.role === GroupMemberRole.ADMIN);
 });
 
 // 普通成员
 const members = computed(() => {
-  return allMembers.value.filter(m => m.role === GroupMemberRole.Member);
+  return allMembers.value.filter(m => m.role === GroupMemberRole.MEMBER);
 });
 
 // 是否有更多
-const hasMore = computed(() => hasMoreGroupMembers.value);
+const hasMore = computed(() => hasMoreMembers.value);
 
 // 获取头像文字
 const getAvatarText = (member: GroupMember): string => {
@@ -184,7 +184,7 @@ const handleLoadMore = async () => {
   
   isLoading.value = true;
   try {
-    await fetchMoreGroupMemberList();
+    await loadMoreMembers();
   } finally {
     isLoading.value = false;
   }

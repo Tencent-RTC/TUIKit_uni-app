@@ -18,10 +18,10 @@ export function useUnmuteGroupMember(routeParams?: any): UserPickerHookResult {
   // ======================== 数据源 ========================
   const groupMemberState = useGroupMemberState({ groupID })
   const { 
-    groupMemberList: allMembers, 
-    hasMoreGroupMembers, 
-    setGroupMemberMuteTime, 
-    fetchMoreGroupMemberList, 
+    memberList: allMembers, 
+    hasMoreMembers, 
+    muteMember, 
+    loadMoreMembers, 
   } = groupMemberState
   
   // ======================== 响应式状态 ========================
@@ -43,7 +43,7 @@ export function useUnmuteGroupMember(routeParams?: any): UserPickerHookResult {
   const lockedItems = computed<string[]>(() => [])
 
   /** 是否有更多数据 */
-  const hasMore = computed(() => hasMoreGroupMembers.value)
+  const hasMore = computed(() => hasMoreMembers.value)
 
   // ======================== 方法 ========================
 
@@ -58,7 +58,7 @@ export function useUnmuteGroupMember(routeParams?: any): UserPickerHookResult {
       
       // 设置禁言时间为0即解除禁言
       for (const user of selectedUsers) {
-        await setGroupMemberMuteTime(user.userID, 0)
+        await muteMember(user.userID, 0)
       }
       
       uni.showToast({ title: '解除成功', icon: 'success' })
@@ -73,9 +73,9 @@ export function useUnmuteGroupMember(routeParams?: any): UserPickerHookResult {
 
   /** 触底加载更多 */
   const onReachEnd = async (): Promise<void> => {
-    if (!hasMoreGroupMembers.value) return
+    if (!hasMoreMembers.value) return
     try {
-      await fetchMoreGroupMemberList()
+      await loadMoreMembers()
     } catch (error) {
       console.error('[useUnmuteGroupMember] onReachEnd failed:', error)
     }

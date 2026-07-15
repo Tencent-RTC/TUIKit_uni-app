@@ -1,0 +1,195 @@
+<template>
+  <view class="black-list">
+    <scroll-view class="black-list__scroll" :show-scrollbar="false" scroll-y="true">
+      <view v-if="isLoading" key="loading">
+        <view class="black-list__placeholder">
+          <component :is="resolvedPlaceholderLoading" />
+        </view>
+      </view>
+
+      <view v-else-if="showEmpty" key="empty">
+        <view class="black-list__placeholder">
+          <component :is="resolvedPlaceholderEmptyList" text="暂无黑名单" />
+        </view>
+      </view>
+
+      <template v-else>
+        <view v-for="user in blackList" :key="(user as UTSJSONObject)['userID'] as string">
+          <SwipeActions
+            :actionsWidth="150"
+            :closeTrigger="getCloseTrigger((user as UTSJSONObject)['userID'] as string)"
+            @contentTap="handleUserClick(user)"
+            @open="handleSwipeOpen((user as UTSJSONObject)['userID'] as string)"
+          >
+            <view class="black-list__item">
+              <component
+                :is="resolvedAvatar"
+                :src="(user as UTSJSONObject)['avatarURL'] as string ?? ''"
+                :name="(user as UTSJSONObject)['nickname'] as string ?? (user as UTSJSONObject)['userID'] as string ?? ''"
+                :size="80"
+                shape="square"
+                defaultAvatarType="user"
+                :pureMode="true"
+              />
+              <view class="black-list__item-content">
+                <text class="black-list__item-name" :numberOfLines="1">{{ (user as UTSJSONObject)['nickname'] as string ?? (user as UTSJSONObject)['userID'] as string }}</text>
+              </view>
+            </view>
+            <template #actions>
+              <view class="black-list__action" @click="handleRemove(user)">
+                <text class="black-list__action-text">移出</text>
+              </view>
+            </template>
+          </SwipeActions>
+        </view>
+      </template>
+    </scroll-view>
+  </view>
+</template>
+
+<script setup lang="uts">
+
+import { ref, computed } from 'vue'
+import AvatarComponent from '../../Avatar/Avatar.uvue'
+import SwipeActions from '../../SwipeActions/SwipeActions.uvue'
+import DefaultEmptyList from '../placeholders/EmptyList.uvue'
+import DefaultLoading from '../placeholders/Loading.uvue'
+import { useContactState } from '../../../state/ContactState'
+import { showToast } from '../../../utils/toast'
+
+type Props = {
+  Avatar?: any
+  PlaceholderEmptyList?: any
+  PlaceholderLoading?: any
+}
+
+type Emits = {
+  userClick: any
+  remove: any
+}
+
+const props = withDefaults(defineProps<Props>(), {
+})
+
+const resolvedAvatar = computed<any>((): any => props.Avatar ?? AvatarComponent)
+const resolvedPlaceholderLoading = computed<any>((): any => props.PlaceholderLoading ?? DefaultLoading)
+const resolvedPlaceholderEmptyList = computed<any>((): any => props.PlaceholderEmptyList ?? DefaultEmptyList)
+
+const emit = defineEmits<Emits>()
+
+const { blackList, removeFromBlacklist } = useContactState()
+
+const isLoading = ref<boolean>(false)
+
+const showEmpty = computed<boolean>((): boolean => blackList.value.length == 0)
+
+// 当前已展开的 userID
+const currentOpenUserID = ref<string>('')
+
+const closeTriggers = ref<Map<string, number>>(new Map<string, number>())
+
+const getCloseTrigger = (userID: string): number => {
+  return closeTriggers.value.get(userID) ?? 0
+}
+
+/**
+ * 触发指定 userID 的 SwipeActions 关闭（递增对应 trigger）
+ */
+const triggerSwipeActionClose = (userID: string): void => {
+  const newMap = new Map<string, number>(closeTriggers.value)
+  const cur = newMap.get(userID) ?? 0
+  newMap.set(userID, cur + 1)
+  closeTriggers.value = newMap
+}
+
+const handleSwipeOpen = (userID: string): void => {
+  // 关闭其他已打开的项
+  if (currentOpenUserID.value.length > 0 && currentOpenUserID.value !== userID) {
+    triggerSwipeActionClose(currentOpenUserID.value)
+  }
+  currentOpenUserID.value = userID
+}
+
+const handleUserClick = (user: any): void => {
+  emit('userClick', user)
+}
+
+const handleRemove = async (user: any): Promise<void> => {
+  const obj = user as UTSJSONObject
+  const uid = obj['userID'] as string
+  if (uid.length == 0) return
+  try {
+    await removeFromBlacklist(uid)
+    // 移除成功后清理 trigger
+    if (closeTriggers.value.has(uid)) {
+      const newMap = new Map<string, number>(closeTriggers.value)
+      newMap.delete(uid)
+      closeTriggers.value = newMap
+    }
+    if (currentOpenUserID.value == uid) {
+      currentOpenUserID.value = ''
+    }
+    showToast({ message: '已移出', type: 'success' })
+    emit('remove', user)
+  } catch (error: any) {
+    showToast({ message: error.message ?? '操作失败', type: 'error' })
+  }
+}
+</script>
+
+<style>
+.black-list {
+  flex: 1;
+  background-color: #FFFFFF;
+}
+
+.black-list__scroll {
+  flex: 1;
+}
+
+.black-list__placeholder {
+  padding-top: 100rpx;
+  padding-bottom: 100rpx;
+  justify-content: center;
+  align-items: center;
+}
+
+.black-list__item {
+  flex-direction: row;
+  align-items: center;
+  padding: 0 32rpx;
+  background-color: #FFFFFF;
+}
+
+.black-list__item-content {
+  flex: 1;
+  margin-left: 24rpx;
+  padding: 36rpx 0;
+  border-bottom: 1rpx solid #E6E9F0;
+}
+
+.black-list__item-name {
+  flex: 1;
+  font-size: 36rpx;
+  font-weight: 400;
+  line-height: 48rpx;
+  color: #111111;
+  lines: 1;
+  text-overflow: ellipsis;
+}
+
+.black-list__action {
+  flex: 1;
+  width: 160rpx;
+  background-color: #E54545;
+  justify-content: center;
+  align-items: center;
+}
+
+.black-list__action-text {
+  font-size: 36rpx;
+  font-weight: 400;
+  line-height: 48rpx;
+  color: #FFFFFF;
+}
+</style>

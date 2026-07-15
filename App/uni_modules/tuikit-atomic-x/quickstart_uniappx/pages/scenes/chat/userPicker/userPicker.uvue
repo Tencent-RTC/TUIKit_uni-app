@@ -1,0 +1,52 @@
+<template>
+  <view class="user-picker-page">
+    <UserPicker :businessType="businessType" :routeParams="routeParams" @confirm="handleConfirm" />
+  </view>
+</template>
+
+<script setup lang="uts">
+
+import { ref } from 'vue'
+import { onLoad } from '@dcloudio/uni-app'
+import UserPicker from '@/uni_modules/tuikit-atomic-x/components/UserPicker/UserPicker.uvue'
+import { type SelectGroupMemberPayload } from '@/uni_modules/tuikit-atomic-x/types/userpicker.uts'
+import { toMap } from '@/uni_modules/tuikit-atomic-x/utils/toMap.uts'
+
+const businessType = ref<number>(-1)
+const routeParams = ref<UTSJSONObject>(new UTSJSONObject())
+
+onLoad((options: OnLoadOptions): void => {
+  const opt: UTSJSONObject = toMap(options)
+  const bt = opt['businessType']
+  if (typeof bt === 'string' && bt.length > 0) {
+    const parsed = parseInt(bt, 10)
+    if (!Number.isNaN(parsed)) {
+      businessType.value = parsed
+    }
+  }
+  routeParams.value = opt
+
+  // 按业务类型设置导航栏标题
+  const titleMap: Map<number, string> = new Map<number, string>()
+  titleMap.set(11, '选择提醒的人')
+  const title = titleMap.get(businessType.value)
+  if (title != null && title.length > 0) {
+    uni.setNavigationBarTitle({ title })
+  }
+})
+
+const handleConfirm = (selectedUsers: any[]): void => {
+  if (businessType.value === 10 || businessType.value === 11) {
+    const payload: SelectGroupMemberPayload = { selectedUsers: selectedUsers }
+    uni.$emit('onSelectGroupMember', payload)
+    uni.navigateBack()
+  }
+}
+</script>
+
+<style>
+.user-picker-page {
+  flex: 1;
+  background-color: #f5f5f5;
+}
+</style>

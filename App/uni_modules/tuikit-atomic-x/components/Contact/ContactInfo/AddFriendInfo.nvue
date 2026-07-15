@@ -15,7 +15,7 @@
         <view class="add-friend-info__header-content">
           <text class="add-friend-info__name" :numberOfLines="1">{{ userInfo?.nickname || userInfo?.userID }}</text>
           <text class="add-friend-info__id" :numberOfLines="1">ID：{{ userInfo?.userID }}</text>
-          <text v-if="userInfo?.signature" class="add-friend-info__signature" :numberOfLines="2">个性签名：{{ userInfo.signature }}</text>
+          <text v-if="userInfo?.aboutMe" class="add-friend-info__signature" :numberOfLines="2">个性签名：{{ userInfo.aboutMe }}</text>
         </view>
       </view>
 

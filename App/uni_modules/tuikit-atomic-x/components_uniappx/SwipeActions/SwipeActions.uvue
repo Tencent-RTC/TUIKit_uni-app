@@ -1,0 +1,317 @@
+<template>
+  <view
+    class="swipe-actions"
+    @touchstart="handleTouchStart"
+    @touchmove="handleTouchMove"
+    @touchend="handleTouchEnd"
+    @touchcancel="handleTouchEnd"
+  >
+    <view class="swipe-actions__wrapper" :style="wrapperStyle">
+      <!-- 主内容区域 -->
+      <view
+        class="swipe-actions__content"
+        :style="contentStyle"
+        @tap="handleContentTap"
+        @longpress="handleContentLongPress"
+      >
+        <slot />
+      </view>
+
+      <!-- 右侧操作按钮区域 -->
+      <view class="swipe-actions__actions">
+        <slot name="actions" />
+      </view>
+    </view>
+  </view>
+</template>
+
+<script setup lang="uts">
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
+
+type Props = {
+  /** 主内容区域宽度(rpx), 不传则自动使用屏幕宽度(750) */
+  contentWidth?: number
+  /** 操作按钮区域宽度(rpx) */
+  actionsWidth: number
+  /** 滑动阈值(px) */
+  swipeThreshold: number
+  /** 阻止tap的延迟时间(ms) */
+  tapPreventDelay: number
+  /** 是否禁用左滑 */
+  disabled: boolean
+  closeTrigger?: number
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  actionsWidth: 420,
+  swipeThreshold: 30,
+  tapPreventDelay: 250,
+  disabled: false,
+  closeTrigger: 0
+})
+
+const emit = defineEmits<{
+  /** 点击内容区域 */
+  (e: 'contentTap'): void
+  /** 长按内容区域 */
+  (e: 'contentLongPress'): void
+  /** 左滑展开 */
+  (e: 'open'): void
+  /** 右滑关闭 */
+  (e: 'close'): void
+}>()
+
+function objTouchCoord(touch: Touch | null, key: string): number {
+  if (touch == null) {
+    return 0
+  }
+  if (key == 'pageX') {
+    const v: number = touch.pageX
+    return v
+  }
+  if (key == 'pageY') {
+    const v: number = touch.pageY
+    return v
+  }
+  if (key == 'identifier') {
+    const v: number = touch.identifier
+    return v
+  }
+  return 0
+}
+
+// px转rpx的比例
+const rpxRatio = ref<number>(2)
+// 屏幕宽度(rpx)
+const screenWidth = ref<number>(750)
+
+// 触摸相关状态
+const startX = ref<number>(0)
+const startY = ref<number>(0)
+const currentX = ref<number>(0) // 0: 关闭, -actionsWidth: 展开
+const shouldPreventTap = ref<boolean>(false)
+const preventTapTimerId = ref<number | null>(null)
+
+/**
+ * 清理防止tap的定时器
+ */
+const clearPreventTapTimer = (): void => {
+  const id = preventTapTimerId.value
+  if (id != null) {
+    clearTimeout(id)
+    preventTapTimerId.value = null
+  }
+}
+
+/**
+ * 设置防止tap标志,并在延迟后恢复
+ */
+const setPreventTap = (): void => {
+  clearPreventTapTimer()
+  shouldPreventTap.value = true
+  preventTapTimerId.value = setTimeout(() => {
+    shouldPreventTap.value = false
+    preventTapTimerId.value = null
+  }, props.tapPreventDelay)
+}
+
+onMounted(() => {
+  // 获取屏幕宽度,计算px到rpx的转换比例
+  try {
+    const systemInfo = uni.getSystemInfoSync()
+    const w: number = typeof systemInfo.screenWidth == 'number' ? systemInfo.screenWidth : 375
+    rpxRatio.value = 750 / w
+    screenWidth.value = 750
+  } catch (e: any) {
+    console.error(`SwipeActions: 获取系统信息失败: ${e}`)
+  }
+})
+
+onBeforeUnmount(() => {
+  clearPreventTapTimer()
+})
+
+/**
+ * 实际使用的内容宽度
+ */
+const actualContentWidth = computed<number>((): number => {
+  return props.contentWidth ?? screenWidth.value
+})
+
+/**
+ * 包裹层的样式 (通过transform移动整个容器来实现左滑效果)
+ */
+const wrapperStyle = computed<string>((): string => {
+  // nvue中transform需要使用px单位,将rpx转换为px
+  const px: number = currentX.value / rpxRatio.value
+  // wrapper总宽度 = 内容宽度 + 操作按钮宽度
+  const wrapperWidth: number = actualContentWidth.value + props.actionsWidth
+  return `width: ${wrapperWidth}rpx; transform: translateX(${px}px); transition-duration: 300ms; transition-timing-function: ease; transition-property: transform;`
+})
+
+/**
+ * 主内容区域样式
+ */
+const contentStyle = computed<string>((): string => {
+  return `width: ${actualContentWidth.value}rpx;`
+})
+
+/**
+ * 是否处于展开状态
+ */
+const isOpen = computed<boolean>((): boolean => currentX.value < 0)
+
+/**
+ * 重置滑动状态
+ */
+const reset = (): void => {
+  currentX.value = 0
+}
+
+/**
+ * 打开操作按钮
+ */
+const open = (): void => {
+  currentX.value = -props.actionsWidth
+}
+
+/**
+ * 关闭操作按钮
+ */
+const close = (): void => {
+  currentX.value = 0
+}
+
+watch((): number => props.closeTrigger ?? 0, (newVal: number, oldVal: number): void => {
+  // 只在 trigger 真正递增时执行 close（避免初始 mount 的 0 触发）
+  if (newVal !== oldVal && newVal > 0) {
+    close()
+  }
+})
+
+const handleTouchStart = (e: TouchEvent): void => {
+  if (props.disabled) {
+    return
+  }
+  const touches = e.touches
+  if (touches == null || touches.length == 0) {
+    return
+  }
+
+  // 清理之前的定时器
+  clearPreventTapTimer()
+
+  const touch = touches[0]
+  const sx: number = objTouchCoord(touch, 'pageX')
+  const sy: number = objTouchCoord(touch, 'pageY')
+  startX.value = sx
+  startY.value = sy
+}
+
+/**
+ * 触摸移动
+ */
+const handleTouchMove = (_e: any): void => {
+  // 不处理,只在touchend时判断
+}
+
+/**
+ * 触摸结束
+ *
+ */
+const handleTouchEnd = (e: TouchEvent): void => {
+  if (props.disabled) {
+    return
+  }
+  const changed = e.changedTouches
+  if (changed == null || changed.length == 0) {
+    return
+  }
+
+  const touch = changed[0]
+  // touch 是 typed Touch 对象，通过下标取 pageX/pageY
+  const tx: number = objTouchCoord(touch, 'pageX')
+  const ty: number = objTouchCoord(touch, 'pageY')
+  const deltaX: number = tx - startX.value
+  const deltaY: number = ty - startY.value
+
+  // 如果垂直滑动距离大于水平滑动距离，认为是垂直滚动，忽略水平滑动
+  if (Math.abs(deltaY) > Math.abs(deltaX)) {
+    return
+  }
+
+  // 左滑超过阈值,展开操作按钮
+  if (deltaX < -props.swipeThreshold) {
+    currentX.value = -props.actionsWidth
+    setPreventTap()
+    emit('open')
+  }
+  // 右滑超过阈值,关闭操作按钮
+  else if (deltaX > props.swipeThreshold && currentX.value < 0) {
+    currentX.value = 0
+    setPreventTap()
+    emit('close')
+  }
+  // 移动距离较小(小于10px),认为是点击
+  else if (Math.abs(deltaX) < 10) {
+    shouldPreventTap.value = false
+  }
+  // 移动距离在10-threshold之间,阻止tap但不做任何操作
+  else {
+    setPreventTap()
+  }
+}
+
+/**
+ * 点击内容区域
+ */
+const handleContentTap = (): void => {
+  // 如果刚刚触发了滑动,阻止tap事件
+  if (shouldPreventTap.value) {
+    return
+  }
+
+  if (currentX.value < 0) {
+    // 如果正在展示操作按钮,点击关闭
+    close()
+  } else {
+    // 否则触发点击事件
+    emit('contentTap')
+  }
+}
+
+/**
+ * 长按内容区域
+ */
+const handleContentLongPress = (): void => {
+  reset()
+  emit('contentLongPress')
+}
+
+// 暴露方法给父组件
+defineExpose({
+  open,
+  close,
+  reset,
+  isOpen
+})
+</script>
+
+<style>
+.swipe-actions {
+  overflow: hidden;
+}
+
+.swipe-actions__wrapper {
+  flex-direction: row;
+}
+
+.swipe-actions__content {
+  background-color: #ffffff;
+  flex-shrink: 0;
+}
+
+.swipe-actions__actions {
+  flex-shrink: 0;
+}
+</style>

@@ -266,10 +266,10 @@ import { useLoginState } from '../../state/LoginState';
 import {
   GroupType,
   GroupJoinOption,
-  ReceiveMessageOpt,
+  GroupInviteOption,
   GroupMemberRole,
 } from '../../types/group';
-import { ConversationReceiveOption } from '../../types/conversation';
+import { ConversationReceiveOption, ReceiveMessageOpt } from '../../types/conversation';
 import { useConversationListState } from '../../state/ConversationListState';
 import { hasPermission, showGroupManagement, GroupPermission } from './utils/groupPermission';
 import { UserPickerType } from '../../types/userpicker';
@@ -279,6 +279,7 @@ import editIcon from './assets/nvue_edit.png';
 import arrowRightIcon from './assets/nvue_arrow-right.png';
 import copyIcon from './assets/nvue_file-copy.png';
 import type { GroupInfo, GroupMember } from '../../types/group';
+import type { ConversationInfo } from '../../types/conversation';
 
 interface Props {
   conversationID: string;
@@ -294,28 +295,26 @@ const groupID = props.conversationID.startsWith('group_') ? props.conversationID
 // ============================================================================
 // 获取会话置顶信息
 const {
-  conversationList,
   pinConversation,
-  fetchConversationInfo,
-  clearConversationMessages
+  getConversationInfo,
+  clearConversationMessages,
+  setReceiveMessageOpt: setReceiveMessageOptAPI,
 } = useConversationListState('groupSetting');
 // 获取群基础信息
 const {
-  joinedGroupList,
-  fetchJoinedGroupList,
-  dismissGroup, 
+  getGroupInfo,
+  dismissGroup,
   quitGroup,
-  updateGroupProfile,
-  setGroupJoinOption: setGroupJoinOptionAPI,
-  setGroupInviteOption: setGroupInviteOptionAPI,
-  setReceiveMessageOpt: setReceiveMessageOptAPI
+  updateProfile,
+  setJoinOption: setGroupJoinOptionAPI,
+  setInviteOption: setGroupInviteOptionAPI,
 } = useGroupState();
 
 // 获取群成员信息
 const {
-  groupMemberList: allMembers,
-  fetchGroupMembersInfo,
-  setSelfGroupNameCard,
+  memberList: allMembers,
+  getMemberInfo,
+  setSelfNameCard,
   destroyStore,
 } = useGroupMemberState({ groupID });
 
@@ -327,27 +326,27 @@ const { loginUserInfo, getLoginUserInfo } = useLoginState();
 // ============================================================================
 
 const isGroupNotExist = ref(false);
+const currentConversation = ref<ConversationInfo | null>(null);
 
-// 群信息（从 joinedGroupList 响应式获取）
-const groupInfo = computed(() => {
-  const group = joinedGroupList.value.find(group => group.groupID === groupID) || null;
-  return group;
-});
+// 群信息（通过 getGroupInfo 主动拉取，按需刷新）
+const groupInfo = ref<GroupInfo | null>(null);
 
 // 群信息(从上至下)
 const groupName = computed(() => (groupInfo.value as GroupInfo)?.groupName ?? '');
 const memberCount = computed(() => (groupInfo.value as GroupInfo)?.memberCount ?? 0);
-const notice = computed(() => (groupInfo.value as GroupInfo)?.notice ?? '');
-const selfRole = computed(() => (groupInfo.value as GroupInfo)?.selfRole ?? GroupMemberRole.Member);
+const notice = computed(() => (groupInfo.value as GroupInfo)?.notification ?? '');
+const selfRole = computed(() => (groupInfo.value as GroupInfo)?.selfRole ?? GroupMemberRole.MEMBER);
 const groupType = computed(() => (groupInfo.value as GroupInfo)?.groupType ?? GroupType.Work);
-const joinGroupApprovalType = computed(() => (groupInfo.value as GroupInfo)?.joinOption ?? GroupJoinOption.Unknown);
-const inviteToGroupApprovalType = computed(() => (groupInfo.value as GroupInfo)?.inviteOption ?? GroupJoinOption.Unknown);
+const joinGroupApprovalType = computed(() => (groupInfo.value as GroupInfo)?.joinOption ?? GroupJoinOption.FORBID);
+const inviteToGroupApprovalType = computed(() => (groupInfo.value as GroupInfo)?.inviteOption ?? GroupInviteOption.FORBID);
 const selfNameCard = ref('');
-const isNotDisturb = computed(() => (groupInfo.value as GroupInfo)?.receiveMessageOpt !== ReceiveMessageOpt.Receive);
-const isPinned = computed(() => {
-  const currentConversation = conversationList.value.find(conv => conv.conversationID === props.conversationID);
-  return currentConversation?.isPinned ?? false;
+const isNotDisturb = computed(() => {
+  const opt = currentConversation.value?.receiveOption;
+  // 数据未加载时默认关闭免打扰，避免误显示为开启
+  if (opt === undefined) return false;
+  return opt !== ReceiveMessageOpt.RECEIVE;
 });
+const isPinned = computed(() => currentConversation.value?.isPinned ?? false);
 
 // 弹窗状态
 const showGroupNamePopup = ref(false);
@@ -359,17 +358,17 @@ const showDismissConfirm = ref(false);
 const showNoticePopup = ref(false);
 const showClearMessageConfirm = ref(false);
 
-// ActionSheet 选项
+// ActionSheet 选项（值对齐底层 GroupJoinOption / GroupInviteOption 枚举）
 const joinOptions: ActionSheetOption[] = [
-  { label: '自由加入', value: 2 },
-  { label: '需要审批', value: 1 },
-  { label: '禁止加入', value: 0 },
+  { label: '自由加入', value: GroupJoinOption.ANY },
+  { label: '需要审批', value: GroupJoinOption.AUTH },
+  { label: '禁止加入', value: GroupJoinOption.FORBID },
 ];
 
 const inviteOptions: ActionSheetOption[] = [
-  { label: '自由加入', value: 2 },
-  { label: '需要审批', value: 1 },
-  { label: '禁止加入', value: 0 },
+  { label: '自由加入', value: GroupInviteOption.ANY },
+  { label: '需要审批', value: GroupInviteOption.AUTH },
+  { label: '禁止加入', value: GroupInviteOption.FORBID },
 ];
 // ============================================================================
 // 权限计算属性
@@ -396,7 +395,7 @@ const canRemoveMember = computed(() => {
 
 // 是否可邀请成员（邀请模式为"禁止加入"时不显示添加按钮）
 const canInviteMember = computed(() => {
-  return inviteToGroupApprovalType.value !== GroupJoinOption.Forbid;
+  return inviteToGroupApprovalType.value !== GroupInviteOption.FORBID;
 });
 
 // 是否显示群管理入口
@@ -443,21 +442,19 @@ const groupTypeText = computed(() => {
 // 加群方式文字
 const joinOptionText = computed(() => {
   const optionMap: Record<GroupJoinOption, string> = {
-    [GroupJoinOption.Any]: '自由加入',
-    [GroupJoinOption.Auth]: '需要审批',
-    [GroupJoinOption.Forbid]: '禁止加入',
-    [GroupJoinOption.Unknown]: '暂无',
+    [GroupJoinOption.ANY]: '自由加入',
+    [GroupJoinOption.AUTH]: '需要审批',
+    [GroupJoinOption.FORBID]: '禁止加入',
   };
   return optionMap[joinGroupApprovalType.value] || '暂无';
 });
 
 // 邀请入群方式文字
 const inviteOptionText = computed(() => {
-  const optionMap: Record<GroupJoinOption, string> = {
-    [GroupJoinOption.Any]: '自由加入',
-    [GroupJoinOption.Auth]: '需要审批',
-    [GroupJoinOption.Forbid]: '禁止加入',
-    [GroupJoinOption.Unknown]: '暂无',
+  const optionMap: Record<GroupInviteOption, string> = {
+    [GroupInviteOption.ANY]: '自由加入',
+    [GroupInviteOption.AUTH]: '需要审批',
+    [GroupInviteOption.FORBID]: '禁止加入',
   };
   return optionMap[inviteToGroupApprovalType.value] || '暂无';
 });
@@ -468,7 +465,7 @@ const inviteOptionText = computed(() => {
 
 /**
  * 拉取自己的群名片
- * fetchGroupMembersInfo
+ * getMemberInfo
  * - SelfNameCard
  */
 async function fetchSelfNameCard() {
@@ -476,7 +473,7 @@ async function fetchSelfNameCard() {
   try {
     const loginUserInfo = uni['__TUIKIT_LOGIN_STATE__']['loginUserInfo'].value;
     if (loginUserInfo.userID) {
-      const groupMemberList = await fetchGroupMembersInfo([loginUserInfo.userID]);
+      const groupMemberList = await getMemberInfo([loginUserInfo.userID]);
       const [selfMemberInfo] = groupMemberList;
       if (selfMemberInfo) {
         selfNameCard.value = selfMemberInfo.nameCard;
@@ -493,12 +490,43 @@ async function fetchSelfNameCard() {
   }
 }
 
+// 拉取群信息（按需刷新）
+const fetchGroupInfo = async () => {
+  if (!groupID) return;
+  try {
+    const info = await getGroupInfo(groupID);
+    if (info) {
+      groupInfo.value = info;
+      console.warn('[GroupChatSetting] fetchGroupInfo success', info);
+    }
+  } catch (error: any) {
+    if (error?.errCode === 10010) {
+      isGroupNotExist.value = true;
+      return;
+    }
+    console.error('[GroupChatSetting] fetchGroupInfo failed:', error);
+  }
+};
+
+// 获取会话信息
+const fetchConversationInfo = async () => {
+  if (!props.conversationID) return;
+  try {
+    const info = await getConversationInfo(props.conversationID);
+    if (info) {
+      currentConversation.value = info;
+    }
+  } catch (error) {
+    console.error('[GroupChatSetting] fetchConversationInfo failed:', error);
+  }
+};
+
 onBeforeMount(async () => {
   if (!groupID) return;
-  // 拉取已加入群列表（响应式自动更新 groupInfo）
-  await fetchJoinedGroupList();
+  // 拉取群信息（按需刷新）
+  await fetchGroupInfo();
   // 拉取会话置顶状态
-  await fetchConversationInfo(props.conversationID);
+  await fetchConversationInfo();
   // 拉取群名片
   await fetchSelfNameCard();
 });
@@ -544,8 +572,24 @@ const handleGroupNameConfirm = async (newName: string) => {
     return;
   }
   if (newGroupName !== groupName.value) {
-    await updateGroupProfile({ groupID, groupName: newGroupName });
-    // joinedGroupList 会自动更新
+    try {
+      await updateProfile({ groupID, groupName: newGroupName });
+      await fetchGroupInfo();
+    } catch (error) {
+      var rawMsg = (error && error.message) ? String(error.message) : ''
+      var errMsg = rawMsg || '创建群组失败，请重试'
+      // 安全打击词识别：错误码 80001
+      // message 形如：'group info secure check fail! beat word: xxx |requestid:...|tcloudapirequestid:...'
+      // 提取 'beat word:' 后到 '|' 前的内容作为被打击词展示
+      if (error && error.errCode === 80001) {
+        var match = rawMsg.match(/beat word:\s*([^|]+?)\s*(\||$)/i)
+        var beatWord = match ? match[1].trim() : ''
+        errMsg = beatWord
+          ? '创建群组失败，存在被打击词汇：' + beatWord
+          : '创建群组失败，存在被打击词汇'
+      }
+      uni.showToast({ title: errMsg, icon: 'none' })
+    }
   }
 };
 
@@ -558,15 +602,29 @@ const handleMemberListClick = () => {
 
 // 添加成员
 const handleAddMember = () => {
+  uni.$off('onGroupMemberChanged');
+  uni.$once('onGroupMemberChanged', () => {
+    setTimeout(() => {
+      fetchGroupInfo();
+    }, 500);
+  });
   uni.navigateTo({
     url: `/pages/scenes/chat/userPicker/userPicker?businessType=${UserPickerType.INVITE_GROUP_MEMBER}&conversationID=${props.conversationID}`,
+    fail: () => { uni.$off('onGroupMemberChanged'); },
   });
 };
 
 // 删除成员
 const handleRemoveMember = () => {
+  uni.$off('onGroupMemberChanged');
+  uni.$once('onGroupMemberChanged', () => {
+    setTimeout(() => {
+      fetchGroupInfo();
+    }, 500);
+  });
   uni.navigateTo({
     url: `/pages/scenes/chat/userPicker/userPicker?businessType=${UserPickerType.REMOVE_GROUP_MEMBER}&conversationID=${props.conversationID}`,
+    fail: () => { uni.$off('onGroupMemberChanged'); },
   });
 };
 
@@ -587,8 +645,8 @@ const handleNoticeClick = () => {
 const handleNoticeConfirm = async (newNotice: string) => {
   const newGroupNotice = newNotice.trim();
   if (newGroupNotice !== notice.value) {
-    await updateGroupProfile({ groupID, notice: newGroupNotice });
-    // joinedGroupList 会自动更新
+    await updateProfile({ groupID, notification: newGroupNotice });
+    await fetchGroupInfo();
   }
 };
 
@@ -609,7 +667,7 @@ const handleJoinGroupApprovalTypeClick = () => {
 // 选择加群方式
 const handleJoinOptionSelect = async (option: ActionSheetOption) => {
   await setGroupJoinOptionAPI(groupID, option.value as GroupJoinOption);
-  // joinedGroupList 会自动更新
+  await fetchGroupInfo();
 };
 
 // 点击邀请入群方式
@@ -621,8 +679,8 @@ const handleInviteGroupApprovalTypeClick = () => {
 
 // 选择邀请入群方式
 const handleInviteOptionSelect = async (option: ActionSheetOption) => {
-  await setGroupInviteOptionAPI(groupID, option.value as GroupJoinOption);
-  // joinedGroupList 会自动更新
+  await setGroupInviteOptionAPI(groupID, option.value as GroupInviteOption);
+  await fetchGroupInfo();
 };
 
 // 编辑我的群昵称
@@ -634,7 +692,7 @@ const handleEditNickname = () => {
 const handleNicknameConfirm = async (newNickname: string) => {
   const newSelfNameCard = newNickname.trim();
   if (newSelfNameCard !== selfNameCard.value) {
-    await setSelfGroupNameCard(newSelfNameCard);
+    await setSelfNameCard(newSelfNameCard);
     // 修改群名片后需要重新拉取
     await fetchSelfNameCard();
   }
@@ -642,19 +700,35 @@ const handleNicknameConfirm = async (newNickname: string) => {
 
 // 切换免打扰 (使用 throttle 防止限频，trailing: true 确保最后一次操作生效)
 const handleNotDisturbChange = throttle(async (value: boolean) => {
-  await setReceiveMessageOptAPI(groupID, value ? ReceiveMessageOpt.NotNotify : ReceiveMessageOpt.Receive);
-  // joinedGroupList 会自动更新
+    try {
+    const opt = value ? ReceiveMessageOpt.NOT_NOTIFY : ReceiveMessageOpt.RECEIVE;
+    await setReceiveMessageOptAPI(`group_${groupID}`, opt);
+    fetchConversationInfo();
+  } catch (error) {
+    console.error('[GroupChatSetting] pinConversation failed:', error);
+  }
 }, 1000, { leading: true, trailing: true });
 
 // 切换置顶
-const handlePinnedChange = (value: boolean) => {
-  pinConversation(props.conversationID, value);
-};
+const handlePinnedChange = throttle(async (value: boolean) => {
+  if (!props.conversationID) return;
+  try {
+    await pinConversation(props.conversationID, value);
+    fetchConversationInfo();
+  } catch (error) {
+    console.error('[GroupChatSetting] pinConversation failed:', error);
+  }
+}, 1000, { leading: true, trailing: true });
 
 // 转让群主
 const handleTransferOwnership = () => {
+  uni.$off('onGroupOwnerChanged');
+  uni.$once('onGroupOwnerChanged', () => {
+    fetchGroupInfo();
+  });
   uni.navigateTo({
     url: `/pages/scenes/chat/userPicker/userPicker?businessType=${UserPickerType.TRANSFER_GROUP_OWNER}&conversationID=${props.conversationID}`,
+    fail: () => { uni.$off('onGroupOwnerChanged'); },
   });
 };
 
@@ -695,6 +769,11 @@ const handleDismissConfirm = () => {
 // 点击清除聊天记录
 const handleClearMessageClick = () => {
   showClearMessageConfirm.value = true;
+};
+
+// 取消清除聊天记录
+const handleClearMessageCancel = () => {
+  // ConfirmDialog 会自动关闭
 };
 
 // 确认清除聊天记录

@@ -1,5 +1,6 @@
 import DCloudUTSFoundation
 import RTCRoomEngine
+import ImSDK_Plus
 
 class ExperimentalApiInvoker {
     public static let shared = ExperimentalApiInvoker()
@@ -19,6 +20,11 @@ class ExperimentalApiInvoker {
             let requestData = try jsonDecoder.decode(RequestData.self, from: data)
             if requestData.api == "setLocalVideoMuteImage" {
                 setLocalVideoMuteImage(data: requestData, callback: callback)
+                return
+            }
+            if requestData.api == "setTestEnvironment" {
+                V2TIMManager.sharedInstance().callExperimentalAPI(
+                    api: "setTestEnvironment", param: NSNumber(value: true), succ: nil, fail: nil)
                 return
             }
             TUIRoomEngine.sharedInstance().callExperimentalAPI(

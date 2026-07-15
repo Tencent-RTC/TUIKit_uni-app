@@ -1,0 +1,16 @@
+/**
+ * 桥接调用参数（用于 callAPI 入参）
+ *
+ * 【问题溯源】SDK 端 utssdk/interface.uts 只导出 HybridListenerOptions，
+ *   并没有导出 HybridCallOptions；shims-nvue.d.ts 里的 `*.uts` 通配补全
+ *   在 UTS 编译期并不被识别（仅 TypeScript 阶段有效）。
+ *
+ * 【解决方案】在 state/ 集中定义 HybridCallOptions，避免对 utssdk 做改动
+ *   （用户要求不动 utssdk/）。HybridListenerOptions 仍从 SDK 主入口 import
+ *
+ * 【使用】8 个 state 文件统一从 "./hybridCallOptions.uts" 导入 HybridCallOptions。
+ */
+export type HybridCallOptions = {
+  api: string;
+  params: any;
+}

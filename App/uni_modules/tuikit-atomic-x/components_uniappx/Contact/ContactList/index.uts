@@ -1,0 +1,15 @@
+import ContactList from './ContactList.uvue'
+import FriendApplicationList from './FriendApplicationList.uvue'
+import GroupApplicationList from './GroupApplicationList.uvue'
+import GroupList from './GroupList.uvue'
+import BlackList from './BlackList.uvue'
+
+export {
+  ContactList,
+  FriendApplicationList,
+  GroupApplicationList,
+  GroupList,
+  BlackList
+}
+
+export default ContactList

@@ -25,9 +25,12 @@
 <script>
 import { MessageStatus, MessageType } from '../../../types/message'
 import { useMessageActionState } from '../../../state/MessageActionState'
+import { throttle } from '../../../utils/lodash'
 
 var ARROW_SIZE = 24
 var GAP = 20
+// 节流窗口：1000ms 足以覆盖 iOS 关闭动画 300ms + 用户连点的反应间隔，避免重复网络请求 / 重复 emit
+var ACTION_THROTTLE_WAIT = 1000
 
 export default {
   name: 'MessageActions',
@@ -51,14 +54,14 @@ export default {
     }
   },
   computed: {
-    canCopy() { return this.message.messageType === MessageType.TEXT && this.message.messageBody && this.message.messageBody.text },
+    canCopy() { return this.message.messageType === MessageType.TEXT && this.message.messagePayload && this.message.messagePayload.text },
     canRecall() {
-      if (!this.message.isSelf) return false
-      if (this.message.status === MessageStatus.RECALLED || this.message.status === MessageStatus.DELETED) return false
+      if (!this.message.isSentBySelf) return false
+      if (this.message.status === MessageStatus.REVOKED || this.message.status === MessageStatus.DELETED) return false
       if (this.message.timestamp) { var diff = Math.floor(Date.now() / 1000) - this.message.timestamp; return diff <= 120 }
       return false
     },
-    canConvertVoice() { return this.message.messageType === MessageType.SOUND },
+    canConvertVoice() { return this.message.messageType === MessageType.AUDIO },
     /**
      * 语音转文字按钮的 label 与是否处于"隐藏文字"模式
      * 判定：当前消息已有 asrText 且 AudioMessage 当前展示该文本 → "隐藏文字"，否则 "转文字"
@@ -66,7 +69,7 @@ export default {
      * 默认（未写入 Map）视为可见 true（与 AudioMessage 中 showConvertedText 默认 true 一致）
      */
     voiceTextHasContent() {
-      return !!(this.message && this.message.messageBody && this.message.messageBody.asrText)
+      return !!(this.message && this.message.messagePayload && this.message.messagePayload.asrText)
     },
     voiceTextVisible() {
       if (!this.voiceTextHasContent) return false
@@ -109,7 +112,7 @@ export default {
       } else {
         pos.top = (tp.y - this.panelHeightRpx - GAP) + 'rpx'
       }
-      if (tp.isSelf) { pos.right = tp.x + 'rpx' }
+      if (tp.isSentBySelf) { pos.right = tp.x + 'rpx' }
       else { pos.left = tp.x + 'rpx' }
       return pos
     },
@@ -124,7 +127,7 @@ export default {
       var pw = this.panelWidthRpx
       if (pw > 0) {
         var panelFinalLeft
-        if (tp.isSelf) {
+        if (tp.isSentBySelf) {
           // 面板用 right 定位: panelFinalLeft = 屏幕宽(750) - right - panelWidth
           panelFinalLeft = 750 - tp.x - pw
         } else {
@@ -146,6 +149,15 @@ export default {
       return style
     }
   },
+  created() {
+    // 防抖包装 4 个动作按钮：leading 立即执行，1000ms 内的连点全部忽略
+    // 每个组件实例独立 throttle，组件销毁时自然回收
+    var self = this
+    this.handleCopy = throttle(function() { self._handleCopyImpl() }, ACTION_THROTTLE_WAIT, { leading: true, trailing: false })
+    this.handleDelete = throttle(function() { self._handleDeleteImpl() }, ACTION_THROTTLE_WAIT, { leading: true, trailing: false })
+    this.handleRecall = throttle(function() { self._handleRecallImpl() }, ACTION_THROTTLE_WAIT, { leading: true, trailing: false })
+    this.handleVoiceToText = throttle(function() { self._handleVoiceToTextImpl() }, ACTION_THROTTLE_WAIT, { leading: true, trailing: false })
+  },
   mounted() {
     this.actionState = useMessageActionState({ message: this.message })
   },
@@ -156,7 +168,7 @@ export default {
       this.triggerPosition = {
         x: position.x, y: position.y,
         messageX: position.messageX, messageWidth: position.messageWidth,
-        messageHeight: position.messageHeight, isSelf: position.isSelf
+        messageHeight: position.messageHeight, isSentBySelf: position.isSentBySelf
       }
       // phase 1: 渲染面板到屏幕外，等测量完高度后定位
       this.phase = 'measure'
@@ -201,18 +213,18 @@ export default {
       // #endif
     },
     handleMaskTap() { this.safeClose() },
-    handleCopy() {
-      if (this.message.messageBody && this.message.messageBody.text) {
-        uni.setClipboardData({ data: this.message.messageBody.text, success: function() { uni.showToast({ title: '已复制', icon: 'none' }) } })
+    _handleCopyImpl() {
+      if (this.message.messagePayload && this.message.messagePayload.text) {
+        uni.setClipboardData({ data: this.message.messagePayload.text, success: function() { uni.showToast({ title: '已复制', icon: 'none' }) } })
       }
       this.$emit('action', { key: 'copy', text: '复制' }); this.safeClose()
     },
-    async handleDelete() {
-      try { await this.actionState.deleteMessage(); this.safeClose() }
+    async _handleDeleteImpl() {
+      try { await this.actionState.delete(); this.safeClose() }
       catch (e) { uni.showToast({ title: '删除失败', icon: 'none', duration: 2000 }); this.safeClose() }
     },
-    async handleRecall() {
-      try { await this.actionState.recallMessage(); this.safeClose() }
+    async _handleRecallImpl() {
+      try { await this.actionState.revoke(); this.safeClose() }
       catch (e) { uni.showToast({ title: '撤回失败', icon: 'none', duration: 2000 }); this.safeClose() }
     },
     /**
@@ -220,7 +232,7 @@ export default {
      * - 当前未展示 asrText：触发转换流程（若已有缓存 SDK 一般立即返回）
      * - 当前正展示 asrText：广播 audioConvertHide，AudioMessage 收到后置 showConvertedText=false
      */
-    handleVoiceToText() {
+    _handleVoiceToTextImpl() {
       var msgID = this.message.msgID
       var visible = this.voiceTextVisible
       this.$emit('action', { key: visible ? 'voiceTextHide' : 'voiceToText', text: this.voiceActionLabel })

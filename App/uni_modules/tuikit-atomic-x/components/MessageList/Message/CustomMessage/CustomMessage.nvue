@@ -1,6 +1,6 @@
 <template>
   <view class="custom-message" :class="{ 'custom-message--center': isCustomCenter }">
-    <CallMessage v-if="isCallMessage" :message="message" :isGroupCall="isCustomCenter" />
+    <CallMessage v-if="isCallMsg" :message="message" :isGroupCall="isCustomCenter" />
     <view v-else class="custom-highlight">
       <view class="default-custom">
         <text class="custom-text">{{ customText }}</text>
@@ -11,9 +11,9 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { MessageInfo } from '../../../../types/message'
+import type { MessageInfo, CustomMessagePayload } from '../../../../types/message'
 import { safeJsonParse } from '../../../../utils/utsUtils'
-import { isGroupCallMessage } from '../../../../utils/callMessageUtils'
+import { isCallMessage, isGroupCallMessage } from '../../../../utils/callMessageUtils'
 import CallMessage from './CallMessage.nvue'
 
 interface Props {
@@ -26,41 +26,31 @@ const props = withDefaults(defineProps<Props>(), {
 })
 
 const customMessage = computed(() => {
-  return props.message.messageBody?.customMessage
+  return props.message.messagePayload as CustomMessagePayload | undefined
 })
 
-// 判断是否是通话消息
-const isCallMessage = computed(() => {
-  const data = customMessage.value?.data
-  if (!data) return false
-  
-  try {
-    const dataContent = safeJsonParse<any>(data as string, null)
-    if (dataContent?.businessID === 1 && dataContent?.data) {
-      const callInfo = safeJsonParse<any>(dataContent.data, null)
-      if (callInfo?.businessID === 'av_call' || callInfo?.businessID === 'rtc_call') {
-        return true
-      }
-    }
-  } catch {
-    return false
-  }
-  return false
+// 解析 customData（业务方序列化的 JSON 字符串）
+const customDataContent = computed<any>(() => {
+  const raw = customMessage.value?.customData
+  if (!raw) return null
+  return safeJsonParse<any>(raw as string, null)
 })
+
+// 判断是否是通话消息（callMessageUtils.isCallMessage 已对齐 customData）
+const isCallMsg = computed(() => isCallMessage(props.message))
 
 // 判断是否是需要居中显示的自定义消息
 const isCustomCenter = computed(() => {
   return isGroupCallMessage(props.message, props.conversationID)
 })
 
-const customDescription = computed(() => {
-  return customMessage.value?.description || ''
-})
-
 const customText = computed(() => {
-  if (customDescription.value) {
-    return customDescription.value
-  }  
+  // 1. 业务侧 customData.content（如 group_create 的"创建群聊"）
+  const content = customDataContent.value?.content
+  if (content) return String(content)
+  // 2. payload.description 兜底
+  const desc = customMessage.value?.description
+  if (desc) return desc
   return '自定义消息'
 })
 </script>

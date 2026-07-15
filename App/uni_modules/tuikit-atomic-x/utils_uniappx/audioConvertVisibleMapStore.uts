@@ -1,0 +1,30 @@
+/**
+ * AudioMessage 转文字可见态 Map 全局单例（UTS 跨端）
+ *
+ *   改用模块级 let Map 单例 + getter/setter 函数
+ *
+ * 使用方式：
+ *   写入端（AudioMessage.uvue 初始化/syncVisibleMap）：
+ *     setAudioConvertVisibleMapEntry(msgID, visible)
+ *   读取端（MessageActions.uvue 渲染按钮时）：
+ *     const map = getAudioConvertVisibleMap()
+ *     if (map.has(msgID)) return map.get(msgID) == true
+ */
+
+let _audioConvertVisibleMap: Map<string, boolean> = new Map<string, boolean>()
+
+export function setAudioConvertVisibleMapEntry(msgID: string, visible: boolean): void {
+  _audioConvertVisibleMap.set(msgID, visible)
+}
+
+export function deleteAudioConvertVisibleMapEntry(msgID: string): void {
+  _audioConvertVisibleMap.delete(msgID)
+}
+
+export function getAudioConvertVisibleMap(): Map<string, boolean> {
+  return _audioConvertVisibleMap
+}
+
+export function clearAudioConvertVisibleMap(): void {
+  _audioConvertVisibleMap = new Map<string, boolean>()
+}

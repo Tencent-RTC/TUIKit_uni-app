@@ -1,0 +1,231 @@
+
+// ==================== 枚举类型 ====================
+
+/** 会话类型（与新版 SDK ConversationType 对齐） */
+export enum ConversationType {
+  UNKNOWN = 0,
+  C2C = 1,
+  GROUP = 2,
+}
+
+/**
+ * 消息接收选项（与新版 SDK ReceiveMessageOpt 对齐）
+ *
+ * 注：旧 ConversationReceiveOption 与 ReceiveMessageOpt 数值完全一致；
+ * 5 值枚举，含义见 ./types/contact.ReceiveMessageOpt
+ */
+export enum ReceiveMessageOpt {
+  RECEIVE = 0,
+  NOT_RECEIVE = 1,
+  NOT_NOTIFY = 2,
+  NOT_NOTIFY_EXCEPT_MENTION = 3,
+  NOT_RECEIVE_EXCEPT_MENTION = 4,
+}
+
+/**
+ * 旧 ConversationReceiveOption alias，保留兼容旧调用点
+ */
+export const ConversationReceiveOption = ReceiveMessageOpt;
+
+/**
+ * 会话标记类型（位掩码）
+ *   直接传 ConversationMarkTypeValue（位掩码数值）。
+ * 本枚举保留用于组件内 if/else 分支判别。
+ */
+export enum ConversationMarkType {
+  STAR = 1,
+  UNREAD = 2,
+  FOLD = 4,
+  HIDE = 8,
+}
+
+/** 会话标记位掩码值类型 */
+export type ConversationMarkTypeValue = number;
+
+/** 群@类型 */
+export enum GroupAtType {
+  AT_ME = 1,
+  AT_ALL = 2,
+  AT_ALL_AT_ME = 3,
+}
+
+/** 群组类型（用于头像默认类型展示） */
+export enum GroupType {
+  Work = "Work",
+  Public = "Public",
+  Meeting = "Meeting",
+  AVChatRoom = "AVChatRoom",
+  Community = "Community",
+}
+
+/** 消息状态（与新版 SDK MessageStatus 对齐；RECALLED 已改为 REVOKED） */
+export enum MessageStatus {
+  INIT = 0,
+  SENDING = 1,
+  SEND_SUCCESS = 2,
+  SEND_FAIL = 3,
+  REVOKED = 4,
+  DELETED = 5,
+  LOCAL_IMPORTED = 6,
+  VIOLATION = 7,
+}
+
+/**
+ * @deprecated 使用 MessageStatus.REVOKED
+ */
+export const RECALLED = MessageStatus.REVOKED;
+
+/** 消息类型（与新版 SDK MessageType 对齐；SOUND → AUDIO，SYSTEM → TIPS） */
+export enum MessageType {
+  UNKNOWN = 0,
+  TEXT = 1,
+  IMAGE = 2,
+  VIDEO = 3,
+  AUDIO = 4,
+  FILE = 5,
+  FACE = 6,
+  TIPS = 7,
+  CUSTOM = 8,
+  MERGED = 9,
+  STREAM = 10,
+}
+
+/** 操作类型枚举 */
+export enum ConversationActionType {
+  PIN = "pin",
+  MUTE = "mute",
+  DELETE = "delete",
+}
+
+// ==================== 数据类型（JSON.parse<T> 反序列化用） ====================
+
+/** 群@信息 */
+export type GroupAtInfo = {
+  msgSeq: number;
+  atType: GroupAtType;
+};
+
+/** 消息发送者信息 */
+export type MessageSenderInfo = {
+  userID: string;
+  avatarURL: string | null;
+  nickname: string | null;
+  friendRemark: string | null;
+  nameCard: string | null;
+};
+
+/** 自定义消息 payload 子集 */
+export type CustomMessageInfo = {
+  customData: string | null;
+  description: string | null;
+  extensionInfo: string | null;
+};
+
+/** 合并消息 payload 子集 */
+export type MergedMessageInfo = {
+  title: string;
+  abstractList: string[] | null;
+};
+
+/** 消息 payload（新版 sealed class，TS 联合类型；UTS 中按 messageType 鉴别） */
+export type MessageBody = {
+  // 文本消息
+  text?: string | null;
+  // 图片消息
+  originalImageWidth?: number;
+  originalImageHeight?: number;
+  // 视频消息
+  videoSnapshotWidth?: number;
+  videoSnapshotHeight?: number;
+  videoDuration?: number;
+  // 语音消息
+  audioSize?: number;
+  audioDuration?: number;
+  // 文件消息
+  fileName?: string | null;
+  fileSize?: number;
+  // 表情消息
+  faceIndex?: number;
+  faceData?: string | null;
+  // 群提示消息
+  groupTips?: any[] | null;
+  // 自定义消息
+  customMessage?: CustomMessageInfo | null;
+  // 合并消息
+  mergedMessage?: MergedMessageInfo | null;
+  // 流式消息
+  markdown?: string;
+  data?: string;
+};
+
+/** 消息信息（ConversationList 预览所需子集） */
+export type MessageInfo = {
+  msgID: string | null;
+  sender: MessageSenderInfo;
+  isSelf: boolean;
+  groupID: string | null;
+  timestamp: number | null;
+  status: MessageStatus | null;
+  messageType: MessageType | null;
+  // 新版字段名 messagePayload（替代旧版 messageBody）
+  messagePayload: MessageBody | null;
+  // 新版字段名 from（替代旧版 sender；字段语义一致，已在 MessageSenderInfo 复用）
+  from: MessageSenderInfo;
+};
+
+/** 会话信息（与新版 SDK ConversationInfo 对齐） */
+export type ConversationInfo = {
+  conversationID: string;
+  type: ConversationType | null;
+  groupType: GroupType | null;
+  avatarURL: string | null;
+  title: string | null;
+  lastMessage: MessageInfo | null;
+  draft: string | null;
+  // 新版删除了 timestamp/orderKey，由 lastMessage.timestamp 决定排序
+  unreadCount: number;
+  isPinned: boolean;
+  receiveOption: ReceiveMessageOpt | null;
+  groupAtInfoList: GroupAtInfo[] | null;
+  conversationGroupList: string[] | null;
+  // 新版字段名 conversationMarkList（替代旧版 markList）
+  conversationMarkList: ConversationMarkTypeValue[] | null;
+  // 原始会话对象，前端不直接使用
+  rawConversation?: any;
+};
+
+/** 会话列表状态 */
+export type ConversationListState = {
+  conversationList: ConversationInfo[];
+  hasMoreConversations: boolean;
+  totalUnreadCount: number;
+};
+
+// ==================== 组件类型 ====================
+
+/**
+ * 操作按钮项
+ * 可由字面量构造，可空字段用 `?:`
+ */
+export type ActionItem = {
+  key: string;
+  text?: string;
+  backgroundColor?: string;
+  color?: string;
+  onClick?: (conversationID: string) => void;
+};
+
+/** 操作按钮配置 */
+export type ActionsConfig = {
+  actions?: ActionItem[];
+  isSupportPin?: boolean;
+  isSupportMute?: boolean;
+  isSupportDelete?: boolean;
+};
+
+/** 文本/表情片段（用于会话预览图文混排） */
+export type MessageSegment = {
+  type: string; // 'text' | 'emoji'
+  content: string;
+  src: string;
+};

@@ -1,0 +1,58 @@
+<template>
+  <view class="load-error">
+    <text class="load-error__text">加载失败</text>
+    <text v-if="errorMessage.length > 0" class="load-error__message">{{ errorMessage }}</text>
+  </view>
+</template>
+
+<script setup lang="uts">
+import { computed } from 'vue'
+
+const props = withDefaults(defineProps<{
+  /** 错误对象 */
+  error?: any
+}>(), {
+  error: null
+})
+
+const errorMessage = computed<string>((): string => {
+  const err = props.error
+  if (err == null) {
+    return ''
+  }
+  // 兼容 Error 对象与 string
+  if (typeof err == 'string') {
+    return err as string
+  }
+  if (typeof err == 'object') {
+    const m = (err as UTSJSONObject)['message']
+    if (typeof m == 'string') {
+      return m as string
+    }
+    return `${err}`
+  }
+  return ''
+})
+</script>
+
+<style>
+.load-error {
+  flex: 1;
+  justify-content: center;
+  align-items: center;
+  padding: 100rpx 60rpx;
+}
+
+.load-error__text {
+  font-size: 28rpx;
+  color: #ff4d4f;
+  text-align: center;
+  margin-bottom: 20rpx;
+}
+
+.load-error__message {
+  font-size: 24rpx;
+  color: #999999;
+  text-align: center;
+}
+</style>

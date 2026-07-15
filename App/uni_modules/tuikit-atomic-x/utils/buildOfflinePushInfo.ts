@@ -20,7 +20,7 @@ import type {
  * - 返回 null / undefined / 任意 falsy 值 → 视为"不附带 push"
  *
  * @param resolver 业务方注入的 push 计算函数（可能为 undefined）
- * @param ctx 当前发送上下文（messageType / messageBody / conversationID）
+ * @param ctx 当前发送上下文（messageType / messagePayload / conversationID）
  * @returns 应附带的 offlinePushInfo；undefined 表示不附带
  */
 export const buildOfflinePushInfo = (

@@ -1,0 +1,48 @@
+/*
+ * Copyright (c) 2025 Tencent
+ * All rights reserved.
+ *
+ * Author: eddardliu
+ */
+
+import { ImageUploaderImpl } from './impl/ImageUploaderImpl'
+
+/**
+ * 裁剪遮罩形状
+ *
+ * 因此在通过 callAPI 传递给原生 SDK 时，必须用 .ordinal 对应数字字面量。
+ */
+export enum CropOverlayShape {
+	CIRCLE = 'CIRCLE',
+	RECTANGLE_1_1 = 'RECTANGLE_1_1',
+	RECTANGLE_4_3 = 'RECTANGLE_4_3',
+	RECTANGLE_3_4 = 'RECTANGLE_3_4',
+	RECTANGLE_16_9 = 'RECTANGLE_16_9',
+	RECTANGLE_9_16 = 'RECTANGLE_9_16'
+}
+
+export type ImageUploaderConfig = {
+	showsCameraItem ?: boolean
+	cropOverlayShape ?: CropOverlayShape
+}
+
+export type ImageUploaderListener = {
+	onPickCompleted(localPath : string | null) : void
+	onCosUploadCompleted ?(statusCode : number) : void
+}
+
+export class ImageUploader {
+	private listener : ImageUploaderListener | null
+	private impl : ImageUploaderImpl
+
+	constructor(listener ?: ImageUploaderListener | null) {
+		this.listener = listener ?? null
+		this.impl = new ImageUploaderImpl(this.listener)
+	}
+
+	pick(config : ImageUploaderConfig = {}, cosUploadURL ?: string | null) : void {
+		this.impl.pick(config, cosUploadURL)
+	}
+}
+
+export default ImageUploader

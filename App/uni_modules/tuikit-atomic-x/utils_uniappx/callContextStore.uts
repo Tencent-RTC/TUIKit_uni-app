@@ -1,0 +1,39 @@
+
+let _callSource: string = ''
+let _callLastPage: string = ''
+
+/**
+ * 设置通话来源（'caller' = 发起方，'callee' = 接收方，后续扩展）
+ */
+export function setCallSource(source: string): void {
+  _callSource = source
+}
+
+/**
+ * 获取通话来源
+ */
+export function getCallSource(): string {
+  return _callSource
+}
+
+/**
+ * 设置发起呼叫时的页面路径（通话结束后回跳用）
+ */
+export function setCallLastPage(path: string): void {
+  _callLastPage = path
+}
+
+/**
+ * 获取发起呼叫时的页面路径
+ */
+export function getCallLastPage(): string {
+  return _callLastPage
+}
+
+/**
+ * 清空通话上下文（通话结束后调用，避免脏读）
+ */
+export function clearCallContext(): void {
+  _callSource = ''
+  _callLastPage = ''
+}

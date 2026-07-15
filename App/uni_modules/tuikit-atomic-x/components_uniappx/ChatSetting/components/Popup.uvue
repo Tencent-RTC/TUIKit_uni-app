@@ -1,0 +1,91 @@
+<template>
+  <view v-if="isShow" class="popup-mask" @tap="handleMaskTap">
+    <view class="popup-container" @tap.stop>
+      <slot></slot>
+    </view>
+  </view>
+</template>
+
+<script setup lang="uts">
+
+import { ref, watch } from 'vue'
+
+type PopupProps = {
+	visible: boolean
+	closeOnMaskTap?: boolean
+}
+
+type Emits = {
+	'update:visible': boolean
+	close: void
+}
+
+const props = withDefaults(defineProps<PopupProps>(), {
+	visible: false,
+	closeOnMaskTap: true
+})
+
+const emit = defineEmits<Emits>()
+
+const isShow = ref<boolean>(false)
+
+function showPopup(): void {
+	isShow.value = true
+}
+
+function hidePopup(callback: (() => void) | null = null): void {
+	isShow.value = false
+	if (callback != null) {
+		callback()
+	}
+}
+
+watch((): boolean => props.visible, (newVal: boolean): void => {
+	if (newVal) {
+		showPopup()
+	} else {
+		hidePopup()
+	}
+})
+
+/**
+ * 暴露 close 方法给父组件
+ */
+function close(callback: (() => void) | null = null): void {
+	hidePopup((): void => {
+		emit('update:visible', false)
+		emit('close')
+		if (callback != null) {
+			callback()
+		}
+	})
+}
+
+const handleMaskTap = (): void => {
+	if (props.closeOnMaskTap) {
+		close()
+	}
+}
+
+defineExpose({ close })
+</script>
+
+<style scoped>
+.popup-mask {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.8);
+  justify-content: center;
+  align-items: center;
+}
+
+.popup-container {
+  width: 654rpx;
+  background-color: #FFFFFF;
+  border-radius: 24rpx;
+  overflow: hidden;
+}
+</style>

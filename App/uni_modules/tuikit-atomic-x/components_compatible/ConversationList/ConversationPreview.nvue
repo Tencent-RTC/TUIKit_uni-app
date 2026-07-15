@@ -14,7 +14,7 @@
     <view class="conv-preview__info">
       <view class="conv-preview__header">
         <text class="conv-preview__name" :numberOfLines="1">{{ conversation.title }}</text>
-        <text class="conv-preview__time">{{ formatTime(conversation.timestamp) }}</text>
+        <text class="conv-preview__time">{{ formatTime(conversation.lastMessage && conversation.lastMessage.timestamp) }}</text>
       </view>
 
       <view class="conv-preview__footer">
@@ -126,8 +126,8 @@ export default {
       if (!lastMessage) {
         return [{ type: 'text', content: '暂无消息' }]
       }
-      if (lastMessage.messageType === MessageType.TEXT && lastMessage.messageBody && lastMessage.messageBody.text) {
-        let text = lastMessage.messageBody.text.replace(/[\r\n]+/g, ' ')
+      if (lastMessage.messageType === MessageType.TEXT && lastMessage.messagePayload && lastMessage.messagePayload.text) {
+        let text = lastMessage.messagePayload.text.replace(/[\r\n]+/g, ' ')
         const senderName = getSenderName(lastMessage)
         if (senderName) {
           text = senderName + ': ' + text
@@ -227,10 +227,12 @@ export default {
   color: #333333;
   lines: 1;
   text-overflow: ellipsis;
+  margin-right: 16rpx;
 }
 
 /* Element: time */
 .conv-preview__time {
+  flex-shrink: 0;
   font-weight: 400;
   font-size: 24rpx;
   line-height: 34rpx;

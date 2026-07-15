@@ -15,7 +15,7 @@ export default {
   data() { return { friendInfo: null } },
   computed: {
     userID() { return (this.friendInfo && this.friendInfo.userID) || '' },
-    remark() { return (this.friendInfo && this.friendInfo.remark) || '' },
+    remark() { return (this.friendInfo && this.friendInfo.friendRemark) || '' },
   },
   onLoad() {
     // 全局变量方式（同步）

@@ -1,6 +1,16 @@
 /**
  * 联系人状态管理
  * @module ContactState
+ *
+ * 对齐底层 atomicxcore.api.contact.ContactStore.kt（HybridAPI: ContactAPI.kt）
+ *
+ * **本次升级关键调整：**
+ * - `fetchUserInfo` → `getContactInfo`（响应字段 `userInfoList` → `contactInfoList`）
+ * - `fetchFriendList` → `loadFriends`
+ * - `fetchBlackList` → `loadBlackList`
+ * - `fetchFriendApplicationList` → `loadFriendApplications`
+ * - `setUserRemark` → `setFriendRemark`
+ * - **移除** `setReceiveMessageOpt`：已下沉到 `ConversationListStore.setReceiveMessageOpt`
  */
 import { ref, type Ref } from "vue";
 import type { HybridCallOptions } from "@/uni_modules/tuikit-atomic-x";
@@ -8,18 +18,14 @@ import { callAPI, addListener, removeListener } from "@/uni_modules/tuikit-atomi
 import { safeJsonParse } from "../utils/utsUtils";
 import type {
   ContactInfo,
-  FriendApplicationInfo
+  FriendApplicationInfo,
 } from "../types/contact";
-import {
-  ReceiveMessageOpt
-} from "../types/contact";
-
 import type { HybridResponseData } from "../types/hybridService";
 
 /**
  * 获取全局 InstanceMap
  */
-function getGlobalInstanceMap() : Map<string, ContactState> {
+function getGlobalInstanceMap(): Map<string, ContactState> {
   try {
     const app = getApp();
     if (app && app.globalData) {
@@ -41,44 +47,33 @@ const InstanceMap = getGlobalInstanceMap();
  */
 class ContactState {
   /** Store 实例ID */
-  public readonly instanceId : string;
+  public readonly instanceId: string;
 
   /** 黑名单列表 */
-  public readonly blackList : Ref<ContactInfo[]>;
+  public readonly blackList: Ref<ContactInfo[]>;
 
   /** 好友列表 */
-  public readonly friendList : Ref<ContactInfo[]>;
+  public readonly friendList: Ref<ContactInfo[]>;
 
   /** 好友申请列表 */
-  public readonly friendApplicationList : Ref<FriendApplicationInfo[]>;
+  public readonly friendApplicationList: Ref<FriendApplicationInfo[]>;
 
   /** 好友申请未读数 */
-  public readonly friendApplicationUnreadCount : Ref<number>;
+  public readonly friendApplicationUnreadCount: Ref<number>;
 
-  /** 添加好友信息 */
-  public readonly addFriendInfo : Ref<ContactInfo | null>;
-
-  /**
-   * 私有构造函数，使用 getInstance 获取实例
-   * @param instanceId Store 实例ID
-   */
-  private constructor(instanceId : string) {
+  private constructor(instanceId: string) {
     this.instanceId = instanceId;
     this.blackList = ref<ContactInfo[]>([]);
     this.friendList = ref<ContactInfo[]>([]);
     this.friendApplicationList = ref<FriendApplicationInfo[]>([]);
     this.friendApplicationUnreadCount = ref<number>(0);
-    this.addFriendInfo = ref<ContactInfo | null>(null);
 
-    // 初始化 Store
+
+
     this.createStore();
   }
 
-  /**
-   * 获取实例（单例模式）
-   * @param instanceId Store 实例ID
-   */
-  public static getInstance(instanceId : string) : ContactState {
+  public static getInstance(instanceId: string): ContactState {
     if (!InstanceMap.has(instanceId)) {
       InstanceMap.set(instanceId, new ContactState(instanceId));
     }
@@ -86,25 +81,22 @@ class ContactState {
   }
 
   private createStore() {
-    const options : HybridCallOptions = {
+    const options: HybridCallOptions = {
       api: "createStore",
       params: {
-        createStoreParams: this.instanceId
-      }
+        createStoreParams: this.instanceId,
+      },
     };
 
-    callAPI(JSON.stringify(options), (response : string) => {
+    callAPI(JSON.stringify(options), (response: string) => {
       try {
         const result = safeJsonParse<any>(response, {});
-        console.log(`[${this.instanceId}][createStore] Response:`, result);
-
         if (result.code === 0) {
-          console.log(`[${this.instanceId}][createStore] Success`);
           this.bindEvent();
           // 初始化拉取数据
-          this.fetchFriendList();
-          this.fetchBlackList();
-          this.fetchFriendApplicationList();
+          this.loadFriends();
+          this.loadBlackList();
+          this.loadFriendApplications();
         } else {
           console.error(`[${this.instanceId}][createStore] Failed:`, result.message);
         }
@@ -114,71 +106,60 @@ class ContactState {
     });
   }
 
-  /**
-   * 绑定事件监听
-   */
-  private bindEvent() : void {
-    // 监听黑名单列表变化
+  private bindEvent(): void {
     addListener({
       type: "",
       store: "Contact",
       name: "blackList",
-      params: { createStoreParams: this.instanceId }
-    }, (data : string) => {
+      params: { createStoreParams: this.instanceId },
+    }, (data: string) => {
       try {
         const result = safeJsonParse<any>(data, {});
         const list = safeJsonParse<ContactInfo[]>(result.blackList, []);
-        console.log(`[${this.instanceId}][blackList listener] Data:`, list);
         this.blackList.value = list;
       } catch (error) {
         console.error(`[${this.instanceId}][blackList listener] Error:`, error);
       }
     });
 
-    // 监听好友列表变化
     addListener({
       type: "",
       store: "Contact",
       name: "friendList",
-      params: { createStoreParams: this.instanceId }
-    }, (data : string) => {
+      params: { createStoreParams: this.instanceId },
+    }, (data: string) => {
       try {
         const result = safeJsonParse<any>(data, {});
         const list = safeJsonParse<ContactInfo[]>(result.friendList, []);
-        console.log(`[${this.instanceId}][friendList listener] Data:`, list);
         this.friendList.value = list;
       } catch (error) {
         console.error(`[${this.instanceId}][friendList listener] Error:`, error);
       }
     });
 
-    // 监听好友申请列表变化
     addListener({
       type: "",
       store: "Contact",
       name: "friendApplicationList",
-      params: { createStoreParams: this.instanceId }
-    }, (data : string) => {
+      params: { createStoreParams: this.instanceId },
+    }, (data: string) => {
       try {
         const result = safeJsonParse<any>(data, {});
         const list = safeJsonParse<FriendApplicationInfo[]>(result.friendApplicationList, []);
-        console.log(`[${this.instanceId}][friendApplicationList listener] Data:`, list);
         this.friendApplicationList.value = list;
       } catch (error) {
         console.error(`[${this.instanceId}][friendApplicationList listener] Error:`, error);
       }
     });
 
-    // 监听好友申请未读数变化
     addListener({
       type: "",
       store: "Contact",
       name: "friendApplicationUnreadCount",
-      params: { createStoreParams: this.instanceId }
-    }, (data : string) => {
+      params: { createStoreParams: this.instanceId },
+    }, (data: string) => {
       try {
         const result = safeJsonParse<any>(data, {});
-        console.log(`[${this.instanceId}][friendApplicationUnreadCount listener] Data:`, result);
         this.friendApplicationUnreadCount.value = Number(result.friendApplicationUnreadCount);
       } catch (error) {
         console.error(`[${this.instanceId}][friendApplicationUnreadCount listener] Error:`, error);
@@ -186,161 +167,149 @@ class ContactState {
     });
   }
 
+  // ============================================================================
+  // Actions
+  // ============================================================================
+
   /**
-   * 拉取用户信息列表
+   * 拉取联系人信息列表（旧名 fetchUserInfo）
    * @param userIDList 用户ID列表
-   * @returns {Promise<ContactInfo[]>}
+   * @returns ContactInfo 列表
    */
-  fetchUserInfo = async (userIDList : string[]) : Promise<ContactInfo[]> => {
+  getContactInfo = async (userIDList: string[]): Promise<ContactInfo[]> => {
     return new Promise((resolve, reject) => {
-      const options : HybridCallOptions = {
-        api: "fetchUserInfo",
+      const options: HybridCallOptions = {
+        api: "getContactInfo",
         params: {
           createStoreParams: this.instanceId,
-          userIDList
-        }
+          userIDList,
+        },
       };
 
-      callAPI(JSON.stringify(options), (response : string) => {
+      callAPI(JSON.stringify(options), (response: string) => {
         try {
-          const result = safeJsonParse<HybridResponseData<{ userInfoList : ContactInfo[] }>>(response, {});
-          console.log(`[${this.instanceId}][fetchUserInfo] Response:`, result);
-
+          const result = safeJsonParse<HybridResponseData<{ contactInfoList: ContactInfo[] }>>(response, { code: -1 });
           if (result.code === 0) {
-            const userInfoList = result.data?.data?.userInfoList || [];
-            resolve(userInfoList);
+            const list = result.data?.data?.contactInfoList || [];
+            resolve(list);
           } else {
-            console.error(`[${this.instanceId}][fetchUserInfo] Failed:`, result.message);
+            console.error(`[${this.instanceId}][getContactInfo] Failed:`, result.message);
             reject(result);
           }
         } catch (error) {
-          console.error(`[${this.instanceId}][fetchUserInfo] Parse error:`, error);
+          console.error(`[${this.instanceId}][getContactInfo] Parse error:`, error);
           reject(error);
         }
       });
     });
-  }
+  };
 
   /**
-   * 拉取好友列表
-   * @returns {Promise<void>}
+   * 拉取好友列表（旧名 fetchFriendList）
    */
-  fetchFriendList = async () : Promise<void> => {
+  loadFriends = async (): Promise<void> => {
     return new Promise((resolve, reject) => {
-      const options : HybridCallOptions = {
-        api: "fetchFriendList",
+      const options: HybridCallOptions = {
+        api: "loadFriends",
         params: {
-          createStoreParams: this.instanceId
-        }
+          createStoreParams: this.instanceId,
+        },
       };
 
-      callAPI(JSON.stringify(options), (response : string) => {
+      callAPI(JSON.stringify(options), (response: string) => {
         try {
           const result = safeJsonParse<any>(response, {});
-          console.log(`[${this.instanceId}][fetchFriendList] Response:`, result);
-
           if (result.code === 0) {
             resolve();
           } else {
-            console.error(`[${this.instanceId}][fetchFriendList] Failed:`, result.message);
-            reject(new Error(result.message || 'Failed to fetch friend list'));
+            console.error(`[${this.instanceId}][loadFriends] Failed:`, result.message);
+            reject(new Error(result.message || 'Failed to load friends'));
           }
         } catch (error) {
-          console.error(`[${this.instanceId}][fetchFriendList] Parse error:`, error);
+          console.error(`[${this.instanceId}][loadFriends] Parse error:`, error);
           reject(error);
         }
       });
     });
-  }
+  };
 
   /**
-   * 拉取黑名单列表
-   * @returns {Promise<void>}
+   * 拉取黑名单列表（旧名 fetchBlackList）
    */
-  fetchBlackList = async () : Promise<void> => {
+  loadBlackList = async (): Promise<void> => {
     return new Promise((resolve, reject) => {
-      const options : HybridCallOptions = {
-        api: "fetchBlackList",
+      const options: HybridCallOptions = {
+        api: "loadBlackList",
         params: {
-          createStoreParams: this.instanceId
-        }
+          createStoreParams: this.instanceId,
+        },
       };
 
-      callAPI(JSON.stringify(options), (response : string) => {
+      callAPI(JSON.stringify(options), (response: string) => {
         try {
           const result = safeJsonParse<any>(response, {});
-          console.log(`[${this.instanceId}][fetchBlackList] Response:`, result);
-
           if (result.code === 0) {
             resolve();
           } else {
-            console.error(`[${this.instanceId}][fetchBlackList] Failed:`, result.message);
-            reject(new Error(result.message || 'Failed to fetch black list'));
+            console.error(`[${this.instanceId}][loadBlackList] Failed:`, result.message);
+            reject(new Error(result.message || 'Failed to load black list'));
           }
         } catch (error) {
-          console.error(`[${this.instanceId}][fetchBlackList] Parse error:`, error);
+          console.error(`[${this.instanceId}][loadBlackList] Parse error:`, error);
           reject(error);
         }
       });
     });
-  }
+  };
 
   /**
-   * 拉取好友申请列表
-   * @returns {Promise<void>}
+   * 拉取好友申请列表（旧名 fetchFriendApplicationList）
    */
-  fetchFriendApplicationList = async () : Promise<void> => {
+  loadFriendApplications = async (): Promise<void> => {
     return new Promise((resolve, reject) => {
-      const options : HybridCallOptions = {
-        api: "fetchFriendApplicationList",
+      const options: HybridCallOptions = {
+        api: "loadFriendApplications",
         params: {
-          createStoreParams: this.instanceId
-        }
+          createStoreParams: this.instanceId,
+        },
       };
 
-      callAPI(JSON.stringify(options), (response : string) => {
+      callAPI(JSON.stringify(options), (response: string) => {
         try {
           const result = safeJsonParse<any>(response, {});
-          console.log(`[${this.instanceId}][fetchFriendApplicationList] Response:`, result);
-
           if (result.code === 0) {
             resolve();
           } else {
-            console.error(`[${this.instanceId}][fetchFriendApplicationList] Failed:`, result.message);
-            reject(new Error(result.message || 'Failed to fetch friend application list'));
+            console.error(`[${this.instanceId}][loadFriendApplications] Failed:`, result.message);
+            reject(new Error(result.message || 'Failed to load friend applications'));
           }
         } catch (error) {
-          console.error(`[${this.instanceId}][fetchFriendApplicationList] Parse error:`, error);
+          console.error(`[${this.instanceId}][loadFriendApplications] Parse error:`, error);
           reject(error);
         }
       });
     });
-  }
+  };
 
   /**
    * 添加好友
-   * @param userID 用户ID
-   * @param remark 备注
-   * @param addWording 添加附言
-   * @returns {Promise<void>}
    */
-  addFriend = async (userID : string, remark ?: string, addWording ?: string) : Promise<void> => {
+  addFriend = async (userID: string, remark?: string, addWording?: string): Promise<void> => {
     return new Promise((resolve, reject) => {
-      const options : HybridCallOptions = {
+      const options: HybridCallOptions = {
         api: "addFriend",
         params: {
           createStoreParams: this.instanceId,
           userID,
           remark,
-          addWording
-        }
+          addWording,
+        },
       };
 
-      callAPI(JSON.stringify(options), (response : string) => {
+      callAPI(JSON.stringify(options), (response: string) => {
         try {
           const result = safeJsonParse<any>(response, {});
-          console.log(`[${this.instanceId}][addFriend] Response:`, result);
-
+          // 30539 = 好友请求待审核
           if (result.code === 0 || result.code === 30539) {
             resolve(result);
           } else {
@@ -353,28 +322,24 @@ class ContactState {
         }
       });
     });
-  }
+  };
 
   /**
    * 删除好友
-   * @param userID 用户ID
-   * @returns {Promise<void>}
    */
-  deleteFriend = async (userID : string) : Promise<void> => {
+  deleteFriend = async (userID: string): Promise<void> => {
     return new Promise((resolve, reject) => {
-      const options : HybridCallOptions = {
+      const options: HybridCallOptions = {
         api: "deleteFriend",
         params: {
           createStoreParams: this.instanceId,
-          userID
-        }
+          userID,
+        },
       };
 
-      callAPI(JSON.stringify(options), (response : string) => {
+      callAPI(JSON.stringify(options), (response: string) => {
         try {
           const result = safeJsonParse<any>(response, {});
-          console.log(`[${this.instanceId}][deleteFriend] Response:`, result);
-
           if (result.code === 0) {
             resolve();
           } else {
@@ -387,64 +352,55 @@ class ContactState {
         }
       });
     });
-  }
+  };
 
   /**
-   * 设置好友备注
-   * @param userID 用户ID
-   * @param remark 备注
-   * @returns {Promise<void>}
+   * 设置好友备注（旧名 setUserRemark）
    */
-  setUserRemark = async (userID : string, remark : string) : Promise<void> => {
+  setFriendRemark = async (userID: string, remark: string): Promise<void> => {
     return new Promise((resolve, reject) => {
-      const options : HybridCallOptions = {
-        api: "setUserRemark",
+      const options: HybridCallOptions = {
+        api: "setFriendRemark",
         params: {
           createStoreParams: this.instanceId,
           userID,
-          remark
-        }
+          remark,
+        },
       };
 
-      callAPI(JSON.stringify(options), (response : string) => {
+      callAPI(JSON.stringify(options), (response: string) => {
         try {
           const result = safeJsonParse<any>(response, {});
-          console.log(`[${this.instanceId}][setUserRemark] Response:`, result);
-
           if (result.code === 0) {
             resolve();
           } else {
-            console.error(`[${this.instanceId}][setUserRemark] Failed:`, result.message);
-            reject(new Error(result.message || 'Failed to set user remark'));
+            console.error(`[${this.instanceId}][setFriendRemark] Failed:`, result.message);
+            reject(new Error(result.message || 'Failed to set friend remark'));
           }
         } catch (error) {
-          console.error(`[${this.instanceId}][setUserRemark] Parse error:`, error);
+          console.error(`[${this.instanceId}][setFriendRemark] Parse error:`, error);
           reject(error);
         }
       });
     });
-  }
+  };
 
   /**
    * 添加到黑名单
-   * @param userID 用户ID
-   * @returns {Promise<void>}
    */
-  addToBlacklist = async (userID : string) : Promise<void> => {
+  addToBlacklist = async (userID: string): Promise<void> => {
     return new Promise((resolve, reject) => {
-      const options : HybridCallOptions = {
+      const options: HybridCallOptions = {
         api: "addToBlacklist",
         params: {
           createStoreParams: this.instanceId,
-          userID
-        }
+          userID,
+        },
       };
 
-      callAPI(JSON.stringify(options), (response : string) => {
+      callAPI(JSON.stringify(options), (response: string) => {
         try {
           const result = safeJsonParse<any>(response, {});
-          console.log(`[${this.instanceId}][addToBlacklist] Response:`, result);
-
           if (result.code === 0) {
             resolve();
           } else {
@@ -457,28 +413,24 @@ class ContactState {
         }
       });
     });
-  }
+  };
 
   /**
    * 从黑名单移除
-   * @param userID 用户ID
-   * @returns {Promise<void>}
    */
-  removeFromBlacklist = async (userID : string) : Promise<void> => {
+  removeFromBlacklist = async (userID: string): Promise<void> => {
     return new Promise((resolve, reject) => {
-      const options : HybridCallOptions = {
+      const options: HybridCallOptions = {
         api: "removeFromBlacklist",
         params: {
           createStoreParams: this.instanceId,
-          userID
-        }
+          userID,
+        },
       };
 
-      callAPI(JSON.stringify(options), (response : string) => {
+      callAPI(JSON.stringify(options), (response: string) => {
         try {
           const result = safeJsonParse<any>(response, {});
-          console.log(`[${this.instanceId}][removeFromBlacklist] Response:`, result);
-
           if (result.code === 0) {
             resolve();
           } else {
@@ -491,28 +443,24 @@ class ContactState {
         }
       });
     });
-  }
+  };
 
   /**
    * 同意好友申请
-   * @param application 申请信息
-   * @returns {Promise<void>}
    */
-  acceptFriendApplication = async (application : FriendApplicationInfo) : Promise<void> => {
+  acceptFriendApplication = async (application: FriendApplicationInfo): Promise<void> => {
     return new Promise((resolve, reject) => {
-      const options : HybridCallOptions = {
+      const options: HybridCallOptions = {
         api: "acceptFriendApplication",
         params: {
           createStoreParams: this.instanceId,
-          info: JSON.stringify(application)
-        }
+          info: JSON.stringify(application),
+        },
       };
 
-      callAPI(JSON.stringify(options), (response : string) => {
+      callAPI(JSON.stringify(options), (response: string) => {
         try {
           const result = safeJsonParse<any>(response, {});
-          console.log(`[${this.instanceId}][acceptFriendApplication] Response:`, result);
-
           if (result.code === 0) {
             resolve();
           } else {
@@ -525,28 +473,24 @@ class ContactState {
         }
       });
     });
-  }
+  };
 
   /**
    * 拒绝好友申请
-   * @param application 申请信息
-   * @returns {Promise<void>}
    */
-  refuseFriendApplication = async (application : FriendApplicationInfo) : Promise<void> => {
+  refuseFriendApplication = async (application: FriendApplicationInfo): Promise<void> => {
     return new Promise((resolve, reject) => {
-      const options : HybridCallOptions = {
+      const options: HybridCallOptions = {
         api: "refuseFriendApplication",
         params: {
           createStoreParams: this.instanceId,
-          info: JSON.stringify(application)
-        }
+          info: JSON.stringify(application),
+        },
       };
 
-      callAPI(JSON.stringify(options), (response : string) => {
+      callAPI(JSON.stringify(options), (response: string) => {
         try {
           const result = safeJsonParse<any>(response, {});
-          console.log(`[${this.instanceId}][refuseFriendApplication] Response:`, result);
-
           if (result.code === 0) {
             resolve();
           } else {
@@ -559,26 +503,23 @@ class ContactState {
         }
       });
     });
-  }
+  };
 
   /**
    * 清空好友申请未读数
-   * @returns {Promise<void>}
    */
-  clearFriendApplicationUnreadCount = async () : Promise<void> => {
+  clearFriendApplicationUnreadCount = async (): Promise<void> => {
     return new Promise((resolve, reject) => {
-      const options : HybridCallOptions = {
+      const options: HybridCallOptions = {
         api: "clearFriendApplicationUnreadCount",
         params: {
-          createStoreParams: this.instanceId
-        }
+          createStoreParams: this.instanceId,
+        },
       };
 
-      callAPI(JSON.stringify(options), (response : string) => {
+      callAPI(JSON.stringify(options), (response: string) => {
         try {
           const result = safeJsonParse<any>(response, {});
-          console.log(`[${this.instanceId}][clearFriendApplicationUnreadCount] Response:`, result);
-
           if (result.code === 0) {
             resolve();
           } else {
@@ -591,116 +532,64 @@ class ContactState {
         }
       });
     });
-  }
+  };
 
-  /**
-   * 设置消息接收选项
-   * @param userID 用户ID
-   * @param opt 消息接收选项
-   * @returns {Promise<void>}
-   */
-  setReceiveMessageOpt = async (userID : string, opt : ReceiveMessageOpt) : Promise<void> => {
-    return new Promise((resolve, reject) => {
-      const options : HybridCallOptions = {
-        api: "setReceiveMessageOpt",
-        params: {
-          createStoreParams: this.instanceId,
-          userID,
-          opt
-        }
-      };
+  // ============================================================================
+  // 销毁
+  // ============================================================================
 
-      callAPI(JSON.stringify(options), (response : string) => {
-        try {
-          const result = safeJsonParse<any>(response, {});
-          console.log(`[${this.instanceId}][setReceiveMessageOpt] Response:`, result);
-
-          if (result.code === 0) {
-            resolve();
-          } else {
-            console.error(`[${this.instanceId}][setReceiveMessageOpt] Failed:`, result.message);
-            reject(new Error(result.message || 'Failed to set receive message opt'));
-          }
-        } catch (error) {
-          console.error(`[${this.instanceId}][setReceiveMessageOpt] Parse error:`, error);
-          reject(error);
-        }
-      });
-    });
-  }
-
-  /**
-   * 移除事件监听
-   */
-  private unbindEvent() : void {
+  private unbindEvent(): void {
     const dataNames = [
       "blackList",
       "friendList",
       "friendApplicationList",
-      "friendApplicationUnreadCount"
+      "friendApplicationUnreadCount",
     ];
 
-    dataNames.forEach(dataName => {
+    dataNames.forEach((dataName) => {
       removeListener({
         type: "",
         store: "Contact",
         name: dataName,
-        params: { createStoreParams: this.instanceId }
+        params: { createStoreParams: this.instanceId },
       });
     });
   }
 
-  /**
-   * 重置数据
-   */
-  private resetData() : void {
+  private resetData(): void {
     this.blackList.value = [];
     this.friendList.value = [];
     this.friendApplicationList.value = [];
     this.friendApplicationUnreadCount.value = 0;
-    this.addFriendInfo.value = null;
   }
 
-  /**
-   * 销毁 Store
-   */
-  destroyStore = () : void => {
+
+  destroyStore = (): void => {
+    // 幂等：实例已被销毁过，直接 return
+    if (!InstanceMap.has(this.instanceId)) return;
     this.unbindEvent();
     this.resetData();
     InstanceMap.delete(this.instanceId);
 
-    const options : HybridCallOptions = {
+    const options: HybridCallOptions = {
       api: "destroyStore",
       params: {
-        createStoreParams: this.instanceId
-      }
+        createStoreParams: this.instanceId,
+      },
     };
 
-    callAPI(JSON.stringify(options), (response : string) => {
-      try {
-        const result = safeJsonParse<any>(response, {});
-        console.log(`[${this.instanceId}][destroyStore] Response:`, result);
-
-        if (result.code === 0) {
-          console.log(`[${this.instanceId}][destroyStore] Success`);
-        } else {
-          console.error(`[${this.instanceId}][destroyStore] Failed:`, result.message);
-        }
-      } catch (error) {
-        console.error(`[${this.instanceId}][destroyStore] Parse error:`, error);
-      }
-    });
-  }
+    callAPI(JSON.stringify(options), () => {});
+  };
 }
 
 /**
  * 联系人状态管理 Hook
- * @param instanceId Store 实例ID，默认为 "default_contact_store"
+ * @param instanceId Store 实例ID（可选；多 instance 场景使用）
  */
-export function useContactState(instanceId ?: string) {
-  const options : any = {
+export function useContactState(instanceId?: string) {
+  const options: any = {
     storeName: "Contact",
-  }
+  };
   if (instanceId) {
     options.instanceId = instanceId;
   }

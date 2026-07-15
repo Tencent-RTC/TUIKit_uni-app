@@ -1,0 +1,912 @@
+<template>
+  <view class="msg-list" ref="messageListContainerViewRef" :style="{ 'padding-top': navbarHeightPx + 'px' }">
+    <scroll-view
+      ref="messageListRef"
+      class="msg-list__scroll"
+      :class="{ 'msg-list__scroll--hidden': isFirstLoad }"
+      direction="vertical"
+      :bounces="true"
+      :enable-passive="true"
+      :show-scrollbar="false"
+      :scroll-with-animation="true"
+      :refresher-enabled="true"
+      :refresher-triggered="refreshing"
+      :upper-threshold="200"
+      :lower-threshold="200"
+      :scroll-into-view="scrollIntoViewID"
+      @scrolltolower="onLoadMore"
+      @refresherrefresh="onRefresh"
+      @tap="handleMessageListTap"
+    >
+      <view
+        v-if="refreshing"
+        class="msg-list__refresh"
+      >
+        <text class="msg-list__refresh-text">{{ refreshText }}</text>
+        <view class="msg-list__refresh-indicator"></view>
+      </view>
+
+      <view
+        v-for="(item, index) in messageItems"
+        :id="item.key"
+      >
+        <view>
+          <MessageTimeDivider
+            v-if="item.type == 'divider'"
+            :timestamp="item.timestamp"
+          />
+
+          <Message
+            v-else-if="item.type == 'message'"
+            :key="item.key"
+            :message="item.message"
+            :conversationID="conversationID"
+            :showAvatar="item.showAvatar"
+            :showNickname="item.showNickname"
+            :highlight="isItemHighlighted(item.message, currentHighlightID)"
+            :customCenterChecker="customCenterChecker"
+            :customMessageRender="customMessageRender"
+            :inputPanelHeight="inputPanelHeight ?? 0"
+            :inputToolbarHeight="inputToolbarHeight ?? 0"
+            @onMessageListTap="handleMessageListTap"
+            @onMessageTap="handleMessageTap"
+          />
+        </view>
+      </view>
+    </scroll-view>
+
+    <view
+      v-if="showScrollToBottom"
+      class="msg-list__scroll-btn"
+      @tap="scrollToBottom"
+    >
+      <image
+        src="../../static/icon/down.png"
+        class="msg-list__scroll-btn-icon"
+        mode="aspectFill"
+      />
+      <text class="msg-list__scroll-btn-text">新消息</text>
+    </view>
+  </view>
+</template>
+
+<script setup lang="uts">
+import { ref, computed, watch, onMounted, onBeforeMount, onBeforeUnmount, nextTick, getCurrentInstance, toRaw } from 'vue'
+import Message from './Message/Message.uvue'
+import MessageTimeDivider from './MessageTimeDivider/MessageTimeDivider.uvue'
+import { useMessageListState } from '../../state/MessageListState'
+import { useConversationListState } from '../../state/ConversationListState'
+import { useListTransform } from './useListTransform'
+import type { UseListTransformOptions } from './useListTransform'
+import { MessageStatus, MessageType, MessageListType, MessageLoadOption } from '../../types/message'
+import { rpxToPx } from '../../utils/unitUtils'
+
+const instance = getCurrentInstance();
+
+type Props = {
+  conversationID: string
+  messageListType?: MessageListType
+  alignment?: string
+  messageAggregationTime?: number
+  enableReadReceipt?: boolean
+  messageActionList?: string[]
+  filter?: ((message: any) => boolean) | null
+  locateMessage?: any | null
+  // 输入框工具栏高度（px）
+  inputToolbarHeight?: number
+  // 键盘/Emoji面板高度（px）
+  inputPanelHeight?: number
+  customCenterChecker?: ((message: any, conversationID: string) => boolean) | null
+  // 自定义消息渲染：(message, conversationID) => Component | null
+  // 返回组件 → 接管 CUSTOM 消息渲染；返回 null/undefined → 走内置 CustomMessage 默认渲染
+  customMessageRender?: any}
+
+type MessageListExpose = {
+  scrollToBottom: (animated: boolean | null) => void
+  scrollToMessage: (message: any, animated: boolean | null) => Promise<void>
+}
+
+/** audioConvertStreamGrow 事件 payload（v20 起 AudioMessage 不再带 boxRef，uvue 走 scroll-into-view 简化路径） */
+type AudioConvertStreamGrowData = {
+  msgID: string
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  messageListType: MessageListType.HISTORY,
+  alignment: 'two-sided',
+  messageAggregationTime: 300, // 5分钟
+  enableReadReceipt: false,
+  messageActionList: () => [],
+  filter: null,
+  locateMessage: null,
+  inputToolbarHeight: 0,
+  inputPanelHeight: 0,
+  customCenterChecker: null,
+  customMessageRender: null
+})
+
+const emit = defineEmits<{
+  onMessageListTap: []
+  onMessageTap: [message: any]
+}>()
+
+function toUTSJSONObjectOrNull(value: any | null): UTSJSONObject | null {
+  if (value == null) return null
+  const raw: any = toRaw<any>(value)
+  return JSON.parse<UTSJSONObject>(JSON.stringify(raw) ?? '{}') ?? new UTSJSONObject()
+}
+
+function toUTSJSONObject(value: any | null): UTSJSONObject {
+  const raw: any = toRaw<any>(value ?? new UTSJSONObject())
+  return JSON.parse<UTSJSONObject>(JSON.stringify(raw) ?? '{}') ?? new UTSJSONObject()
+}
+
+const navbarHeightPx = ref(0);
+const systemInfo = uni.getSystemInfoSync()
+const isIOSPlatform: boolean = systemInfo.platform === 'ios'
+const messageListRef = ref(null)
+const showScrollToBottom = ref(false)
+const refreshing = ref(false)
+const refreshText = ref('下拉加载历史消息')
+const lastScrollTop = ref(0)
+const cellRefs: any[] = []
+const scrollIntoViewID: Ref<string> = ref('')
+const isFirstLoad = ref(true)
+const currentHighlightID = ref('')
+const pendingScrollMessage = ref<any | null>(null)
+let _firstLoadFinalized: boolean = false
+
+const getMsgID = (msg: any): string => {
+  if (msg == null) return ''
+  const obj: UTSJSONObject = msg as UTSJSONObject
+  const idRaw: any | null = obj['msgID']
+  return idRaw != null ? `${idRaw}` : ''
+}
+
+const isItemHighlighted = (message: any | null, currentID: string): number => {
+  if (message == null) return 0
+  return getMsgID(message) == currentID ? 1 : 0
+}
+
+const readyCellCount = ref(0)
+
+const timers = new Set<number>()
+
+let _listTransformOnNewMessage: (() => Promise<void>) | null = null
+
+let _handleAudioConvertStreamGrow: ((data: any) => void) | null = null
+
+let _isLocatingMessage: boolean = false
+
+let _pendingFinalizeVisibility: boolean = false
+
+const addTimer = (timer: number): number => {
+  timers.add(timer)
+  return timer
+}
+
+const clearTimer = (timer: number) => {
+  clearTimeout(timer)
+  timers.delete(timer)
+}
+
+const clearAllTimers = () => {
+  timers.forEach(timer => clearTimeout(timer))
+  timers.clear()
+}
+
+const setCellRef = (el: any, index: number) => {
+  if (el && cellRefs[index] !== el) {
+    const isNew = !cellRefs[index]
+    cellRefs[index] = el
+    if (isNew) {
+      readyCellCount.value++
+    }
+  }
+}
+
+const buildInitialLoadOption = (locateMessage: any | null): any | null => {
+  if (locateMessage == null) return null
+  const locateMsg: UTSJSONObject | null = toUTSJSONObjectOrNull(locateMessage)
+  if (locateMsg == null) return null
+  const idRaw: any | null = locateMsg['msgID']
+  if (idRaw == null) return null
+  const idStr: string = `${idRaw}`
+  if (idStr.length == 0) return null
+
+  const cursor: UTSJSONObject = new UTSJSONObject()
+  cursor['msgID'] = idStr
+  const seqRaw: any | null = locateMsg['sequence']
+  if (typeof seqRaw === 'number') {
+    cursor['sequence'] = seqRaw
+  }
+  const tsRaw: any | null = locateMsg['timestamp']
+  if (typeof tsRaw === 'number') {
+    cursor['timestamp'] = tsRaw
+  }
+
+  return {
+    cursor: cursor,
+    messageListType: 0,
+    direction: 2,  // backward from cursor
+    messageTypeList: [] as number[],
+    pageCount: 20
+  }
+}
+
+const { messageList, loadMessages, loadOlderMessages, loadNewerMessages, hasOlderMessages, hasNewerMessages, destroyStore } = useMessageListState({
+  conversationID: props.conversationID,
+  initialLoadOption: buildInitialLoadOption(props.locateMessage),
+})
+
+const conversationListState = useConversationListState()
+
+const loadMoreOlderMessage = () => {
+  return loadOlderMessages()
+}
+
+const loadMoreNewerMessage = () => {
+  return loadNewerMessages()
+}
+
+const isMessageInList = (messageID: string): boolean => {
+  if (messageList.value == null || messageList.value.length == 0) {
+    return false
+  }
+  return messageIndexByID.value.has(messageID)
+}
+
+const locateToMessage = async (message: any) => {
+  if (message == null) return
+  const m: UTSJSONObject = toUTSJSONObject(message)
+  const idRaw: any | null = m['msgID']
+  if (idRaw == null) return
+  const idStr: string = `${idRaw}`
+  if (idStr.length == 0) return
+
+  try {
+
+    const cursor: UTSJSONObject = new UTSJSONObject()
+    cursor['msgID'] = idStr
+    const seqRaw: any | null = m['sequence']
+    if (typeof seqRaw === 'number') {
+      cursor['sequence'] = seqRaw
+    }
+    const tsRaw: any | null = m['timestamp']
+    if (typeof tsRaw === 'number') {
+      cursor['timestamp'] = tsRaw
+    }
+    const option: MessageLoadOption = {
+      cursor: cursor,
+      messageListType: 0,
+      direction: 2,
+      messageTypeList: [] as number[],
+      pageCount: 20
+    } as MessageLoadOption
+    await loadMessages(option)
+  } catch (error: any) {
+    console.error('[MessageList] locateToMessage failed:', error)
+  }
+}
+
+type MessageItem = {
+  key: string
+  type: 'divider' | 'message'
+  timestamp?: number
+  message?: any | null
+  showAvatar?: boolean
+  showNickname?: boolean
+}
+
+const messageItems = computed<MessageItem[]>(() => {
+  if (messageList.value == null || messageList.value.length == 0) {
+    return []
+  }
+
+  // 过滤消息
+  let filteredMessages: any[]
+  if (props.filter != null) {
+    const customFilter = props.filter
+    filteredMessages = messageList.value.filter((msg: any): boolean => {
+      return customFilter(msg)
+    })
+  } else {
+    filteredMessages = messageList.value.filter((message: any): boolean => {
+      if (message == null) return false
+      const m: UTSJSONObject = toUTSJSONObject(message)
+      return m['status'] !== MessageStatus.DELETED
+    })
+  }
+
+  const items: MessageItem[] = []
+  const aggregationTime = props.messageAggregationTime * 1000
+
+  let prevTimestamp: number | null = null
+  let prevIsNotNull: boolean = false
+
+  filteredMessages.forEach((message: any, index: number) => {
+
+    if (message == null) return
+    const m: UTSJSONObject = toUTSJSONObject(message)
+    const statusRaw: any | null = m['status']
+    const messageTypeRaw: any | null = m['messageType']
+    const isCenterMessage = statusRaw == MessageStatus.REVOKED ||
+      (messageTypeRaw == MessageType.TIPS)
+
+    const tsRaw: any | null = m['timestamp']
+    const isCurTsValid: boolean = typeof tsRaw == 'number' && (tsRaw as number) > 0
+    const isPrevTsValid: boolean = prevTimestamp != null
+    const isTimeGap: boolean = isCurTsValid && isPrevTsValid &&
+      ((tsRaw as number) - (prevTimestamp as number)) > aggregationTime
+
+    const showTimeDivider: boolean = index == 0 || (prevIsNotNull && isTimeGap)
+
+    const idRaw: any | null = m['msgID']
+    const idStr: string = idRaw != null ? `${idRaw}` : `idx-${index}`
+
+    if (showTimeDivider) {
+      items.push({
+        key: `divider-${idStr}`,
+        type: 'divider',
+        timestamp: typeof tsRaw == 'number' ? (tsRaw as number) : 0
+      })
+    }
+
+    if (isCenterMessage) {
+      items.push({
+        key: `message-${idStr}`,
+        type: 'message',
+        message: message,
+        showAvatar: false,
+        showNickname: false
+      })
+      prevTimestamp = typeof tsRaw == 'number' ? (tsRaw as number) : null
+      prevIsNotNull = true
+      return
+    }
+
+    const isSelfRaw: any | null = m['isSentBySelf']
+    const isSelf: boolean = isSelfRaw == true
+
+    items.push({
+      key: `message-${idStr}`,
+      type: 'message',
+      message: message,
+      showAvatar: true,
+      showNickname: props.conversationID.startsWith('group_') && !isSelf
+    })
+
+    prevTimestamp = typeof tsRaw == 'number' ? (tsRaw as number) : null
+    prevIsNotNull = true
+  })
+
+  return items
+})
+
+const messageIndexByID = computed<Map<string, number>>((): Map<string, number> => {
+  const map = new Map<string, number>()
+  const items = messageItems.value
+  let msgCount = 0
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i]
+    if (item.type === 'message' && item.message != null) {
+      const m: any | null = item.message
+      const id: string = m != null ? getMsgID(m) : ''
+      if (id.length > 0) {
+        map.set(id, i)
+        msgCount++
+      }
+    }
+  }
+  return map
+})
+
+const onPullingDown = (e: any) => {
+  if (refreshing.value) return
+  
+  const { pullingDistance, viewHeight } = e
+  if (pullingDistance < viewHeight) {
+    refreshText.value = '下拉加载历史消息'
+    emit('onMessageListTap')
+  } else {
+    refreshText.value = '释放加载历史消息'
+  }
+}
+
+const onRefresh = async (e: any) => {
+  if (refreshing.value) return;
+
+  refreshing.value = true;
+  
+  if (!hasOlderMessages.value) {
+    refreshText.value = '没有更多历史消息';
+    let timer: number = 0
+    timer = addTimer(setTimeout(() => {
+      refreshing.value = false
+      const t: number = timer
+      if (t > 0) clearTimer(t)
+    }, 500))
+    return;
+  }
+
+  refreshText.value = '加载中...'
+  
+  const firstMessage = messageList.value && messageList.value.length > 0 
+    ? messageList.value[0] 
+    : null
+  
+  if (firstMessage) {
+    pendingScrollMessage.value = firstMessage
+  }
+  
+  try {
+    await loadMoreOlderMessage()
+    refreshText.value = '加载完成'
+  } catch (error: any) {
+    refreshText.value = '加载失败'
+    pendingScrollMessage.value = null
+  } finally {
+    let timer: number = 0
+    timer = addTimer(setTimeout(() => {
+      refreshing.value = false
+      const t: number = timer
+      if (t > 0) clearTimer(t)
+    }, 500))
+  }
+}
+
+const onLoadMore = async () => {
+  if (_isLocatingMessage) return
+  if (!hasNewerMessages.value) return
+
+  try {
+    await loadMoreNewerMessage()
+  } catch (error: any) {
+    console.error('[MessageList] loadMoreNewerMessage failed:', error)
+  }
+}
+
+const scrollToKey = (key: string): void => {
+  if (scrollIntoViewID.value !== key) {
+    scrollIntoViewID.value = key
+    return
+  }
+  scrollIntoViewID.value = ''
+  nextTick((): void => {
+    scrollIntoViewID.value = key
+  })
+}
+
+const doScrollToMessage = (messageID: string, _animated: boolean | null, _highlight: boolean | null): void => {
+  const animated: boolean = _animated == null ? true : _animated
+  const highlight: boolean = _highlight == null ? true : _highlight
+  if (messageItems.value.length == 0) return
+
+  let targetIndex: number = -1
+  const idxFromMap: number | null = messageIndexByID.value.get(messageID)
+  if (idxFromMap != null) {
+    targetIndex = idxFromMap
+  } else {
+    targetIndex = messageItems.value.findIndex(
+      item => {
+        if (item.type !== 'message') return false
+        return isItemHighlighted(item.message, messageID) > 0
+      }
+    )
+  }
+
+  if (targetIndex == -1) {
+    return
+  }
+
+  const targetItem = messageItems.value[targetIndex]
+  if (targetItem != null) {
+    scrollToKey(targetItem.key)
+
+    if (highlight) {
+      currentHighlightID.value = messageID
+
+      let timer: number = 0
+      timer = addTimer(setTimeout(() => {
+        currentHighlightID.value = ''
+        const t: number = timer
+        if (t > 0) clearTimer(t)
+      }, 3000))
+    }
+  }
+}
+
+const scrollToBottom = (_animated: boolean | null): void => {
+  const animated: boolean = _animated == null ? true : _animated
+  if (messageItems.value.length == 0) return
+
+  const lastIndex = messageItems.value.length - 1
+  const lastItem = messageItems.value[lastIndex]
+  if (lastItem != null) {
+    scrollToKey(lastItem.key)
+  }
+  showScrollToBottom.value = false
+}
+
+const scrollToMessage = async (message: any, _animated: boolean | null): Promise<void> => {
+  const animated: boolean = _animated == null ? true : _animated
+  if (message == null) return
+  const m: UTSJSONObject = toUTSJSONObject(message)
+  const idRaw: any | null = m['msgID']
+  const messageID: string = idRaw != null ? `${idRaw}` : ''
+  if (messageID == null || messageID.length == 0) {
+    return
+  }
+
+  if (!messageIndexByID.value.has(messageID)) {
+    _isLocatingMessage = true
+    await locateToMessage(message)
+
+    await nextTick()
+    let timer: number = 0
+    timer = addTimer(setTimeout(() => {
+      doScrollToMessage(messageID, animated, null)
+      const t: number = timer
+      if (t > 0) clearTimer(t)
+      let releaseTimer: number = 0
+      releaseTimer = addTimer(setTimeout(() => {
+        _isLocatingMessage = false
+        const rt: number = releaseTimer
+        if (rt > 0) clearTimer(rt)
+      }, 500))
+    }, 100))
+    return
+  }
+
+  doScrollToMessage(messageID, animated, null)
+}
+
+function finalizeFirstLoad(fromMounted: boolean = false): void {
+  if (_firstLoadFinalized) return
+  _firstLoadFinalized = true
+
+  const locateMsg: UTSJSONObject | null = toUTSJSONObjectOrNull(props.locateMessage)
+  let hasMsgID: boolean = false
+  if (locateMsg != null) {
+    const idRaw: any | null = locateMsg['msgID']
+    if (idRaw != null) {
+      hasMsgID = `${idRaw}`.length > 0
+    }
+  }
+
+  nextTick((): void => {
+    if (hasMsgID) {
+      _pendingFinalizeVisibility = true
+      if (isIOSPlatform) {
+        setTimeout(() => {
+          scrollToMessage(locateMsg as UTSJSONObject, false)
+        }, 100)
+      } else {
+        scrollToMessage(locateMsg as UTSJSONObject, false)
+      }
+    } else {
+      isFirstLoad.value = false
+      if (isIOSPlatform) {
+        setTimeout(() => {
+          scrollToBottom(false)
+        }, 100)
+      } else {
+        scrollToBottom(false)
+      }
+    }
+  })
+}
+
+const handleScroll = (e: any): void => {
+  const eObj: UTSJSONObject = toUTSJSONObject(e)
+
+  const offsetRaw: any | null = eObj['contentOffset']
+  if (offsetRaw != null) {
+    const offset: UTSJSONObject = toUTSJSONObject(offsetRaw)
+    const yRaw: any | null = offset['y']
+    const currentScrollTop: number = typeof yRaw == 'number' ? (yRaw as number) : 0
+    lastScrollTop.value = currentScrollTop
+
+    const contentSizeRaw: any | null = eObj['contentSize']
+    const layoutSizeRaw: any | null = eObj['layoutSize']
+    if (contentSizeRaw != null && layoutSizeRaw != null) {
+      const contentSize: UTSJSONObject = toUTSJSONObject(contentSizeRaw)
+      const layoutSize: UTSJSONObject = toUTSJSONObject(layoutSizeRaw)
+      const chRaw: any | null = contentSize['height']
+      const lhRaw: any | null = layoutSize['height']
+      const contentHeight: number = typeof chRaw == 'number' ? (chRaw as number) : 0
+      const layoutHeight: number = typeof lhRaw == 'number' ? (lhRaw as number) : 0
+      const distanceToBottom: number = contentHeight - currentScrollTop - layoutHeight
+
+      showScrollToBottom.value = distanceToBottom > 200
+    }
+  }
+
+  let isDraggingRaw: any | null = eObj['isDragging']
+  if (isDraggingRaw == null) {
+    const detailRaw: any | null = eObj['detail']
+    if (detailRaw != null) {
+      const detail: UTSJSONObject = toUTSJSONObject(detailRaw)
+      isDraggingRaw = detail['isDragging']
+    }
+  }
+  if (isDraggingRaw == true) {
+    emit('onMessageListTap')
+  }
+}
+
+const handleMessageListTap = () => {
+  emit('onMessageListTap')
+}
+
+const handleMessageTap = (message: any): void => {
+  emit('onMessageTap', message)
+}
+
+watch(messageList, (newMessages: any[] | null, oldMessages: any[] | null): void => {
+  if (newMessages == null || newMessages.length == 0) return
+
+  if (isFirstLoad.value && newMessages.length > 0) {
+    nextTick((): void => {
+      finalizeFirstLoad(false)
+    })
+    return
+  }
+
+  if (pendingScrollMessage.value != null) {
+    const targetMessage: any | null = pendingScrollMessage.value
+    if (targetMessage == null) return
+    const targetMsgObj: UTSJSONObject = JSON.parse<UTSJSONObject>(JSON.stringify(targetMessage ?? new UTSJSONObject())) ?? new UTSJSONObject()
+    const msgIDRaw: any | null = targetMsgObj['msgID']
+
+    pendingScrollMessage.value = null
+
+    nextTick(() => {
+      let timer: number = 0
+      timer = addTimer(setTimeout(() => {
+        const msgId: string = msgIDRaw != null ? `${msgIDRaw}` : ''
+        doScrollToMessage(msgId, false, false)
+        const t: number = timer
+        if (t > 0) clearTimer(t)
+      }, 600))
+    })
+    return
+  }
+
+  const hasNewMessage = oldMessages == null ||
+    oldMessages.length == 0 ||
+    newMessages.length > oldMessages.length
+
+  if (hasNewMessage) {
+    const lastMessage: any = newMessages[newMessages.length - 1]
+    const lastMsgObj: UTSJSONObject = toUTSJSONObject(lastMessage ?? new UTSJSONObject())
+    const isSelfRaw: any | null = lastMsgObj['isSentBySelf']
+    const isMyMessage: boolean = isSelfRaw == true
+
+    if (!isMyMessage) {
+      conversationListState.clearConversationUnreadCount(props.conversationID)
+    }
+
+    if (isMyMessage || !showScrollToBottom.value) {
+      if (!_isLocatingMessage){
+        nextTick(() => {
+          let timer: number = 0
+          timer = setTimeout(() => {
+            scrollToBottom(null)
+            const t: number = timer
+            if (t > 0) clearTimeout(t)
+          }, 100)
+        })
+      }
+    }
+
+    // 新消息到达时，通知 transform hook 处理
+    nextTick(() => {
+      const onNew: (() => Promise<void>) | null = _listTransformOnNewMessage
+      if (onNew != null) {
+        onNew()
+      }
+    });
+  }
+}, { immediate: false })
+
+watch((): UTSJSONObject | null => toUTSJSONObjectOrNull(props.locateMessage), (newMessage: UTSJSONObject | null, _oldMessage: UTSJSONObject | null): void => {
+  const newMsgObj: UTSJSONObject = newMessage ?? new UTSJSONObject()
+  const idRaw: any | null = newMsgObj['msgID']
+  let hasMsgID: boolean = false
+  if (idRaw != null) {
+    hasMsgID = `${idRaw}`.length > 0
+  }
+  if (newMessage != null && hasMsgID && !isFirstLoad.value) {
+    nextTick(() => {
+      scrollToMessage(newMessage, true)
+    })
+  }
+})
+
+onBeforeMount(() => {
+  try {
+    const sysObj = uni.getSystemInfoSync()
+    const nhRaw: any = sysObj.statusBarHeight
+    const nh: number = typeof nhRaw == 'number' ? (nhRaw as number) : 44
+    navbarHeightPx.value = nh + rpxToPx(160);
+  } catch (e: any) {
+    navbarHeightPx.value = 44 + rpxToPx(160);
+  }
+});
+
+onMounted(() => {
+  // mount 时 messageList 已有缓存数据：watch immediate=false 不会触发，需手动启动收尾流程
+  if (messageList.value != null && messageList.value.length > 0) {
+    nextTick((): void => {
+      finalizeFirstLoad(true)
+    })
+  }
+  // 监听 AudioMessage "转写文本入场"事件：当本条是最后一条且用户未在浏览历史时，
+  // 跟随滚动到底部，防止幕布展开后底部被输入框遮挡
+  const handler: ((data: any) => void) | null = _handleAudioConvertStreamGrow
+  if (handler != null) {
+    uni.$on('audioConvertStreamGrow', handler)
+  }
+})
+
+const handleAudioConvertStreamGrow = (data: any): void => {
+  const dataObj: UTSJSONObject = toUTSJSONObject(data ?? new UTSJSONObject())
+  const msgIDRaw: any | null = dataObj['msgID']
+  const msgID: string = msgIDRaw != null ? `${msgIDRaw}` : ''
+  if (msgID.length == 0) return
+  if (showScrollToBottom.value) return
+
+  const targetIndex = messageItems.value.findIndex(
+    item => {
+      if (item.type !== 'message') return false
+      return isItemHighlighted(item.message, msgID) > 0
+    }
+  )
+  if (targetIndex < 0) return
+
+  // 只处理「最后一条」—— 之前位置的消息文本框在列表中部，不会被 input 遮挡
+  const lastIndex = messageItems.value.length - 1
+  if (targetIndex !== lastIndex) return
+
+  setTimeout(() => {
+    const lastItem = messageItems.value[lastIndex]
+    if (lastItem == null) return
+    scrollToKey(lastItem.key)
+  }, 380)
+}
+
+_handleAudioConvertStreamGrow = handleAudioConvertStreamGrow
+
+watch(scrollIntoViewID, (newVal: string, oldVal: string): void => {
+  if (_pendingFinalizeVisibility && newVal.length > 0 && !newVal.startsWith('__')) {
+    _pendingFinalizeVisibility = false
+    isFirstLoad.value = false
+  }
+})
+
+onBeforeUnmount(() => {
+  _isLocatingMessage = false
+  _pendingFinalizeVisibility = false
+  clearAllTimers()
+  conversationListState.clearConversationUnreadCount(props.conversationID)
+  const handler: ((data: any) => void) | null = _handleAudioConvertStreamGrow
+  if (handler != null) {
+    uni.$off('audioConvertStreamGrow', handler)
+  }
+  destroyStore()
+})
+
+/**
+ * 获取最后一条消息底部到屏幕顶部的 px 值
+ * - uvue 用 UniElement.getBoundingClientRect() 同步获取（4.0+ 全平台支持）
+ * - 文档：https://doc.dcloud.net.cn/uni-app-x/api/dom/unielement.html#getboundingclientrect
+ * - 返回 DOMRect { x, y, left, top, right, bottom, width, height }（单位 px）
+ * - 找不到 cell / 测量失败时返回 9999 作为 fallback（远大于屏幕高，calcTranslateY 直接返回 0）
+ */
+const getLastMessageCellPosition = async (): Promise<number> => {
+  if (cellRefs.length == 0) return 9999
+  const lastCell = cellRefs[cellRefs.length - 1]
+  if (lastCell == null) return 9999
+  try {
+    const rect: DOMRect = (lastCell as UniElement).getBoundingClientRect()
+    return rect.bottom
+  } catch (e: any) {
+    return 9999
+  }
+}
+
+// ==================== Transform Hook ====================
+const messageListContainerViewRef = ref(null);
+
+const listTransformOptions: UseListTransformOptions = {
+  getInputPanelHeight: (): number => (props.inputPanelHeight ?? 0),
+  getInputToolbarHeight: (): number => (props.inputToolbarHeight ?? 0),
+  getLastMessageBottom: (): Promise<number> => getLastMessageCellPosition(),
+  getMessageCount: (): number => cellRefs.length,
+  listRef: messageListContainerViewRef,
+  threshold: 10
+}
+const listTransform = useListTransform(listTransformOptions)
+
+_listTransformOnNewMessage = listTransform.onNewMessage
+
+// 监听面板高度变化
+watch((): number | null => props.inputPanelHeight as number | null, async (newHeight: number | null, oldHeight: number | null): Promise<void> => {
+  const isOpening = (oldHeight == null || oldHeight == 0) && newHeight != null && newHeight > 0;
+
+  // 面板打开时先滚动到底部
+  if (newHeight != null && newHeight > 0) {
+    scrollToBottom(null);
+    await nextTick();
+  }
+
+  listTransform.onPanelHeightChange(isOpening);
+});
+
+defineExpose({
+  scrollToBottom: scrollToBottom,
+  scrollToMessage: scrollToMessage,
+})
+</script>
+
+<style>
+.msg-list {
+  flex: 1;
+  position: relative;
+}
+
+.msg-list__scroll {
+  flex: 1;
+  background-color: #F9FAFC;
+}
+
+.msg-list__scroll--hidden {
+  opacity: 0;
+}
+
+.msg-list__refresh {
+  width: 750rpx;
+  align-items: center;
+  justify-content: center;
+  flex-direction: row;
+}
+
+.msg-list__refresh-text {
+  font-size: 28rpx;
+  color: #999999;
+  text-align: center;
+}
+
+.msg-list__refresh-indicator {
+  width: 36rpx;
+  height: 36rpx;
+  margin-left: 12rpx;
+  color: #999999;
+}
+
+.msg-list__scroll-btn {
+  position: absolute;
+  bottom: 30rpx;
+  right: 30rpx;
+  width: 120rpx;
+  height: 80rpx;
+  background-color: #ffffff;
+  border-radius: 40rpx;
+  box-shadow: 0 2rpx 10rpx rgba(0, 0, 0, 0.1);
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+}
+
+.msg-list__scroll-btn-icon {
+  width: 40rpx;
+  height: 40rpx;
+  margin-bottom: 4rpx;
+}
+
+.msg-list__scroll-btn-text {
+  font-size: 20rpx;
+  color: #666;
+}
+</style>

@@ -64,7 +64,7 @@ const props = withDefaults(defineProps<SetRemarkProps>(), {
 
 const emit = defineEmits<SetRemarkEmits>()
 
-const { setUserRemark } = useContactState()
+const { setFriendRemark } = useContactState()
 
 const remarkInput = ref('')
 const inputFocused = ref(false)
@@ -89,7 +89,7 @@ const handleSave = async () => {
   
   isSubmitting.value = true
   try {
-    await setUserRemark(props.userID, remarkInput.value.trim())
+    await setFriendRemark(props.userID, remarkInput.value.trim())
     showToast({ message: '设置成功', type: 'success' })
     emit('success', props.userID, remarkInput.value.trim())
   } catch (error: any) {

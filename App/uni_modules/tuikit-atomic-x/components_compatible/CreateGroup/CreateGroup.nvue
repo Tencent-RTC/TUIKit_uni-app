@@ -75,6 +75,7 @@ import { useLoginState } from '../../state/LoginState'
 import { useGroupState } from '../../state/GroupState'
 import { useMessageInputState } from '../../state/MessageInputState'
 import { GROUP_TYPES, DEFAULT_GROUP_AVATARS, getGroupTypeById } from '../../constants/groupTypes'
+import { safeJsonParse } from '../../utils/utsUtils'
 
 export default {
   props: { selectedUsers: { type: Array, default: function() { return [] } } },
@@ -113,7 +114,17 @@ export default {
         })
       }
       if (messageInputState) {
-        messageInputState.sendCustomMessage({ version: 1, businessID: 'group_create', opUser: (loginInfo && loginInfo.value && loginInfo.value.userID) || '', content: '创建群聊', cmd: 0 }).finally(doNavigate)
+        var customPayload = {
+          type: 'custom',
+          customData: JSON.stringify({
+            version: 1,
+            businessID: 'group_create',
+            opUser: (loginInfo && loginInfo.value && loginInfo.value.userID) || '',
+            content: '创建群聊',
+            cmd: 0,
+          }),
+        }
+        messageInputState.sendMessage(customPayload).finally(doNavigate)
       } else {
         doNavigate()
       }
@@ -124,7 +135,9 @@ export default {
       if (!this.canCreate || this.isCreating) return
       this.isCreating = true
       var self = this
-      this.groupState.createGroup({ groupType: (this.selectedGroupType && this.selectedGroupType.id), groupName: this.groupName, groupID: this.groupID, avatarURL: DEFAULT_GROUP_AVATARS[this.selectedAvatarIndex], memberList: uni.$selectedUserData }).then(function(createdGroupID) {
+      // uni.$selectedUserData 由 UserPicker 序列化为 JSON 字符串传递；GroupCreateParams.memberList 期望 string[]
+      var memberList = safeJsonParse(uni.$selectedUserData, [])
+      this.groupState.createGroup({ groupType: (this.selectedGroupType && this.selectedGroupType.id), groupName: this.groupName, groupID: this.groupID, avatarURL: DEFAULT_GROUP_AVATARS[this.selectedAvatarIndex], memberList: memberList }).then(function(createdGroupID) {
         if (!createdGroupID) {
           uni.showToast({ title: '创建群组失败，请重试', icon: 'none' })
           // 失败可重试，立即释放
@@ -134,7 +147,19 @@ export default {
         // 成功路径：isCreating 不在此处释放，由 mounted 在重新进入本页时统一重置
         self.handleGroupCreatedSuccess(createdGroupID)
       }).catch(function(error) {
-        uni.showToast({ title: (error && error.message), icon: 'none' })
+        var rawMsg = (error && error.message) ? String(error.message) : ''
+        var errMsg = rawMsg || '创建群组失败，请重试'
+        // 安全打击词识别：错误码 80001
+        // message 形如：'group info secure check fail! beat word: xxx |requestid:...|tcloudapirequestid:...'
+        // 提取 'beat word:' 后到 '|' 前的内容作为被打击词展示
+        if (error && error.errCode === 80001) {
+          var match = rawMsg.match(/beat word:\s*([^|]+?)\s*(\||$)/i)
+          var beatWord = match ? match[1].trim() : ''
+          errMsg = beatWord
+            ? '创建群组失败，存在被打击词汇：' + beatWord
+            : '创建群组失败，存在被打击词汇'
+        }
+        uni.showToast({ title: errMsg, icon: 'none' })
         // 失败可重试，释放
         self.isCreating = false
       })

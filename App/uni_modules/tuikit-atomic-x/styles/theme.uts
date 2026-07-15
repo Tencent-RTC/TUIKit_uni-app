@@ -245,7 +245,7 @@ export function getBorderColor(): UTSJSONObject {
  * @param type 按钮类型：primary, secondary
  */
 export function createButtonStyle(type: string = 'primary'): UTSJSONObject {
-  if (type === 'primary') {
+  if (type == 'primary') {
     return {
       backgroundColor: currentTheme.colors.primary,
       color: currentTheme.colors.text,
@@ -253,7 +253,7 @@ export function createButtonStyle(type: string = 'primary'): UTSJSONObject {
       paddingVertical: '8px',
       borderRadius: '4px',
     };
-  } else if (type === 'secondary') {
+  } else if (type == 'secondary') {
     return {
       backgroundColor: currentTheme.colors.secondary,
       color: currentTheme.colors.text,

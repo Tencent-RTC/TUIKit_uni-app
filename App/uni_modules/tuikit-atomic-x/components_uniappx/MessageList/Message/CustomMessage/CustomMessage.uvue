@@ -1,0 +1,105 @@
+<template>
+  <view class="custom-message" :class="{ 'custom-message--center': isCustomCenter }">
+    <CallMessage v-if="isCallMsg" :message="message" :isGroupCall="isCustomCenter" />
+    <view v-else class="custom-highlight">
+      <view class="default-custom">
+        <text class="custom-text">{{ customText }}</text>
+      </view>
+    </view>
+  </view>
+</template>
+
+<script setup lang="uts">
+import { computed } from 'vue'
+import { safeJsonParse } from '../../../../utils/utsUtils'
+import { isCallMessage, isGroupCallMessage } from '../../../../utils/callMessageUtils'
+import CallMessage from './CallMessage.uvue'
+
+type Props = {
+  message: any | null
+  conversationID?: string}
+
+const props = withDefaults(defineProps<Props>(), {
+  conversationID: ''
+})
+
+const customMessage = computed((): any | null => {
+  const messageObj: UTSJSONObject = props.message as UTSJSONObject
+  const body: any | null = messageObj['messagePayload']
+  if (body == null) return null
+  return body
+})
+
+// 解析 customData（业务方序列化的 JSON 字符串）
+const customDataContent = computed<any | null>((): any | null => {
+  const cm: any | null = customMessage.value
+  if (cm == null) return null
+  const cmObj: UTSJSONObject = cm as UTSJSONObject
+  const raw: any | null = cmObj['customData']
+  if (raw == null) return null
+  return safeJsonParse<any>(typeof raw == 'string' ? (raw as string) : '', {})
+})
+
+// 判断是否是通话消息（callMessageUtils.isCallMessage 已对齐 customData）
+const isCallMsg = computed((): boolean => isCallMessage(props.message as any))
+
+// 判断是否是需要居中显示的自定义消息
+const isCustomCenter = computed((): boolean => {
+  return isGroupCallMessage(props.message as any, props.conversationID ?? '')
+})
+
+const customText = computed((): string => {
+  // 1. 业务侧 customData.content（如 group_create 的"创建群聊"）
+  const cdc: any | null = customDataContent.value
+  if (cdc != null) {
+    const cdcObj: UTSJSONObject = cdc as UTSJSONObject
+    const content: any | null = cdcObj['content']
+    if (typeof content == 'string' && (content as string).length > 0) return content as string
+  }
+  // 2. payload.description 兜底
+  const cm: any | null = customMessage.value
+  if (cm != null) {
+    const cmObj: UTSJSONObject = cm as UTSJSONObject
+    const desc: any | null = cmObj['description']
+    if (typeof desc == 'string' && (desc as string).length > 0) return desc as string
+  }
+  return '自定义消息'
+})
+</script>
+
+<style>
+.custom-message {
+  background-color: rgba(255, 255, 255, 0.8);
+  border-radius: 12rpx;
+  min-width: 160rpx;
+  max-width: 480rpx;
+}
+
+/* 居中消息样式（如群组通话消息） */
+.custom-message--center {
+  background-color: transparent;
+  max-width: 750rpx;
+  min-width: 0;
+}
+
+.custom-highlight {
+  flex: 1;
+  padding: 20rpx;
+  background-color: transparent;
+  border-radius: 12rpx;
+}
+
+.default-custom {
+  flex-direction: row;
+  align-items: flex-start;
+}
+
+.custom-text {
+  font-size: 28rpx;
+  color: #333;
+  flex: 1;
+  lines: 0;
+  word-wrap: break-word;
+  white-space: pre-wrap;
+}
+</style>

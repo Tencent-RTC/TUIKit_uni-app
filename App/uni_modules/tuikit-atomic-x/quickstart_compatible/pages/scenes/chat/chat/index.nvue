@@ -40,6 +40,7 @@ import MessageInput from '@/uni_modules/tuikit-atomic-x/components/MessageInput/
 import CustomNavbar from '@/uni_modules/tuikit-atomic-x/components/CustomNavbar/CustomNavbar.nvue'
 import { useConversationListState } from '@/uni_modules/tuikit-atomic-x/state/ConversationListState'
 import { useGroupState } from '@/uni_modules/tuikit-atomic-x/state/GroupState'
+import { useLoginState } from '@/uni_modules/tuikit-atomic-x/state/LoginState'
 import { MessageType } from '@/uni_modules/tuikit-atomic-x/types/message'
 
 export default {
@@ -51,6 +52,7 @@ export default {
   data() {
     var groupState = useGroupState()
     var convState = useConversationListState('chat')
+    var loginState = useLoginState()
     var systemInfo = uni.getSystemInfoSync()
     return {
       conversationID: '',
@@ -60,6 +62,7 @@ export default {
       inputPanelHeight: 0,
       groupState: groupState,
       convState: convState,
+      loginState: loginState,
       screenHeight: systemInfo.screenHeight || 750
     }
   },
@@ -85,15 +88,15 @@ export default {
       return
     }
     this.conversationID = options.conversationID
-    this.convState.fetchConversationInfo(this.conversationID)
-    this.groupState.fetchJoinedGroupList()
+    this.convState.getConversationInfo(this.conversationID)
+    this.groupState.loadJoinedGroups()
     if (uni.$locateMessage) {
       this.locateMessage = uni.$locateMessage
       uni.$locateMessage = null
     }
   },
   onShow() {
-    this.convState.fetchConversationInfo(this.conversationID)
+    this.convState.getConversationInfo(this.conversationID)
   },
   methods: {
     onNavBack() {
@@ -123,11 +126,15 @@ export default {
       if (ref && ref.collapse) ref.collapse()
     },
     setOfflinePushInfo(ctx) {
-      var title = (this.currentConversation && this.currentConversation.title) || '新消息'
+      // 群组会话用群名；C2C 会话用当前登录用户的昵称（消息发送者本人），fallback userID
+      var loginInfo = (this.loginState && this.loginState.loginUserInfo && this.loginState.loginUserInfo.value) || null
+      var title = this.isC2CConversation
+        ? ((loginInfo && (loginInfo.nickname || loginInfo.userID)) || '新消息')
+        : ((this.currentConversation && this.currentConversation.title) || '新消息')
       var description = '[新消息]'
       switch (ctx.messageType) {
         case MessageType.TEXT:
-          description = (ctx.messageBody && ctx.messageBody.text) || '[文本消息]'
+          description = ctx.messagePayload.text || '[文本消息]'
           break
         case MessageType.IMAGE:
           description = '[图片]'
@@ -135,7 +142,7 @@ export default {
         case MessageType.VIDEO:
           description = '[视频]'
           break
-        case MessageType.SOUND:
+        case MessageType.AUDIO:
           description = '[语音]'
           break
         case MessageType.FILE:
