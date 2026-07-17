@@ -1,0 +1,87 @@
+{
+  "pages": [
+    {
+      "path": "pages/login/login",
+      "style": {
+        "navigationBarTitleText": "登录"
+      }
+    },
+    {
+      "path": "pages/index/index",
+      "style": {
+        "navigationBarTitleText": "腾讯云 IM"
+      }
+    }
+  ],
+  "subPackages": [{
+    "root": "TUIKit",
+    "pages": [{
+        "path": "components/TUIConversation/index",
+        "style": {
+          "navigationBarTitleText": "腾讯云 IM"
+        }
+      },
+      {
+        "path": "components/TUIChat/index",
+        "style": {
+          "navigationBarTitleText": "腾讯云 IM",
+          "app-plus": {
+            "softinputMode": "adjustResize",
+            "titleNView": {
+              "buttons": [{
+                "type": "menu"
+              }]
+            }
+          },
+          "h5": {
+            "titleNView": {
+              "buttons": []
+            }
+          }
+        }
+      },
+      {
+        "path": "components/TUIChat/video-play",
+        "style": {
+          "navigationBarTitleText": "腾讯云 IM"
+        }
+      },
+      {
+        "path": "components/TUIChat/web-view",
+        "style": {
+          "navigationBarTitleText": "腾讯云 IM"
+        }
+      },
+      {
+        "path": "components/TUIContact/index",
+        "style": {
+          "navigationBarTitleText": "腾讯云 IM"
+        }
+      },
+      {
+        "path": "components/TUIGroup/index",
+        "style": {
+          "navigationBarTitleText": "腾讯云 IM"
+        }
+      },
+      {
+        "path": "components/TUISearch/index",
+        "style": {
+          "navigationBarTitleText": "聊天记录"
+        }
+      }
+    ]
+  }],
+  "preloadRule": {
+    "pages/index/index": {
+      "network": "all",
+      "packages": ["TUIKit"]
+    }
+  },
+  "globalStyle": {
+    "navigationBarTextStyle": "black",
+    "navigationBarTitleText": "uni-app",
+    "navigationBarBackgroundColor": "#F8F8F8",
+    "backgroundColor": "#F8F8F8"
+  }
+}

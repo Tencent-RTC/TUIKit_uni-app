@@ -35,12 +35,6 @@
 			"style": {
 				"navigationBarTitleText": "群设置"
 			}
-		},
-		{
-			"path": "TUIKit/components/CallView/CallView",
-			"style": {
-				"navigationBarTitleText": "uni-app"
-			}
 		}
 	],
 	"tabBar": {

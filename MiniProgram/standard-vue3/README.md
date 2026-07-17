@@ -6,69 +6,15 @@ TUIKit 标准版是基于 IM SDK 的一款 UI 组件库。本文介绍如何快�
 npm install
 ```
 
-2. 拷贝源码。
-
-【MacOS 端】
-``` bash
-mkdir -p ./TUIKit && cp -r node_modules/tuikit-atomicx-uniapp-wx-standard/ ./TUIKit && cp node_modules/@trtc/call-engine-lite-wx/RTCCallEngine.wasm.br ./static
-```
-
-【Windows 端】
-``` bash
-xcopy node_modules\tuikit-atomicx-uniapp-wx-standard .\TUIKit /i /e
-xcopy node_modules\@trtc\call-engine-lite-wx\RTCCallEngine.wasm.br .\static
-```
-
 ### 步骤2：填写鉴权信息
  修改 `./debug/GenerateTestUserSig-es.js` 文件 的 SDKAPPID 以及 SECRETKEY。
-   
-   <img src="https://qcloudimg.tencent-cloud.cn/image/document/fb139f2bc10b1ae71eb9c1a6b63265e3.png" width="400" />
 
-### 步骤3：增加音视频通话（可选）
-参考 [开通音视频服务](https://cloud.tencent.com/document/product/269/123770#bfcba373-c69c-4f0e-968d-aaeac847b534)
+   <img src="https://qcloudimg.tencent-cloud.cn/image/document/fb139f2bc10b1ae71eb9c1a6b63265e3.png" width="400" />
 
 
 ###  步骤4：运行和测试
 ![](https://write-document-release-1258344699.cos.ap-guangzhou.tencentcos.cn/100027131298/85f89e3d8c8411f0814e525400bf7822.png)
 
-
-## 常见问题
-
-### 如何移除音视频通话功能
-
-移除 `static/RTCCallEngine.wasm.br` 文件。
-
-
-
-【移除通话功能】
-
-移除 TUIKit/index.ts 中的模块导出
-
-![](https://write-document-release-1258344699.cos.ap-guangzhou.tencentcos.cn/100027131298/f0b448709ce411f0a90152540099c741.png)
-
-
-【移除通话按钮】
-
-移除 TUIKit/components/MessageInput/MessageInput.vue 中的通话按钮
-
-![](https://write-document-release-1258344699.cos.ap-guangzhou.tencentcos.cn/100027131298/05bbb87b9ce511f09936525400e889b2.png)
-
-
-【移除配置的页面路由】
-
-移除在 pages.json 中为音视频通话添加的全局页面监听配置。
-
-
-【选项一】
-``` bash
-   // {
-	//    "path": "TUIKit/components/CallView/CallView",
-	//	  "style": {
-	//		  "navigationBarTitleText": "uni-app"
-	//	  }
-	// }
-
-```
 
 ### Debug 脚本的作用
 
