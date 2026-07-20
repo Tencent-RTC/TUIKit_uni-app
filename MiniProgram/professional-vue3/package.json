@@ -1,0 +1,19 @@
+{
+  "name": "uniapp-wx-profession",
+  "version": "1.0.0",
+  "description": "",
+  "main": "main.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "publish:github": "node script/publish-github.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@tencentcloud/chat-uikit-wx-uniapp": "^1.0.1",
+    "@trtc/calls-uikit-wx-uniapp": "^5.0.1",
+    "unplugin-vue2-script-setup": "^0.11.4"
+  }
+}

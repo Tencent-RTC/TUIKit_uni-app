@@ -1,0 +1,23 @@
+node_modules/
+unpackage/
+.hbuilderx/
+.DS_Store
+
+# Files copied from @trtc/calls-uikit-wx-uniapp by add-callview-page scripts.
+# Do NOT commit these; they are generated at install time.
+TUIKit/assets/call/
+TUIKit/assets/base/
+TUIKit/components/CallView/
+TUIKit/components/GroupCallView/
+TUIKit/states/TUICallService/
+TUIKit/states/CallListState.ts
+TUIKit/states/CallParticipantState.ts
+TUIKit/states/DeviceState.ts
+TUIKit/states/UIConfigState.ts
+TUIKit/adapter/vue-version.ts
+TUIKit/adapter/vue-demi.ts
+TUIKit/plugin/ring/
+TUIKit/utils/permission.ts
+TUIKit/constants/call.ts
+TUIKit/constants/chat.ts
+TUIKit/call/

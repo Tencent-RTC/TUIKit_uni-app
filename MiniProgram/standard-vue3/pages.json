@@ -1,70 +1,64 @@
 {
-	"pages": [
-		{
-			"path": "pages/login/login",
-			"style": {
-				"navigationBarTitleText": "uni-app"
-			}
-		},
-		{
-			"path": "pages/conversation/conversation",
-			"style": {
-				"navigationBarTitleText": "uni-app"
-			}
-		},
-		{
-			"path": "pages/profile/profile",
-			"style": {
-				"navigationBarTitleText": "uni-app"
-			}
-		},
-		{
-			"path": "pages/chat/chat",
-			"style": {
-				"navigationBarTitleText": "uni-app"
-			}
-		},
-		{
-			"path": "pages/createConversation/createConversation",
-			"style": {
-				"navigationBarTitleText": "uni-app"
-			}
-		},
-		{
-			"path": "TUIKit/components/Group/GroupSettings",
-			"style": {
-				"navigationBarTitleText": "群设置"
-			}
-		},
-		{
-			"path": "TUIKit/components/CallView/CallView",
-			"style": {
-				"navigationBarTitleText": "uni-app"
-			}
-		}
-	],
-	"tabBar": {
-		"list": [
-			{
-				"pagePath": "pages/conversation/conversation",
-				"text": "消息",
-				"iconPath": "./static/conversation-unselected.png",
-				"selectedIconPath": "./static/conversation-selected.png",
-				"badge": "{{totalUnRead > 99 ? '99+' : totalUnRead.toString()}}"
-			},
-			{
-				"pagePath": "pages/profile/profile",
-				"text": "个人中心",
-				"iconPath": "./static/profile-unselected.png",
-				"selectedIconPath": "./static/profile-selected.png"
-			}
-		]
-	},
-	"globalStyle": {
-		"navigationBarTextStyle": "black",
-		"navigationBarTitleText": "uni-app",
-		"navigationBarBackgroundColor": "#F8F8F8",
-		"backgroundColor": "#F8F8F8"
-	},
-	"uniIdRouter": {}
+  "pages": [
+    {
+      "path": "pages/login/login",
+      "style": {
+        "navigationBarTitleText": "uni-app"
+      }
+    },
+    {
+      "path": "pages/conversation/conversation",
+      "style": {
+        "navigationBarTitleText": "uni-app"
+      }
+    },
+    {
+      "path": "pages/profile/profile",
+      "style": {
+        "navigationBarTitleText": "uni-app"
+      }
+    },
+    {
+      "path": "pages/chat/chat",
+      "style": {
+        "navigationBarTitleText": "uni-app"
+      }
+    },
+    {
+      "path": "pages/createConversation/createConversation",
+      "style": {
+        "navigationBarTitleText": "uni-app"
+      }
+    },
+    {
+      "path": "TUIKit/components/Group/GroupSettings",
+      "style": {
+        "navigationBarTitleText": "群设置"
+      }
+    }
+  ],
+  "tabBar": {
+    "list": [
+      {
+        "pagePath": "pages/conversation/conversation",
+        "text": "消息",
+        "iconPath": "./static/conversation-unselected.png",
+        "selectedIconPath": "./static/conversation-selected.png",
+        "badge": "{{totalUnRead > 99 ? '99+' : totalUnRead.toString()}}"
+      },
+      {
+        "pagePath": "pages/profile/profile",
+        "text": "个人中心",
+        "iconPath": "./static/profile-unselected.png",
+        "selectedIconPath": "./static/profile-selected.png"
+      }
+    ]
+  },
+  "globalStyle": {
+    "navigationBarTextStyle": "black",
+    "navigationBarTitleText": "uni-app",
+    "navigationBarBackgroundColor": "#F8F8F8",
+    "backgroundColor": "#F8F8F8"
+  },
+  "uniIdRouter": {}
 }
