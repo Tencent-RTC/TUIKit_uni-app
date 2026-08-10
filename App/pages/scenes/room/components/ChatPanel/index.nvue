@@ -1,0 +1,184 @@
+<template>
+  <view
+    class="page-container"
+    :style="props.visible ? rootStyleVisible : rootStyleHidden"
+  >
+    <CustomNavbar
+      v-if="props.visible"
+      position="fixed"
+      title="聊天"
+      :showBack="true"
+      :showMenu="false"
+      @back="onNavBack"
+    />
+
+    <view
+      class="message-list-container"
+      :style="{ paddingBottom: inputToolbarHeight + 'px' }"
+      @tap="closeSoftKeyboard"
+    >
+      <MessageList
+        v-if="conversationID"
+        :conversationID="conversationID"
+        :inputToolbarHeight="inputToolbarHeight"
+        :inputPanelHeight="inputPanelHeight"
+        @onMessageListTap="closeSoftKeyboard"
+      />
+    </view>
+
+    <MessageInput
+      v-if="conversationID && props.visible"
+      ref="messageInputRef"
+      :conversationID="conversationID"
+      :setOfflinePushInfo="setOfflinePushInfo"
+      :toolList="customToolList"
+      :enableVoice="false"
+      :enableMention="false"
+      @height-change="onMessageInputHeightChange"
+    />
+  </view>
+</template>
+
+<script setup lang="ts">
+  import { ref, computed, watch } from 'vue';
+  import MessageList from '@/uni_modules/tuikit-atomic-x/components/MessageList/MessageList.nvue';
+  import MessageInput, { DEFAULT_TOOLS } from '@/uni_modules/tuikit-atomic-x/components/MessageInput/MessageInput.nvue';
+  import type { ToolItem } from '@/uni_modules/tuikit-atomic-x/components/MessageInput/types';
+  import CustomNavbar from '@/uni_modules/tuikit-atomic-x/components/CustomNavbar/CustomNavbar.nvue';
+  import { useConversationListState } from '@/uni_modules/tuikit-atomic-x/state/ConversationListState';
+  import { useLoginState } from '@/uni_modules/tuikit-atomic-x/state/LoginState';
+  import { MessageType } from '@/uni_modules/tuikit-atomic-x/types/message';
+  import type { OfflinePushContext, OfflinePushInfo } from '@/uni_modules/tuikit-atomic-x/types/message';
+
+  const props = withDefaults(defineProps<{
+    roomID: string;
+    visible?: boolean;
+  }>(), {
+    visible: true,
+  });
+
+  const rootStyleVisible: UTSJSONObject = {
+    position: 'fixed',
+    top: '0',
+    left: '0',
+    right: '0',
+    bottom: '0',
+    flexDirection: 'column',
+    backgroundColor: '#F9FAFC',
+    zIndex: '100',
+    transform: 'translateY(0)',
+    pointerEvents: 'auto'
+  };
+  const rootStyleHidden: UTSJSONObject = {
+    position: 'fixed',
+    top: '0',
+    left: '0',
+    right: '0',
+    bottom: '0',
+    flexDirection: 'column',
+    backgroundColor: '#F9FAFC',
+    zIndex: '100',
+    transform: 'translateY(100%)',
+    pointerEvents: 'none'
+  };
+
+  const emit = defineEmits<{
+    (e: 'close'): void;
+  }>();
+
+  const { loginUserInfo } = useLoginState();
+
+  // ==================== 状态 ====================
+  const messageInputRef = ref<any>(null);
+  const inputToolbarHeight = ref(0);
+  const inputPanelHeight = ref(0);
+  const currentConversation = ref<any>(null);
+
+  const { getConversationInfo } = useConversationListState('chat');
+
+  // ==================== 计算属性 ====================
+  const conversationID = computed<string>(() => {
+    return props.roomID.length > 0 ? `group_${props.roomID}` : '';
+  });
+
+  const isC2CConversation = computed(() => conversationID.value.startsWith('c2c_'));
+
+
+  const refreshConversationInfo = (): void => {
+    if (conversationID.value.length === 0) return;
+    getConversationInfo(conversationID.value)
+      .then((info) => {
+        currentConversation.value = info;
+      })
+      .catch((e) => {
+        console.error('[ChatPanel] getConversationInfo failed:', e);
+      });
+  };
+
+  const customToolList = computed<ToolItem[]>(() => {
+    return DEFAULT_TOOLS.filter(tool => tool.id !== 'videoCall' && tool.id !== 'voiceCall' && tool.id !== 'video');
+  });
+
+  const onNavBack = (): void => {
+    emit('close');
+  };
+
+  // ==================== 输入框 ====================
+  const onMessageInputHeightChange = (payload: { inputToolbarHeight: number; inputPanelHeight: number }): void => {
+    inputToolbarHeight.value = payload.inputToolbarHeight;
+    inputPanelHeight.value = payload.inputPanelHeight;
+  };
+
+  const closeSoftKeyboard = (): void => {
+    const refVal: any = messageInputRef.value;
+    if (refVal != null && typeof refVal.collapse === 'function') {
+      refVal.collapse();
+    }
+  };
+
+  const setOfflinePushInfo = (ctx: OfflinePushContext): OfflinePushInfo | null => {
+    const title = isC2CConversation.value
+      ? (loginUserInfo.value?.nickname || loginUserInfo.value?.userID || '新消息')
+      : ((currentConversation.value && currentConversation.value.title) || '新消息');
+    const conv = ctx.conversationID;
+
+    let description = '[新消息]';
+    switch (ctx.messageType) {
+      case MessageType.TEXT:
+        description = (ctx.messagePayload as { text?: string })?.text || '[文本消息]';
+        break;
+      case MessageType.IMAGE: description = '[图片]'; break;
+      case MessageType.VIDEO: description = '[视频]'; break;
+      case MessageType.AUDIO: description = '[语音]'; break;
+      case MessageType.FILE: description = '[文件]'; break;
+      case MessageType.CUSTOM: return null;
+      default: return null;
+    }
+
+    return {
+      title,
+      description,
+      extensionInfo: {
+        ext: JSON.stringify({
+          conversationID: conv,
+          messageType: ctx.messageType,
+        }),
+      },
+    };
+  };
+
+  refreshConversationInfo();
+
+  watch(
+    conversationID,
+    () => refreshConversationInfo()
+  );
+</script>
+
+<style>
+  .message-list-container {
+    flex: 1;
+    flex-direction: column;
+    background-color: #F9FAFC;
+  }
+</style>

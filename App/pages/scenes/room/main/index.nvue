@@ -36,6 +36,7 @@
       <MembersButton :roomID="roomID" />
       <MicButton />
       <CameraButton />
+      <ChatButton :roomID="roomID" :isChatPanelOpen="isChatPanelOpen" @click="isChatPanelOpen = true" />
       <RecordingButton @request-start="onRequestStartRecording" @request-stop="onRequestStopRecording" />
     </view>
 
@@ -78,17 +79,24 @@
     >
       <text v-if="recordingDialog.message">{{ recordingDialog.message }}</text>
     </RoomDialog>
+
+    <ChatPanel
+      :visible="isChatPanelOpen"
+      :roomID="roomID"
+      @close="isChatPanelOpen = false"
+    />
   </view>
 </template>
 
 <script setup lang="ts">
-  import { onLoad, onBackPress, onShow, onHide, onUnload } from '@dcloudio/uni-app';
+  import { onLoad, onBackPress } from '@dcloudio/uni-app';
   import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
   import {
     useRoomState, RoomType,
     useRoomParticipantState, RoomParticipantRole,
     useDeviceState, AudioOutput,
   } from '@/uni_modules/tuikit-atomic-x/state';
+  import { useLoginState } from '@/uni_modules/tuikit-atomic-x/state/LoginState';
   import { useRoomTips } from '../hooks/useRoomTips';
   import { showErrorToast, parseErrorCode } from '../utils/errorHandler';
   import { showToast } from '@/uni_modules/tuikit-atomic-x/utils/toast';
@@ -100,6 +108,8 @@
   import MembersButton from '../components/MembersButton/index.nvue';
   import MicButton from '../components/MicButton/index.nvue';
   import CameraButton from '../components/CameraButton/index.nvue';
+  import ChatButton from '../components/ChatButton/index.nvue';
+  import ChatPanel from '../components/ChatPanel/index.nvue';
   import RecordingButton from '../components/RecordingButton/index.nvue';
   import RecordingFloatingView from '../components/RecordingFloatingView/index.nvue';
   import RoomEnterPasswordSheet from '../components/RoomEnterPasswordSheet/index.nvue';
@@ -108,13 +118,16 @@
   const mode = ref<'create' | 'join'>('create');
   const roomID = ref<string>('');
   const roomName = ref<string>('');
+  const isChatPanelOpen = ref<boolean>(false);
   const autoEnableCamera = ref<boolean>(false);
   const autoEnableMicrophone = ref<boolean>(true);
   const autoEnableSpeaker = ref<boolean>(true);
 
   const roomState = useRoomState();
   const roomParticipantState = useRoomParticipantState();
-  const { localParticipant } = roomParticipantState;
+  const { loginUserInfo, loginStatus } = useLoginState();
+  const { localParticipant, participantList } = roomParticipantState;
+  const localUserID = computed(() => loginUserInfo.value?.userID ?? '');
 
   const {
     openLocalCamera,
@@ -126,6 +139,16 @@
 
   const systemInfo = ref<any>({});
   const exitBtnRef = ref<any>(null);
+
+  watch(
+    () => loginStatus.value,
+    (newStatus: number, oldStatus: number) => {
+      if (oldStatus === 1 && newStatus === 3) {
+        showToast('您在其他设备登录，请重新登录');
+        navigateBack();
+      }
+    }
+  );
 
   const isOwner = computed(() => localParticipant.value?.role === RoomParticipantRole.Owner);
 
@@ -198,6 +221,7 @@
 
   const { dialogState: tipsDialogRef } = useRoomTips({
     onExitConfirmed: () => {
+      isChatPanelOpen.value = false;
       triggerExit();
     },
     onDemotedToAudience: () => {
@@ -266,18 +290,39 @@
     initMediaState();
   }
 
-  async function initMediaState() {
-    const isAllCameraDisabled = roomState.currentRoom.value?.isAllCameraDisabled === true;
-    const isAllMicrophoneDisabled = roomState.currentRoom.value?.isAllMicrophoneDisabled === true;
+  function isLocalInParticipantList(): boolean {
+    const roomInfo = roomState.currentRoom.value;
+    if (!roomInfo) return false;
+    if (localUserID.value === roomInfo.roomOwner.userID) return true;
+    return participantList.value.some(p => p.userID === localUserID.value);
+  }
 
-    if (autoEnableCamera.value && !isAllCameraDisabled) {
+  function canOpenCamera(): boolean {
+    const roomInfo = roomState.currentRoom.value;
+    if (!roomInfo) return false;
+    if (localUserID.value === roomInfo.roomOwner.userID) return true;
+    if (roomInfo.roomType === RoomType.Standard && localParticipant.value?.role === RoomParticipantRole.Admin) return true;
+    return !roomInfo.isAllCameraDisabled;
+  }
+
+  function canOpenMicrophone(): boolean {
+    const roomInfo = roomState.currentRoom.value;
+    if (!roomInfo) return false;
+    if (localUserID.value === roomInfo.roomOwner.userID) return true;
+    if (localParticipant.value?.role === RoomParticipantRole.Admin) return true;
+    return !roomInfo.isAllMicrophoneDisabled;
+  }
+
+  async function initMediaState() {
+    if (!isLocalInParticipantList()) return;
+    if (autoEnableCamera.value && canOpenCamera()) {
       try {
         await openLocalCamera({ isFront: true });
       } catch (e) {
         showErrorToast(e);
       }
     }
-    if (autoEnableMicrophone.value && !isAllMicrophoneDisabled) {
+    if (autoEnableMicrophone.value && canOpenMicrophone()) {
       try {
         await openLocalMicrophone();
         await roomParticipantState.unmuteMicrophone();
@@ -425,9 +470,7 @@
     flex-direction: row;
     justify-content: space-around;
     align-items: center;
-    padding-left: 32rpx;
-    padding-right: 32rpx;
-    padding-bottom: 68rpx;
+    padding: 0 32rpx;
   }
 
   .recording-floating {
