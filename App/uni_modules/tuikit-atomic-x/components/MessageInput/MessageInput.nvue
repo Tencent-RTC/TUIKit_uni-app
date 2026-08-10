@@ -253,6 +253,13 @@ interface MessageInputProps {
   enableTools?: boolean;
   toolList?: ToolItem[];
   /**
+   * 是否启用 @ 群成员功能
+   * - true（默认）：群会话（非直播群）下输入 @ 触发选人页
+   * - false：完全禁用 @ 功能（textarea 不再响应 @ 字符、不跳转选人页、不维护 mentions）
+   * - 业务场景：直播聊天室等不需要 @ 的场景可关闭
+   */
+  enableMention?: boolean;
+  /**
    * 业务方注入：在每次发送消息前回调本函数计算 offlinePushInfo
    *
    * - 同步函数；返回 OfflinePushInfo 表示附带 push；返回 null/undefined 表示不附带
@@ -266,6 +273,7 @@ const props = withDefaults(defineProps<MessageInputProps>(), {
   enableVoice: true,
   enableEmoji: true,
   enableTools: true,
+  enableMention: true,
   conversationID: '',
 });
 
@@ -344,9 +352,9 @@ const currentGroupType = computed(() => {
   return info?.groupType;
 });
 
-// 是否启用 @ 功能：仅群会话 & 非直播群（AVChatRoom 不支持 @ 消息）
+// 是否启用 @ 功能：仅群会话 & 非直播群（AVChatRoom 不支持 @ 消息）& 业务方未显式关闭
 const isAtSupported = computed(() => {
-  return isGroupConversation.value && currentGroupType.value !== GroupType.AVChatRoom;
+  return props.enableMention === true && isGroupConversation.value && currentGroupType.value !== GroupType.AVChatRoom;
 });
 
 // mention 段（派生自 inputText + selectedMembers）

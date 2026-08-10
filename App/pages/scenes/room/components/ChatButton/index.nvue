@@ -1,0 +1,208 @@
+<template>
+  <view class="bottom-btn" @tap="handleTap">
+    <view class="bottom-icon-box">
+      <image
+        class="bottom-icon"
+        :src="iconSrc"
+        mode="aspectFit"
+      />
+      <text class="bottom-text">聊天</text>
+    </view>
+    <view v-if="displayUnreadCount.length > 0" class="unread-badge">
+      <text class="unread-badge-text">{{ displayUnreadCount }}</text>
+    </view>
+  </view>
+</template>
+
+<script setup lang="ts">
+  import { ref, computed, watch, onUnmounted } from 'vue';
+  import { useConversationListState, useMessageListState } from '@/uni_modules/tuikit-atomic-x/state';
+
+  // ==================== Props / Emits ====================
+  const props = withDefaults(defineProps<{
+    roomID?: string;
+    isChatPanelOpen?: boolean;
+  }>(), {
+    roomID: '',
+    isChatPanelOpen: false,
+  });
+
+  const emit = defineEmits<{
+    (e: 'click', payload: { roomID: string }): void;
+  }>();
+
+  const iconSrc = '/static/images/room/room_chat.png';
+
+  // ==================== 未读数状态（自维护）====================
+  const conversationListState = useConversationListState('room');
+  const messageListState = ref<any>(null);
+  const unreadCount = ref<number>(0);
+  const lastMessage = ref<any>(null);
+  let lastMessageCount = 0;
+  let isUnreadInitialized = false;
+
+  const ensureMessageListState = (): void => {
+    const rid = props.roomID ?? '';
+    if (rid.length === 0) {
+      messageListState.value = null;
+      return;
+    }
+    const targetID = `group_${rid}`;
+    if (messageListState.value?.conversationID === targetID) {
+      return;
+    }
+    messageListState.value = useMessageListState({ conversationID: targetID });
+  };
+
+  // 拉服务端真实未读数
+  const fetchUnread = async (): Promise<void> => {
+    const rid = props.roomID ?? '';
+    if (rid.length === 0) return;
+    const targetID = `group_${rid}`;
+    try {
+      const info = await conversationListState.getConversationInfo(targetID);
+      lastMessage.value = info.lastMessage;
+      unreadCount.value = info.unreadCount ?? 0;
+    } catch (error) {
+      console.warn('[ChatButton] getConversationInfo failed:', error);
+      unreadCount.value = 0;
+    }
+  };
+
+  const initUnread = async (): Promise<void> => {
+    isUnreadInitialized = false;
+    if (props.roomID?.length === 0) {
+      unreadCount.value = 0;
+      lastMessage.value = null;
+      lastMessageCount = 0;
+      messageListState.value = null;
+      isUnreadInitialized = true;
+      return;
+    }
+    ensureMessageListState();
+    await fetchUnread();
+    lastMessageCount = messageListState?.value?.messageList.value?.length ?? 0;
+    isUnreadInitialized = true;
+  };
+
+  // 监听 messageList 变化：累加新消息到未读数
+  watch(
+    () => messageListState?.value?.messageList,
+    (newList: Array<any>) => {
+      if (messageListState.value == null) return;
+      if (!isUnreadInitialized) {
+        lastMessageCount = newList?.length ?? 0;
+        return;
+      }
+      if (props.isChatPanelOpen === true) {
+        lastMessageCount = newList?.length ?? 0;
+        return;
+      }
+      const newLastMessage = newList[newList.length - 1];
+      const isSameLastMessage =
+        lastMessage.value != null &&
+        newLastMessage != null &&
+        newLastMessage.msgID === lastMessage.value.msgID;
+      if (newList.length > lastMessageCount && !isSameLastMessage) {
+        unreadCount.value += newList.length - lastMessageCount;
+      }
+      lastMessageCount = newList.length;
+      if (newLastMessage != null) {
+        lastMessage.value = newLastMessage;
+      }
+    }
+  );
+
+  watch(
+    () => props.isChatPanelOpen,
+    (isOpen: boolean) => {
+      if (isOpen === false) {
+        fetchUnread();
+      }
+    }
+  );
+
+  watch(
+    () => props.roomID,
+    () => initUnread(),
+    { immediate: true }
+  );
+
+  onUnmounted(() => {
+    messageListState.value = null;
+  });
+
+  // ==================== 角标显示 ====================
+  // 0 不显示，>99 显示 99+
+  const displayUnreadCount = computed<string>(() => {
+    const count = unreadCount.value;
+    if (count <= 0) return '';
+    if (count > 99) return '99+';
+    return String(count);
+  });
+
+  function handleTap(): void {
+    if (props.roomID.length === 0) return;
+    emit('click', { roomID: props.roomID });
+  }
+</script>
+
+<style>
+  .bottom-btn {
+    position: relative;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    /* nvue 默认 overflow: hidden，角标超出父容器会被裁剪，显式 visible */
+    overflow: visible;
+    padding: 12rpx;
+  }
+
+  .bottom-icon-box {
+    position: relative;
+    width: 104rpx;
+    height: 104rpx;
+    border-radius: 20rpx;
+    background-color: #2A2D38;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    /* nvue (weex) view 默认 overflow: hidden，角标 top:-8rpx right:-8rpx 会超出父容器被裁剪
+       显式声明 overflow: visible 让角标完整显示 */
+    overflow: visible;
+  }
+
+  .bottom-icon {
+    width: 48rpx;
+    height: 48rpx;
+  }
+
+  .bottom-text {
+    color: #FFFFFF;
+    font-size: 20rpx;
+    margin-top: 6rpx;
+    lines: 1;
+    text-overflow: ellipsis;
+  }
+
+  /* 未读数角标：右上角绝对定位 */
+  .unread-badge {
+    position: absolute;
+    top: 0rpx;
+    right: 0rpx;
+    min-width: 32rpx;
+    height: 32rpx;
+    padding: 0 8rpx;
+    border-radius: 16rpx;
+    background-color: #FF3B30;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .unread-badge-text {
+    color: #FFFFFF;
+    font-size: 20rpx;
+    line-height: 32rpx;
+    text-align: center;
+  }
+</style>
