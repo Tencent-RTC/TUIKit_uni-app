@@ -1,6 +1,8 @@
 import DCloudUTSFoundation
 import Foundation
 import RTCRoomEngine
+import UIKit
+import ReplayKit
 
 // MARK: - Public protocols
 
@@ -22,6 +24,12 @@ import RTCRoomEngine
 
     // MARK: - API key 常量
 
+    // Room Lifecycle API — 进出房时需要额外处理（屏幕分享监听等）
+    static let CREATE_AND_JOIN_ROOM    = "roomStore.createAndJoinRoom"
+    static let JOIN_ROOM                = "roomStore.joinRoom"
+    static let LEAVE_ROOM                = "roomStore.leaveRoom"
+    static let END_ROOM                  = "roomStore.endRoom"
+
     // Conference API
     static let GET_SCHEDULED_ROOM_LIST     = "roomStore.getScheduledRoomList"
     static let GET_SCHEDULED_ATTENDEES     = "roomStore.getScheduledAttendees"
@@ -35,6 +43,10 @@ import RTCRoomEngine
     static let CANCEL_CALL                 = "roomStore.cancelCall"
     static let ACCEPT_CALL                 = "roomStore.acceptCall"
     static let REJECT_CALL                 = "roomStore.rejectCall"
+
+    // Device API — 需要桥层特殊处理（屏幕分享等），不走 engine.call 通用通道
+    static let START_SCREEN_SHARE          = "startScreenShare"
+    static let STOP_SCREEN_SHARE            = "stopScreenShare"
 
     // Conference Event
     static let EVT_ON_ADDED_TO_SCHEDULED_ROOM      = "roomListener.onAddedToScheduledRoom"
@@ -121,6 +133,18 @@ import RTCRoomEngine
         ACCEPT_OPEN_DEVICE_INVITATION, DECLINE_OPEN_DEVICE_INVITATION,
     ]
 
+    /// 设备相关 API：需要桥层特殊处理（iOS 屏幕分享需通过 BroadcastLauncher
+    /// 弹出系统 Broadcast Picker，不能直接调 engine.call）。
+    private static let DEVICE_API_SET: Set<String> = [
+        START_SCREEN_SHARE, STOP_SCREEN_SHARE,
+    ]
+
+    /// 房间生命周期 API：进房时需注册 `UIScreenCapturedDidChange` 通知，
+    /// 退房时需移除，避免在房外错误触发屏幕分享。
+    private static let LIFECYCLE_API_SET: Set<String> = [
+        CREATE_AND_JOIN_ROOM, JOIN_ROOM, LEAVE_ROOM, END_ROOM,
+    ]
+
     // MARK: - 单例 / 内部状态
 
     private static let shared = EngineBridge()
@@ -131,6 +155,9 @@ import RTCRoomEngine
     private var observers: [EngineBridgeObserver] = []
     fileprivate let deviceRequestHandler = DeviceRequestHandler()
     private var observerWrapper: ObserverWrapper?
+
+    /// 屏幕 captured 变化通知观察者对象，进房时注册，退房时移除。
+    private var screenCapturedObserver: NSObjectProtocol?
 
     /// 当前已在主线程则直接同步执行，避免不必要的 hop。
     private static func runOnMain(_ block: @escaping () -> Void) {
@@ -189,8 +216,95 @@ import RTCRoomEngine
             dispatchParticipantApi(api: api, json: Codec.parseObject(params), callback: callback)
             return
         }
+        if Self.DEVICE_API_SET.contains(api) {
+            dispatchDeviceApi(api: api, json: Codec.parseObject(params), callback: callback)
+            return
+        }
+        if Self.LIFECYCLE_API_SET.contains(api) {
+            handleRoomLifecycle(api: api, params: params, callback: callback)
+            return
+        }
         engine.call(api: api, param: params) { code, message, data in
             callback.onResult(Int(code), message ?? "", data ?? "")
+        }
+    }
+
+    // MARK: - Device API 分发
+
+    /// 屏幕分享等设备相关 API：iOS 通过 `BroadcastLauncher` 弹出系统
+    /// Broadcast Picker，停止屏幕分享则直接调 `engine.stopScreenCapture`。
+    private func dispatchDeviceApi(api: String, json: [String: Any]?, callback cb: EngineBridgeResultCallback) {
+        switch api {
+        case Self.START_SCREEN_SHARE:
+            guard !Self.screenShareAppGroup.isEmpty else {
+                cb.onResult(12061, "TUIRoomAppGroup is not configured in Info.plist", "")
+                return
+            }
+            BroadcastLauncher.launch()
+            cb.onResult(0, "", "")
+        case Self.STOP_SCREEN_SHARE:
+            engine.stopScreenCapture()
+            cb.onResult(0, "", "")
+        default:
+            cb.onResult(-1, "unsupported device api: \(api)", "")
+        }
+    }
+
+    // MARK: - Room Lifecycle API 分发
+
+    /// 房间生命周期 API（createAndJoinRoom / joinRoom / leaveRoom / endRoom）：
+    /// 进房后注册 `UIScreenCapturedDidChange` 通知，通知触发时调
+    /// `TUIRoomEngine.startScreenCapture(appGroup:)` 恢复/开启屏幕分享；
+    /// 退房时移除通知，避免在房外错误触发。
+    private func handleRoomLifecycle(api: String, params: String, callback cb: EngineBridgeResultCallback) {
+        let isEnterRoom = (api == Self.CREATE_AND_JOIN_ROOM || api == Self.JOIN_ROOM)
+        engine.call(api: api, param: params) { [weak self] code, message, data in
+            guard let self = self else {
+                cb.onResult(Int(code), message ?? "", data ?? "")
+                return
+            }
+            if Int(code) == 0 {
+                if isEnterRoom {
+                    self.registerScreenCapturedNotification()
+                } else {
+                    self.removeScreenCapturedNotification()
+                }
+            }
+            cb.onResult(Int(code), message ?? "", data ?? "")
+        }
+    }
+
+    /// 屏幕分享使用的 App Group：从 App Info.plist 的 `TUIRoomAppGroup` 读取
+    /// （由工程根目录 `Info.plist` 配置，云打包时合并进 App 的 Info.plist），未配置时返回空字符串，调用方需判空。与
+    /// `nativeResources/ios/ios-extension.json` 中 extension 的 application-groups 保持一致。
+    private static var screenShareAppGroup: String {
+        guard let value = Bundle.main.object(forInfoDictionaryKey: "TUIRoomAppGroup") as? String else {
+            return ""
+        }
+        return value
+    }
+
+    /// 注册 `UIScreenCapturedDidChange` 通知：当系统屏幕捕获状态变化时，
+    /// 调用 `TUIRoomEngine.startScreenCapture(appGroup:)` 恢复/开启屏幕分享推流。
+    /// （对齐 conference 模块的可用实现：进房内引擎实例才是真正推流的对象。）
+    private func registerScreenCapturedNotification() {
+        removeScreenCapturedNotification()
+        screenCapturedObserver = NotificationCenter.default.addObserver(
+            forName: UIScreen.capturedDidChangeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            let isCaptured = UIScreen.main.isCaptured
+            guard let self = self, isCaptured, !Self.screenShareAppGroup.isEmpty else { return }
+            self.engine.startScreenCapture(appGroup: Self.screenShareAppGroup)
+        }
+    }
+
+    /// 移除 `UIScreenCapturedDidChange` 通知。
+    private func removeScreenCapturedNotification() {
+        if let observer = screenCapturedObserver {
+            NotificationCenter.default.removeObserver(observer)
+            screenCapturedObserver = nil
         }
     }
 

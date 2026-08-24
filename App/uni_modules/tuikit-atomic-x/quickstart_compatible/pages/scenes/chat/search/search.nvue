@@ -15,6 +15,8 @@
 
 <script>
 import Search from '@/uni_modules/tuikit-atomic-x/components/Search/Search.nvue'
+import { useMessageListState } from '@/uni_modules/tuikit-atomic-x/state/MessageListState'
+import { MessageLoadDirection } from '@/uni_modules/tuikit-atomic-x/types/message'
 export default {
   components: { Search },
   data() {
@@ -29,11 +31,24 @@ export default {
         uni.$contactInfoData = { friendInfo: data }
         uni.navigateTo({ url: '/pages/scenes/chat/contacts/contactInfo/index?type=friend' })
       } else if (type === 'group') {
+        // 预创建 MessageList store，与导航动画并行
+        useMessageListState({ conversationID: 'group_' + data.groupID })
         uni.navigateTo({ url: '/pages/scenes/chat/chat/index?conversationID=group_' + data.groupID })
       } else if (type === 'conversation') {
         var conversationID = data.conversationID
         if (data.messageCount === 1 && data.messageList && data.messageList.length > 0) {
-          uni.$locateMessage = data.messageList[0]
+          var singleMessage = data.messageList[0]
+          uni.$locateMessage = singleMessage
+          // 带定位消息：首次拉取直接用 cursor + BOTH 命中目标那批，
+          // 否则默认拉最新 20 条大概率不含目标，chat 页落地后还要再发一次定位拉取
+          useMessageListState({
+            conversationID: conversationID,
+            initialLoadOption: {
+              cursor: singleMessage,
+              direction: MessageLoadDirection.BOTH,
+              pageCount: 20
+            }
+          })
           uni.navigateTo({ url: '/pages/scenes/chat/chat/index?conversationID=' + conversationID })
         } else {
           uni.navigateTo({ url: '/pages/scenes/chat/search/searchInConversation?conversationID=' + conversationID + '&keyword=' + encodeURIComponent(this.$refs.searchRef && this.$refs.searchRef.keyword || '') })
@@ -41,6 +56,15 @@ export default {
       } else if (type === 'message') {
         uni.$locateMessage = data
         var cid = data.conversationID || ''
+        // 带定位消息：同上，首次拉取即用 cursor + BOTH
+        useMessageListState({
+          conversationID: cid,
+          initialLoadOption: {
+            cursor: data,
+            direction: MessageLoadDirection.BOTH,
+            pageCount: 20
+          }
+        })
         uni.navigateTo({ url: '/pages/scenes/chat/chat/index?conversationID=' + cid })
       }
     },

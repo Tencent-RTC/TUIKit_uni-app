@@ -1,0 +1,249 @@
+<template>
+  <view class="page" :style="{ minHeight: safeArea.height + 'px' }">
+    <view
+      class="header"
+      :style="{
+        paddingTop: statusBarHeight + 'px',
+        height: (statusBarHeight + 60) + 'px',
+      }"
+    >
+      <view class="back-btn" @tap="handleBack">
+        <image class="back-icon" src="/static/images/back-black.png" mode="aspectFit" />
+      </view>
+      <text class="header-title">加入房间</text>
+    </view>
+
+    <view class="header-gap"></view>
+
+    <view class="card">
+      <view class="form-item">
+        <text class="form-label">房间号</text>
+        <input class="form-input"
+               v-model="roomID"
+               placeholder="请输入房间号"
+               placeholder-style="color: #C2C7D0; font-size: 32rpx; font-weight: 500;" />
+      </view>
+      <view class="form-divider"></view>
+      <view class="form-item">
+        <text class="form-label">您的姓名</text>
+        <text class="form-value" :numberOfLines="1">
+          {{ loginUserInfo?.nickname || loginUserInfo?.userID || '' }}
+        </text>
+      </view>
+    </view>
+
+    <view class="card-gap"></view>
+
+    <view class="card">
+      <view class="switch-item">
+        <text class="form-label">开启麦克风</text>
+        <ToggleSwitch :checked="isAudioEnabled" activeColor="#0468FC" @change="onAudioChange" />
+      </view>
+      <view class="form-divider"></view>
+      <view class="switch-item">
+        <text class="form-label">开启扬声器</text>
+        <ToggleSwitch :checked="isSpeakerEnabled" activeColor="#0468FC" @change="onSpeakerChange" />
+      </view>
+      <view class="form-divider"></view>
+      <view class="switch-item">
+        <text class="form-label">开启摄像头</text>
+        <ToggleSwitch :checked="isVideoEnabled" activeColor="#0468FC" @change="onVideoChange" />
+      </view>
+    </view>
+
+    <view class="footer">
+      <view class="submit-btn" @tap="handleJoinRoom">
+        <text class="submit-btn-text">加入房间</text>
+      </view>
+    </view>
+  </view>
+</template>
+
+<script setup>
+  import { ref, onMounted } from 'vue';
+  import { useLoginState } from '@/uni_modules/tuikit-atomic-x/state';
+  import { ToggleSwitch } from '@/uni_modules/tuikit-atomic-x/components_compatible';
+
+  const { loginUserInfo } = useLoginState();
+
+  const roomID = ref('');
+  const isAudioEnabled = ref(true);
+  const isSpeakerEnabled = ref(true);
+  const isVideoEnabled = ref(true);
+
+  const safeArea = ref({
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    width: 375,
+    height: 750,
+  });
+  const statusBarHeight = ref(0);
+
+  onMounted(() => {
+    uni.getSystemInfo({
+      success: (res) => {
+        safeArea.value = res.safeArea;
+        statusBarHeight.value = res.statusBarHeight || 0;
+      }
+    });
+  });
+
+  const onAudioChange = (e) => {
+    isAudioEnabled.value = e.detail.value;
+  }
+
+  const onSpeakerChange = (e) => {
+    isSpeakerEnabled.value = e.detail.value;
+  }
+
+  const onVideoChange = (e) => {
+    isVideoEnabled.value = e.detail.value;
+  }
+
+  const handleBack = () => {
+    uni.navigateBack();
+  }
+
+  const handleJoinRoom = () => {
+    const trimmedID = (roomID.value || '').trim();
+    if (trimmedID.length === 0) {
+      uni.showToast({
+        title: '输入不能为空',
+        icon: 'none'
+      });
+      return;
+    }
+    uni.hideKeyboard();
+    const query = [
+      'mode=join',
+      `roomID=${encodeURIComponent(trimmedID)}`,
+      `autoEnableCamera=${isVideoEnabled.value ? 1 : 0}`,
+      `autoEnableMicrophone=${isAudioEnabled.value ? 1 : 0}`,
+      `autoEnableSpeaker=${isSpeakerEnabled.value ? 1 : 0}`,
+    ].join('&');
+    uni.navigateTo({
+      url: `/pages/scenes/room/main/index?${query}`,
+    });
+  }
+</script>
+
+<style>
+  .page {
+    flex: 1;
+    background-color: #F2F5FC;
+    flex-direction: column;
+  }
+
+  .header {
+    flex-direction: row;
+    align-items: center;
+    padding-left: 24rpx;
+    padding-right: 24rpx;
+    background-color: #FFFFFF;
+  }
+
+  .back-btn {
+    width: 44rpx;
+    height: 44rpx;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .back-icon {
+    width: 32rpx;
+    height: 32rpx;
+  }
+
+  .header-title {
+    font-size: 32rpx;
+    font-weight: 500;
+    color: #1F2229;
+    margin-left: 24rpx;
+  }
+
+  .header-gap {
+    height: 20rpx;
+  }
+
+  .card {
+    margin-left: 24rpx;
+    margin-right: 24rpx;
+    background-color: #FFFFFF;
+    border-radius: 16rpx;
+    flex-direction: column;
+  }
+
+  .card-gap {
+    height: 40rpx;
+  }
+
+  .form-item {
+    flex-direction: row;
+    align-items: center;
+    padding-top: 28rpx;
+    padding-bottom: 28rpx;
+    padding-left: 32rpx;
+    padding-right: 32rpx;
+  }
+
+  .switch-item {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    padding-top: 20rpx;
+    padding-bottom: 20rpx;
+    padding-left: 32rpx;
+    padding-right: 32rpx;
+  }
+
+  .form-label {
+    width: 176rpx;
+    font-size: 32rpx;
+    color: #4B5468;
+  }
+
+  .form-input {
+    flex: 1;
+    font-size: 32rpx;
+    font-weight: 500;
+    color: #1F2229;
+    padding: 0;
+  }
+
+  .form-value {
+    flex: 1;
+    font-size: 32rpx;
+    font-weight: 500;
+    color: #1F2229;
+  }
+
+  .form-divider {
+    height: 1rpx;
+    margin-left: 40rpx;
+    margin-right: 40rpx;
+    background-color: #F2F5FC;
+  }
+
+  .footer {
+    margin-top: 96rpx;
+    flex-direction: row;
+    justify-content: center;
+  }
+
+  .submit-btn {
+    width: 400rpx;
+    height: 104rpx;
+    border-radius: 20rpx;
+    background-color: #0468FC;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .submit-btn-text {
+    color: #FFFFFF;
+    font-size: 32rpx;
+    font-weight: 600;
+  }
+</style>

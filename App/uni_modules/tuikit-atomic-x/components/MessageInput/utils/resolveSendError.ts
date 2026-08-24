@@ -58,6 +58,8 @@ function resolveSendError(error: SendError): string {
       return '消息内容过长，请减少内容后重试';
     case 90995:
       return '消息过长，请减少内容';
+    case 80002:
+      return '消息内容过长，请减少内容后重试';
     
     // 服务端内部错误
     case 90992:

@@ -1,0 +1,34 @@
+<template>
+  <view class="switch-camera-btn" @tap="handleTap">
+    <image class="switch-camera-icon" src="/static/images/room/room_switch_camera.png" mode="aspectFit" />
+  </view>
+</template>
+
+<script setup lang="ts">
+  import { useDeviceState } from '@/uni_modules/tuikit-atomic-x/state';
+  import { showErrorToast } from '../../utils/errorHandler';
+
+  const { switchCamera, isFrontCamera } = useDeviceState();
+
+  async function handleTap() {
+    try {
+      await switchCamera({ isFront: !isFrontCamera.value });
+    } catch (e) {
+      showErrorToast(e);
+    }
+  }
+</script>
+
+<style>
+  .switch-camera-btn {
+    width: 48rpx;
+    height: 48rpx;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .switch-camera-icon {
+    width: 40rpx;
+    height: 40rpx;
+  }
+</style>

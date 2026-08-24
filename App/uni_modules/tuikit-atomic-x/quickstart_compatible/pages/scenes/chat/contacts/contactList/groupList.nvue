@@ -8,11 +8,16 @@
 <script>
 import CustomNavbar from '@/uni_modules/tuikit-atomic-x/components/CustomNavbar/CustomNavbar.nvue'
 import { GroupList } from '@/uni_modules/tuikit-atomic-x/components/Contact'
+import { useMessageListState } from '@/uni_modules/tuikit-atomic-x/state/MessageListState'
 export default {
   components: { CustomNavbar, GroupList },
   methods: {
     handleBack() { uni.navigateBack({ delta: 1 }) },
-    handleGroupClick(group) { uni.navigateTo({ url: '/pages/scenes/chat/chat/index?conversationID=group_' + group.groupID }) },
+    handleGroupClick(group) {
+      // 预创建 MessageList store，与导航动画并行
+      useMessageListState({ conversationID: 'group_' + group.groupID })
+      uni.navigateTo({ url: '/pages/scenes/chat/chat/index?conversationID=group_' + group.groupID })
+    },
   },
 }
 </script>

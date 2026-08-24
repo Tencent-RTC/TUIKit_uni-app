@@ -1,0 +1,183 @@
+<template>
+  <view v-if="visible" class="mask">
+    <view class="container">
+      <text class="title">{{ titleText }}</text>
+
+      <view class="input-row">
+        <input
+          class="input"
+          :value="password"
+          :password="true"
+          type="number"
+          :maxlength="6"
+          :placeholder="placeholderText"
+          placeholder-style="color:#C2C7D0;font-size:32rpx;"
+          @input="onInput"
+        />
+        <view v-if="password.length > 0" class="clear-btn" @tap="onClear">
+          <image class="clear-icon" src="/static/images/room/room_password_close.png" mode="aspectFit" />
+        </view>
+      </view>
+
+      <view class="divider-h"></view>
+
+      <view class="button-row">
+        <view class="btn btn-cancel" @tap="onCancel">
+          <text class="btn-text-cancel">{{ cancelText }}</text>
+        </view>
+        <view class="divider-v"></view>
+        <view class="btn btn-join" @tap="onJoin">
+          <text class="btn-text-join">{{ joinText }}</text>
+        </view>
+      </view>
+    </view>
+  </view>
+</template>
+
+<script setup lang="ts">
+  import { ref, watch } from 'vue';
+
+  const titleText = '入会密码';
+  const placeholderText = '请输入入会密码';
+  const cancelText = '取消';
+  const joinText = '加入房间';
+
+  const props = defineProps({
+    visible: { type: Boolean, default: false },
+  });
+
+  const emit = defineEmits<{
+    (e: 'cancel'): void
+    (e: 'join', password: string): void
+  }>();
+
+  const password = ref<string>('');
+
+  watch(
+    () => props.visible,
+    (v) => {
+      if (v) password.value = '';
+    },
+  );
+
+  function onInput(e: any) {
+    const v = (e?.detail?.value ?? e?.target?.value ?? '') as string;
+    password.value = v.length > 6 ? v.slice(0, 6) : v;
+  }
+
+  function onClear() {
+    password.value = '';
+  }
+
+  function onCancel() {
+    uni.hideKeyboard();
+    emit('cancel');
+  }
+
+  function onJoin() {
+    uni.hideKeyboard();
+    emit('join', password.value);
+  }
+</script>
+
+<style>
+  .mask {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.6);
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .container {
+    width: 600rpx;
+    background-color: #FFFFFF;
+    border-radius: 16rpx;
+    flex-direction: column;
+  }
+
+  .title {
+    margin-top: 50rpx;
+    text-align: center;
+    font-size: 32rpx;
+    color: #1F2229;
+    font-weight: 600;
+    width: 600rpx;
+  }
+
+  .input-row {
+    margin-top: 40rpx;
+    margin-left: 20rpx;
+    margin-right: 20rpx;
+    height: 80rpx;
+    border-radius: 12rpx;
+    border-width: 1rpx;
+    border-style: solid;
+    border-color: #0468FC;
+    background-color: #FFFFFF;
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .input {
+    flex: 1;
+    margin-left: 20rpx;
+    height: 80rpx;
+    font-size: 32rpx;
+    color: #1F2229;
+  }
+
+  .clear-btn {
+    width: 64rpx;
+    height: 64rpx;
+    margin-right: 8rpx;
+    flex-direction: row;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .clear-icon {
+    width: 32rpx;
+    height: 32rpx;
+  }
+
+  .divider-h {
+    margin-top: 40rpx;
+    height: 1rpx;
+    background-color: #EBEBEE;
+  }
+
+  .button-row {
+    height: 108rpx;
+    flex-direction: row;
+    align-items: stretch;
+  }
+
+  .btn {
+    flex: 1;
+    flex-direction: row;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .btn-text-cancel {
+    font-size: 32rpx;
+    color: #8F8F94;
+    font-weight: 400;
+  }
+
+  .btn-text-join {
+    font-size: 32rpx;
+    color: #0468FC;
+    font-weight: 400;
+  }
+
+  .divider-v {
+    width: 1rpx;
+    background-color: #EBEBEE;
+  }
+</style>

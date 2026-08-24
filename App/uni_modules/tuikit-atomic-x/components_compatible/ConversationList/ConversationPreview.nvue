@@ -59,7 +59,7 @@
 <script>
 import AvatarComponent from '../Avatar'
 import { ConversationType, ConversationReceiveOption, GroupAtType } from '../../types/conversation'
-import { MessageType } from '../../types/message'
+import { MessageType, MessageStatus } from '../../types/message'
 import { 
   getMessageAbstract, 
   parseTextToSegments, 
@@ -126,7 +126,7 @@ export default {
       if (!lastMessage) {
         return [{ type: 'text', content: '暂无消息' }]
       }
-      if (lastMessage.messageType === MessageType.TEXT && lastMessage.messagePayload && lastMessage.messagePayload.text) {
+      if (lastMessage.status === MessageStatus.SEND_SUCCESS && lastMessage.messageType === MessageType.TEXT && lastMessage.messagePayload && lastMessage.messagePayload.text) {
         let text = lastMessage.messagePayload.text.replace(/[\r\n]+/g, ' ')
         const senderName = getSenderName(lastMessage)
         if (senderName) {

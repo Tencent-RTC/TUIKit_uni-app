@@ -1,6 +1,6 @@
 <template>
   <view class="player-container">
-    <video class="video-player" :style="{ width: screenWidth + 'px', height: screenHeight + 'px' }" :src="videoUrl" :autoplay="true" @error="handleError" @ended="handleEnded" />
+    <video class="video-player" :style="{ width: screenWidth + 'px', height: screenHeight + 'px' }" :src="videoUrl" :autoplay="true" :show-fullscreen-btn="false" @error="handleError" @ended="handleEnded" />
     <view class="close-btn" @tap="handleClose"><text class="close-btn-text">×</text></view>
     <view v-if="loadError" class="error-overlay">
       <text class="error-text">视频加载失败</text>
@@ -13,7 +13,7 @@
 export default {
   data() {
     var si = uni.getSystemInfoSync()
-    return { videoUrl: '', loadError: false, screenWidth: si.screenWidth || 375, screenHeight: si.screenHeight || 812 }
+    return { videoUrl: '', loadError: false, screenWidth: si.screenWidth || 375, screenHeight: (si.screenHeight || 812) - 40 }
   },
   onLoad(options) {
     if (options && options.url) this.videoUrl = decodeURIComponent(options.url)

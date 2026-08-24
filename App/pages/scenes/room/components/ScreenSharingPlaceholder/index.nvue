@@ -1,0 +1,108 @@
+<template>
+  <view class="screen-sharing-placeholder">
+    <view class="screen-sharing-content">
+      <image
+        class="screen-sharing-icon"
+        src="/static/images/room/room_screen_sharing.png"
+        mode="aspectFit"
+      />
+      <text class="screen-sharing-text">你正在共享屏幕…</text>
+      <view class="screen-sharing-stop-btn" @tap="onStopScreenShare">
+        <text class="screen-sharing-stop-btn-text">停止共享</text>
+      </view>
+    </view>
+
+    <RoomDialog
+      :modelValue="dialogVisible"
+      title="结束共享"
+      confirmButton="结束共享"
+      cancelButton="取消"
+      :modal="true"
+      @confirm="onConfirmStop"
+      @cancel="onCancelStop"
+      @update:modelValue="(val: boolean) => { if (!val) dialogVisible = false; }"
+    >
+      <text>{{ STOP_CONFIRM_MESSAGE }}</text>
+    </RoomDialog>
+  </view>
+</template>
+
+<script setup lang="ts">
+  import { computed, ref } from 'vue';
+  import { useDeviceState, useRoomParticipantState, DeviceStatus } from '@/uni_modules/tuikit-atomic-x/state';
+  import RoomDialog from '../RoomDialog/index.nvue';
+
+  const { localParticipant } = useRoomParticipantState();
+  const { stopScreenShare } = useDeviceState();
+
+  const isLocalScreenSharing = computed(() => {
+    return localParticipant.value?.screenShareStatus === DeviceStatus.ON;
+  });
+
+  const dialogVisible = ref<boolean>(false);
+
+  const STOP_CONFIRM_MESSAGE =
+    '结束共享后，其他人将无法继续观看你的屏幕内容，确认要结束共享吗？';
+
+  function onStopScreenShare(): void {
+    dialogVisible.value = true;
+  }
+
+  function onConfirmStop(): void {
+    dialogVisible.value = false;
+    stopScreenShare();
+  }
+
+  function onCancelStop(): void {
+    dialogVisible.value = false;
+  }
+</script>
+
+<style>
+  .screen-sharing-placeholder {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #0F1014;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .screen-sharing-content {
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .screen-sharing-icon {
+    width: 96rpx;
+    height: 96rpx;
+    margin-bottom: 24rpx;
+  }
+
+  .screen-sharing-text {
+    color: #FFFFFF;
+    font-size: 28rpx;
+    line-height: 40rpx;
+    margin-bottom: 64rpx;
+  }
+
+  .screen-sharing-stop-btn {
+    width: 200rpx;
+    height: 72rpx;
+    border-radius: 36rpx;
+    background-color: #FF5733;
+    flex-direction: row;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .screen-sharing-stop-btn-text {
+    color: #FFFFFF;
+    font-size: 28rpx;
+    line-height: 40rpx;
+  }
+</style>

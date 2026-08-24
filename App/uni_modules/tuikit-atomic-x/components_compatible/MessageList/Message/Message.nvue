@@ -76,7 +76,9 @@ export default {
     messageActionList: { type: Array, default: function() { return [] } },
     highlight: { type: Boolean, default: false },
     customCenterChecker: { type: Function, default: null },
-    customMessageRender: { type: Function, default: null }
+    customMessageRender: { type: Function, default: null },
+    // >0 表示键盘/EMOJI/TOOLS 面板正展开（MessageInput.updateSpacer：NONE/VOICE 时为 0）
+    inputPanelHeight: { type: Number, default: 0 }
   },
   data: function() {
     var callStateInstance = useCallState();
@@ -300,26 +302,30 @@ export default {
       if (this.isCenterMessage) return
       this.longPressPosition = { x: this.lastTouchPosition.x, y: this.lastTouchPosition.y }
       var self = this
-      this.getMessagePosition(this.message.msgID).then(function(messagePosition) {
-        var systemInfo = uni.getSystemInfoSync()
-        self.longPressPosition = {
-          x: 132,
-          y: messagePosition.top / systemInfo.windowWidth * 750,
-          messageX: messagePosition.left,
-          messageWidth: messagePosition.width,
-          messageHeight: messagePosition.height / systemInfo.windowWidth * 750,
-          isSentBySelf: self.message.isSentBySelf,
-        }
-      }).catch(function(error) {
-        console.warn('获取位置失败:', error)
-      }).then(function() {
-        self.showActions = true
-        self.$nextTick(function() {
-          if (self.$refs.messageActionsRef && typeof self.$refs.messageActionsRef.setTriggerPosition === 'function') {
-            self.$refs.messageActionsRef.setTriggerPosition(self.longPressPosition)
+      var settleDelay = this.inputPanelHeight > 0 ? 450 : 0
+      if (settleDelay > 0) this.$emit('onMessageListTap')
+      setTimeout(function() {
+        self.getMessagePosition(self.message.msgID).then(function(messagePosition) {
+          var systemInfo = uni.getSystemInfoSync()
+          self.longPressPosition = {
+            x: 132,
+            y: messagePosition.top / systemInfo.windowWidth * 750,
+            messageX: messagePosition.left,
+            messageWidth: messagePosition.width,
+            messageHeight: messagePosition.height / systemInfo.windowWidth * 750,
+            isSentBySelf: self.message.isSentBySelf,
           }
+        }).catch(function(error) {
+          console.warn('获取位置失败:', error)
+        }).then(function() {
+          self.showActions = true
+          self.$nextTick(function() {
+            if (self.$refs.messageActionsRef && typeof self.$refs.messageActionsRef.setTriggerPosition === 'function') {
+              self.$refs.messageActionsRef.setTriggerPosition(self.longPressPosition)
+            }
+          })
         })
-      })
+      }, settleDelay)
     },
     handleTap: function() {
       if (this.isLongPressing) {

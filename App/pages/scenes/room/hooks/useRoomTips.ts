@@ -5,7 +5,13 @@ import {
   useDeviceState,
   RecordingStopReason,
 } from '@/uni_modules/tuikit-atomic-x/state';
-import type { DeviceRequestInfo, RoomUser } from '@/uni_modules/tuikit-atomic-x/types';
+import type {
+  DeviceRequestInfo,
+  RoomUser,
+} from '@/uni_modules/tuikit-atomic-x/types';
+import {
+  KickedOutOfRoomReason,
+} from '@/uni_modules/tuikit-atomic-x/types';
 import { showToast } from '@/uni_modules/tuikit-atomic-x/utils/toast';
 import { showErrorToast } from '../utils/errorHandler';
 
@@ -91,10 +97,44 @@ export function useRoomTips(options?: UseRoomTipsOptions) {
     });
   }
 
-  function onKickedFromRoom() {
+  function resolveKickedTip(reason: KickedOutOfRoomReason): { title: string } {
+    switch (reason) {
+      case KickedOutOfRoomReason.KickedByAdmin:
+        return {
+          title: '您已被主持人移出房间',
+        };
+      case KickedOutOfRoomReason.ReplacedByAnotherDevice:
+        return {
+          title: '您的账号已在其他设备登录',
+        };
+      case KickedOutOfRoomReason.KickedByServer:
+        return {
+          title: '您已被服务器移出房间',
+        };
+      case KickedOutOfRoomReason.ConnectionTimeout:
+        return {
+          title: '网络连接超时，正在退出房间',
+        };
+      case KickedOutOfRoomReason.InvalidStatusOnReconnect:
+        return {
+          title: '房间已解散或您在离线期间已被移出',
+        };
+      case KickedOutOfRoomReason.RoomLimitExceeded:
+        return {
+          title: '房间人数已达上限，无法加入',
+        };
+      default:
+        return {
+          title: '您已被移出房间',
+        };
+    }
+  }
+
+  function onKickedFromRoom(data: { reason: KickedOutOfRoomReason; message: string }) {
+    const { title } = resolveKickedTip(data.reason);
     showDialog({
       key: DIALOG_KEY_KICKED_FROM_ROOM,
-      title: '您已被主持人移出房间',
+      title: title || data.message,
       onConfirm: () => { options?.onExitConfirmed?.(); },
     });
   }

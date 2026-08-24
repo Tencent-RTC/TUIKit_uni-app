@@ -48,6 +48,7 @@
 import { ref, computed, nextTick } from 'vue'
 import ConversationList from '@/uni_modules/tuikit-atomic-x/components/ConversationList/ConversationList.nvue'
 import CustomNavbar from '@/uni_modules/tuikit-atomic-x/components/CustomNavbar/CustomNavbar.nvue'
+import { useMessageListState } from '@/uni_modules/tuikit-atomic-x/state/MessageListState'
 
 // 菜单显示状态
 const showMenu = ref(false)
@@ -144,6 +145,10 @@ const handleSearchTap = () => {
  */
 const handleConversationTap = (conversation: any) => {
 	console.log('会话点击:', conversation)
+	// 预创建 MessageList store（createStore + bindEvent + loadMessages），
+	// 让这段耗时与页面导航动画并行，而不是等 chat 页 onLoad 后才开始。
+	// 幂等：getInstance 按 conversationID 缓存，chat 页再取到的是同一实例。
+	useMessageListState({ conversationID: conversation.conversationID })
 	// 跳转到聊天页面
 	uni.navigateTo({
 		url: `/pages/scenes/chat/chat/index?conversationID=${conversation.conversationID}`

@@ -1,0 +1,219 @@
+<template>
+  <view
+    v-if="visible"
+    :class="containerClass"
+    @click="handleClick"
+  >
+    <view class="toast__content">
+      <!-- 图标(自定义图标优先级高于 type 内置图标) -->
+      <image
+        v-if="hasIcon"
+        class="toast__icon"
+        :src="finalIcon"
+      />
+      <!-- 文本 -->
+      <text
+        v-if="hasMessage"
+        class="toast__text"
+        :lines="textLines"
+      >{{ message }}</text>
+    </view>
+  </view>
+</template>
+
+<script setup lang="ts">
+import { computed, onBeforeUnmount, watch } from 'vue'
+
+/** Toast 类型 */
+export type ToastType = 'none' | 'success' | 'error' | 'loading'
+
+/** 垂直位置 */
+export type ToastVerticalAlign = 'top' | 'center' | 'bottom'
+
+/** Toast 组件 props */
+interface ToastProps {
+  /** 是否显示,支持 v-model:visible */
+  visible?: boolean
+  /** 提示消息文本 */
+  message: string
+  /** Toast 类型,默认 none */
+  type?: ToastType
+  /** 自定义图标路径(本地绝对路径或网络 URL),优先级高于 type 内置图标 */
+  icon?: string
+  /** 自动关闭时长(ms),0 表示不自动关闭,默认 2000 */
+  duration?: number
+  /** 垂直位置: top | center | bottom,默认 center */
+  verticalAlign?: ToastVerticalAlign
+  /** 是否显示遮罩,默认 false */
+  mask?: boolean
+  /** 文本最多显示行数,默认 2,0 表示不限制 */
+  textLines?: number
+}
+
+/** Toast 组件 emits */
+interface ToastEmits {
+  (e: 'update:visible', value: boolean): void
+  (e: 'close'): void
+}
+
+const ICON_BASE = '/uni_modules/tuikit-atomic-x/static/icon/'
+
+// 内置图标,直接复用项目 static/icon 下的资源
+const ICONS: Record<string, string> = {
+  success: ICON_BASE + 'success-icon.png',
+  error: ICON_BASE + 'error-icon.png',
+  loading: ICON_BASE + 'loading.png'
+}
+
+const props = withDefaults(defineProps<ToastProps>(), {
+  visible: false,
+  type: 'none',
+  icon: '',
+  duration: 2000,
+  verticalAlign: 'center',
+  mask: false,
+  textLines: 2
+})
+
+const emit = defineEmits<ToastEmits>()
+
+// 解析最终显示的图标:自定义 icon > type 内置 > 无
+const finalIcon = computed<string>((): string => {
+  if (props.icon.length > 0) {
+    return props.icon
+  }
+  if (props.type !== 'none') {
+    const builtin: string = ICONS[props.type] || ''
+    return builtin
+  }
+  return ''
+})
+
+const hasIcon = computed<boolean>((): boolean => finalIcon.value.length > 0)
+
+const hasMessage = computed<boolean>((): boolean => {
+  return typeof props.message === 'string' && props.message.length > 0
+})
+
+const containerClass = computed<string[]>((): string[] => {
+  const cls: string[] = ['toast', `toast--${props.verticalAlign}`]
+  if (props.mask) {
+    cls.push('toast--with-mask')
+  }
+  return cls
+})
+
+const close = (): void => {
+  emit('update:visible', false)
+  emit('close')
+}
+
+// 点击遮罩关闭(仅当显示遮罩时响应)
+const handleClick = (): void => {
+  if (props.mask) {
+    close()
+  }
+}
+
+// 自动关闭定时器
+let timer: number | null = null
+
+const clearTimer = (): void => {
+  const t: number | null = timer
+  if (t != null) {
+    clearTimeout(t)
+    timer = null
+  }
+}
+
+const startTimer = (): void => {
+  clearTimer()
+  if (props.duration > 0) {
+    timer = setTimeout((): void => {
+      close()
+    }, props.duration) as unknown as number
+  }
+}
+
+// 监听 visible 变化:开启时启动定时器,关闭时清除
+watch((): boolean => props.visible, (newVal: boolean): void => {
+  if (newVal) {
+    startTimer()
+  } else {
+    clearTimer()
+  }
+})
+
+onBeforeUnmount((): void => {
+  clearTimer()
+})
+
+// 暴露 close 方法,供 ref 调用
+defineExpose({
+  close
+})
+</script>
+
+<style>
+/* ========== 容器:全屏 fixed 定位 ========== */
+.toast {
+  position: fixed;
+  left: 0;
+  right: 0;
+  z-index: 9999;
+  flex-direction: column;
+  align-items: center;
+  /* 默认顶部对齐,各位置变体覆盖 */
+  justify-content: flex-start;
+}
+
+/* ========== 三种垂直位置 ========== */
+.toast--top {
+  top: 160rpx;
+  bottom: auto;
+}
+
+.toast--center {
+  top: 0;
+  bottom: 0;
+  justify-content: center;
+}
+
+.toast--bottom {
+  bottom: 240rpx;
+  top: auto;
+}
+
+/* ========== 遮罩变体(覆盖全屏) ========== */
+.toast--with-mask {
+  top: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  justify-content: center;
+}
+
+/* ========== 内容卡片 ========== */
+.toast__content {
+  max-width: 600rpx;
+  padding: 24rpx 36rpx;
+  background-color: rgba(0, 0, 0, 0.78);
+  border-radius: 16rpx;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ========== 图标 ========== */
+.toast__icon {
+  width: 48rpx;
+  height: 48rpx;
+  margin-bottom: 16rpx;
+}
+
+/* ========== 文本 ========== */
+.toast__text {
+  font-size: 14px;
+  color: #FFFFFF;
+  line-height: 40rpx;
+  text-align: center;
+}
+</style>

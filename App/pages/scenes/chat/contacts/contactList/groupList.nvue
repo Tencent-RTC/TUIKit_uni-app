@@ -13,6 +13,7 @@
 import CustomNavbar from '@/uni_modules/tuikit-atomic-x/components/CustomNavbar/CustomNavbar.nvue'
 import { GroupList } from '@/uni_modules/tuikit-atomic-x/components/Contact'
 import type { GroupInfo } from '@/uni_modules/tuikit-atomic-x/types/group'
+import { useMessageListState } from '@/uni_modules/tuikit-atomic-x/state/MessageListState'
 
 const handleBack = () => {
 	uni.navigateBack({ delta: 1 })
@@ -20,6 +21,8 @@ const handleBack = () => {
 
 const handleGroupClick = (group: GroupInfo) => {
 	console.log('点击群聊:', group)
+	// 预创建 MessageList store，与导航动画并行
+	useMessageListState({ conversationID: `group_${group.groupID}` })
 	uni.navigateTo({
 		url: `/pages/scenes/chat/chat/index?conversationID=group_${group.groupID}`,
 	})

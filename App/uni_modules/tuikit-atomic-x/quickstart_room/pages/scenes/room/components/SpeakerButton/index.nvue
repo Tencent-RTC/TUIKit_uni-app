@@ -1,0 +1,45 @@
+<template>
+  <view class="speaker-btn" @tap="handleTap">
+    <image
+      class="speaker-icon"
+      :src="speakerIconSrc"
+      mode="aspectFit"
+    />
+  </view>
+</template>
+
+<script setup lang="ts">
+  import { computed } from 'vue';
+  import { useDeviceState, AudioOutput } from '@/uni_modules/tuikit-atomic-x/state';
+
+  const { setAudioRoute, currentAudioRoute } = useDeviceState();
+  const audioRoute = currentAudioRoute;
+
+  const speakerIconSrc = computed(() =>
+    audioRoute.value === AudioOutput.SPEAKERPHONE
+      ? '/static/images/room/room_speakerphone.png'
+      : '/static/images/room/room_earpiece.png',
+  );
+
+  function handleTap() {
+    setAudioRoute({
+      audioRoute: currentAudioRoute.value === AudioOutput.SPEAKERPHONE
+        ? AudioOutput.EARPIECE
+        : AudioOutput.SPEAKERPHONE,
+    });
+  }
+</script>
+
+<style>
+  .speaker-btn {
+    width: 48rpx;
+    height: 48rpx;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .speaker-icon {
+    width: 40rpx;
+    height: 40rpx;
+  }
+</style>

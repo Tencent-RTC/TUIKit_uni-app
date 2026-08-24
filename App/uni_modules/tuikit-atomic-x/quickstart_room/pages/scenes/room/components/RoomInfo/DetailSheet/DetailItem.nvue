@@ -1,0 +1,46 @@
+<template>
+  <view class="info-row">
+    <text class="info-prefix">{{ prefixText }}</text>
+    <view class="info-gap"></view>
+    <text class="info-text" :numberOfLines="1">{{ infoText }}</text>
+    <view class="info-slot" v-if="$slots.default">
+      <slot />
+    </view>
+  </view>
+</template>
+
+<script setup lang="ts">
+  defineProps({
+    prefixText: { type: String, required: true },
+    infoText: { type: String, required: true },
+  });
+</script>
+
+<style>
+  .info-row {
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .info-prefix {
+    width: 146rpx;
+    font-size: 28rpx;
+    color: #7C85A6;
+  }
+
+  .info-gap {
+    width: 40rpx;
+  }
+
+  .info-text {
+    flex: 1;
+    font-size: 28rpx;
+    color: #D5E0F2;
+    lines: 1;
+    text-overflow: ellipsis;
+  }
+
+  .info-slot {
+    margin-left: 8rpx;
+  }
+</style>

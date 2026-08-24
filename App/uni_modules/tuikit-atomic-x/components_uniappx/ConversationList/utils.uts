@@ -271,10 +271,14 @@ function isGroupMessage(message: MessageInfo): boolean {
  * @returns 摘要文本
  */
 export function getMessageAbstract(message: MessageInfo): string {
-  // 已撤回/已删除判断
-  if (message.status == MessageStatus.REVOKED) {
-    return '[消息已撤回]';
+  if (message.status === MessageStatus.REVOKED) {
+    const senderName = getSenderName(message)
+    if (senderName.length > 0) {
+      return `${senderName}: 撤回了一条消息`
+    }
+    return '撤回了一条消息'
   }
+  
   if (message.status == MessageStatus.DELETED) {
     return '[消息已删除]';
   }

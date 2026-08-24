@@ -83,6 +83,7 @@
           placeholder-class="message-input__placeholder"
           :selection-start="cursorPosition"
           :selection-end="cursorPosition"
+          :maxlength="-1"
           :fixed="true"
           @input="handleInput"
           @blur="handleBlur"
@@ -378,7 +379,17 @@ const lastInputCursor = ref(0);
 const mentionDeleteCooldownUntil = ref(0);
 
 // 高度定义
-let inputToolbarHeightPx: number = 0;
+// 首次测量前的兜底高度（单行工具栏）。iOS 上首帧测量会拿到偏大的中间值，
+// 靠 onBeforeMount 里延迟测量规避，这里只兜住"测量失败"的情况。
+const TOOLBAR_FALLBACK_HEIGHT_PX = 43;
+
+/** 归一化 boundingClientRect 的 height：无效值回退兜底 */
+const normalizeToolbarHeight = (raw: number | undefined | null): number => {
+  const h = Math.round(raw || 0);
+  return h > 0 ? h : TOOLBAR_FALLBACK_HEIGHT_PX;
+};
+
+let inputToolbarHeightPx: number = TOOLBAR_FALLBACK_HEIGHT_PX;
 let lastInputPopupHeightPx = ref(0);
 const currentKeyboardHeightPx: Ref<number> = ref(0); // H_kb: 实时键盘高度 (px)
 const cachedKeyboardHeight: Ref<number> = ref(-1); // 缓存的键盘高度 (px)，兜底值
@@ -519,15 +530,17 @@ onBeforeMount(() => {
   const systemInfo = uni.getSystemInfoSync();
   safeAreaBottomRpx.value = Math.max(pxToRpx(systemInfo.safeAreaInsets?.bottom || 0), 16);
 
+  // iOS 首帧测量常拿到偏大的中间值（54 vs 稳态 43），布局稳定后才是真实高度，
+  // 因此延迟一次测量再 emit；期间用初值 43 撑住，避免高度抖动闪屏。
+  // Android 无此抖动，走立即测量 —— 否则 MessageList 会先按初值滚到底，
+  // 待延迟 emit 改变 paddingBottom 后最后一条消息被顶下去，需手动滑动才能看到。
+  const isIOS: boolean = systemInfo.platform === 'ios';
   nextTick(() => {
-    const _query = uni.createSelectorQuery().in(vueInstance.proxy);
-    _query
-    .select("#message-input-toolbar")
-    .boundingClientRect((data) => {
-      inputToolbarHeightPx = Math.round(data?.height || 45);
-      updateSpacer();
-    })
-    .exec();
+    if (isIOS) {
+      setTimeout(() => measureToolbar(), 900);
+    } else {
+      measureToolbar();
+    }
   });
 })
 
@@ -860,6 +873,18 @@ const updateSpacer = (): void => {
   });
 };
 
+/** 测量工具栏高度并同步 spacer */
+const measureToolbar = () => {
+  const query = uni.createSelectorQuery().in(vueInstance.proxy);
+  query
+    .select("#message-input-toolbar")
+    .boundingClientRect((data) => {
+      inputToolbarHeightPx = normalizeToolbarHeight(data?.height);
+      updateSpacer();
+    })
+    .exec();
+}
+
 // ==================== 核心状态机 ====================
 /**
  * 状态切换函数 - 基于5个原子状态的FSM
@@ -1077,16 +1102,8 @@ const switchMode = (targetState: InputState): void => {
 
 // ==================== 事件处理 ====================
 const onLinechange = () => {
-  const query = uni.createSelectorQuery().in(vueInstance.proxy);
-  query
-    .select("#message-input-toolbar")
-    .boundingClientRect((data) => {
-      inputToolbarHeightPx = Math.round(data?.height || 0);
-      updateSpacer();
-    })
-    .exec();
+  measureToolbar();
 }
-
 
 const onTextareaTouchstart = throttle((e) => {
   if (Date.now() - lastOperationTime < OPERATION_TIME_THRESHOLD) {

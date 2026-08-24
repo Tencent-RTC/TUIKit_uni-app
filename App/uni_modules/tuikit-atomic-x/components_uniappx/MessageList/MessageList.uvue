@@ -53,6 +53,7 @@
           />
         </view>
       </view>
+      <view id="list-bottom-anchor" style="height: 1rpx;" />
     </scroll-view>
 
     <view
@@ -519,12 +520,8 @@ const doScrollToMessage = (messageID: string, _animated: boolean | null, _highli
 const scrollToBottom = (_animated: boolean | null): void => {
   const animated: boolean = _animated == null ? true : _animated
   if (messageItems.value.length == 0) return
+  scrollToKey('list-bottom-anchor')
 
-  const lastIndex = messageItems.value.length - 1
-  const lastItem = messageItems.value[lastIndex]
-  if (lastItem != null) {
-    scrollToKey(lastItem.key)
-  }
   showScrollToBottom.value = false
 }
 
@@ -805,8 +802,11 @@ onBeforeUnmount(() => {
  * - 找不到 cell / 测量失败时返回 9999 作为 fallback（远大于屏幕高，calcTranslateY 直接返回 0）
  */
 const getLastMessageCellPosition = async (): Promise<number> => {
-  if (cellRefs.length == 0) return 9999
-  const lastCell = cellRefs[cellRefs.length - 1]
+  // cellRefs 只增不减，cellRefs.length 是历史最大值；用当前列表长度取末尾 cell，
+  // 避免切会话/列表变短后命中已销毁的旧 cell 导致测量失真。
+  const lastIndex: number = messageItems.value.length - 1
+  if (lastIndex < 0) return 9999
+  const lastCell = cellRefs[lastIndex]
   if (lastCell == null) return 9999
   try {
     const rect: DOMRect = (lastCell as UniElement).getBoundingClientRect()
@@ -823,7 +823,7 @@ const listTransformOptions: UseListTransformOptions = {
   getInputPanelHeight: (): number => (props.inputPanelHeight ?? 0),
   getInputToolbarHeight: (): number => (props.inputToolbarHeight ?? 0),
   getLastMessageBottom: (): Promise<number> => getLastMessageCellPosition(),
-  getMessageCount: (): number => cellRefs.length,
+  getMessageCount: (): number => messageItems.value.length,
   listRef: messageListContainerViewRef,
   threshold: 10
 }

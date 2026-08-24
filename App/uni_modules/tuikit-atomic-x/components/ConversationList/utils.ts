@@ -209,7 +209,11 @@ export const parseMessageToRichTextNodes = (message: MessageInfo): RichTextNode[
 
 const getMessageAbstract = (message: MessageInfo): string => {
   if (message.status === MessageStatus.REVOKED) {
-    return '[消息已撤回]'
+    const senderName = getSenderName(message)
+    if (senderName.length > 0) {
+      return `${senderName}: 撤回了一条消息`
+    }
+    return '撤回了一条消息'
   }
   
   if (message.status === MessageStatus.DELETED) {

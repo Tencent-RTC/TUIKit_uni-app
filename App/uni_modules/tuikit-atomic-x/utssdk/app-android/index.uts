@@ -1,7 +1,7 @@
 import Context from "android.content.Context";
 import Intent from "android.content.Intent";
 import { CallExperimentalAPIOptions, HybridListenerOptions } from "../interface";
-import { ExperimentalApiInvoker, FloatViewManager, Logger, VibratorFeature, SystemImagePicker, EngineBridge, AlbumPickerManager} from 'uts.sdk.modules.atomicx.kotlin';
+import { ExperimentalApiInvoker, FloatViewManager, Logger, VibratorFeature, SystemImagePicker, EngineBridge, AlbumPickerManager, CallEngineManager } from 'uts.sdk.modules.atomicx.kotlin';
 
 // from native aar
 import { TUIRoomDefine, TUIRoomEngine } from 'com.tencent.cloud.tuikit.engine.room';
@@ -225,6 +225,18 @@ export function stopVibrating() {
     VibratorFeature.getInstance(context).stopVibrating()
   }, null)
 }
+/**
+ * 初始化 TUICallEngine
+ * @param sdkAppID 腾讯云 SDKAppID
+ * @param userID 用户 ID
+ * @param userSig 用户签名
+ */
+export function initCallEngine(sdkAppID: number, userID: string, userSig: string) {
+  UTSAndroid.getDispatcher("main").async(function (_) {
+    CallEngineManager.initEngine(context, (sdkAppID as number).toInt(), userID, userSig)
+  }, null)
+}
+
 /**
  * 设置背景模糊
  */

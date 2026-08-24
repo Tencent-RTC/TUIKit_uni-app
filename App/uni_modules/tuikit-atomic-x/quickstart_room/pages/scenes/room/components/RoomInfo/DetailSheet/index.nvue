@@ -1,0 +1,144 @@
+<template>
+  <view class="info-sheet">
+    <view class="drop-bar" @tap="handleClose">
+      <image class="drop-line" src="/static/images/room/room_lineImage.png" mode="aspectFit" />
+    </view>
+
+    <view class="info-body">
+      <text class="info-title" :numberOfLines="1">{{ currentRoom?.roomName || roomID }}</text>
+
+      <view class="info-gap-24"></view>
+      <DetailItem prefix-text="房主" :info-text="ownerDisplayName" />
+
+      <view class="info-gap-16"></view>
+      <DetailItem prefix-text="房间号" :info-text="roomID">
+        <view class="copy-btn" @tap="copyRoomID">
+          <image class="copy-icon" src="/static/images/room/room_copy.png" mode="aspectFit" />
+          <text class="copy-text">复制</text>
+        </view>
+      </DetailItem>
+
+      <view class="info-gap-24"></view>
+      <view class="info-copy-all" @tap="copyAll">
+        <text class="info-copy-all-text">复制房间信息</text>
+      </view>
+    </view>
+  </view>
+</template>
+
+<script setup lang="ts">
+  import { computed } from 'vue';
+  import { useRoomState } from '@/uni_modules/tuikit-atomic-x/state';
+  import DetailItem from './DetailItem.nvue';
+
+  const props = defineProps({
+    roomID: { type: String, required: true },
+  });
+
+  const emit = defineEmits<{ (e: 'close'): void }>();
+
+  const { currentRoom } = useRoomState();
+
+  const ownerDisplayName = computed(() => {
+    const owner = currentRoom.value?.roomOwner;
+    if (!owner) return '';
+    return owner.userName || owner.userID || '';
+  });
+
+  function handleClose() { emit('close'); }
+
+  function copyRoomID() {
+    uni.setClipboardData({
+      data: props.roomID,
+      success: () => {
+        uni.showToast({ icon: 'none', title: '房间号已复制' });
+      },
+    });
+  }
+
+  function copyAll() {
+    const room = currentRoom.value;
+    if (!room) return;
+    const allInfo = `房间名: ${room.roomName || ''}\n房间号: ${room.roomID || props.roomID}`;
+    uni.setClipboardData({
+      data: allInfo,
+      success: () => {
+        uni.showToast({ icon: 'none', title: '房间信息复制成功' });
+      },
+    });
+  }
+</script>
+
+<style>
+  .info-sheet {
+    background-color: #1F2229;
+    border-top-left-radius: 40rpx;
+    border-top-right-radius: 40rpx;
+    padding-bottom: 68rpx;
+  }
+
+  .drop-bar {
+    height: 70rpx;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .drop-line {
+    width: 48rpx;
+    height: 48rpx;
+  }
+
+  .info-body {
+    padding-left: 32rpx;
+    padding-right: 32rpx;
+  }
+
+  .info-title {
+    color: #D5E0F2;
+    font-size: 40rpx;
+    font-weight: 500;
+    lines: 1;
+  }
+
+  .info-gap-24 {
+    height: 48rpx;
+  }
+
+  .info-gap-16 {
+    height: 32rpx;
+  }
+
+  .info-copy-all {
+    height: 96rpx;
+    background-color: rgba(74, 89, 112, 0.3);
+    border-radius: 16rpx;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .info-copy-all-text {
+    color: #C5CCDC;
+    font-size: 32rpx;
+  }
+
+  .copy-btn {
+    width: 124rpx;
+    height: 50rpx;
+    background-color: #4A5970;
+    border-radius: 10rpx;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .copy-icon {
+    width: 32rpx;
+    height: 32rpx;
+    margin-right: 4rpx;
+  }
+
+  .copy-text {
+    font-size: 24rpx;
+    color: #FFFFFF;
+  }
+</style>

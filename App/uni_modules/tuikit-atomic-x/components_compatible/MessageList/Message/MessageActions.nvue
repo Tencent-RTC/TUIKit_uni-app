@@ -43,6 +43,7 @@ export default {
       triggerPosition: { x: 0, y: 0 },
       phase: 'measure',
       showBelow: false,
+      isCentered: false,
       panelHeightRpx: 0,
       panelLeftRpx: 0,
       panelWidthRpx: 0,
@@ -98,6 +99,42 @@ export default {
     voiceActionLabel() {
       return this.voiceTextVisible ? '隐藏文字' : '转文字'
     },
+    /**
+     * 视口安全区度量（rpx）—— 一处算好，panelTopRpx / _measureAndPosition 复用
+     */
+    viewportMinRpx() {
+      var si = uni.getSystemInfoSync()
+      var sw = si.windowWidth || 375
+      var sh = si.screenHeight || si.windowHeight || 667
+      var navH = si.platform === 'android' ? 48 : 44
+      var safeTop = (si.safeArea && si.safeArea.top) ? si.safeArea.top : 0
+      return (safeTop + navH + 8) / sw * 750
+    },
+    viewportMaxRpx() {
+      var si = uni.getSystemInfoSync()
+      var sw = si.windowWidth || 375
+      var sh = si.screenHeight || si.windowHeight || 667
+      var safeBottom = (si.safeArea && si.safeArea.bottom) ? (sh - si.safeArea.bottom) : 0
+      return (sh - safeBottom - 8) / sw * 750
+    },
+    /**
+     * 面板最终 top（rpx）—— 唯一 source of truth
+     * panelStyle 和 arrowStyle 都读它，箭头贴 panel 边缘算位置 → 物理上不可能分离
+     */
+    panelTopRpx() {
+      var tp = this.triggerPosition
+      var ph = this.panelHeightRpx
+      var want = this.showBelow ? (tp.y + tp.messageHeight + GAP) : (tp.y - ph - GAP)
+      if (ph <= 0) return want
+      var minTop = this.viewportMinRpx
+      var maxBottom = this.viewportMaxRpx
+      // 长消息占满屏：上下都放不下 → 居中
+      if (this.isCentered) return Math.round((minTop + maxBottom - ph) / 2)
+      var result = want
+      if (result < minTop) result = minTop
+      if (result > maxBottom - ph) result = maxBottom - ph
+      return Math.round(result)
+    },
     panelStyle() {
       var tp = this.triggerPosition
       // phase=measure: 渲染在屏幕外以便测量真实高度
@@ -106,18 +143,21 @@ export default {
       }
       // phase=ready: 定位到正确位置
       if (!tp.x || !tp.y) return { visibility: 'hidden' }
-      var pos = {}
-      if (this.showBelow) {
-        pos.top = (tp.y + tp.messageHeight + GAP) + 'rpx'
+      var pos = { top: this.panelTopRpx + 'rpx' }
+      if (this.isCentered && this.panelWidthRpx > 0) {
+        // 居中显示时水平也居中（屏幕宽固定 750rpx）
+        pos.left = Math.round((750 - this.panelWidthRpx) / 2) + 'rpx'
+      } else if (tp.isSentBySelf) {
+        pos.right = tp.x + 'rpx'
       } else {
-        pos.top = (tp.y - this.panelHeightRpx - GAP) + 'rpx'
+        pos.left = tp.x + 'rpx'
       }
-      if (tp.isSentBySelf) { pos.right = tp.x + 'rpx' }
-      else { pos.left = tp.x + 'rpx' }
       return pos
     },
     arrowStyle() {
       if (this.phase !== 'ready') return { visibility: 'hidden' }
+      // 居中显示时没有可指的气泡边，箭头隐藏
+      if (this.isCentered) return { visibility: 'hidden' }
       var tp = this.triggerPosition
       if (!tp.x || !tp.y) return { visibility: 'hidden' }
       var si = uni.getSystemInfoSync()
@@ -140,11 +180,14 @@ export default {
         if (arrowLeft < minLeft) arrowLeft = minLeft
         if (arrowLeft > maxLeft) arrowLeft = maxLeft
       }
+      // top 直接贴 panel 边缘算（读 panelTopRpx 这一唯一 source of truth）
       var style = { left: arrowLeft + 'rpx', visibility: 'visible' }
       if (this.showBelow) {
-        style.top = (tp.y + tp.messageHeight + GAP - ARROW_SIZE / 2) + 'rpx'
+        // 面板在气泡下方：箭头跨在面板上边缘
+        style.top = (this.panelTopRpx - ARROW_SIZE / 2) + 'rpx'
       } else {
-        style.top = (tp.y - GAP - ARROW_SIZE / 2) + 'rpx'
+        // 面板在气泡上方：箭头跨在面板下边缘
+        style.top = (this.panelTopRpx + this.panelHeightRpx - ARROW_SIZE / 2) + 'rpx'
       }
       return style
     }
@@ -192,14 +235,27 @@ export default {
           self.panelLeftRpx = Math.round(result.size.left / sw * 750)
           self.panelWidthRpx = Math.round(result.size.width / sw * 750)
         }
-        // 判断面板显示方向
+        // 方向判定：用「panel 矩形能否完整放入视口」（inSafeArea）
+        // 长消息滚到中间时 tp.y 为负，旧的「顶部剩余空间」算法会误判 → panel 跑到屏幕外
+        if (self.panelHeightRpx <= 0) { self.phase = 'ready'; return }
         var tp = self.triggerPosition
-        var si2 = uni.getSystemInfoSync()
-        var sw2 = si2.windowWidth || 375
-        var navH = si2.platform === 'android' ? 48 : 44
-        var safeTop = (si2.safeArea && si2.safeArea.top) ? si2.safeArea.top : 0
-        var totalNavRpx = (safeTop + navH) / sw2 * 750
-        self.showBelow = (tp.y - totalNavRpx) < (self.panelHeightRpx + GAP)
+        var minTop = self.viewportMinRpx
+        var maxBottom = self.viewportMaxRpx
+        var ph = self.panelHeightRpx
+        var inSafeArea = function(top) { return top >= minTop && top + ph <= maxBottom }
+        var canBelow = inSafeArea(tp.y + tp.messageHeight + GAP)
+        var canAbove = inSafeArea(tp.y - GAP - ph)
+        if (canBelow) {
+          // 优先下方（更靠近气泡）
+          self.showBelow = true
+          self.isCentered = false
+        } else if (canAbove) {
+          self.showBelow = false
+          self.isCentered = false
+        } else {
+          // 长消息占满全屏：上下都放不下 → 居中显示，箭头隐藏
+          self.isCentered = true
+        }
         // phase 2: 切换到正确位置
         self.phase = 'ready'
       })

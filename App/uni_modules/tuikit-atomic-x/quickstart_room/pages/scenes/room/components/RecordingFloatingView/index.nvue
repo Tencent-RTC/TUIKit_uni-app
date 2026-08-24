@@ -1,0 +1,200 @@
+<template>
+  <view v-if="visible" class="recording-root">
+    <!-- 折叠态 pill -->
+    <view v-if="!expanded" class="pill" @tap="onPillTap">
+      <view class="dot" :style="{ opacity: blinkAlpha }" />
+      <text class="text">录制中</text>
+      <image v-if="canManage" class="arrow" src="/static/images/room/room_recording_arrow.png" mode="aspectFit" />
+    </view>
+
+    <!-- 展开态 card -->
+    <view v-if="expanded" class="outside-mask" @tap="collapse">
+      <view class="card" :style="{ top: (props.top ?? 0) + 'px' }" @tap.stop>
+        <view class="card-header" @tap="collapse">
+          <view class="dot" :style="{ opacity: blinkAlpha }" />
+          <text class="text">录制中</text>
+          <image class="arrow arrow-up" src="/static/images/room/room_recording_arrow.png" mode="aspectFit" />
+        </view>
+        <view class="stop-btn" @tap="onStopTap">
+          <image class="stop-icon" src="/static/images/room/room_recording_stop.png" mode="aspectFit" />
+          <text class="stop-text">结束</text>
+        </view>
+      </view>
+    </view>
+  </view>
+</template>
+
+<script setup lang="ts">
+  import { computed, ref, watch, onUnmounted } from 'vue';
+  import {
+    useRoomState,
+    useRoomParticipantState,
+    RoomParticipantRole,
+    RecordingStatus,
+  } from '@/uni_modules/tuikit-atomic-x/state';
+
+  const props = defineProps<{ top?: number }>();
+  const emit = defineEmits(['request-stop']);
+
+  const roomState = useRoomState();
+  const { localParticipant } = useRoomParticipantState();
+
+  const status = computed(
+    () => roomState.currentRoom.value?.recordingInfo?.status ?? RecordingStatus.None
+  );
+  const visible = computed(() => status.value === RecordingStatus.Recording);
+  const role = computed(() => localParticipant.value?.role);
+  const canManage = computed(
+    () => role.value === RoomParticipantRole.Owner || role.value === RoomParticipantRole.Admin
+  );
+
+  const expanded = ref(false);
+
+  const blinkAlpha = ref(1);
+  const BLINK_PERIOD_MS = 1200;
+  const BLINK_MIN = 0.3;
+  const BLINK_MAX = 1.0;
+  let blinkTimer: any = null;
+  let blinkStartTs = 0;
+
+  function tickBlink() {
+    const elapsed = (Date.now() - blinkStartTs) % BLINK_PERIOD_MS;
+    const phase = elapsed / BLINK_PERIOD_MS;
+    const eased = (Math.cos(phase * 2 * Math.PI) + 1) / 2;
+    blinkAlpha.value = BLINK_MIN + (BLINK_MAX - BLINK_MIN) * eased;
+  }
+
+  function startBlink() {
+    if (blinkTimer) return;
+    blinkStartTs = Date.now();
+    blinkTimer = setInterval(tickBlink, 16);
+  }
+
+  function stopBlink() {
+    if (blinkTimer) {
+      clearInterval(blinkTimer);
+      blinkTimer = null;
+    }
+    blinkAlpha.value = 1;
+  }
+
+  watch(
+    visible,
+    (v) => {
+      if (v) startBlink();
+      else {
+        stopBlink();
+        expanded.value = false;
+      }
+    },
+    { immediate: true }
+  );
+
+  watch(canManage, (v) => { if (!v) expanded.value = false; });
+
+  function onPillTap() {
+    if (!canManage.value) return;
+    expanded.value = true;
+  }
+
+  function collapse() {
+    expanded.value = false;
+  }
+
+  function onStopTap() {
+    expanded.value = false;
+    emit('request-stop');
+  }
+
+  onUnmounted(() => {
+    stopBlink();
+  });
+</script>
+
+<style>
+  .recording-root {
+    position: absolute;
+    top: 0;
+    left: 0;
+  }
+
+  .outside-mask {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+  }
+
+  .pill {
+    flex-direction: row;
+    align-items: center;
+    height: 60rpx;
+    padding-left: 16rpx;
+    padding-right: 16rpx;
+    border-radius: 16rpx;
+    background-color: rgba(34, 38, 46, 0.7);
+  }
+
+  .card {
+    position: fixed;
+    left: 32rpx;
+    flex-direction: column;
+    padding-bottom: 24rpx;
+    border-radius: 16rpx;
+    background-color: rgba(34, 38, 46, 0.7);
+  }
+
+  .card-header {
+    flex-direction: row;
+    align-items: center;
+    height: 60rpx;
+    padding-left: 16rpx;
+    padding-right: 16rpx;
+  }
+
+  .dot {
+    width: 16rpx;
+    height: 16rpx;
+    border-radius: 8rpx;
+    background-color: #FF2E2E;
+  }
+
+  .text {
+    color: #D5E0F2;
+    font-size: 24rpx;
+    margin-left: 12rpx;
+    lines: 1;
+  }
+
+  .arrow {
+    width: 32rpx;
+    height: 32rpx;
+    margin-left: 8rpx;
+  }
+
+  .arrow-up {
+    transform: rotate(180deg);
+  }
+
+  .stop-btn {
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    margin-top: 16rpx;
+    padding-left: 24rpx;
+    padding-right: 24rpx;
+  }
+
+  .stop-icon {
+    width: 80rpx;
+    height: 80rpx;
+  }
+
+  .stop-text {
+    color: #D5E0F2;
+    font-size: 24rpx;
+    margin-top: 8rpx;
+    lines: 1;
+  }
+</style>
