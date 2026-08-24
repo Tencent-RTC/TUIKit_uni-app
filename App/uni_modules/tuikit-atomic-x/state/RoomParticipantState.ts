@@ -31,6 +31,7 @@ import {
 } from '../types/roomParticipant';
 import type { RoomInfo, RoomUser } from '../types/room';
 import { registerRoomLifecycle, type RoomLifecycleHooks } from './internal/roomLifecycle';
+import { KeyMetricsKey, reportKeyMetrics } from './internal/keyMetrics';
 
 /** 列表更新类型 */
 enum ListModifyType {
@@ -876,6 +877,7 @@ const _instance: RoomParticipantStateImpl = new RoomParticipantStateImpl();
  */
 export function useRoomParticipantState(): IRoomParticipantState {
   reportMetrics('ROOM_PARTICIPANT_STATE');
+  reportKeyMetrics(KeyMetricsKey.T_METRICS_STATE_ROOM_PARTICIPANT_STATE_COUNT);
   return _instance;
 }
 

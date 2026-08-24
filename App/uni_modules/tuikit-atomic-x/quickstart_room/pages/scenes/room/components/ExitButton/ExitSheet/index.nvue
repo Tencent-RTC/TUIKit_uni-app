@@ -1,0 +1,100 @@
+<template>
+  <view class="exit-mask" v-if="visible" @tap.stop="handleCancel">
+    <view class="exit-sheet" @tap.stop>
+      <view class="drop-bar" @tap.stop="handleCancel">
+        <image class="drop-line" src="/static/images/room/room_lineImage.png" mode="aspectFit" />
+      </view>
+      <text class="exit-sheet-tip">{{ tipText }}</text>
+      <view class="exit-sheet-divider"></view>
+      <view class="exit-sheet-btn" @tap.stop="handleLeave">
+        <text class="exit-sheet-btn-text-leave">离开房间</text>
+      </view>
+      <view class="exit-sheet-divider" v-if="isOwner"></view>
+      <view class="exit-sheet-btn" v-if="isOwner" @tap.stop="handleEnd">
+        <text class="exit-sheet-btn-text-end">结束房间</text>
+      </view>
+    </view>
+  </view>
+</template>
+
+<script setup lang="ts">
+  import { computed } from 'vue';
+
+  const props = defineProps({
+    visible: { type: Boolean, default: false },
+    isOwner: { type: Boolean, default: false },
+  });
+
+  const emit = defineEmits<{
+    (e: 'leave'): void
+    (e: 'end'): void
+    (e: 'cancel'): void
+  }>();
+
+  const tipText = computed(() => (props.isOwner ? '如果您不想结束房间，请在离开房间前指定新的主持人' : '您确定要离开房间吗'));
+
+  function handleLeave() { emit('leave'); }
+  function handleEnd() { emit('end'); }
+  function handleCancel() { emit('cancel'); }
+</script>
+
+<style>
+  .exit-mask {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.4);
+    flex-direction: column;
+    justify-content: flex-end;
+  }
+
+  .exit-sheet {
+    background-color: #1F2229;
+    border-top-left-radius: 24rpx;
+    border-top-right-radius: 24rpx;
+    padding-bottom: 34rpx;
+  }
+
+  .drop-bar {
+    height: 70rpx;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .drop-line {
+    width: 48rpx;
+    height: 48rpx;
+  }
+
+  .exit-sheet-tip {
+    color: #7C85A6;
+    font-size: 24rpx;
+    text-align: center;
+    padding-left: 32rpx;
+    padding-right: 32rpx;
+    padding-bottom: 32rpx;
+  }
+
+  .exit-sheet-divider {
+    height: 1rpx;
+    background-color: rgba(79, 88, 107, 0.3);
+  }
+
+  .exit-sheet-btn {
+    height: 116rpx;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .exit-sheet-btn-text-leave {
+    color: #006EFF;
+    font-size: 36rpx;
+  }
+
+  .exit-sheet-btn-text-end {
+    color: #ED414D;
+    font-size: 36rpx;
+  }
+</style>

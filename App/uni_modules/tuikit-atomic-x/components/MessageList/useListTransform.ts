@@ -55,7 +55,16 @@ export function useListTransform(options: UseListTransformOptions) {
     
     // 面板高度超过可用空间时，需要上移差值
     if (panelHeight > availableSpace) {
-      return panelHeight - availableSpace;
+      const needed = panelHeight - availableSpace;
+      // transform 的语义是"补足面板遮挡的那部分"，所以上移量的物理上限就是 panelHeight：
+      // 上移 panelHeight 时，露出的底部区域正好被面板覆盖，用户看不到空隙。
+      // 一旦超过 panelHeight，多出来的部分不再被面板遮住 → 底部出现空白、内容被顶出屏幕。
+      //
+      // 会超上限是因为 originalBottom 可能失真：restoreOriginalBottom 只补偿了 transform 位移，
+      // 没有补偿 list 的滚动位移。发送长消息时 scrollToBottom 让最后一条消息贴到视口底部，
+      // 此时 currentBottom 已接近视口底，再加上 currentTranslateY 就得到一个虚高的 originalBottom，
+      // availableSpace 变成负数，needed = panelHeight + |availableSpace| 被放大。
+      return needed > panelHeight ? panelHeight : needed;
     }
     return 0;
   };

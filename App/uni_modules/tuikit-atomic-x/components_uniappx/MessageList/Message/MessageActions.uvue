@@ -146,6 +146,8 @@ const triggerPosition = ref<TriggerPosition>({
 const phase = ref('measure')
 // 面板是否显示在气泡下方（顶部空间不够时）
 const showBelow = ref(false)
+// 长消息占满全屏时：上下都放不下 → 居中显示，箭头隐藏
+const isCentered = ref(false)
 // 测量得到的真实面板尺寸（rpx）
 const panelWidthRpx = ref(0)
 const panelHeightRpx = ref(0)
@@ -262,29 +264,65 @@ const voiceActionLabel = computed(() => {
 })
 
 /**
+ * 视口安全区度量（rpx）—— 一处算好，panelTopRpx / measureAndPosition 复用
+ */
+const viewportRpx = (): { minTop: number, maxBottom: number } => {
+  const si: any = uni.getSystemInfoSync()
+  const sw: number = (si.windowWidth as number) ?? 375
+  const sh: number = (si.screenHeight as number) ?? (si.windowHeight as number) ?? 667
+  const navH: number = si.platform == 'android' ? 48 : 44
+  const safeTop: number = (si.safeArea?.top as number) ?? 0
+  const safeBottomRaw: number = (si.safeArea?.bottom as number) ?? sh
+  const safeBottom: number = (sh - safeBottomRaw) > 0 ? (sh - safeBottomRaw) : 0
+  return {
+    minTop: (safeTop + navH + 8) / sw * 750,
+    maxBottom: (sh - safeBottom - 8) / sw * 750,
+  }
+}
+
+/**
+ * 面板最终 top（rpx）—— 唯一 source of truth
+ * panelStyle 和 arrowStyle 都读它，箭头贴 panel 边缘算位置 → 物理上不可能分离
+ */
+const panelTopRpx = computed((): number => {
+  const tp: TriggerPosition = triggerPosition.value
+  const ph: number = panelHeightRpx.value
+  const want: number = showBelow.value ? (tp.y + tp.messageHeight + GAP) : (tp.y - ph - GAP)
+  if (ph <= 0) return want
+  const { minTop, maxBottom } = viewportRpx()
+  // 长消息占满屏：上下都放不下 → 居中
+  if (isCentered.value) return Math.round((minTop + maxBottom - ph) / 2)
+  return Math.max(minTop, Math.min(want, maxBottom - ph))
+})
+
+/**
  * 面板样式
  * - phase='measure'：渲染到屏幕外（top: -9999rpx, opacity: 0）以便测量真实尺寸
- * - phase='ready'：根据 showBelow 定位到气泡上方或下方
+ * - phase='ready'：top 取 panelTopRpx（已含 clamp / 居中）
  */
-const panelStyle = computed(() => {
-  const tp = triggerPosition.value
+const panelStyle = computed((): UTSJSONObject => {
+  const tp: TriggerPosition = triggerPosition.value
   if (phase.value == 'measure') {
-    return { top: '-9999rpx', left: '0rpx', opacity: 0 }
+    const m: UTSJSONObject = new UTSJSONObject()
+    m['top'] = '-9999rpx'
+    m['left'] = '0rpx'
+    m['opacity'] = 0
+    return m
   }
-  if (tp.x == 0 || tp.y == 0) return { visibility: 'hidden' }
-
-  const effectiveHeight = panelHeightRpx.value > 0 ? panelHeightRpx.value : 130
-
-  const pos = {}
-  if (showBelow.value) {
-    pos.top = `${tp.y + tp.messageHeight + GAP}rpx`
-  } else {
-    pos.top = `${tp.y - effectiveHeight - GAP}rpx`
+  if (tp.x == 0 || tp.y == 0) {
+    const m: UTSJSONObject = new UTSJSONObject()
+    m['visibility'] = 'hidden'
+    return m
   }
-  if (tp.isSentBySelf) {
-    pos.right = `${tp.x}rpx`
+  const pos: UTSJSONObject = new UTSJSONObject()
+  pos['top'] = `${panelTopRpx.value}rpx`
+  if (isCentered.value && panelWidthRpx.value > 0) {
+    // 居中显示时水平也居中（屏幕宽固定 750rpx）
+    pos['left'] = `${Math.round((750 - panelWidthRpx.value) / 2)}rpx`
+  } else if (tp.isSentBySelf) {
+    pos['right'] = `${tp.x}rpx`
   } else {
-    pos.left = `${tp.x}rpx`
+    pos['left'] = `${tp.x}rpx`
   }
   return pos
 })
@@ -301,9 +339,23 @@ const panelStyle = computed(() => {
  * - 这里直接用 rpx 做运算，与 panelStyle 行为一致
  */
 const arrowStyle = computed((): UTSJSONObject => {
-  if (phase.value !== 'ready') return { visibility: 'hidden' }
-  const tp = triggerPosition.value
-  if (tp.x == 0 || tp.y == 0) return { visibility: 'hidden' }
+  if (phase.value !== 'ready') {
+    const m: UTSJSONObject = new UTSJSONObject()
+    m['visibility'] = 'hidden'
+    return m
+  }
+  // 居中显示时没有可指的气泡边，箭头隐藏
+  if (isCentered.value) {
+    const m: UTSJSONObject = new UTSJSONObject()
+    m['visibility'] = 'hidden'
+    return m
+  }
+  const tp: TriggerPosition = triggerPosition.value
+  if (tp.x == 0 || tp.y == 0) {
+    const m: UTSJSONObject = new UTSJSONObject()
+    m['visibility'] = 'hidden'
+    return m
+  }
 
   const screenWidthRpx = 750
 
@@ -311,7 +363,7 @@ const arrowStyle = computed((): UTSJSONObject => {
   let arrowLeft: number = tp.messageX + tp.messageWidth / 2 - ARROW_SIZE / 2
 
   // 用真实测量的 panelWidth 做 clamp（防止 arrow 脱离 panel 边界）
-  const pw = panelWidthRpx.value > 0 ? panelWidthRpx.value : 480
+  const pw: number = panelWidthRpx.value > 0 ? panelWidthRpx.value : 480
   if (pw > 0) {
     let panelFinalLeft: number = 0
     if (tp.isSentBySelf) {
@@ -327,16 +379,17 @@ const arrowStyle = computed((): UTSJSONObject => {
     if (arrowLeft > maxLeft) arrowLeft = maxLeft
   }
 
-  // 用 UTSJSONObject + 下标赋值（computed 返回 typed class 实例，模板 :style 接收安全）
+  // top 直接贴 panel 边缘算（读 panelTopRpx 这一唯一 source of truth）
+  // → panel 被 clamp 时箭头自动跟随，不可能分离
   const style: UTSJSONObject = new UTSJSONObject()
   style['left'] = `${arrowLeft}rpx`
   style['visibility'] = 'visible'
   if (showBelow.value) {
-    // 面板在气泡下方：箭头位于面板顶边，跨在上边缘
-    style['top'] = `${tp.y + tp.messageHeight + GAP - ARROW_SIZE / 2}rpx`
+    // 面板在气泡下方：箭头跨在面板上边缘
+    style['top'] = `${panelTopRpx.value - ARROW_SIZE / 2}rpx`
   } else {
-    // 面板在气泡上方：箭头位于面板底边，跨在下边缘
-    style['top'] = `${tp.y - GAP - ARROW_SIZE / 2}rpx`
+    // 面板在气泡上方：箭头跨在面板下边缘
+    style['top'] = `${panelTopRpx.value + panelHeightRpx.value - ARROW_SIZE / 2}rpx`
   }
   return style
 })
@@ -533,18 +586,34 @@ const measureAndPosition = () => {
   try {
     // uvue: panelEl 是 UniElement（ref<any> 静态推断不出具体类型，强转 UniElement）
     const rect: DOMRect = (panelEl as UniElement).getBoundingClientRect()
-    const si = uni.getSystemInfoSync()
-    const sw = si.windowWidth ?? 375
+    const si: any = uni.getSystemInfoSync()
+    const sw: number = (si.windowWidth as number) ?? 375
     // rect.width / height 是 px，转 rpx（px / sw * 750）
     panelWidthRpx.value = Math.round(rect.width / sw * 750)
     panelHeightRpx.value = Math.round(rect.height / sw * 750)
-    // 判定面板显示方向：顶部剩余空间不够就下方展示
-    const tp = triggerPosition.value
-    const navH = si.platform == 'android' ? 48 : 44
-    const safeTop = si.safeArea?.top ?? 0
-    const totalNavRpx = (safeTop + navH) / sw * 750
-    const effectiveHeight = panelHeightRpx.value > 0 ? panelHeightRpx.value : 130
-    showBelow.value = (tp.y - totalNavRpx) < (effectiveHeight + GAP)
+    // 方向判定：用「panel 矩形能否完整放入视口」（inSafeArea）
+    // 长消息滚到中间时 tp.y 为负，旧的「顶部剩余空间」算法会误判 → panel 跑到屏幕外
+    if (panelHeightRpx.value <= 0) {
+      phase.value = 'ready'
+      return
+    }
+    const tp: TriggerPosition = triggerPosition.value
+    const { minTop, maxBottom } = viewportRpx()
+    const ph: number = panelHeightRpx.value
+    const inSafeArea = (top: number): boolean => top >= minTop && top + ph <= maxBottom
+    const canBelow: boolean = inSafeArea(tp.y + tp.messageHeight + GAP)
+    const canAbove: boolean = inSafeArea(tp.y - GAP - ph)
+    if (canBelow) {
+      // 优先下方（更靠近气泡）
+      showBelow.value = true
+      isCentered.value = false
+    } else if (canAbove) {
+      showBelow.value = false
+      isCentered.value = false
+    } else {
+      // 长消息占满全屏：上下都放不下 → 居中显示，箭头隐藏
+      isCentered.value = true
+    }
   } catch (e: any) {
     console.error('[MessageActions] measureAndPosition failed:', e)
   }

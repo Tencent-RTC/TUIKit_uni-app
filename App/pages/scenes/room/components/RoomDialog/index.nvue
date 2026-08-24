@@ -1,0 +1,178 @@
+<template>
+  <view
+    v-if="visible"
+    class="overlay-container"
+    @tap="handleOverlayClick"
+  >
+    <view class="dialog-container" @tap.stop>
+      <text v-if="hasTitle" class="dialog-title">{{ props.title }}</text>
+      <view class="dialog-content">
+        <slot></slot>
+      </view>
+      <view class="dialog-footer">
+        <view
+          v-if="props.cancelButton"
+          class="dialog-btn dialog-btn-cancel"
+          @tap="handleCancel"
+        >
+          <text class="dialog-btn-text dialog-btn-text-cancel">{{ props.cancelButton }}</text>
+        </view>
+        <view
+          class="dialog-btn dialog-btn-confirm"
+          :class="{ 'dialog-btn-confirm-only': !props.cancelButton }"
+          @tap="handleConfirm"
+        >
+          <text
+            class="dialog-btn-text"
+            :class="{ 'dialog-btn-text-confirm': !!props.cancelButton, 'dialog-btn-text-confirm-only': !props.cancelButton }"
+          >{{ props.confirmButton }}</text>
+        </view>
+      </view>
+    </view>
+  </view>
+</template>
+
+<script setup lang="ts">
+  import { ref, watch, computed } from 'vue';
+
+  const visible = ref(false);
+  const hasTitle = computed(() => props.title !== '');
+
+  interface Props {
+    modelValue: boolean;
+    title?: string;
+    confirmButton?: string;
+    cancelButton?: string;
+    closeOnClickModal?: boolean;
+    appendToBody?: boolean;
+    modal?: boolean;
+  }
+  const props = withDefaults(defineProps<Props>(), {
+    title: '',
+    modelValue: false,
+    confirmButton: '',
+    cancelButton: '',
+    closeOnClickModal: false,
+    appendToBody: false,
+    modal: false,
+  });
+  const emit = defineEmits(['update:modelValue', 'close', 'confirm', 'cancel']);
+
+  watch(
+    () => props.modelValue,
+    (val) => {
+      visible.value = val;
+    },
+  );
+
+  function handleConfirm(): void {
+    emit('confirm');
+    handleClose();
+  }
+  function handleCancel(): void {
+    emit('cancel');
+    handleClose();
+  }
+
+  function handleClose(): void {
+    visible.value = false;
+    emit('update:modelValue', false);
+    emit('close');
+  }
+
+  function handleOverlayClick(): void {
+    if (!props.closeOnClickModal) return;
+    handleClose();
+  }
+</script>
+
+<style>
+  /* === 覆盖层：viewport 全屏 + 居中 + 最上层 ===
+     nvue 中嵌套在 list-sheet 这种 position:fixed 父容器内时，必须加 z-index
+     否则会被父级覆盖层遮住导致 dialog 偏上。 */
+  .overlay-container {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 9999;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    background-color: rgba(0, 0, 0, 0.6);
+  }
+
+  .dialog-container {
+    width: 640rpx;
+    background-color: #ffffff;
+    border-radius: 16rpx;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* === 标题 === */
+  .dialog-title {
+    font-size: 32rpx;
+    font-weight: bold;
+    color: #000000;
+    text-align: center;
+    padding-top: 40rpx;
+    padding-left: 48rpx;
+    padding-right: 48rpx;
+    lines: 2;
+    text-overflow: ellipsis;
+  }
+
+  .dialog-content {
+    flex-direction: column;
+    align-items: center;
+    padding-top: 24rpx;
+    padding-bottom: 40rpx;
+    padding-left: 48rpx;
+    padding-right: 48rpx;
+    min-height: 60rpx;
+  }
+
+  /* === 底部按钮 ===
+     必须 view 包 text 两层结构（红线）：
+     - weex <text> 不是 box-model 元素，作为 flex item 时
+       flex: 1 / border-* / height / padding-* 都不生效
+     - 外层 view 当 flex 容器 / 内层 view 当 flex item 撑起 box-model
+     - 内层 text 只承载 color + font-* 样式 */
+  .dialog-footer {
+    flex-direction: row;
+    border-top-width: 1rpx;
+    border-top-style: solid;
+    border-top-color: #d5e0f2;
+  }
+  .dialog-btn {
+    flex: 1;
+    height: 96rpx;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+  }
+  .dialog-btn-confirm {
+    border-left-width: 1rpx;
+    border-left-style: solid;
+    border-left-color: #d5e0f2;
+  }
+  .dialog-btn-confirm-only {
+    border-left-width: 0;
+  }
+  .dialog-btn-text {
+    font-size: 30rpx;
+    font-weight: 400;
+  }
+  .dialog-btn-text-cancel {
+    color: #4F586B;
+  }
+  .dialog-btn-text-confirm {
+    color: #1C66E5;
+  }
+  .dialog-btn-text-confirm-only {
+    color: #1C66E5;
+    font-weight: bold;
+  }
+</style>

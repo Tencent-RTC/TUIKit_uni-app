@@ -5,7 +5,7 @@
     <component v-else-if="isCustomCenterMessage" :is="centerCustomComponent" :message="message" :conversationID="conversationID" />
   </view>
   <view v-else class="msg msg--no-select" :class="messageClasses" :data-message-id="message.msgID" @touchstart="handleTouchStart" @touchend="handleTouchEnd" @tap.stop="handleTap" @touchmove.stop.prevent="handleTouchMove">
-    <Avatar v-if="showAvatar" :src="message.from.avatarURL" :name="displayName" :size="80" defaultAvatarType="user" lazy class="msg__avatar" />
+    <Avatar v-if="showAvatar" :src="message.from.avatarURL" :name="displayName" :size="80" defaultAvatarType="user" class="msg__avatar" />
     <view class="msg__main msg__main--no-select" :class="'msg__main--'+ (message.isSentBySelf ? 'out' : 'in')">
       <view v-if="showNickname" class="msg__nickname">
         <text class="msg__nickname-text msg__text--no-select">{{ displayName }}</text>
@@ -70,6 +70,8 @@
     highlight?: boolean
     customCenterChecker?: (message: MessageInfo, conversationID: string) => boolean
     customMessageRender?: any
+    // >0 表示键盘/EMOJI/TOOLS 面板正展开（MessageInput.updateSpacer：NONE/VOICE 时为 0）
+    inputPanelHeight?: number
   }
 
   const props = withDefaults(defineProps<Props>(), {
@@ -80,7 +82,8 @@
     messageActionList: () => [],
     highlight: false,
     customCenterChecker: null,
-    customMessageRender: null
+    customMessageRender: null,
+    inputPanelHeight: 0
   })
 
   const emit = defineEmits<{
@@ -99,6 +102,7 @@
   const avatarRef = ref(null)
 
   const isLongPressing = ref(false)
+  const COLLAPSE_SETTLE_MS = 450
   const longPressTimer = ref<number | null>(null)
   const touchStartTime = ref(0)
   const {
@@ -408,6 +412,11 @@
     }
 
     longPressPosition.value = { ...lastTouchPosition.value }
+
+    if (props.inputPanelHeight > 0) {
+      emit('onMessageListTap')
+      await new Promise(resolve => setTimeout(resolve, COLLAPSE_SETTLE_MS))
+    }
 
     try {
       const messagePosition = await getMessagePosition(props.message.msgID) //

@@ -1,0 +1,157 @@
+<template>
+  <view class="page" :style="{ height: safeArea.height + 'px' }">
+    <view class="header">
+      <view class="back-btn" @tap="handleBack">
+        <image class="back-icon" src="/static/images/back-black.png" mode="aspectFit" />
+      </view>
+      <view class="user-info">
+        <image class="user-avatar" :src="loginUserInfo?.avatarURL || defaultAvatarURL" mode="aspectFill" />
+        <text class="user-name" :numberOfLines="1">{{ loginUserInfo?.nickname || loginUserInfo?.userID || '' }}</text>
+      </view>
+    </view>
+
+    <view class="actions">
+      <view class="action-btn" @tap="handleJoinRoom">
+        <image class="action-btn-icon" src="/static/images/room/room_join.png" mode="aspectFit" />
+        <text class="action-btn-text">加入房间</text>
+      </view>
+      <view class="action-btn-gap"></view>
+      <view class="action-btn" @tap="handleCreateRoom">
+        <image class="action-btn-icon" src="/static/images/room/room_create.png" mode="aspectFit" />
+        <text class="action-btn-text">创建房间</text>
+      </view>
+    </view>
+  </view>
+</template>
+
+<script setup>
+  import { ref, onMounted } from 'vue';
+  import { useLoginState } from '@/uni_modules/tuikit-atomic-x/state';
+  import { reportMetrics } from '@/uni_modules/tuikit-atomic-x';
+
+  const { loginUserInfo } = useLoginState();
+
+  const defaultAvatarURL = '/static/images/default-avatar.png';
+
+  const safeArea = ref({
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    width: 375,
+    height: 750,
+  });
+
+  onMounted(() => {
+    reportMetrics('ROOM_SCENE');
+    uni.getSystemInfo({
+      success: (res) => {
+        safeArea.value = res.safeArea;
+      }
+    });
+  });
+
+  const handleBack = () => {
+    uni.navigateBack({
+      fail: () => {
+        uni.reLaunch({ url: '/pages/index/index' });
+      }
+    });
+  }
+
+  const handleJoinRoom = () => {
+    uni.navigateTo({
+      url: '/pages/scenes/room/join/index'
+    });
+  }
+
+  const handleCreateRoom = () => {
+    uni.navigateTo({
+      url: '/pages/scenes/room/create/index'
+    });
+  }
+</script>
+
+<style>
+  .page {
+    flex: 1;
+    background-color: #F2F5FC;
+    flex-direction: column;
+    position: relative;
+  }
+
+  .header {
+    flex-direction: row;
+    align-items: center;
+    padding-top: 96rpx;
+    padding-bottom: 24rpx;
+    padding-left: 32rpx;
+    padding-right: 32rpx;
+  }
+
+  .back-btn {
+    width: 44rpx;
+    height: 44rpx;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .back-icon {
+    width: 32rpx;
+    height: 32rpx;
+  }
+
+  .user-info {
+    flex: 1;
+    flex-direction: row;
+    align-items: center;
+    margin-left: 44rpx;
+  }
+
+  .user-avatar {
+    width: 64rpx;
+    height: 64rpx;
+    border-radius: 32rpx;
+    margin-right: 24rpx;
+  }
+
+  .user-name {
+    font-size: 32rpx;
+    font-weight: 500;
+    color: #676C80;
+    flex: 1;
+  }
+
+  .actions {
+    position: absolute;
+    bottom: 308rpx;
+    left: 112rpx;
+    right: 112rpx;
+    flex-direction: column;
+  }
+
+  .action-btn {
+    height: 108rpx;
+    border-radius: 16rpx;
+    background-color: #0468FC;
+    flex-direction: row;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .action-btn-gap {
+    height: 48rpx;
+  }
+
+  .action-btn-icon {
+    width: 40rpx;
+    height: 40rpx;
+    margin-right: 16rpx;
+  }
+
+  .action-btn-text {
+    color: #FFFFFF;
+    font-size: 32rpx;
+    font-weight: 600;
+  }
+</style>

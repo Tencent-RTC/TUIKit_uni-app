@@ -6,6 +6,8 @@
       :src="videoUrl"
       :autoplay="true"
       :controls="true"
+      :style="videoStyles"
+      :show-fullscreen-btn="false"
       @error="handleError"
       @ended="handleEnded"
     />
@@ -33,6 +35,8 @@ import { onLoad } from '@dcloudio/uni-app'
 // 状态
 const videoUrl = ref<string>('')
 const loadError = ref<boolean>(false)
+const systemInfo = uni.getSystemInfoSync()
+const videoStyles = ref<string>(`width: ${systemInfo.screenWidth}px; height: ${systemInfo.screenHeight - 40}px;`)
 
 // 页面加载时解析参数
 onLoad((options: OnLoadOptions): void => {

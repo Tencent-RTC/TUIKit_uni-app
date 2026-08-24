@@ -120,8 +120,8 @@ const messageSegments = computed<MessageSegment[]>(() => {
   if (!lastMessage) {
     return [{ type: 'text', content: '暂无消息' }]
   }
-  
-  if (lastMessage.messageType === MessageType.TEXT && lastMessage.messagePayload?.text) {
+
+  if (lastMessage.status === MessageStatus.SEND_SUCCESS && lastMessage.messageType === MessageType.TEXT && lastMessage.messagePayload?.text) {
     // 将换行符替换为空格，保证一行显示
     let text = lastMessage.messagePayload.text.replace(/[\r\n]+/g, ' ')
     

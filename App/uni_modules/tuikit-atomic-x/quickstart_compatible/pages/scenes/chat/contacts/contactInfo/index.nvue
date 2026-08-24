@@ -12,6 +12,7 @@
 <script>
 import ContactInfo from '@/uni_modules/tuikit-atomic-x/components/Contact/ContactInfo'
 import CustomNavbar from '@/uni_modules/tuikit-atomic-x/components/CustomNavbar/CustomNavbar.nvue'
+import { useMessageListState } from '@/uni_modules/tuikit-atomic-x/state/MessageListState'
 export default {
   components: { ContactInfo, CustomNavbar },
   data() { return { type: undefined, userInfo: null, friendInfo: null, friendApplication: null, canAddFriend: true } },
@@ -43,7 +44,11 @@ export default {
     },
     handleAcceptFriend(application) { uni.navigateBack({ delta: 2 }) },
     handleRejectFriend(application) { uni.navigateBack({ delta: 2 }) },
-    handleSendMessage(userID) { uni.navigateTo({ url: '/pages/scenes/chat/chat/index?conversationID=c2c_' + userID }) },
+    handleSendMessage(userID) {
+      // 预创建 MessageList store，与导航动画并行
+      useMessageListState({ conversationID: 'c2c_' + userID })
+      uni.navigateTo({ url: '/pages/scenes/chat/chat/index?conversationID=c2c_' + userID })
+    },
     handleRemarkChange(data) {
       uni.$remarkData = data
       uni.navigateTo({ url: '/pages/scenes/chat/contacts/setRemark/index' })

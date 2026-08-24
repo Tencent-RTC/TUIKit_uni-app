@@ -67,6 +67,7 @@ const { getContactInfo } = useContactState('MessageListState');
 class MessageListState {
   public readonly instanceId: string;
   private readonly conversationID: string;
+  private readonly initialLoadOption?: MessageLoadOption;
 
   /** 消息列表 */
   public readonly messageList: Ref<MessageInfo[]>;
@@ -83,9 +84,10 @@ class MessageListState {
   /** messageEvent 订阅者列表 */
   private messageEventHandlers: Set<(event: MessageEvent) => void> = new Set();
 
-  private constructor(conversationID: string) {
+  private constructor(conversationID: string, initialLoadOption?: MessageLoadOption) {
     this.instanceId = MessageListState.generateInstanceId(conversationID);
     this.conversationID = conversationID;
+    this.initialLoadOption = initialLoadOption;
     this.messageList = ref<MessageInfo[]>([]);
     this.hasOlderMessages = ref<boolean>(true);
     this.hasNewerMessages = ref<boolean>(false);
@@ -136,7 +138,7 @@ class MessageListState {
         if (result.code === 0) {
           this.bindEvent();
           if (this.conversationID) {
-            this.loadMessages({ pageCount: 20 });
+            this.loadMessages(this.initialLoadOption || { pageCount: 20 });
           }
         } else {
           console.error(`[${this.instanceId}][createStore] Failed:`, result.message);
@@ -154,10 +156,18 @@ class MessageListState {
     });
   }
 
-  public static getInstance(conversationID: string = ""): MessageListState {
+  /**
+   * 获取指定会话的实例（按 conversationID 缓存）
+   *
+   * @param initialLoadOption 首次拉取选项，**仅实例首次创建时生效**（已存在则忽略）
+   */
+  public static getInstance(
+    conversationID: string = "",
+    initialLoadOption?: MessageLoadOption
+  ): MessageListState {
     const instanceId = MessageListState.generateInstanceId(conversationID);
     if (!InstanceMap.has(instanceId)) {
-      InstanceMap.set(instanceId, new MessageListState(conversationID));
+      InstanceMap.set(instanceId, new MessageListState(conversationID, initialLoadOption));
     }
     return InstanceMap.get(instanceId)!;
   }
@@ -590,7 +600,7 @@ class MessageListState {
    *
    * @returns 取消订阅函数
    */
-  onMessageEvent = (handler: (event: MessageEvent) => void): (() => void) => {
+  messageListOnEvent = (handler: (event: MessageEvent) => void): (() => void) => {
     this.messageEventHandlers.add(handler);
     return () => {
       this.messageEventHandlers.delete(handler);
@@ -647,12 +657,13 @@ class MessageListState {
  */
 export interface UseMessageListStateOptions {
   conversationID?: string;
+  initialLoadOption?: MessageLoadOption;
 }
 
 export function useMessageListState(options: UseMessageListStateOptions = {}) {
-  const { conversationID = "" } = options;
+  const { conversationID = "", initialLoadOption } = options;
 
-  return MessageListState.getInstance(conversationID);
+  return MessageListState.getInstance(conversationID, initialLoadOption);
 }
 
 export {

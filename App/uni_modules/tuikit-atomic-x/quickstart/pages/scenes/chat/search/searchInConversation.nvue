@@ -19,6 +19,8 @@
 import { ref } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import Search from '@/uni_modules/tuikit-atomic-x/components/Search/Search.nvue'
+import { useMessageListState } from '@/uni_modules/tuikit-atomic-x/state/MessageListState'
+import { MessageLoadDirection } from '@/uni_modules/tuikit-atomic-x/types/message'
 
 const searchRef = ref(null)
 const conversationID = ref('')
@@ -59,7 +61,23 @@ const handleResultItemClick = (type, data) => {
     
     // 通过全局变量传递完整的消息对象
     uni.$locateMessage = data
-    
+
+    // 预创建 MessageList store，与导航动画并行。
+    //
+    // ★ 必须传 initialLoadOption 做定位拉取：本路径的目标是某条历史消息，
+    // 若按默认拉最新 20 条，目标消息大概率不在其中 —— chat 页落地后 MessageList
+    // 仍要再发一次定位拉取，预创建就只省下 createStore + bindEvent。
+    // 传 cursor + BOTH 让首次拉取直接命中目标消息所在的那批。
+    // 参数与 MessageList 内部 locateToMessage 保持一致。
+    useMessageListState({
+      conversationID: targetConversationID,
+      initialLoadOption: {
+        cursor: data,
+        direction: MessageLoadDirection.BOTH,
+        pageCount: 20
+      }
+    })
+
     uni.navigateTo({
       url: `/pages/scenes/chat/chat/index?conversationID=${targetConversationID}`
     })

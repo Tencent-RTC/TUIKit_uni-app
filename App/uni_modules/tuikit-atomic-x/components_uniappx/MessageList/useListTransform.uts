@@ -48,7 +48,12 @@ export function useListTransform(options: UseListTransformOptions): UseListTrans
 		const availableSpace: number = screenHeight - originalBottom - toolbarHeight
 
 		if (panelHeight > availableSpace) {
-			return panelHeight - availableSpace
+			const needed: number = panelHeight - availableSpace
+			// transform 的语义是"补足面板遮挡的那部分"，上移量的物理上限就是 panelHeight：
+			// 上移 panelHeight 时露出的底部正好被面板覆盖；超过则底部出现空白、内容被顶出屏幕。
+			// originalBottom 可能因 list 滚动而失真（restoreOriginalBottom 只补偿了 transform，
+			// 未补偿滚动），发送长消息时会把 needed 放大，故此处收口。
+			return needed > panelHeight ? panelHeight : needed
 		}
 		return 0
 	}

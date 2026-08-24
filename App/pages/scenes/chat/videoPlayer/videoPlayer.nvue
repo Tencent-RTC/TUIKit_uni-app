@@ -5,6 +5,8 @@
       class="video-player"
       :src="videoUrl"
       :autoplay="true"
+      :style="videoStyles"
+      :show-fullscreen-btn="false"
       @error="handleError"
       @ended="handleEnded"
     />
@@ -31,13 +33,18 @@ import { onLoad } from '@dcloudio/uni-app'
 // 状态
 const videoUrl = ref('')
 const loadError = ref(false)
+const systemInfo = uni.getSystemInfoSync()
+const videoStyles = ref({
+  width: `${systemInfo.screenWidth}px`,
+  height: `${systemInfo.screenHeight - 40}px`
+})
 
 // 页面加载时解析参数
 onLoad((options) => {
   if (options?.url) {
     videoUrl.value = decodeURIComponent(options.url)
   }
-  
+
   if (!videoUrl.value) {
     loadError.value = true
   }
@@ -83,10 +90,12 @@ const handleRetry = () => {
 
 .video-player {
   position: absolute;
-  top: 0;
+  top: 33rpx;
   left: 0;
   right: 0;
   bottom: 0;
+  background: red;
+  height: 851rpx;
 }
 
 .close-btn {

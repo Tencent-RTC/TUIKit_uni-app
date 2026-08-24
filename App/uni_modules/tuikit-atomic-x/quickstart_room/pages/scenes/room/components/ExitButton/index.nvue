@@ -1,0 +1,66 @@
+<template>
+  <view class="exit-btn" @tap="handleTap">
+    <image class="exit-icon" src="/static/images/room/room_exit.png" mode="aspectFit" />
+    <text class="exit-text">结束</text>
+
+    <ExitSheet
+      :visible="isExitVisible"
+      :isOwner="isOwner"
+      @leave="handleLeave"
+      @end="handleEnd"
+      @cancel="handleCancel"
+    />
+  </view>
+</template>
+
+<script setup lang="ts">
+  import { ref } from 'vue';
+  import ExitSheet from './ExitSheet/index.nvue';
+
+  defineProps({
+    isOwner: { type: Boolean, default: false },
+  });
+
+  const emit = defineEmits<{
+    (e: 'leave'): void
+    (e: 'end'): void
+  }>();
+
+  const isExitVisible = ref(false);
+
+  function handleTap() { isExitVisible.value = true; }
+  function handleCancel() { isExitVisible.value = false; }
+
+  function handleLeave() {
+    isExitVisible.value = false;
+    emit('leave');
+  }
+
+  function handleEnd() {
+    isExitVisible.value = false;
+    emit('end');
+  }
+
+  function showExit() { isExitVisible.value = true; }
+  defineExpose({ showExit });
+</script>
+
+<style>
+  .exit-btn {
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .exit-icon {
+    width: 40rpx;
+    height: 40rpx;
+    margin-right: 6rpx;
+  }
+
+  .exit-text {
+    color: #ED414D;
+    font-size: 28rpx;
+    font-weight: 600;
+  }
+</style>

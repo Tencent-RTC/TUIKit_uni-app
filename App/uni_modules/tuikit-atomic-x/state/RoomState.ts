@@ -38,6 +38,7 @@ import {
   UpdateRoomOptions,
 } from '../types/room';
 import { roomLifecycle } from './internal/roomLifecycle';
+import { KeyMetricsKey, reportKeyMetrics } from './internal/keyMetrics';
 // 触发 RoomParticipantState 模块加载，确保其在进/退房广播前完成生命周期自注册。
 import './RoomParticipantState';
 
@@ -354,6 +355,7 @@ class RoomStateImpl implements IRoomState {
     options: CreateRoomOptions;
   }): Promise<void> => {
     setFramework(COMPONENT_ROOM);
+    reportKeyMetrics(KeyMetricsKey.T_METRICS_STATE_API_CREATE_ROOM_COUNT);
     // 进房前广播 beforeEnterRoom：子 state 据此绑定 roomID 并注册底层 observer。
     // 进房失败不广播 didLeaveRoom：未真正进入房间，无需触发子 state 清理。
     roomLifecycle.beforeEnterRoom(options.roomID);
@@ -369,6 +371,7 @@ class RoomStateImpl implements IRoomState {
 
   joinRoom = async (options: { roomID: string; roomType?: RoomType; password?: string }): Promise<void> => {
     setFramework(COMPONENT_ROOM);
+    reportKeyMetrics(KeyMetricsKey.T_METRICS_STATE_API_JOIN_ROOM_COUNT);
     roomLifecycle.beforeEnterRoom(options.roomID);
     const innerOptions: Record<string, any> = {};
     if (options.password) innerOptions.password = options.password;
@@ -420,10 +423,12 @@ class RoomStateImpl implements IRoomState {
   };
 
   startRecording = async (options?: { options?: StartRecordingOptions }): Promise<void> => {
+    reportKeyMetrics(KeyMetricsKey.T_METRICS_STATE_API_START_RECORDING_COUNT);
     await invokeApi(ApiKeys.START_RECORDING, { options: options?.options ?? {} });
   };
 
   stopRecording = async (): Promise<void> => {
+    reportKeyMetrics(KeyMetricsKey.T_METRICS_STATE_API_STOP_RECORDING_COUNT);
     await invokeApi(ApiKeys.STOP_RECORDING, '');
   };
 
@@ -531,6 +536,7 @@ export function useRoomState(): IRoomState {
     _instance = new RoomStateImpl();
   }
   reportMetrics('ROOM_STATE');
+  reportKeyMetrics(KeyMetricsKey.T_METRICS_STATE_ROOM_STATE_COUNT);
   return _instance;
 }
 

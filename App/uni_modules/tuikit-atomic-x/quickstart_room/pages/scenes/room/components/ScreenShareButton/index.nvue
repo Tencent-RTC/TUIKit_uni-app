@@ -1,0 +1,281 @@
+<template>
+  <view class="bottom-btn" @tap="handleTap" :style="dimStyle">
+    <view class="bottom-icon-box">
+      <image
+        class="bottom-icon"
+        :src="screenShareIconSrc"
+        mode="aspectFit"
+      />
+      <text class="bottom-text">{{ screenShareText }}</text>
+    </view>
+
+    <RoomDialog
+      :modelValue="dialogState.visible"
+      :title="dialogState.title"
+      :confirmButton="dialogState.confirmButton"
+      :cancelButton="dialogState.cancelButton"
+      :modal="true"
+      @confirm="onDialogConfirm"
+      @cancel="onDialogCancel"
+      @update:modelValue="(val: boolean) => { if (!val) closeDialog(); }"
+    >
+      <!-- iOS 扩展配置引导文案很长，RoomDialog 的内容区不带滚动（容器 overflow: hidden），
+           不套 scroll-view 会被裁掉，所以按 scrollable 分两路渲染 -->
+      <scroll-view v-if="dialogState.scrollable" scroll-y class="dialog-scroll">
+        <text class="dialog-message">{{ dialogState.message }}</text>
+      </scroll-view>
+      <text v-else class="dialog-message">{{ dialogState.message }}</text>
+    </RoomDialog>
+
+    <Toast
+      v-model:visible="toastState.visible"
+      :message="toastState.message"
+      :type="toastState.type"
+    />
+  </view>
+</template>
+
+<script setup lang="ts">
+  import { computed, reactive } from 'vue';
+  import { useRoomState } from '@/uni_modules/tuikit-atomic-x/state';
+  import { useDeviceState } from '@/uni_modules/tuikit-atomic-x/state';
+  import { useRoomParticipantState } from '@/uni_modules/tuikit-atomic-x/state';
+  import {
+    RoomParticipantRole,
+    DeviceStatus,
+  } from '@/uni_modules/tuikit-atomic-x/state';
+  import { showErrorToast, parseErrorCode, ERR_SCREEN_SHARE_EXTENSION_NOT_CONFIGURED } from '../../utils/errorHandler';
+  import RoomDialog from '../RoomDialog/index.nvue';
+  import Toast, { type ToastType } from '@/uni_modules/tuikit-atomic-x/components/Toast';
+
+  const { currentRoom } = useRoomState();
+  const { localParticipant, participantWithScreen } = useRoomParticipantState();
+  const { startScreenShare, stopScreenShare } = useDeviceState();
+
+  const isScreenSharing = computed(() => {
+    return localParticipant.value?.screenShareStatus === DeviceStatus.ON;
+  });
+
+  // 全员禁屏幕共享时普通用户处于关闭态：按钮置灰 + 点击弹「仅房主/管理员可共享屏幕」
+  // （与 CameraButton 的 isDimmed 同一模式：全员禁 + 普通用户 + 自己当前是关闭态）
+  const isDimmed = computed(() => {
+    return (
+      currentRoom.value?.isAllScreenShareDisabled === true &&
+      localParticipant.value?.role === RoomParticipantRole.GeneralUser &&
+      localParticipant.value?.screenShareStatus === DeviceStatus.OFF
+    );
+  });
+
+  const dimStyle = computed(() => ({ opacity: isDimmed.value ? 0.5 : 1 }));
+
+  const screenShareIconSrc = computed(() =>
+    isScreenSharing.value
+      ? '/static/images/room/room_stop_screen_share.png'
+      : '/static/images/room/room_start_screen_share.png',
+  );
+
+  const screenShareText = computed(() => (isScreenSharing.value ? '停止分享' : '屏幕分享'));
+
+  const OCCUPIED_MESSAGE = '其他用户正在共享屏幕';
+  const DISABLED_MESSAGE = '仅房主/管理员可共享屏幕';
+  const SAFETY_MESSAGE =
+    '共享屏幕时可能会泄漏短信验证码、密码等隐私信息，造成财产损失，请警惕各种诈骗行为。';
+  const STOP_CONFIRM_MESSAGE =
+    '结束共享后，其他人将无法继续观看你的屏幕内容，确认要结束共享吗？';
+  // iOS 未配置屏幕分享扩展（12061）。用 Dialog 而不是 Toast：这是「工程配置缺失」
+  // 而不是运行时状态，必须让开发者看清要改哪些文件，Toast 一闪而过会被忽略。
+  const IOS_EXTENSION_MISSING_MESSAGE =
+    'iOS 需要配置屏幕分享扩展才能使用该功能：\n' +
+    '一、在 nativeResources/ios 下放置三个文件：\n' +
+    '1. ios-screenShareUpload.mobileprovision，在 Apple 开发者后台为 Extension 的 Bundle ID 单独创建（需勾选 App Groups 能力）后下载\n' +
+    '2. ios-extension.json 配置：\n' +
+    '{\n' +
+    '  "ScreenShareExtension.appex": {\n' +
+    '    "identifier": "com.xxx.upload",\n' +
+    '    "profile": "ios-screenShareUpload.mobileprovision",\n' +
+    '    "entitlements": {\n' +
+    '      "com.apple.security.application-groups": ["group.com.xxx"]\n' +
+    '    }\n' +
+    '  }\n' +
+    '}\n' +
+    '各字段来源：\n' +
+    '· identifier：Extension 的 Bundle ID，必须是主 App Bundle ID 加后缀（如主 App 为 com.xxx，则填 com.xxx.upload），且与上面 mobileprovision 绑定的 Bundle ID 一致\n' +
+    '· profile：上面那份 mobileprovision 的文件名（相对 nativeResources/ios）\n' +
+    '· entitlements.com.apple.security.application-groups：Apple 开发者后台创建的 App Group ID（形如 group.com.xxx），主 App 与 Extension 必须同时勾选同一个\n' +
+    '3. UniApp.entitlements 配置（主 App 侧的 App Groups 授权，上面 ios-extension.json 里的 entitlements 只对 Extension 生效，主 App 需要这份文件才能与 Extension 共享数据）：\n' +
+    '<?xml version="1.0" encoding="UTF-8"?>\n' +
+    '<plist version="1.0">\n' +
+    '  <dict>\n' +
+    '    <key>com.apple.security.application-groups</key>\n' +
+    '    <array>\n' +
+    '      <string>group.com.xxx</string>\n' +
+    '    </array>\n' +
+    '  </dict>\n' +
+    '</plist>\n' +
+    '\n' +
+    '二、在项目根目录新建 Info.plist，加入 TUIRoomAppGroup：\n' +
+    '<?xml version="1.0" encoding="UTF-8"?>\n' +
+    '<plist version="1.0">\n' +
+    '  <dict>\n' +
+    '    <key>TUIRoomAppGroup</key>\n' +
+    '    <string>group.com.xxx</string>\n' +
+    '  </dict>\n' +
+    '</plist>\n' +
+    '以上三处 group.com.xxx（ios-extension.json 的 application-groups、UniApp.entitlements、Info.plist 的 TUIRoomAppGroup）必须完全一致，不一致会推流失败。\n' +
+    '\n' +
+    '三、重新制作自定义基座后生效。\n' +
+    '\n' +
+    '具体配置过程请查看官网「快速集成 > 高级功能」。';
+
+  type DialogConfig = {
+    title: string;
+    message: string;
+    confirmButton: string;
+    cancelButton: string;
+    onConfirm: () => void;
+    onCancel: () => void;
+    /** 内容区是否套 scroll-view（长文案必须开，否则被容器裁掉）。缺省 false */
+    scrollable?: boolean;
+  };
+
+  const dialogState = reactive<DialogConfig & { visible: boolean }>({
+    visible: false,
+    title: '',
+    message: '',
+    confirmButton: '确定',
+    cancelButton: '取消',
+    onConfirm: (): void => {},
+    onCancel: (): void => {},
+    scrollable: false,
+  });
+
+  const toastState = reactive<{ visible: boolean; message: string; type: ToastType }>({
+    visible: false,
+    message: '',
+    type: 'none',
+  });
+
+  function showDialog(config: DialogConfig): void {
+    dialogState.title = config.title;
+    dialogState.message = config.message;
+    dialogState.confirmButton = config.confirmButton;
+    dialogState.cancelButton = config.cancelButton;
+    dialogState.onConfirm = config.onConfirm;
+    dialogState.onCancel = config.onCancel;
+    dialogState.scrollable = config.scrollable === true;
+    dialogState.visible = true;
+  }
+
+  function closeDialog(): void {
+    dialogState.visible = false;
+  }
+
+  function onDialogConfirm(): void {
+    closeDialog();
+    dialogState.onConfirm();
+  }
+
+  function onDialogCancel(): void {
+    closeDialog();
+    dialogState.onCancel();
+  }
+
+  function handleTap(): void {
+    if (isScreenSharing.value) {
+      // 分享中 → 弹结束确认弹窗
+      showDialog({
+        title: '结束共享',
+        message: STOP_CONFIRM_MESSAGE,
+        confirmButton: '结束共享',
+        cancelButton: '取消',
+        onConfirm: (): void => {
+          stopScreenShare();
+        },
+        onCancel: (): void => {},
+      });
+    } else if (isDimmed.value) {
+      // 全员禁共享 + 普通用户 → 只提示无权限，不走安全提醒弹窗
+      toastState.message = DISABLED_MESSAGE;
+      toastState.type = 'none';
+      toastState.visible = true;
+    } else if (participantWithScreen.value != null) {
+      toastState.message = OCCUPIED_MESSAGE;
+      toastState.type = 'none';
+      toastState.visible = true;
+    } else {
+      showDialog({
+        title: '安全提醒',
+        message: SAFETY_MESSAGE,
+        confirmButton: '继续共享',
+        cancelButton: '取消',
+        onConfirm: (): void => {
+          // startScreenShare 返回 Promise，reject 出的 Error 带 code；
+          // 12061 = iOS 未配置屏幕分享扩展，需要开发者改配置，走 Dialog 强提示
+          startScreenShare().catch((e: any): void => {
+            if (parseErrorCode(e) === ERR_SCREEN_SHARE_EXTENSION_NOT_CONFIGURED) {
+              showDialog({
+                title: '未配置屏幕分享扩展',
+                message: IOS_EXTENSION_MISSING_MESSAGE,
+                confirmButton: '我知道了',
+                cancelButton: '',
+                onConfirm: (): void => {},
+                onCancel: (): void => {},
+                scrollable: true,
+              });
+              return;
+            }
+            showErrorToast(e, '开启屏幕分享失败');
+          });
+        },
+        onCancel: (): void => {},
+      });
+    }
+  }
+</script>
+
+<style>
+  .bottom-btn {
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .bottom-icon-box {
+    width: 104rpx;
+    height: 104rpx;
+    border-radius: 20rpx;
+    background-color: #2A2D38;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .bottom-icon {
+    width: 48rpx;
+    height: 48rpx;
+  }
+
+  .bottom-text {
+    color: #FFFFFF;
+    font-size: 20rpx;
+    margin-top: 6rpx;
+    lines: 1;
+    text-overflow: ellipsis;
+  }
+
+  /* 长文案滚动容器。nvue scroll-view 必须给具体高度（max-height 不生效），
+     700rpx 约占屏高一半，配合 RoomDialog 的 title + footer 不会溢出屏幕 */
+  .dialog-scroll {
+    width: 544rpx;
+    height: 700rpx;
+  }
+
+  /* 多行提示文案（iOS 扩展配置引导有换行），左对齐可读性更好；
+     不设 lines 让 weex 不限制行数 */
+  .dialog-message {
+    font-size: 28rpx;
+    line-height: 44rpx;
+    color: #4F586B;
+    text-align: left;
+  }
+</style>

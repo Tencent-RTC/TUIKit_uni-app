@@ -2,7 +2,7 @@
   "frameworks": [
     "CoreTelephony.framework"
   ],
-  "deploymentTarget": "13",
+  "deploymentTarget": "14",
   "dependencies-pods": [{
       "name": "SVGAPlayer",
       "version": "2.5.7",
@@ -19,7 +19,7 @@
     },
     {
       "name": "TXLiteAVSDK_Professional",
-      "version": "13.1.20476"
+      "version": "13.4.21067"
     },
     {
       "name": "RTCRoomEngine/Professional",

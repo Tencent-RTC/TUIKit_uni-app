@@ -660,7 +660,7 @@ class MessageListState {
     }
   };
 
-  onMessageEvent = (handler: (event: any) => void): (() => void) => {
+  messageListOnEvent = (handler: (event: any) => void): (() => void) => {
     this.messageEventHandlers.add(handler);
     return () => {
       this.messageEventHandlers.delete(handler);

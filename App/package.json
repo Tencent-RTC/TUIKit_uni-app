@@ -7,8 +7,7 @@
     "dev": "uni",
     "build": "uni build",
     "build:h5": "uni build:h5",
-    "build:app-plus": "uni build:app-plus",
-    "vue2": "node scripts/convert-to-vue2-quickstart.js"
+    "build:app-plus": "uni build:app-plus"
   },
   "keywords": [
     "uniapp",

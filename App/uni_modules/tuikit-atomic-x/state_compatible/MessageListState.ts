@@ -47,6 +47,7 @@ const { getContactInfo } = useContactState('MessageListState');
 class MessageListState {
   public readonly instanceId: string;
   private readonly conversationID: string;
+  private readonly initialLoadOption?: MessageLoadOption;
 
   /** 消息列表 */
   public readonly messageList: { value: MessageInfo[] };
@@ -61,11 +62,12 @@ class MessageListState {
   public readonly pinnedMessageList: { value: MessageInfo[] };
 
   private peerUserInfo: { userID: string; avatarURL?: string; nickname?: string } | null = null;
-  private messageEventHandlers: Array<(event: MessageEvent) => void> = [];
+  private messageEventHandlers: Set<(event: MessageEvent) => void> = new Set();
 
-  private constructor(conversationID: string) {
+  private constructor(conversationID: string, initialLoadOption?: MessageLoadOption) {
     this.instanceId = MessageListState.generateInstanceId(conversationID);
     this.conversationID = conversationID;
+    this.initialLoadOption = initialLoadOption;
     this.messageList = makeReactive({ value: [] });
     this.hasOlderMessages = makeReactive({ value: true });
     this.hasNewerMessages = makeReactive({ value: false });
@@ -82,10 +84,18 @@ class MessageListState {
     });
   }
 
-  public static getInstance(conversationID: string = ""): MessageListState {
+  /**
+   * 获取指定会话的实例（按 conversationID 缓存）
+   *
+   * @param initialLoadOption 首次拉取选项，**仅实例首次创建时生效**（已存在则忽略）
+   */
+  public static getInstance(
+    conversationID: string = "",
+    initialLoadOption?: MessageLoadOption
+  ): MessageListState {
     const instanceId = MessageListState.generateInstanceId(conversationID);
     if (!InstanceMap.has(instanceId)) {
-      InstanceMap.set(instanceId, new MessageListState(conversationID));
+      InstanceMap.set(instanceId, new MessageListState(conversationID, initialLoadOption));
     }
     return InstanceMap.get(instanceId)!;
   }
@@ -122,7 +132,7 @@ class MessageListState {
         if (result.code === 0) {
           this.bindEvent();
           if (this.conversationID) {
-            this.loadMessages({ pageCount: 20 });
+            this.loadMessages(this.initialLoadOption || { pageCount: 20 });
           }
         } else {
           console.error(`[${this.instanceId}][createStore] Failed:`, result.message);
@@ -434,9 +444,12 @@ class MessageListState {
     });
   }
 
-  /** 注册流式消息事件订阅 */
-  onMessageEvent = (handler: (event: MessageEvent) => void): void => {
-    this.messageEventHandlers.push(handler);
+  /** 注册流式消息事件订阅，返回 unsubscribe 函数 */
+  messageListOnEvent = (handler: (event: MessageEvent) => void): (() => void) => {
+    this.messageEventHandlers.add(handler);
+    return () => {
+      this.messageEventHandlers.delete(handler);
+    };
   }
 
   // ==================== 内部工具 ====================
@@ -518,11 +531,12 @@ class MessageListState {
 
 export interface UseMessageListStateOptions {
   conversationID?: string;
+  initialLoadOption?: MessageLoadOption;
 }
 
 export function useMessageListState(options: UseMessageListStateOptions = {}) {
-  const { conversationID = "" } = options;
-  return MessageListState.getInstance(conversationID);
+  const { conversationID = "", initialLoadOption } = options;
+  return MessageListState.getInstance(conversationID, initialLoadOption);
 }
 
 export {

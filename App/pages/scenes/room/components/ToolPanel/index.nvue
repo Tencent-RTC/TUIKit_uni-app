@@ -1,0 +1,183 @@
+<template>
+  <view v-if="!expanded" class="tool-panel-collapsed">
+    <view class="tool-row">
+      <view v-for="t in visibleCollapsedTools.slice(0, threshold)" :key="t.name" class="tool-cell">
+        <component
+          :is="t.component"
+          v-bind="t.props || {}"
+          @click="t.listeners?.click?.($event)"
+          @request-start="t.listeners?.['request-start']?.()"
+          @request-stop="t.listeners?.['request-stop']?.()"
+        />
+      </view>
+      <view v-if="visibleCollapsedTools.length > threshold" class="toggle-btn" @tap="expand">
+        <view class="toggle-icon-box">
+          <image class="toggle-icon" src="/static/images/room/room_tool_open.png" mode="aspectFit" />
+          <text class="toggle-text">展开</text>
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <!-- 展开态：底部面板 + 全量工具 + 右侧收起按钮（展开态不应用 visible 过滤） -->
+  <view v-else class="tool-panel-mask" @tap="collapse">
+    <view class="tool-panel-content" @tap.stop>
+      <view class="tool-grid">
+        <view v-for="t in tools" :key="t.name" class="tool-grid-cell">
+          <component
+            :is="t.component"
+            v-bind="t.props || {}"
+            @click="t.listeners?.click?.($event)"
+            @request-start="t.listeners?.['request-start']?.()"
+            @request-stop="t.listeners?.['request-stop']?.()"
+          />
+        </view>
+      </view>
+      <view class="toggle-btn-collapsed" @tap="collapse">
+        <view class="toggle-icon-box">
+          <image class="toggle-icon" src="/static/images/room/room_tool_close.png" mode="aspectFit" />
+          <text class="toggle-text">收起</text>
+        </view>
+      </view>
+    </view>
+  </view>
+</template>
+
+<script setup lang="ts">
+  import { ref, computed } from 'vue';
+  import type { ToolDescriptor } from './toolDescriptor';
+  const props = defineProps({
+    tools: { type: Array as () => ToolDescriptor[], default: () => [] },
+    threshold: { type: Number, default: 5 },
+  });
+
+  const expanded = ref<boolean>(false);
+  const visibleCollapsedTools = computed<ToolDescriptor[]>(() =>
+    props.tools.filter((t) => t.visible !== false)
+  );
+
+  function expand(): void {
+    expanded.value = true;
+  }
+
+  function collapse(): void {
+    expanded.value = false;
+  }
+
+  function toggle(): void {
+    expanded.value = !expanded.value;
+  }
+
+  defineExpose({ expand, collapse, toggle, expanded });
+</script>
+
+<style>
+  /* ==================== 收起态 ==================== */
+  .tool-panel-collapsed {
+    flex: 1;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-around;
+    padding: 0 32rpx;
+    background-color: transparent;
+  }
+
+  .tool-row {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    flex: 1;
+  }
+
+  .tool-cell {
+    flex: 1;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* ==================== 展开态 ==================== */
+  /* ToolPanel 嵌在 main/.bottom-bar 内，展开时不能让 mask 受 192rpx bottom-bar 高度限制 */
+  /* 必须用 position: fixed 撑出父容器，从屏幕底往上铺 */
+  .tool-panel-mask {
+    position: fixed;
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    flex-direction: column;
+    justify-content: flex-end;
+    background-color: transparent;
+  }
+
+  .tool-panel-content {
+    /* 内容面板：从屏幕底贴底，圆角顶左/顶右，左右各留 16rpx 边距 */
+    position: absolute;
+    left: 16rpx;
+    right: 16rpx;
+    bottom: 34rpx;
+    background-color: #2A2D38;
+    border-radius: 24rpx;
+    flex-direction: row;
+    align-items: flex-start;
+    padding: 24rpx;
+  }
+
+  /* 展开态:5 列网格。flex: 0 0 20% 让每 cell 占容器 1/5 宽度，左对齐 flex-start */
+  .tool-grid {
+    flex: 1;
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+
+  .tool-grid-cell {
+    width: 120rpx;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+  }
+
+  /* ==================== 折叠/展开按钮 ==================== */
+  .toggle-btn {
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding-left: 8rpx;
+  }
+
+  .toggle-btn-collapsed {
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .toggle-icon-box {
+    width: 66rpx;
+    height: 104rpx;
+    border-radius: 20rpx;
+    background-color: #2A2D38;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+  }
+
+  /* 展开态下右侧 toggle 与工具格在同一暗色面板里，背景透明避免双层压色 */
+  .toggle-btn-collapsed .toggle-icon-box {
+    background-color: transparent;
+  }
+
+  .toggle-icon {
+    width: 48rpx;
+    height: 48rpx;
+  }
+
+  .toggle-text {
+    color: #FFFFFF;
+    font-size: 20rpx;
+    margin-top: 6rpx;
+    lines: 1;
+    text-overflow: ellipsis;
+    text-align: center;
+  }
+</style>

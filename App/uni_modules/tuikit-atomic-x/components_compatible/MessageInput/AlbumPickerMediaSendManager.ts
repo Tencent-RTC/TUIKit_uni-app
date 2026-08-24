@@ -27,6 +27,8 @@ export function openAlbumPicker(conversationID: any, config: any) {
   console.log(TAG, 'openAlbumPicker, conversationID:', conversationID);
   var pickerSessions = getPickerSessions();
 
+  saveWindowSystemUiState();
+
   var picker = createAlbumPicker();
   var session = {
     picker: picker,
@@ -49,12 +51,14 @@ export function openAlbumPicker(conversationID: any, config: any) {
       console.log(TAG, 'onMediaProcessed: conversationID=' + conversationID);
       removeSession(pickerSessions, session);
       refreshMessageList(conversationID);
+      notifyPickerDismissed();
     },
 
     onCancel: function() {
       console.log(TAG, 'onCancel: conversationID=' + conversationID);
       removeSession(pickerSessions, session);
       refreshMessageList(conversationID);
+      notifyPickerDismissed();
     },
   });
 }
@@ -284,6 +288,90 @@ function refreshMessageList(conversationID: any) {
   } else if (filtered.length !== currentList.length) {
     state.messageList.value = filtered;
   }
+}
+
+/**
+ * AlbumPicker 是挂在 decorView 上的 overlay（不是独立 Activity），
+ * AlbumPickerView 内部会把宿主窗口切成 edge-to-edge（内容延伸到导航栏下方），
+ * 但 removeOverlay 只摘 view、不还原窗口状态 —— 于是首次打开相册之后，
+ * 整个 App 的底部都被导航栏压住：MessageInput、原生 tabBar、其他页面全中。
+ *
+ * 这里在打开前快照、关闭后原样还原，从根上修掉，不需要各页面各自加 padding 兜底。
+ */
+var FLAG_LAYOUT_NO_LIMITS = 0x00000200;
+
+var savedSystemUiVisibility: number | null = null;
+var savedWindowFlags: number | null = null;
+
+function getAndroidWindow(): any {
+  try {
+    if (typeof plus === 'undefined' || !plus.android) return null;
+    var activity = plus.android.runtimeMainActivity();
+    if (!activity) return null;
+    return plus.android.invoke(activity, 'getWindow') || null;
+  } catch (e) {
+    return null;
+  }
+}
+
+function saveWindowSystemUiState(): void {
+  var win = getAndroidWindow();
+  if (!win) return;
+
+  try {
+    var decorView = plus.android.invoke(win, 'getDecorView');
+    if (decorView) {
+      savedSystemUiVisibility = plus.android.invoke(decorView, 'getSystemUiVisibility');
+    }
+  } catch (e) {
+    savedSystemUiVisibility = null;
+  }
+
+  try {
+    var attrs = plus.android.invoke(win, 'getAttributes');
+    if (attrs) {
+      savedWindowFlags = plus.android.getAttribute(attrs, 'flags');
+    }
+  } catch (e) {
+    savedWindowFlags = null;
+  }
+}
+
+function restoreWindowSystemUiState(): void {
+  var win = getAndroidWindow();
+  if (!win) return;
+
+  // 分开 try：任一还原方式在某些机型/版本上不可用时，不影响其余几种
+  try {
+    if (savedSystemUiVisibility !== null) {
+      var decorView = plus.android.invoke(win, 'getDecorView');
+      if (decorView) {
+        plus.android.invoke(decorView, 'setSystemUiVisibility', savedSystemUiVisibility);
+      }
+    }
+  } catch (e) {}
+
+  try {
+    // 原本没开 FLAG_LAYOUT_NO_LIMITS，说明是 picker 加上的，清掉
+    if (savedWindowFlags !== null && (savedWindowFlags & FLAG_LAYOUT_NO_LIMITS) === 0) {
+      plus.android.invoke(win, 'clearFlags', FLAG_LAYOUT_NO_LIMITS);
+    }
+  } catch (e) {}
+
+  try {
+    // API 30+ 走这条控制内容是否避开系统栏，旧版本没这个方法（抛异常即忽略）
+    plus.android.invoke(win, 'setDecorFitsSystemWindows', true);
+  } catch (e) {}
+}
+
+/**
+ * Picker 关闭：还原被 picker 改掉的窗口状态。
+ *
+ * 为什么不能靠页面 onShow：picker 是 decorView 上的 overlay，关闭时不产生
+ * 页面切换，当前 page 的 onShow 不会触发。只能在完成/取消回调里做。
+ */
+function notifyPickerDismissed(): void {
+  restoreWindowSystemUiState();
 }
 
 function removeFilePrefix(path: any) {

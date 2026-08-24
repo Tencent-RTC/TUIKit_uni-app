@@ -137,6 +137,20 @@ export function removeListener(options: HybridListenerOptions) {
 export function callAPI(options: string, callback: (result: string) => void) {
   DispatchQueue.main.async(execute = (): void => {
     console.log('callAPI: options:', options)
+    // 屏幕分享相关 API（startScreenShare / stopScreenShare）需要走 EngineBridge
+    // 的 invokeInternal 特殊处理逻辑（iOS: BroadcastLauncher / stopScreenCapture），
+    // 不能走 hybridBridge 通用通道。
+    const optionsObj = JSON.parse<UTSJSONObject>(options ?? "");
+    const api = optionsObj?.getString("api") ?? "";
+    if (api == "startScreenShare" || api == "stopScreenShare") {
+      const paramsData = optionsObj?.getJSON("params");
+      const paramsStr = (paramsData != null ? JSON.stringify(paramsData) : "{}") as string;
+      EngineBridgeFacade.shared.invoke(api, paramsStr ?? "{}", (code: NSNumber, message: string, data: string): void => {
+        const result = JSON.stringify({ code: code as number, message: message, data: data }) ?? "";
+        callback(result);
+      });
+      return;
+    }
     hybridBridge.callAPI(json = options ?? "", callback = callback);
   });
 }
@@ -190,6 +204,18 @@ export function setCallFramework(component: number = 17) {
     TUICallEngine.createInstance().callExperimentalAPI(jsonObject = JSON.stringify(data) ?? "")
   });
 }
+/**
+ * 初始化 TUICallEngine
+ * @param sdkAppID 腾讯云 SDKAppID
+ * @param userID 用户 ID
+ * @param userSig 用户签名
+ */
+export function initCallEngine(sdkAppID: number, userID: string, userSig: string) {
+  DispatchQueue.main.async(execute = (): void => {
+    CallEngineManager.shared.initEngine(Int32(sdkAppID), userID = userID, userSig = userSig)
+  })
+}
+
 /**
  * 设置背景模糊
  */

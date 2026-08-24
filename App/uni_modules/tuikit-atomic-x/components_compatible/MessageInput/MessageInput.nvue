@@ -79,6 +79,7 @@
           placeholder-class="message-input__placeholder"
           :selection-start="cursorPosition"
           :selection-end="cursorPosition"
+          :maxlength="-1"
           :fixed="true"
           @input="handleInput"
           @blur="handleBlur"
@@ -218,7 +219,7 @@ export default {
   data() {
     return {
       inputState: 'NONE', prevInputState: 'NONE', inputText: '',
-      lastCursorPosition: 0, cursorPosition: -1, inputToolbarHeightPx: 0,
+      lastCursorPosition: 0, cursorPosition: -1, inputToolbarHeightPx: 43,
       lastInputPopupHeightPx: 0, currentKeyboardHeightPx: 0, cachedKeyboardHeight: -1,
       safeAreaBottomRpx: 0, isFocused: false, focusTrigger: false,
       showEmojiPanel: false, showToolsPanel: false, emojiPanelOpacity: 0, toolsPanelOpacity: 0,
@@ -273,11 +274,17 @@ export default {
     this.groupStateInst = useGroupState()
     this.animationPlugin = uni.requireNativePlugin('animation')
     var self = this
+    // iOS 首帧测量常拿到偏大的中间值（54 vs 稳态 43），布局稳定后才是真实高度，
+    // 因此延迟一次测量再 emit；期间用初值 43 撑住，避免高度抖动闪屏。
+    // Android 无此抖动，走立即测量 —— 否则 MessageList 会先按初值滚到底，
+    // 待延迟 emit 改变 paddingBottom 后最后一条消息被顶下去，需手动滑动才能看到。
+    var isIOS = si.platform === 'ios'
     this.$nextTick(function() {
-      var q = uni.createSelectorQuery().in(self)
-      q.select('#message-input-toolbar').boundingClientRect(function(data) {
-        self.inputToolbarHeightPx = Math.round((data && data.height) || 45); self._updateSpacer()
-      }).exec()
+      if (isIOS) {
+        setTimeout(function() { self._measureToolbar() }, 900)
+      } else {
+        self._measureToolbar()
+      }
     })
   },
   mounted() {
@@ -305,6 +312,19 @@ export default {
       this.messageInputStateInst && this.messageInputStateInst.destroyStore()
     },
     _pxToRpx(px) { return Math.round((px / (uni.getSystemInfoSync().screenWidth || 375)) * 750) },
+    // 首次测量前的兜底高度（单行工具栏）。iOS 上首帧测量会拿到偏大的中间值，
+    // 靠 beforeMount 里延迟测量规避，这里只兜住"测量失败"的情况。
+    _normalizeToolbarHeight(raw) {
+      var h = Math.round(raw || 0)
+      return h > 0 ? h : 43
+    },
+    _measureToolbar() {
+      var self = this
+      uni.createSelectorQuery().in(self).select('#message-input-toolbar').boundingClientRect(function(d) {
+        self.inputToolbarHeightPx = self._normalizeToolbarHeight(d && d.height)
+        self._updateSpacer()
+      }).exec()
+    },
     collapse() { if (this.inputState === 'VOICE') return; this._switchMode('NONE') },
     focus() { this._switchMode('TEXT') },
     blur() { (this.$refs.textareaRef && this.$refs.textareaRef.blur()) },
@@ -413,7 +433,7 @@ export default {
         (this.$refs.textareaRef && this.$refs.textareaRef.blur()); this._updateSpacer(); return
       }
     },
-    onLinechange() { var self = this; uni.createSelectorQuery().in(self).select('#message-input-toolbar').boundingClientRect(function(d) { self.inputToolbarHeightPx = Math.round((d && d.height) || 0); self._updateSpacer() }).exec() },
+    onLinechange() { this._measureToolbar() },
     onTextareaTouchstart: throttle(function(e) { if (Date.now() - this.lastOpTime < this.OP_THRESHOLD) return; this.lastOpTime = Date.now(); this.isFocused = true; this._switchMode('TEXT') }, 250, { leading: true, trailing: false }),
     handleFocus(e) { this.isFocused = true; if (this.inputState !== 'TEXT') this._switchMode('TEXT') },
     handleBlur(event) { this.isFocused = false; this.focusTrigger = false; this.lastCursorPosition = event.detail.cursor },

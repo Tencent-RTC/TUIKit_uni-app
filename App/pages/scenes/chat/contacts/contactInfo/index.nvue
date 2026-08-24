@@ -33,6 +33,7 @@
     useCallState
   } from '@/uni_modules/tuikit-atomic-x/state/CallState';
   import { getCurrentPageFullPath } from "@/uni_modules/tuikit-atomic-x/server/callService"
+  import { useMessageListState } from '@/uni_modules/tuikit-atomic-x/state/MessageListState'
   interface UserInfo {
     userID: string
     nickname?: string
@@ -109,6 +110,8 @@
   }
 
   const handleSendMessage = (userID: string) => {
+    // 预创建 MessageList store，与导航动画并行
+    useMessageListState({ conversationID: `c2c_${userID}` })
     uni.navigateTo({
       url: `/pages/scenes/chat/chat/index?conversationID=c2c_${userID}`
     })

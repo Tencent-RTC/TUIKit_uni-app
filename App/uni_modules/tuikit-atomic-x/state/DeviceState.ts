@@ -13,6 +13,7 @@ import {
 } from "@/uni_modules/tuikit-atomic-x";
 import permission from "../utils/permission";
 import { safeJsonParse } from "../utils/utsUtils";
+import { KeyMetricsKey, reportKeyMetrics } from "./internal/keyMetrics";
 
 declare const uni: any;
 
@@ -433,6 +434,7 @@ const networkInfo: Ref<any> = getGlobalState().networkInfo;
  * openLocalMicrophone({})
  */
 async function openLocalMicrophone(params?: OpenLocalMicrophoneOptions): Promise<void> {
+  reportKeyMetrics(KeyMetricsKey.T_METRICS_STATE_API_DEVICE_OPEN_LOCAL_MICROPHONE_COUNT);
   // @ts-ignore
   if (uni.getSystemInfoSync().platform === "android") {
     await permission.requestAndroidPermission(
@@ -543,6 +545,7 @@ function setAudioRoute(params: SetAudioRouteOptions): void {
  * openLocalCamera({ isFront: true })
  */
 async function openLocalCamera(params?: OpenLocalCameraOptions): Promise<void> {
+  reportKeyMetrics(KeyMetricsKey.T_METRICS_STATE_API_DEVICE_OPEN_LOCAL_CAMERA_COUNT);
   // @ts-ignore
   if (uni.getSystemInfoSync().platform === "android") {
     await permission.requestAndroidPermission("android.permission.CAMERA");
@@ -643,18 +646,42 @@ function updateVideoQuality(params: UpdateVideoQualityOptions): void {
 
 /**
  * 开始屏幕共享
- * @returns {void}
+ *
+ * iOS 侧若未配置屏幕分享扩展（Info.plist 缺 `TUIRoomAppGroup`），
+ * 原生会回 12061，此处 reject 出带 `code` 的 Error，业务层可据此做强提示。
+ *
+ * @returns {Promise<void>}
  * @memberof module:DeviceState
  * @example
  * import { useDeviceState } from '@/uni_modules/tuikit-atomic-x/state/DeviceState';
  * const { startScreenShare } = useDeviceState();
- * startScreenShare()
+ * try {
+ *   await startScreenShare();
+ * } catch (e) {
+ *   console.warn(e.code, e.message);
+ * }
  */
-function startScreenShare(): void {
-  callAPI(JSON.stringify({
-    api: "startScreenShare",
-    params: {},
-  }), () => { });
+async function startScreenShare(): Promise<void> {
+  reportKeyMetrics(KeyMetricsKey.T_METRICS_STATE_API_DEVICE_START_SCREEN_SHARE_COUNT);
+  return new Promise((resolve, reject) => {
+    callAPI(JSON.stringify({
+      api: "startScreenShare",
+      params: {},
+    }), (res: string) => {
+      try {
+        const data = safeJsonParse(res, {}) as HybridResponseData;
+        console.log('startScreenShare result: ', data);
+        if (data?.code === 0) {
+          resolve();
+        } else {
+          reject(data);
+        }
+      } catch (error) {
+        console.error('startScreenShare parse result error: ', error, ', raw: ', res);
+        reject(error);
+      }
+    });
+  });
 }
 
 /**
@@ -801,6 +828,7 @@ function clearDeviceState(): void {
 
 export function useDeviceState() {
   bindEvent();
+  reportKeyMetrics(KeyMetricsKey.T_METRICS_STATE_DEVICE_STATE_COUNT);
   return {
     microphoneStatus,         // 麦克风开启状态
     microphoneLastError,      // 麦克风最后一次错误状态
