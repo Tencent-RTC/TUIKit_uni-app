@@ -24,7 +24,11 @@
         >
           <text
             class="dialog-btn-text"
-            :class="{ 'dialog-btn-text-confirm': !!props.cancelButton, 'dialog-btn-text-confirm-only': !props.cancelButton }"
+            :class="{
+              'dialog-btn-text-confirm': !!props.cancelButton && !props.confirmButtonDanger,
+              'dialog-btn-text-confirm-only': !props.cancelButton && !props.confirmButtonDanger,
+              'dialog-btn-text-confirm-danger': props.confirmButtonDanger,
+            }"
           >{{ props.confirmButton }}</text>
         </view>
       </view>
@@ -43,6 +47,8 @@
     title?: string;
     confirmButton?: string;
     cancelButton?: string;
+    /** 确认按钮红色（危险操作，如「删除」），覆盖默认蓝色 */
+    confirmButtonDanger?: boolean;
     closeOnClickModal?: boolean;
     appendToBody?: boolean;
     modal?: boolean;
@@ -52,6 +58,7 @@
     modelValue: false,
     confirmButton: '',
     cancelButton: '',
+    confirmButtonDanger: false,
     closeOnClickModal: false,
     appendToBody: false,
     modal: false,
@@ -170,6 +177,9 @@
   }
   .dialog-btn-text-confirm {
     color: #1C66E5;
+  }
+  .dialog-btn-text-confirm-danger {
+    color: #E5454D;
   }
   .dialog-btn-text-confirm-only {
     color: #1C66E5;

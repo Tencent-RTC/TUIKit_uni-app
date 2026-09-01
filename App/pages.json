@@ -280,11 +280,36 @@
       }
     },
     {
+      "path": "pages/scenes/room/schedule/index",
+      "style": {
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/scenes/room/scheduleDetail/index",
+      "style": {
+        "navigationStyle": "custom"
+      }
+    },
+    {
       "path": "pages/scenes/room/main/index",
       "style": {
         "navigationStyle": "custom",
         "disableScroll": true,
         "disableSwipeBack": true
+      }
+    },
+    {
+      "path": "pages/scenes/room/roomInvite/index",
+      "style": {
+        "navigationStyle": "custom",
+        "disableScroll": true,
+        "disableSwipeBack": true,
+        "backgroundColor": "#000000",
+        "app-plus": {
+          "titleNView": false,
+          "animationType": "slide-in-bottom"
+        }
       }
     },
     {

@@ -1,0 +1,110 @@
+<template>
+  <view v-if="visible" class="mask" @tap="handleClose">
+    <view class="sheet" @tap.stop>
+      <view class="drop-bar" @tap="handleClose">
+        <image class="drop-line" src="/static/images/room/room_lineImage.png" mode="aspectFit" />
+      </view>
+
+      <view class="action-item" @tap="handleAddMember">
+        <image class="action-icon" src="/static/images/room/room_invate_add.png" mode="aspectFit" />
+        <text class="action-label">添加成员</text>
+      </view>
+      <view class="action-divider"></view>
+
+      <view class="action-item" @tap="handleInvite">
+        <image class="action-icon" src="/static/images/room/room_invate_info.png" mode="aspectFit" />
+        <text class="action-label">邀请加入</text>
+      </view>
+    </view>
+  </view>
+</template>
+
+<script setup lang="ts">
+  /**
+   * 会中「添加成员」入口面板。
+   *
+   * 必须挂在 main 页面级（不能放 ToolPanel 内），
+   * 因为 ToolPanel 收起/展开是两套独立 DOM，collapse 会销毁内部组件实例连带弹窗状态。
+   */
+  defineProps({
+    visible: { type: Boolean, default: false },
+    roomID: { type: String, default: '' },
+  });
+
+  const emit = defineEmits<{
+    (e: 'close'): void
+    (e: 'addMember'): void
+    (e: 'invite'): void
+  }>();
+
+  function handleClose(): void {
+    emit('close');
+  }
+
+  function handleAddMember(): void {
+    emit('close');
+    emit('addMember');
+  }
+
+  function handleInvite(): void {
+    emit('close');
+    emit('invite');
+  }
+</script>
+
+<style>
+  .mask {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 9997;
+    background-color: rgba(0, 0, 0, 0.4);
+    flex-direction: column;
+    justify-content: flex-end;
+  }
+
+  .sheet {
+    background-color: #1F2229;
+    border-top-left-radius: 40rpx;
+    border-top-right-radius: 40rpx;
+    flex-direction: column;
+  }
+
+  .drop-bar {
+    height: 70rpx;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .drop-line {
+    width: 48rpx;
+    height: 48rpx;
+  }
+
+  .action-item {
+    height: 112rpx;
+    flex-direction: row;
+    align-items: center;
+    padding-left: 32rpx;
+    padding-right: 32rpx;
+  }
+
+  .action-icon {
+    width: 48rpx;
+    height: 48rpx;
+    margin-right: 24rpx;
+  }
+
+  .action-label {
+    font-size: 32rpx;
+    color: #D5E0F2;
+  }
+
+  .action-divider {
+    height: 1rpx;
+    margin-left: 32rpx;
+    background-color: rgba(74, 89, 112, 0.3);
+  }
+</style>

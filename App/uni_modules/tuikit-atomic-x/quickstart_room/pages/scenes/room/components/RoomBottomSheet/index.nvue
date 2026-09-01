@@ -1,0 +1,107 @@
+<template>
+  <view
+    v-if="visible"
+    class="room-sheet-mask"
+    :class="theme === 'dark' ? 'theme-dark' : 'theme-light'"
+    @tap="handleMaskClick"
+  >
+    <view class="room-sheet" @tap.stop>
+      <view class="room-sheet-head" @tap.stop="emit('close')">
+        <image
+          v-if="showHandle"
+          class="room-sheet-handle"
+          src="/static/images/room/room_lineImage.png"
+          mode="aspectFit"
+        />
+      </view>
+      <text v-if="title.length > 0" class="room-sheet-title">{{ title }}</text>
+      <slot></slot>
+    </view>
+  </view>
+</template>
+
+<script setup lang="ts">
+  withDefaults(
+    defineProps<{
+      visible: boolean;
+      title?: string;
+      showHandle?: boolean;
+      closeOnMaskClick?: boolean;
+      /** 主题：'light'（默认）| 'dark' */
+      theme?: 'light' | 'dark';
+    }>(),
+    {
+      title: '',
+      showHandle: true,
+      closeOnMaskClick: true,
+      theme: 'light',
+    }
+  );
+
+  const emit = defineEmits<{
+    (e: 'close'): void;
+  }>();
+
+  function handleMaskClick(e: any): void {
+    const data = (e?.currentTarget?.dataset ?? {}) as { closeOnMaskClick?: string };
+    if (data.closeOnMaskClick === 'false') return;
+    emit('close');
+  }
+</script>
+
+<style>
+  /* ========== mask（两层主题一致；降低透明度在深底上反而更明显） ========== */
+  .room-sheet-mask {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 9998;
+    background-color: rgba(0, 0, 0, 0.6);
+    flex-direction: column;
+    justify-content: flex-end;
+  }
+
+  /* ========== 主体（主题只影响 background-color + 标题色） ========== */
+  .room-sheet {
+    border-top-left-radius: 48rpx;
+    border-top-right-radius: 48rpx;
+    flex-direction: column;
+  }
+
+  .room-sheet-head {
+    flex-direction: column;
+  }
+
+  .room-sheet-handle {
+    width: 72rpx;
+    height: 9rpx;
+    align-self: center;
+    margin-top: 24rpx;
+  }
+
+  .room-sheet-title {
+    padding: 0 32rpx;
+    font-size: 36rpx;
+    font-weight: 500;
+    margin: 40rpx 0 20rpx;
+  }
+
+  /* ========== light 主题（默认，原色保留） ========== */
+  .theme-light .room-sheet {
+    background-color: #FFFFFF;
+  }
+
+  .theme-light .room-sheet-title {
+    color: #4F586B;
+  }
+
+  .theme-dark .room-sheet {
+    background-color: #1F2229;
+  }
+
+  .theme-dark .room-sheet-title {
+    color: #FFFFFF;
+  }
+</style>

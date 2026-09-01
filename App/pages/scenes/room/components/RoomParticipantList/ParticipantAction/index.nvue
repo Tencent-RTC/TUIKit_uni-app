@@ -128,6 +128,7 @@
   import type { RoomUser } from '@/uni_modules/tuikit-atomic-x/types';
   import RoomDialog from '../../RoomDialog/index.nvue';
   import { showErrorToast, parseErrorCode } from '../../../utils/errorHandler';
+  import { showToast } from '@/uni_modules/tuikit-atomic-x/utils/toast';
 
   // 重复邀请错误码
   const ERR_DUPLICATE_INVITE = 100100;
@@ -332,7 +333,7 @@
       showErrorToast(e, '转移房主失败');
       return;
     }
-    uni.showToast({ icon: 'none', title: `已将房主转移给 ${name}` });
+    showToast(`已将房主转移给 ${name}`);
     emit('transferred', id);
   }
 
@@ -352,7 +353,7 @@
       showErrorToast(e);
       return;
     }
-    uni.showToast({ icon: 'none', title: isAdmin ? `已撤销 ${name} 的管理员` : `已设置 ${name} 为管理员` });
+    showToast(isAdmin ? `已撤销 ${name} 的管理员` : `已设置 ${name} 为管理员`);
   }
 
   function handleKick() {

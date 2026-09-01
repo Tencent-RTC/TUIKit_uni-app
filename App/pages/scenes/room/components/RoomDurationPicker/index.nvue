@@ -1,0 +1,379 @@
+<template>
+  <RoomBottomSheet
+    :visible="visible"
+    @close="handleCancel"
+  >
+    <!-- 自定义 header：左取消 icon、中 title、右确定 icon -->
+    <view class="picker-header">
+      <view class="header-btn header-btn-left" @tap="handleCancel">
+        <image class="header-icon" src="/static/images/room/room_collapse.png" mode="aspectFit" />
+      </view>
+      <text class="picker-title">房间时长</text>
+      <view class="header-btn header-btn-right" @tap="handleConfirm">
+        <image class="header-icon" src="/static/images/room/room_schedule_selected.png" mode="aspectFit" />
+      </view>
+    </view>
+
+    <view class="picker-area">
+      <view class="picker-highlight"></view>
+
+      <scroll-view
+        class="column"
+        scroll-y
+        :scroll-into-view="hourScrollId"
+        :show-scrollbar="false"
+        @scroll="onHourScroll"
+      >
+        <view
+          v-for="(h, idx) in hourLoopList"
+          :key="`h-${idx}`"
+          :id="`h-${idx}`"
+          class="cell"
+        >
+          <text
+            class="cell-num"
+            :class="idx === hourActiveIdx ? 'text-active' : (idx === hourActiveIdx - 1 || idx === hourActiveIdx + 1 ? 'text-near' : 'text-far')"
+          >{{ h }}</text>
+          <text
+            class="cell-unit"
+            :class="idx === hourActiveIdx ? 'text-active' : (idx === hourActiveIdx - 1 || idx === hourActiveIdx + 1 ? 'text-near' : 'text-far')"
+          >小时</text>
+        </view>
+      </scroll-view>
+
+      <scroll-view
+        class="column"
+        scroll-y
+        :scroll-into-view="minuteScrollId"
+        :show-scrollbar="false"
+        @scroll="onMinuteScroll"
+      >
+        <view
+          v-for="(m, idx) in minuteLoopList"
+          :key="`m-${idx}`"
+          :id="`m-${idx}`"
+          class="cell"
+        >
+          <text
+            class="cell-num"
+            :class="idx === minuteActiveIdx ? 'text-active' : (idx === minuteActiveIdx - 1 || idx === minuteActiveIdx + 1 ? 'text-near' : 'text-far')"
+          >{{ m }}</text>
+          <text
+            class="cell-unit"
+            :class="idx === minuteActiveIdx ? 'text-active' : (idx === minuteActiveIdx - 1 || idx === minuteActiveIdx + 1 ? 'text-near' : 'text-far')"
+          >分钟</text>
+        </view>
+      </scroll-view>
+    </view>
+
+    <!-- 底部只留安全区，按钮统一放在 header（避免与 icon 重复） -->
+    <view class="bottom-safe"></view>
+  </RoomBottomSheet>
+</template>
+
+<script setup lang="ts">
+  /**
+   * 时分双列「无限循环」滚轮：小时 0~23、分钟 0~55 步进 5。
+   *
+   * ── 四个核心设计 ──
+   *
+   * 1. ★ scrollTop 单位是 px，CSS cell 高度是 rpx，必须换算 ★
+   *    `e.detail.scrollTop` 返回设备逻辑像素（px），而 CSS `.cell { height: 88rpx }` 是 rpx。
+   *    750rpx = 屏幕宽度 → 88rpx 在 375px 宽屏上仅 44px。
+   *    直接用 88 去除 px 值会让索引差约 2 倍 → 高亮错位 + confirm 值错误。
+   *    正解：onMounted 读 screenWidth 算 `cellHeightPx = 88 / 750 * screenWidth`，scroll 回调用它反算。
+   *
+   * 2. 循环 = 数据重复多轮 + 边界静默 reset
+   *    hourLoopList = 0~23 重复 ROUNDS 轮，打开时定位到中间轮。
+   *    滚出安全区（首/末 2 轮）后 debounce 150ms 静默跳回中间轮等价位置。
+   *    weex scroll-into-view 无动画 → 瞬跳用户无感 → 视觉上无限循环。
+   *
+   * 3. 定位用 scroll-into-view（不用 :scroll-top）
+   *    实测 nvue 真机上 `:scroll-top="数值"` 绑定被忽略；
+   *    项目内其他 nvue（UserPickerList / RoomTimePicker）统一用 scroll-into-view。
+   *
+   * 4. 让选中项落进 highlight：scroll-into-view 目标 = idx - CENTER_OFFSET
+   *    weex scroll-into-view 行为 = 目标元素顶部对齐 scroll-view 顶部。
+   *    viewport 440rpx = 5 × 88rpx（5 行），highlight 在第 3 行（y=176~264rpx）。
+   *    滚到 (idx - 2) 时 cell-idx 正好在第 3 行 = highlight，上方 2 行天然可见形成循环体感。
+   *
+   * 注：`:class` 用内联三元表达式而不是函数调用 —— nvue 上 :class 绑函数返回值响应式追踪不可靠。
+   *
+   * emit:
+   *  - cancel：取消关闭
+   *  - confirm(totalMinutes)：小时*60 + 分钟
+   */
+  import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue';
+  import RoomBottomSheet from '../RoomBottomSheet/index.nvue';
+
+  const CELL_HEIGHT_RPX = 88; // 单个 cell 高度（rpx），与 CSS .cell 一致
+  // highlight 在 viewport 第 3 行 → 目标 cell 前面要留 2 行
+  const CENTER_OFFSET = 2;
+
+  /** 基础数据 */
+  const HOURS = Array.from({ length: 24 }, (_, i) => i); // 0~23
+  const MINUTES = Array.from({ length: 12 }, (_, i) => i * 5); // 0/5/.../55
+
+  /** 循环轮数：总 cell 数控制在 ~220（nvue 渲染性能与可滚距离的折中） */
+  const HOUR_ROUNDS = 9; // 24 × 9 = 216
+  const MINUTE_ROUNDS = 18; // 12 × 18 = 216
+  /** 初始所在轮次（居中，上下各留 4 / 8 轮可滚） */
+  const HOUR_MID_ROUND = 4;
+  const MINUTE_MID_ROUND = 8;
+  /** 安全区：滚出首/末 SAFE_ROUNDS 轮就 reset 回中间轮 */
+  const SAFE_ROUNDS = 2;
+
+  const props = defineProps({
+    visible: { type: Boolean, default: false },
+    /** 编辑态传入初始值（总分钟数），新建态不传默认 30 */
+    initialTotalMinutes: { type: Number, default: 30 },
+  });
+
+  const emit = defineEmits<{
+    (e: 'cancel'): void;
+    (e: 'confirm', totalMinutes: number): void;
+  }>();
+
+  /**
+   * cell 高度的 px 值（scrollTop 反算用）。
+   * 默认按 375px 宽屏预估（88 / 750 × 375 = 44），onMounted 拿到真实 screenWidth 后修正。
+   */
+  const cellHeightPx = ref<number>(44);
+
+  onMounted(() => {
+    uni.getSystemInfo({
+      success: (res: any) => {
+        const w = (res?.screenWidth ?? 375) as number;
+        if (w > 0) cellHeightPx.value = (CELL_HEIGHT_RPX / 750) * w;
+      },
+    });
+  });
+
+  /** 循环内容：基础数据重复 N 轮 */
+  function buildLoopList(base: number[], rounds: number): number[] {
+    const list: number[] = [];
+    for (let r = 0; r < rounds; r++) {
+      for (let i = 0; i < base.length; i++) list.push(base[i]);
+    }
+    return list;
+  }
+  const hourLoopList: number[] = buildLoopList(HOURS, HOUR_ROUNDS);
+  const minuteLoopList: number[] = buildLoopList(MINUTES, MINUTE_ROUNDS);
+
+  /** 初始值 → 基础下标 */
+  const initialHour = computed(() => {
+    const h = Math.floor(props.initialTotalMinutes / 60);
+    return Math.max(0, Math.min(23, h));
+  });
+  const initialMinuteIdx = computed(() => {
+    const idx = Math.round((props.initialTotalMinutes % 60) / 5);
+    return Math.max(0, Math.min(11, idx));
+  });
+
+  /** 当前 active 在循环列表里的下标（唯一状态源，真实值由它索引得出） */
+  const hourActiveIdx = ref<number>(HOUR_MID_ROUND * HOURS.length + initialHour.value);
+  const minuteActiveIdx = ref<number>(MINUTE_MID_ROUND * MINUTES.length + initialMinuteIdx.value);
+
+  /** 真实选中值（供 confirm 用） */
+  const selectedHour = computed(() => hourLoopList[hourActiveIdx.value] ?? 0);
+  const selectedMinute = computed(() => minuteLoopList[minuteActiveIdx.value] ?? 0);
+
+  /** scroll-into-view 目标 id */
+  const hourScrollId = ref<string>('');
+  const minuteScrollId = ref<string>('');
+
+  /** reset / 主动定位期间抑制 scroll 回调，避免自触发死循环 */
+  let hourLocking = false;
+  let minuteLocking = false;
+  let hourResetTimer: any = null;
+  let minuteResetTimer: any = null;
+
+  /** 把 activeIdx 滚到 highlight（目标 = activeIdx - CENTER_OFFSET） */
+  function scrollHourToActive(): void {
+    hourLocking = true;
+    const target = Math.max(0, hourActiveIdx.value - CENTER_OFFSET);
+    hourScrollId.value = '';
+    nextTick().then(() => {
+      hourScrollId.value = `h-${target}`;
+      // 滚动落定后再解锁（weex 无动画，给一点缓冲防 scroll 回调残留）
+      setTimeout(() => {
+        hourLocking = false;
+      }, 200);
+    });
+  }
+  function scrollMinuteToActive(): void {
+    minuteLocking = true;
+    const target = Math.max(0, minuteActiveIdx.value - CENTER_OFFSET);
+    minuteScrollId.value = '';
+    nextTick().then(() => {
+      minuteScrollId.value = `m-${target}`;
+      setTimeout(() => {
+        minuteLocking = false;
+      }, 200);
+    });
+  }
+
+  watch(
+    () => props.visible,
+    (v) => {
+      if (!v) {
+        if (hourResetTimer != null) clearTimeout(hourResetTimer);
+        if (minuteResetTimer != null) clearTimeout(minuteResetTimer);
+        return;
+      }
+      // 还原初始值到中间轮
+      hourActiveIdx.value = HOUR_MID_ROUND * HOURS.length + initialHour.value;
+      minuteActiveIdx.value = MINUTE_MID_ROUND * MINUTES.length + initialMinuteIdx.value;
+      scrollHourToActive();
+      scrollMinuteToActive();
+    },
+    { immediate: true },
+  );
+
+  /**
+   * 滚出安全区就跳回中间轮的等价位置（同一个真实值，不同轮次），实现无限循环。
+   * debounce 150ms：等用户手指离开、惯性滚动停下再跳，避免滚动中打断。
+   */
+  function scheduleHourReset(): void {
+    if (hourResetTimer != null) clearTimeout(hourResetTimer);
+    hourResetTimer = setTimeout(() => {
+      const len = HOURS.length;
+      const round = Math.floor(hourActiveIdx.value / len);
+      if (round >= SAFE_ROUNDS && round < HOUR_ROUNDS - SAFE_ROUNDS) return;
+      const real = hourActiveIdx.value % len;
+      hourActiveIdx.value = HOUR_MID_ROUND * len + real;
+      scrollHourToActive();
+    }, 150);
+  }
+  function scheduleMinuteReset(): void {
+    if (minuteResetTimer != null) clearTimeout(minuteResetTimer);
+    minuteResetTimer = setTimeout(() => {
+      const len = MINUTES.length;
+      const round = Math.floor(minuteActiveIdx.value / len);
+      if (round >= SAFE_ROUNDS && round < MINUTE_ROUNDS - SAFE_ROUNDS) return;
+      const real = minuteActiveIdx.value % len;
+      minuteActiveIdx.value = MINUTE_MID_ROUND * len + real;
+      scrollMinuteToActive();
+    }, 150);
+  }
+
+  /**
+   * scroll 回调反算 activeIdx（★ scrollTop 是 px，用 cellHeightPx 不是 rpx 常量 ★）：
+   *   scrollTop / cellHeightPx = viewport 第 1 行对应的内容下标
+   *   + CENTER_OFFSET 得 highlight（第 3 行）对应的内容下标
+   */
+  function onHourScroll(e: any): void {
+    if (hourLocking) return;
+    const top = (e?.detail?.scrollTop ?? 0) as number;
+    const unit = cellHeightPx.value > 0 ? cellHeightPx.value : 44;
+    const idx = Math.round(top / unit) + CENTER_OFFSET;
+    hourActiveIdx.value = Math.max(0, Math.min(hourLoopList.length - 1, idx));
+    scheduleHourReset();
+  }
+  function onMinuteScroll(e: any): void {
+    if (minuteLocking) return;
+    const top = (e?.detail?.scrollTop ?? 0) as number;
+    const unit = cellHeightPx.value > 0 ? cellHeightPx.value : 44;
+    const idx = Math.round(top / unit) + CENTER_OFFSET;
+    minuteActiveIdx.value = Math.max(0, Math.min(minuteLoopList.length - 1, idx));
+    scheduleMinuteReset();
+  }
+
+  onUnmounted(() => {
+    if (hourResetTimer != null) clearTimeout(hourResetTimer);
+    if (minuteResetTimer != null) clearTimeout(minuteResetTimer);
+  });
+
+  function handleCancel(): void {
+    emit('cancel');
+  }
+  function handleConfirm(): void {
+    emit('confirm', selectedHour.value * 60 + selectedMinute.value);
+  }
+</script>
+
+<style>
+  /* ── 自定义 header（替代原 RoomBottomSheet title + 底部 btn-row） ── */
+  .picker-header {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    height: 96rpx;
+    padding: 0 16rpx;
+  }
+  .header-btn {
+    width: 88rpx;
+    height: 88rpx;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+  }
+  .header-icon {
+    width: 48rpx;
+    height: 48rpx;
+  }
+  .picker-title {
+    font-size: 36rpx;
+    font-weight: 500;
+    color: #4F586B;
+  }
+
+  /* viewport 440rpx = 5 行 × 88rpx；无 padding，让上方 cell 可见形成循环体感 */
+  .picker-area {
+    flex-direction: row;
+    height: 440rpx;
+    background-color: #FFFFFF;
+    position: relative;
+  }
+
+  /* highlight 在第 3 行（正中）：y = 2 × 88 = 176 ~ 264 */
+  .picker-highlight {
+    position: absolute;
+    top: 176rpx;
+    left: 0;
+    right: 0;
+    height: 88rpx;
+    border-top-width: 1rpx;
+    border-bottom-width: 1rpx;
+    border-top-style: solid;
+    border-bottom-style: solid;
+    border-top-color: #E5E7EB;
+    border-bottom-color: #E5E7EB;
+  }
+
+  .column {
+    flex: 1;
+  }
+
+  .cell {
+    height: 88rpx;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .cell-num {
+    font-size: 34rpx;
+    margin-right: 4rpx;
+  }
+  .cell-unit {
+    font-size: 34rpx;
+  }
+
+  /* 三级视觉层次：选中最深、相邻中灰、更远浅灰 */
+  .text-active {
+    color: #22262E;
+    font-weight: 500;
+  }
+  .text-near {
+    color: #6B7385;
+  }
+  .text-far {
+    color: #C2C7D0;
+  }
+
+  /* 底部只留安全区（按钮统一放在 header） */
+  .bottom-safe {
+    height: 40rpx;
+  }
+</style>

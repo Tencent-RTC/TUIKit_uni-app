@@ -1,0 +1,290 @@
+<template>
+  <view class="room-schedule-list">
+    <view v-if="isEmpty" class="empty">
+      <image class="empty-icon" src="/static/images/room/room_schedule_placeholder.png" mode="aspectFit" />
+      <text class="empty-text">{{ emptyText }}</text>
+    </view>
+
+    <scroll-view
+      v-else
+      class="list-scroll"
+      scroll-y="true"
+      show-scrollbar="false"
+      @scrolltolower="handleLoadMore"
+    >
+      <view v-for="(group, groupIndex) in groups" :key="groupIndex" class="group">
+        <view class="group-title-row">
+          <image class="group-title-icon" src="/static/images/room/room_calendar.png" mode="aspectFit" />
+          <text class="group-title-text">{{ group.title }}</text>
+        </view>
+        <view
+          v-for="(room, roomIndex) in group.rooms"
+          :key="roomIndex"
+          class="item"
+          @tap="handleRoomTap(room)"
+        >
+          <view class="item-main">
+            <view class="item-top">
+              <text class="item-name" :numberOfLines="1">{{ room.roomName || room.roomID }}</text>
+              <image class="item-arrow" src="/static/images/room/room_chevron-down.png" mode="aspectFit" />
+            </view>
+            <view class="item-bottom">
+              <text class="item-time">{{ formatRoomTimeRange(room) }}</text>
+              <text class="item-divider">|</text>
+              <text class="item-id">{{ formatRoomIDDisplay(room.roomID) }}</text>
+              <text class="item-divider">|</text>
+              <text
+                class="item-status-text"
+                :class="{ 'item-status-running': isRoomRunning(room) }"
+              >{{ formatRoomStatusText(room) }}</text>
+            </view>
+          </view>
+          <view class="enter-btn">
+            <text class="enter-btn-text">进入</text>
+          </view>
+        </view>
+      </view>
+
+      <view v-if="isLoadingMore" class="loading-more">
+        <text class="loading-more-text">加载中...</text>
+      </view>
+    </scroll-view>
+  </view>
+</template>
+
+<script setup lang="ts">
+  /**
+   * 预定房间列表组件。
+   *
+   * 专供 `pages/scenes/room/index.nvue`（room 首页）内联使用，
+   * 因此不内置 header / safeArea / 返回按钮 —— 这些是页面级 chrome，
+   * 由使用方自己提供。也**不带搜索栏**（产品决策：首页不再支持关键字过滤）。
+   */
+  import { ref, computed, onMounted, onUnmounted } from 'vue';
+  import { onShow } from '@dcloudio/uni-app';
+  import { useRoomState, RoomStatus } from '@/uni_modules/tuikit-atomic-x/state';
+  import type { RoomInfo } from '@/uni_modules/tuikit-atomic-x/types/room';
+  import { showErrorToast } from '../../utils/errorHandler';
+  import { formatTimeSec, formatRoomIDDisplay, groupRoomsByDate } from '../../utils/scheduleUtils';
+
+  const roomState = useRoomState();
+  const scheduledRoomList = roomState.scheduledRoomList;
+  const scheduledRoomListCursor = roomState.scheduledRoomListCursor;
+
+  const isLoadingMore = ref(false);
+
+  // cursor 为空表示已经拉到底（SDK 分页约定）
+  const hasMore = computed(() => (scheduledRoomListCursor.value || '').length > 0);
+
+  const groups = computed(() => groupRoomsByDate(scheduledRoomList.value || []));
+
+  const isEmpty = computed(() => (scheduledRoomList.value || []).length === 0);
+  const emptyText = computed(() => '暂无预定的房间');
+
+  onMounted(() => {
+    uni.$on('scheduledRoomListChanged', handleListChanged);
+  });
+
+  onUnmounted(() => {
+    uni.$off('scheduledRoomListChanged', handleListChanged);
+  });
+
+  // 从预定页/详情页返回时也刷新一次，避免依赖单一 emit 时序
+  onShow(() => {
+    refresh();
+  });
+
+  function handleListChanged(): void {
+    refresh();
+  }
+
+  function refresh(): void {
+    roomState
+      .getScheduledRoomList({ cursor: '' })
+      .catch((e: any) => {
+        showErrorToast(e, '获取预定房间失败');
+      });
+  }
+
+  function handleLoadMore(): void {
+    if (isLoadingMore.value || !hasMore.value) return;
+    isLoadingMore.value = true;
+    roomState
+      .getScheduledRoomList({ cursor: scheduledRoomListCursor.value })
+      .then(() => {
+        isLoadingMore.value = false;
+      })
+      .catch((e: any) => {
+        isLoadingMore.value = false;
+        showErrorToast(e, '加载更多失败');
+      });
+  }
+
+  function formatRoomTimeRange(room: RoomInfo): string {
+    // scheduledStartTime/EndTime 是 SDK 推的**秒级时间戳**（types/room.ts:99-101），
+    // 用 formatTimeSec 内部 * 1000 转毫秒，避免把秒当毫秒显示「00:00 - 00:00」。
+    const start = formatTimeSec(room?.scheduledStartTime);
+    const end = formatTimeSec(room?.scheduledEndTime);
+    if (start.length === 0) return '';
+    if (end.length === 0) return start;
+    return `${start} - ${end}`;
+  }
+
+  function isRoomRunning(room: RoomInfo): boolean {
+    return room?.roomStatus === RoomStatus.Running;
+  }
+
+  function formatRoomStatusText(room: RoomInfo): string {
+    return isRoomRunning(room) ? '进行中' : '未开始';
+  }
+
+  function handleRoomTap(room: RoomInfo): void {
+    const rid = room?.roomID || '';
+    if (rid.length === 0) return;
+    uni.navigateTo({
+      url: `/pages/scenes/room/scheduleDetail/index?roomID=${encodeURIComponent(rid)}`,
+    });
+  }
+</script>
+
+<style>
+  .room-schedule-list {
+    flex: 1;
+    flex-direction: column;
+  }
+
+  .list-scroll {
+    flex: 1;
+    padding: 0 40rpx;
+  }
+
+  .group {
+    flex-direction: column;
+    padding-top: 40rpx;
+    padding-bottom: 20rpx;
+  }
+
+  .group-title-row {
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .group-title-icon {
+    width: 32rpx;
+    height: 32rpx;
+    margin-right: 4rpx;
+  }
+
+  .group-title-text {
+    font-weight: 400;
+    font-size: 28rpx;
+    color: #969EB4;
+  }
+
+  .item {
+    flex-direction: row;
+    align-items: center;
+    padding-top: 40rpx;
+  }
+
+  .item-main {
+    flex: 1;
+    flex-direction: column;
+  }
+
+  .item-top {
+    flex-direction: row;
+    align-items: center;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  .item-name {
+    max-width: 460rpx;
+    font-size: 32rpx;
+    font-weight: 500;
+    color: #4F586B;
+    lines: 1;
+    text-overflow: ellipsis;
+  }
+
+  .item-arrow {
+    width: 32rpx;
+    height: 32rpx;
+    flex-shrink: 0;
+    transform: rotate(-90deg);
+  }
+
+  .item-bottom {
+    flex-direction: row;
+    align-items: center;
+    margin-top: 12rpx;
+  }
+
+  .item-time {
+    font-weight: 400;
+    font-size: 28rpx;
+    color: #4F586B;
+  }
+
+  .item-divider {
+    font-weight: 400;
+    font-size: 28rpx;
+    color: #969EB4;
+    margin-left: 16rpx;
+    margin-right: 16rpx;
+  }
+
+  .item-id {
+    font-weight: 400;
+    font-size: 28rpx;
+    color: #4F586B;
+  }
+
+  .item-status-text {
+    font-weight: 400;
+    font-size: 28rpx;
+    color: #FF643D;
+  }
+
+  .item-status-running {
+    color: #0468FC;
+  }
+
+  .enter-btn {
+    margin-left: 40rpx;
+    padding: 10rpx 40rpx;
+    border-radius: 28rpx;
+    background-color: #F0F3FA;
+    flex-direction: row;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .enter-btn-text {
+    font-size: 28rpx;
+    font-weight: 400;
+    line-height: 44rpx;
+    color: #4F586B;
+  }
+
+  .empty {
+    flex: 1;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .empty-icon {
+    width: 300rpx;
+    height: 198rpx;
+    margin-bottom: 16rpx;
+  }
+
+  .empty-text {
+    font-weight: 400;
+    font-size: 28rpx;
+    line-height: 44rpx;
+    color: #8F9AB2;
+  }
+</style>

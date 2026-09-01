@@ -1,27 +1,40 @@
 <template>
   <view v-if="visible || micDialogState.visible || cameraDialogState.visible" class="list-root">
     <view class="list-mask" v-if="visible" @tap="onClose">
-    <view class="list-sheet" @tap.stop>
+    <view class="list-sheet" @tap.stop="handleDismissKeyboard">
       <view class="drop-bar" @tap="onClose">
         <image class="drop-line" src="/static/images/room/room_lineImage.png" mode="aspectFit" />
       </view>
 
-      <view v-if="!isWebinar" class="title-row">
-        <text class="title-text">成员（{{ participantCount }}）</text>
+      <!-- 搜索 -->
+      <view class="search-row">
+        <view class="search-wrap">
+          <image class="search-icon" src="/static/images/room/room_search.png" mode="aspectFit" />
+          <input
+            ref="searchInputRef"
+            class="search-input"
+            :value="keyword"
+            placeholder="搜索参会成员"
+            placeholder-style="color: #6B7385; font-size: 28rpx;"
+            @input="onKeywordInput"
+          />
+        </view>
       </view>
-      <view v-else class="tab-bar">
+
+      <!-- Tab：已进房 / 未进房（研讨会为 嘉宾 / 观众） -->
+      <view class="tab-bar">
         <view class="tab-item" :class="{ 'tab-item-selected': currentTab === 'participant' }" @tap="setTab('participant')">
-          <text class="tab-text" :class="{ 'tab-text-selected': currentTab === 'participant' }">嘉宾（{{ participantCount }}）</text>
+          <text class="tab-text" :class="{ 'tab-text-selected': currentTab === 'participant' }">{{ firstTabText }}</text>
         </view>
         <view class="tab-item" :class="{ 'tab-item-selected': currentTab === 'audience' }" @tap="setTab('audience')">
-          <text class="tab-text" :class="{ 'tab-text-selected': currentTab === 'audience' }">观众（{{ audienceCount }}）</text>
+          <text class="tab-text" :class="{ 'tab-text-selected': currentTab === 'audience' }">{{ secondTabText }}</text>
         </view>
       </view>
 
       <view class="list-gap"></view>
 
       <list v-if="currentTab === 'participant'" class="list-scroll">
-        <cell v-for="(p, idx) in sortedParticipantList" :key="p.userID">
+        <cell v-for="(p, idx) in filteredParticipantList" :key="p.userID">
           <ParticipantItem
             type="participant"
             :participant="p"
@@ -30,26 +43,45 @@
             :is-webinar="isWebinar"
             @press="emit('manage', p)"
           />
-          <view v-if="idx < sortedParticipantList.length - 1" class="list-divider"></view>
+          <view v-if="idx < filteredParticipantList.length - 1" class="list-divider"></view>
         </cell>
       </list>
       <list v-else class="list-scroll">
-        <cell v-for="(u, idx) in sortedAudienceList" :key="u.userID">
+        <cell v-for="(u, idx) in filteredSecondTabList" :key="u.userID">
+          <!-- 研讨会：观众列表（带管理员标签 + 管理员可踢人） -->
           <ParticipantItem
+            v-if="isWebinar"
             type="audience"
             :audience="u"
             :is-admin="isAdminUser(u.userID)"
             :is-local="u.userID === localParticipant?.userID"
-            :can-control="canControlAudience(u)"
+            :can-control="isWebinar && canControlAudience(u)"
             :is-webinar="isWebinar"
-            @press="emit('manageAud', u)"
+            @press="isWebinar ? emit('manageAud', u) : undefined"
           />
-          <view v-if="idx < sortedAudienceList.length - 1" class="list-divider"></view>
+          <!-- 普通会议「未进房」：右侧带「呼叫 / 取消」按钮 -->
+          <ParticipantItem
+            v-else
+            type="notJoined"
+            :not-joined-user="u"
+            :is-calling="isUserCalling(u)"
+            :is-rejected="isUserRejected(u)"
+            @call="handleCall(u)"
+            @cancelCall="handleCancelCall(u)"
+          />
+          <view v-if="idx < filteredSecondTabList.length - 1" class="list-divider"></view>
         </cell>
       </list>
 
-      <!-- 底部全员禁麦/禁视频（仅标准会议 + 房主/管理员） -->
-      <view v-if="!isWebinar && (isOwner || isAdmin)" class="bottom-row">
+      <!-- 普通会议「未进房」空态：即时房间没有预约人员 -->
+      <view v-if="!isWebinar && currentTab === 'audience' && filteredSecondTabList.length === 0" class="list-empty">
+        <text class="list-empty-text">暂无未进房成员</text>
+      </view>
+
+      <!-- 底部操作区（仅标准会议 + 房主/管理员）：
+           已进房 tab → 全员禁麦 / 全员禁画
+           未进房 tab → 呼叫所有人 -->
+      <view v-if="!isWebinar && (isOwner || isAdmin) && currentTab === 'participant'" class="bottom-row">
         <view class="bottom-btn" @tap="handleAllMicToggle">
           <text
             class="bottom-btn-text"
@@ -62,6 +94,15 @@
             class="bottom-btn-text"
             :style="allCameraTextStyle"
           >{{ allCameraText }}</text>
+        </view>
+      </view>
+
+      <view
+        v-else-if="!isWebinar && currentTab === 'audience' && callAllTargets.length > 0"
+        class="bottom-row"
+      >
+        <view class="bottom-btn" @tap="handleCallAll">
+          <text class="bottom-btn-text bottom-btn-text-primary">呼叫所有人</text>
         </view>
       </view>
 
@@ -96,20 +137,27 @@
 </template>
 
 <script setup lang="ts">
-  import { computed, ref } from 'vue';
+  import { computed, ref, watch, onMounted, onBeforeUnmount } from 'vue';
   import type { PropType } from 'vue';
-  import { useRoomState } from '@/uni_modules/tuikit-atomic-x/state';
-  import { useRoomParticipantState } from '@/uni_modules/tuikit-atomic-x/state';
   import {
+    useRoomState,
+    useRoomParticipantState,
     DeviceStatus,
     DeviceType,
     RoomParticipantRole,
+    RoomParticipantStatus,
+    RoomEvent,
   } from '@/uni_modules/tuikit-atomic-x/state';
   import type { RoomParticipant } from '@/uni_modules/tuikit-atomic-x/types';
   import type { RoomUser } from '@/uni_modules/tuikit-atomic-x/types';
+  // RoomCallResult 枚举同时在 state/interface/room.ts 和 types/room.ts 导出，
+  // 本组件沿用 SelectMemberPanel 的约定（types/room）保持一致，避免跨模块 nominal mismatch
+  import { RoomCallResult } from '@/uni_modules/tuikit-atomic-x/types/room';
   import ParticipantItem from './ParticipantItem/index.nvue';
   import RoomDialog from '../RoomDialog/index.nvue';
   import { showErrorToast } from '../../utils/errorHandler';
+  import { showToast } from '@/uni_modules/tuikit-atomic-x/utils/toast';
+  import type { ToastType } from '@/uni_modules/tuikit-atomic-x/utils/toast';
 
   const props = defineProps({
     visible: { type: Boolean, default: false },
@@ -123,15 +171,107 @@
     (e: 'manageAud', audience: RoomUser): void
   }>();
 
-  const { currentRoom } = useRoomState();
+  const {
+    currentRoom,
+    getRoomInfo,
+    getScheduledAttendees,
+    callUserToRoom,
+    cancelCall,
+    subscribeEvent,
+    unsubscribeEvent,
+  } = useRoomState();
   const roomParticipantState = useRoomParticipantState();
-  const { participantList, audienceList, adminList, localParticipant } = roomParticipantState;
+  const { participantList, audienceList, adminList, localParticipant, pendingParticipantList } = roomParticipantState;
 
   const currentTab = ref<'participant' | 'audience'>('participant');
   function setTab(t: 'participant' | 'audience') { currentTab.value = t; }
 
-  const participantCount = computed(() => currentRoom.value?.participantCount ?? participantList.value?.length ?? 0);
-  const audienceCount = computed(() => currentRoom.value?.audienceCount ?? audienceList.value?.length ?? 0);
+  const keyword = ref('');
+  const searchInputRef = ref<any>(null);
+  function onKeywordInput(e: any): void {
+    keyword.value = (e?.detail?.value ?? '') as string;
+  }
+  // 点 sheet 空白失焦关键盘（@tap.stop 同步防冒泡到 mask onClose）
+  function handleDismissKeyboard(): void {
+    searchInputRef.value?.blur?.();
+    uni.hideKeyboard();
+  }
+
+  // 优先用 SDK roomInfo 推送的 count，会中通常不可靠所以并发取 list.length 取较大值
+const participantCount = computed(() => {
+    const fromRoom = currentRoom.value?.participantCount;
+    const fromList = participantList.value?.length || 0;
+    if (typeof fromRoom === 'number' && fromRoom > 0) return fromRoom;
+    return fromList;
+  });
+  const audienceCount = computed(() => {
+    const fromRoom = currentRoom.value?.audienceCount;
+    const fromList = audienceList.value?.length || 0;
+    if (typeof fromRoom === 'number' && fromRoom > 0) return fromRoom;
+    return fromList;
+  });
+
+  /**
+   * 该用户是否处于「呼叫中」—— 直接读 SDK 的 RoomParticipantStatus.InCalling，
+   * 不再本地维护 pendingCallSet（SDK 通过 ON_INVITATION_STATUS_CHANGED 推送状态变化）。
+   */
+  function isUserCalling(u: RoomUser): boolean {
+    return (u as RoomParticipant).roomStatus === RoomParticipantStatus.InCalling;
+  }
+
+  /* ============== 「暂不入会」瞬时提示（拒绝后 3s） ============== */
+
+  /** 「暂不入会」徽标展示时长 */
+  const REJECTED_HINT_MS = 3000;
+  /** 刚拒绝呼叫的 userID 集合（3s 后自动移除，随后 item 回到「呼叫」按钮） */
+  const rejectedSet = ref<Set<string>>(new Set());
+  /** userID → 清除定时器，用于同一用户重复拒绝时重置计时 + 卸载时清理 */
+  const rejectedTimers = new Map<string, number>();
+
+  function isUserRejected(u: RoomUser): boolean {
+    return rejectedSet.value.has(u.userID);
+  }
+
+  function markRejected(userID: string): void {
+    if (typeof userID !== 'string' || userID.length === 0) return;
+    const prev = rejectedTimers.get(userID);
+    if (prev != null) clearTimeout(prev);
+
+    const next = new Set(rejectedSet.value);
+    next.add(userID);
+    rejectedSet.value = next;
+
+    const timer = setTimeout(() => {
+      rejectedTimers.delete(userID);
+      const cleared = new Set(rejectedSet.value);
+      cleared.delete(userID);
+      rejectedSet.value = cleared;
+    }, REJECTED_HINT_MS) as unknown as number;
+    rejectedTimers.set(userID, timer);
+  }
+
+  const onCallRejected = (opt: { roomInfo: any; call: any; reason: any }): void => {
+    const userID = opt?.call?.callee?.userID;
+    if (typeof userID !== 'string' || userID.length === 0) return;
+    markRejected(userID);
+  };
+
+  onMounted((): void => {
+    subscribeEvent(RoomEvent.onCallRejected, onCallRejected as any);
+  });
+
+  onBeforeUnmount((): void => {
+    unsubscribeEvent(RoomEvent.onCallRejected, onCallRejected as any);
+    rejectedTimers.forEach((t: number) => clearTimeout(t));
+    rejectedTimers.clear();
+  });
+
+  const firstTabText = computed(() =>
+    props.isWebinar ? `嘉宾(${participantCount.value})` : `已进房(${participantCount.value})`
+  );
+  const secondTabText = computed(() =>
+    props.isWebinar ? `观众(${audienceCount.value})` : `未进房(${pendingParticipantList.value.length})`
+  );
 
   const isOwner = computed(() => localParticipant.value?.role === RoomParticipantRole.Owner);
   const isAdmin = computed(() => localParticipant.value?.role === RoomParticipantRole.Admin);
@@ -192,6 +332,27 @@
       return (a.userName || '').localeCompare(b.userName || '');
     });
     return list;
+  });
+
+  /** 搜索命中判定：userName / userID 任一包含关键词即命中 */
+  function matchKeyword(userName: string, userID: string): boolean {
+    const kw = keyword.value.trim().toLowerCase();
+    if (kw.length === 0) return true;
+    return (userName || '').toLowerCase().indexOf(kw) > -1
+      || (userID || '').toLowerCase().indexOf(kw) > -1;
+  }
+
+  const filteredParticipantList = computed<RoomParticipant[]>(() =>
+    sortedParticipantList.value.filter((p) => matchKeyword(p.userName, p.userID))
+  );
+
+  /**
+   * 第二个 Tab 的数据源：研讨会是观众列表（RoomUser），普通会议是未进房列表（RoomParticipant）。
+   * RoomParticipant extends RoomUser，统一按 RoomUser 消费（模板只用 userID / userName）。
+   */
+  const filteredSecondTabList = computed<RoomUser[]>(() => {
+    const source: RoomUser[] = props.isWebinar ? sortedAudienceList.value : pendingParticipantList.value;
+    return source.filter((u) => matchKeyword(u.userName, u.userID));
   });
 
   function isAdminUser(userID: string): boolean {
@@ -257,6 +418,93 @@
   }
 
   function onClose() { emit('close'); }
+
+  watch(
+    () => props.visible,
+    (v) => {
+      if (!v) return;
+      // 拉全量参与人（cursor='' 表示从头拉，会返回 FULL 推送）
+      roomParticipantState.getParticipantList({ cursor: '' }).catch(() => {});
+      // 拉房间详情（带回 participantCount / audienceCount）
+      getRoomInfo({ roomID: props.roomID })
+        .then((info) => {
+          if (info && currentRoom.value) {
+            // 保留 scheduleAttendees 等预约字段（与 RoomState.mergeCurrentRoom 同步）
+            currentRoom.value = { ...info, scheduleAttendees: currentRoom.value.scheduleAttendees };
+          }
+        })
+        .catch(() => {});
+    },
+    { immediate: false },
+  );
+
+  /**
+   * 「呼叫」按钮：单用户呼叫，直接复用 Round 24 约定的 SDK API。
+   * 返回 Map<userID, RoomCallResult>，聚合提示与 SelectMemberPanel 同模式。
+   * 呼叫中状态由 SDK 的 RoomParticipantStatus.InCalling 驱动，本地不维护。
+   */
+  function handleCall(u: RoomUser): Promise<void> {
+    if (props.roomID.length === 0) return Promise.resolve();
+    return callUserToRoom({ roomID: props.roomID, userIDList: [u.userID] })
+      .then((results: Map<string, RoomCallResult>) => {
+        const code = results.get(u.userID);
+        let msg = '呼叫失败';
+        let toastType: ToastType = 'none';
+        if (code === RoomCallResult.Success) {
+          msg = `已呼叫 ${u.userName || u.userID}`;
+          toastType = 'success';
+        } else if (code === RoomCallResult.AlreadyInCalling) {
+          msg = '对方已在呼叫中';
+        } else if (code === RoomCallResult.AlreadyInRoom) {
+          msg = '对方已在房间中';
+        }
+        showToast({ message: msg, type: toastType });
+      })
+      .catch((e: any) => {
+        showErrorToast(e, '呼叫失败');
+      });
+  }
+
+  /**
+   * 「取消」按钮：取消已发起的呼叫。
+   * 按钮状态由 SDK 推的 RoomParticipantStatus 变化驱动，不做本地乐观更新。
+   */
+  function handleCancelCall(u: RoomUser): void {
+    if (props.roomID.length === 0) return;
+    cancelCall({ roomID: props.roomID, userIDList: [u.userID] })
+      .then(() => {
+        showToast('已取消呼叫');
+      })
+      .catch((e: any) => {
+        showErrorToast(e, '取消呼叫失败');
+      });
+  }
+
+  /**
+   * 「呼叫所有人」的目标：未进房列表里**尚未在呼叫中**的人。
+   * 已在呼叫中的排除掉，避免重复发起（SDK 会返回 AlreadyInCalling）。
+   * 不该影响「所有人」的语义。
+   */
+  const callAllTargets = computed<RoomUser[]>(() =>
+    pendingParticipantList.value.filter((u: RoomParticipant) => !isUserCalling(u))
+  );
+
+  /** 「呼叫所有人」：批量呼叫未进房且未在呼叫中的成员，结果聚合提示 */
+  function handleCallAll(): void {
+    if (props.roomID.length === 0) return;
+    const ids = callAllTargets.value.map((u: RoomUser) => u.userID);
+    if (ids.length === 0) {
+      showToast('没有可呼叫的成员');
+      return;
+    }
+    callUserToRoom({ roomID: props.roomID, userIDList: ids })
+      .then(() => {
+        showToast('邀请信息已发出，等待成员加入');
+      })
+      .catch((e: any) => {
+        showErrorToast(e, '呼叫失败');
+      });
+  }
 </script>
 
 <style>
@@ -289,23 +537,44 @@
     height: 48rpx;
   }
 
-  .title-row {
-    height: 48rpx;
-    padding-left: 32rpx;
-    padding-right: 32rpx;
-    justify-content: center;
-    flex-direction: column;
+  /* ==================== 搜索 ==================== */
+  .search-row {
+    flex-direction: row;
+    margin-left: 32rpx;
+    margin-right: 32rpx;
+    margin-top: 32rpx;
+    height: 72rpx;
   }
 
-  .title-text {
+  .search-wrap {
+    flex: 1;
+    height: 72rpx;
+    border-radius: 12rpx;
+    background-color: #2A2D38;
+    flex-direction: row;
+    align-items: center;
+    padding-left: 20rpx;
+    padding-right: 20rpx;
+  }
+
+  .search-icon {
+    width: 32rpx;
+    height: 32rpx;
+    margin-right: 12rpx;
+  }
+
+  .search-input {
+    flex: 1;
+    height: 72rpx;
+    font-size: 28rpx;
     color: #D5E0F2;
-    font-size: 32rpx;
-    font-weight: 500;
+    padding: 0;
   }
 
   .tab-bar {
     margin-left: 32rpx;
     margin-right: 32rpx;
+    margin-top: 24rpx;
     height: 72rpx;
     background-color: #2A2D38;
     border-radius: 12rpx;
@@ -349,6 +618,18 @@
     margin-right: 32rpx;
   }
 
+  .list-empty {
+    flex: 1;
+    justify-content: center;
+    align-items: center;
+    padding-top: 120rpx;
+  }
+
+  .list-empty-text {
+    color: #6B7385;
+    font-size: 28rpx;
+  }
+
   .bottom-row {
     flex-direction: row;
     padding-left: 32rpx;
@@ -367,6 +648,10 @@
 
   .bottom-btn-text {
     font-size: 28rpx;
+  }
+
+  .bottom-btn-text-primary {
+    color: #FFFFFF;
   }
 
   .bottom-gap {

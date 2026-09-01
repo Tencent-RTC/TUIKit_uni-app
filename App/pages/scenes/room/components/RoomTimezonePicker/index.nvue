@@ -1,0 +1,164 @@
+<template>
+  <view v-if="visible" class="tz-panel">
+    <CustomNavbar
+      title="选择时区"
+      :showBack="true"
+      :showMenu="false"
+      :showShadow="false"
+      @back="handleCancel"
+    />
+    <view
+      class="tz-confirm-btn"
+      :style="{ top: statusBarHeight + 'px' }"
+      @tap="handleConfirm"
+    >
+      <image
+        class="tz-confirm-icon"
+        src="/static/images/room/room_schedule_selected.png"
+        mode="aspectFit"
+      />
+    </view>
+
+    <scroll-view
+      class="tz-scroll"
+      scroll-y="true"
+      :scroll-into-view="scrollId"
+      :show-scrollbar="false"
+    >
+      <view
+        v-for="item in options"
+        :key="item.value"
+        :id="`tz-${item.value}`"
+        class="tz-item"
+        @tap="handlePick(item.value)"
+      >
+        <text
+          class="tz-item-text"
+          :class="{ 'tz-item-text-selected': item.value === pickedValue }"
+        >{{ item.label }}</text>
+      </view>
+      <view class="tz-bottom-safe"></view>
+    </scroll-view>
+  </view>
+</template>
+
+<script setup lang="ts">
+  import { ref, watch, onMounted } from 'vue';
+  import CustomNavbar from '@/uni_modules/tuikit-atomic-x/components/CustomNavbar/CustomNavbar.nvue';
+
+  type OptionItem = {
+    value: number;
+    label: string;
+  };
+
+  const props = defineProps({
+    visible: { type: Boolean, default: false },
+    options: { type: Array as () => OptionItem[], default: () => [] },
+    selectedValue: { type: Number, default: -1 },
+  });
+
+  const emit = defineEmits<{
+    (e: 'cancel'): void;
+    (e: 'select', value: number): void;
+  }>();
+
+  /** 面板内的临时选中态，确认后才向外 emit */
+  const pickedValue = ref<number>(-1);
+  const scrollId = ref<string>('');
+  /** 状态栏高度（px），绝对定位对勾按钮 top 用 */
+  const statusBarHeight = ref<number>(44);
+
+  onMounted((): void => {
+    try {
+      const sysInfo = uni.getSystemInfoSync();
+      const h = sysInfo.statusBarHeight;
+      statusBarHeight.value = typeof h === 'number' && h > 0 ? h : 44;
+    } catch (e) {
+      statusBarHeight.value = 44;
+    }
+  });
+
+  watch(
+    () => props.visible,
+    (v) => {
+      if (!v) return;
+      pickedValue.value = props.selectedValue;
+      // 打开时滚到已选项：先清空再赋值，保证同一 id 也能重新触发
+      scrollId.value = '';
+      setTimeout(() => {
+        if (props.selectedValue >= 0) scrollId.value = `tz-${props.selectedValue}`;
+      }, 50);
+    },
+    { immediate: true },
+  );
+
+  function handlePick(value: number): void {
+    pickedValue.value = value;
+  }
+
+  function handleCancel(): void {
+    emit('cancel');
+  }
+
+  function handleConfirm(): void {
+    if (pickedValue.value < 0) {
+      emit('cancel');
+      return;
+    }
+    emit('select', pickedValue.value);
+  }
+</script>
+
+<style>
+  .tz-panel {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 100;
+    background-color: #FFFFFF;
+    flex-direction: column;
+  }
+
+  .tz-confirm-btn {
+    position: absolute;
+    right: 0;
+    width: 88rpx;
+    height: 88rpx;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    z-index: 3;
+  }
+
+  .tz-confirm-icon {
+    width: 48rpx;
+    height: 48rpx;
+  }
+
+  .tz-scroll {
+    flex: 1;
+  }
+
+  .tz-item {
+    height: 112rpx;
+    padding-left: 32rpx;
+    padding-right: 32rpx;
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .tz-item-text {
+    font-size: 32rpx;
+    color: #22262E;
+  }
+
+  .tz-item-text-selected {
+    color: #1C66E5;
+  }
+
+  .tz-bottom-safe {
+    height: 40rpx;
+  }
+</style>

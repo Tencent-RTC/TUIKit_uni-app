@@ -1,0 +1,663 @@
+<template>
+  <view class="root">
+    <CustomNavbar
+      :title="pageTitle"
+      :showShadow="false"
+      @back="handleBack"
+    />
+    <scroll-view
+      class="page"
+      scroll-y="true"
+      :style="{ paddingBottom: keyboardHeight + 'px' }"
+    >
+
+    <view class="card" @tap="handleRootTap">
+      <view class="form-item">
+        <text class="form-label">房间名称</text>
+        <input
+          ref="roomNameInputRef"
+          class="form-input"
+          :value="roomName"
+          placeholder="请输入房间名称"
+          placeholder-style="color: #C2C7D0; font-size: 32rpx;"
+          :maxlength="30"
+          @input="onRoomNameInput"
+        />
+      </view>
+
+      <view class="form-item" @tap="handleOpenTimePicker">
+        <text class="form-label">开始时间</text>
+        <text class="form-value" :numberOfLines="1">{{ startTimeText }}</text>
+        <image class="form-arrow" src="/static/images/room/room_chevron-down.png" mode="aspectFit" />
+      </view>
+
+      <view class="form-item" @tap="handleOpenDurationPicker">
+        <text class="form-label">房间时长</text>
+        <text class="form-value" :numberOfLines="1">{{ durationText }}</text>
+        <image class="form-arrow" src="/static/images/room/room_chevron-down.png" mode="aspectFit" />
+      </view>
+
+      <view class="form-item" @tap="handleOpenTimezonePicker">
+        <text class="form-label">时区</text>
+        <text class="form-value" :numberOfLines="1">{{ timezoneText }}</text>
+        <image class="form-arrow" src="/static/images/room/room_chevron-down.png" mode="aspectFit" />
+      </view>
+
+      <view class="form-item" @tap="handleOpenMemberPanel">
+        <text class="form-label">参与成员</text>
+        <view class="attendee-box">
+          <image
+            v-for="user in attendeeAvatarList"
+            :key="user.userID"
+            class="attendee-avatar"
+            :src="user.avatarURL.length > 0 ? user.avatarURL : defaultAvatar"
+            mode="aspectFill"
+          />
+          <text class="attendee-text">{{ attendeeText }}</text>
+        </view>
+        <image class="form-arrow form-arrow-right" src="/static/images/room/room_chevron-down.png" mode="aspectFit" />
+      </view>
+    </view>
+
+    <view class="card" v-if="!isEditMode" @tap="handleRootTap">
+      <view class="form-item switch-item">
+        <text class="form-label">房间加密</text>
+        <ToggleSwitch :checked="isRoomEncrypted" activeColor="#0468FC" @change="onRoomEncryptedChange" />
+      </view>
+      <view v-if="isRoomEncrypted" class="form-item">
+        <text class="form-label">进房密码</text>
+        <input
+          ref="roomPasswordInputRef"
+          class="form-input"
+          type="number"
+          :value="roomPassword"
+          placeholder="请输入 6 位数字密码"
+          placeholder-style="color: #C2C7D0; font-size: 32rpx;"
+          :maxlength="6"
+          @input="onRoomPasswordInput"
+        />
+      </view>
+    </view>
+
+    <view class="card" v-if="!isEditMode" @tap="handleRootTap">
+      <view class="form-item switch-item">
+        <text class="form-label">全体静音</text>
+        <ToggleSwitch :checked="isAllMicrophoneDisabled" activeColor="#0468FC" @change="onAllMicChange" />
+      </view>
+      <view class="form-item switch-item">
+        <text class="form-label">全体禁画</text>
+        <ToggleSwitch :checked="isAllCameraDisabled" activeColor="#0468FC" @change="onAllCameraChange" />
+      </view>
+      <!-- <view class="form-item switch-item">
+        <text class="form-label">全体禁言</text>
+        <ToggleSwitch :checked="isAllMessageDisabled" activeColor="#0468FC" @change="onAllMessageChange" />
+      </view>
+      <view class="form-item switch-item">
+        <text class="form-label">全体禁屏</text>
+        <ToggleSwitch :checked="isAllScreenShareDisabled" activeColor="#0468FC" @change="onAllScreenShareDisabledChange" />
+      </view> -->
+    </view>
+
+    <view class="footer">
+      <view class="submit-btn" :style="submitBtnStyle" @tap="handleSubmit">
+        <text class="submit-btn-text">{{ submitText }}</text>
+      </view>
+    </view>
+
+    <RoomTimePicker
+      :visible="isTimePickerVisible"
+      :timestamp="startWallClockMs"
+      @cancel="isTimePickerVisible = false"
+      @confirm="handleTimeConfirm"
+    />
+
+    <RoomDurationPicker
+      :visible="isDurationPickerVisible"
+      :initialTotalMinutes="durationMinutes"
+      @cancel="isDurationPickerVisible = false"
+      @confirm="handleDurationConfirm"
+    />
+
+    <RoomInviteSheet
+      :visible="isInviteSheetVisible"
+      :roomID="createdRoomID"
+      title="预定成功，邀请他们加入"
+      @close="handleInviteSheetClose"
+    />
+    </scroll-view>
+
+    <!-- 选人面板：position: fixed 全屏覆盖，必须放在 scroll-view 外层 -->
+    <SelectMemberPanel
+      :visible="isMemberPanelVisible"
+      :selectOnly="true"
+      :initialSelectedIDs="attendeeIDList"
+      @selected="handleAttendeeSelected"
+      @close="isMemberPanelVisible = false"
+    />
+
+    <!-- 时区面板：同样 position: fixed 全屏覆盖，必须放在 scroll-view 外层 -->
+    <RoomTimezonePicker
+      :visible="isTimezonePickerVisible"
+      :options="timezoneOptions"
+      :selectedValue="timezoneIndex"
+      @cancel="isTimezonePickerVisible = false"
+      @select="handleTimezoneSelect"
+    />
+  </view>
+</template>
+
+<script setup lang="ts">
+  import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
+  import { onLoad } from '@dcloudio/uni-app';
+  import { useLoginState, useRoomState, RoomType } from '@/uni_modules/tuikit-atomic-x/state';
+  import { ToggleSwitch } from '@/uni_modules/tuikit-atomic-x/components_compatible';
+  import CustomNavbar from '@/uni_modules/tuikit-atomic-x/components/CustomNavbar/CustomNavbar.nvue';
+  import RoomTimePicker from '../components/RoomTimePicker/index.nvue';
+  import RoomTimezonePicker from '../components/RoomTimezonePicker/index.nvue';
+  import RoomDurationPicker from '../components/RoomDurationPicker/index.nvue';
+  import RoomInviteSheet from '../components/RoomInviteSheet/index.nvue';
+  import SelectMemberPanel from '../components/SelectMemberPanel/index.nvue';
+  import { showErrorToast } from '../utils/errorHandler';
+  import {
+    formatDuration,
+    formatFullDateTime,
+    getDefaultStartTime,
+    generateRoomID,
+    generateRoomPassword,
+  } from '../utils/scheduleUtils';
+  import {
+    TIMEZONE_OPTIONS,
+    getDefaultTimezoneIndex,
+    getTimezoneLabel,
+    wallClockToUtcMs,
+    utcToWallClockMs,
+  } from '../utils/timezones';
+  import { showToast } from '@/uni_modules/tuikit-atomic-x/utils/toast';
+
+  const { loginUserInfo } = useLoginState();
+  const roomState = useRoomState();
+
+  const defaultAvatar = 'https://web.sdk.qcloud.com/im/assets/all-in-one/user.png';
+  const MAX_AVATAR_PREVIEW = 4;
+
+  type AttendeeUser = {
+    userID: string;
+    displayName: string;
+    avatarURL: string;
+  };
+
+  const roomName = ref('');
+  const roomNameInputRef = ref<any>(null);
+  const roomPasswordInputRef = ref<any>(null);
+  const keyboardHeight = ref(0);
+  const roomType = ref<number>(RoomType.Standard);
+  const startTime = ref<number>(getDefaultStartTime());
+  const timezoneIndex = ref<number>(getDefaultTimezoneIndex());
+  const durationMinutes = ref<number>(30);
+  const isRoomEncrypted = ref(false);
+  const roomPassword = ref('');
+  const isPasswordSystemGenerated = ref(false);
+  const isAllMicrophoneDisabled = ref(false);
+  const isAllCameraDisabled = ref(false);
+  const isAllMessageDisabled = ref(false);
+  const isAllScreenShareDisabled = ref(false);
+  const attendeeList = ref<AttendeeUser[]>([]);
+  const originalAttendeeIDs = ref<string[]>([]);
+
+  const editRoomID = ref('');
+  const isEditMode = computed(() => editRoomID.value.length > 0);
+  const pageTitle = computed(() => (isEditMode.value ? '修改房间' : '预定房间'));
+  const submitText = computed(() => (isEditMode.value ? '保存' : '预定房间'));
+
+  const isTimePickerVisible = ref(false);
+  const isTimezonePickerVisible = ref(false);
+  const isDurationPickerVisible = ref(false);
+  const isInviteSheetVisible = ref(false);
+  const isMemberPanelVisible = ref(false);
+  const createdRoomID = ref('');
+
+  const isSubmitting = ref(false);
+
+  const timezoneOptions = computed(() =>
+    TIMEZONE_OPTIONS.map((o) => ({ value: o.value, label: o.label })),
+  );
+  const timezoneText = computed(() => getTimezoneLabel(timezoneIndex.value));
+
+  // startTime 存 UTC 毫秒（唯一真值）。展示 / picker 初始值都要换算成
+  // 「选中时区的墙上时间」，这样切时区时开始时间跟着变。
+  const startWallClockMs = computed(() => utcToWallClockMs(startTime.value, timezoneIndex.value));
+
+  const startTimeText = computed(() => formatFullDateTime(startWallClockMs.value));
+  const durationText = computed(() => formatDuration(durationMinutes.value));
+
+  // ── 参与成员展示 ──
+  const attendeeIDList = computed<string[]>(() => attendeeList.value.map((u) => u.userID));
+  /** 只展示前 MAX_AVATAR_PREVIEW 个头像，与设计稿一致 */
+  const attendeeAvatarList = computed<AttendeeUser[]>(() =>
+    attendeeList.value.slice(0, MAX_AVATAR_PREVIEW),
+  );
+  const attendeeText = computed(() => {
+    const n = attendeeList.value.length;
+    return n === 0 ? '添加' : `${n}人`;
+  });
+
+  const isSubmitDisabled = computed(() => roomName.value.trim().length === 0 || isSubmitting.value);
+  const submitBtnStyle = computed(() => ({ opacity: isSubmitDisabled.value ? 0.5 : 1 }));
+
+  onLoad((options: any) => {
+    const rid = options?.roomID ? decodeURIComponent(String(options.roomID)) : '';
+    if (rid.length > 0) {
+      editRoomID.value = rid;
+      if (options?.roomName) roomName.value = decodeURIComponent(String(options.roomName));
+      if (options?.roomType) roomType.value = parseInt(String(options.roomType), 10) || RoomType.Standard;
+      if (options?.startTime) {
+        const st = parseInt(String(options.startTime), 10);
+        if (st > 0) startTime.value = st;
+      }
+      if (options?.duration) {
+        const du = parseInt(String(options.duration), 10);
+        if (du > 0) durationMinutes.value = du;
+      }
+      isAllMicrophoneDisabled.value = options?.allMicDisabled === '1';
+      isAllCameraDisabled.value = options?.allCameraDisabled === '1';
+      isAllMessageDisabled.value = options?.allMessageDisabled === '1';
+      isAllScreenShareDisabled.value = options?.allScreenShareDisabled === '1';
+      if (options?.password) {
+        const pwd = decodeURIComponent(String(options.password)).replace(/\D/g, '').slice(0, 6);
+        if (pwd.length > 0) {
+          roomPassword.value = pwd;
+          isRoomEncrypted.value = true;
+          isPasswordSystemGenerated.value = false;
+        }
+      }
+    }
+  });
+
+  onMounted(() => {
+    if (!isEditMode.value && roomName.value.length === 0) {
+      const nickName = loginUserInfo.value?.nickname || loginUserInfo.value?.userID || '';
+      roomName.value = nickName.length > 0 ? `${nickName}的房间` : '';
+    }
+    if (isEditMode.value) loadScheduledAttendees();
+    const onKeyboardChange = (res: any): void => {
+      keyboardHeight.value = (res?.height ?? 0) as number;
+    };
+    uni.onKeyboardHeightChange(onKeyboardChange);
+    // nvue 卸载时清理（与 RegisterCoupon 生态一致）
+    onBeforeUnmount(() => uni.offKeyboardHeightChange(onKeyboardChange));
+  });
+
+  function loadScheduledAttendees(): void {
+    const rid = editRoomID.value;
+    if (rid.length === 0) return;
+    const collected: AttendeeUser[] = [];
+    const MAX_PAGES = 50;
+    let pageIndex = 0;
+    let cursor = '';
+    const loopFetch = (): Promise<void> => {
+      return roomState
+        .getScheduledAttendees({ roomID: rid, cursor })
+        .then((res: any) => {
+          const list = (res?.attendees || []) as any[];
+          for (const a of list) {
+            const uid = a.userID || '';
+            const nick = a.userName || a.nickname || '';
+            collected.push({
+              userID: uid,
+              displayName: nick.length > 0 ? `${uid}(${nick})` : uid,
+              avatarURL: a.avatarURL || '',
+            } as AttendeeUser);
+          }
+          pageIndex += 1;
+          // cursor 为空 = 拉完；超过 MAX_PAGES 也强制结束（防御）
+          if (!res?.cursor || pageIndex >= MAX_PAGES) {
+            attendeeList.value = collected;
+            // 同步记录原始 userID 列表，供提交时 diff 用
+            originalAttendeeIDs.value = collected.map((u) => u.userID);
+            return;
+          }
+          cursor = res.cursor;
+          return loopFetch();
+        });
+    };
+    loopFetch().catch((e: any) => {
+      console.warn('[schedule] getScheduledAttendees failed:', e);
+    });
+  }
+
+  function onRoomNameInput(e: any): void {
+    roomName.value = (e?.detail?.value ?? '') as string;
+  }
+
+
+  function onRoomEncryptedChange(e: any): void {
+    const on = e.detail.value as boolean;
+    isRoomEncrypted.value = on;
+    if (!on) return; // 关闭：不重置任何东西，方便再次开启复用
+    // 开启：仅首次（password 为空）时 generate 一次
+    if (roomPassword.value.length === 0) {
+      roomPassword.value = generateRoomPassword();
+      isPasswordSystemGenerated.value = true;
+    }
+  }
+  function onRoomPasswordInput(e: any): void {
+    // 只留数字，最长 6 位（防止部分平台 maxlength 不生效）
+    const raw = (e?.detail?.value ?? '') as string;
+    roomPassword.value = raw.replace(/\D/g, '').slice(0, 6);
+    // 用户手动改过 → 不再视作"系统生成"，关闭再开启也要复用他改的
+    isPasswordSystemGenerated.value = false;
+  }
+
+  function onAllMicChange(e: any): void {
+    isAllMicrophoneDisabled.value = e.detail.value;
+  }
+  function onAllCameraChange(e: any): void {
+    isAllCameraDisabled.value = e.detail.value;
+  }
+  function onAllMessageChange(e: any): void {
+    isAllMessageDisabled.value = e.detail.value;
+  }
+  function onAllScreenShareDisabledChange(e: any): void {
+    isAllScreenShareDisabled.value = e.detail.value;
+  }
+
+  function handleRootTap(): void {
+    // nvue 中 uni.hideKeyboard() 不保证 input 真正失焦，必须 ref.blur()。
+    // 参考项目中已验证稳定模式：uni_modules/tuikit-atomic-x/components/Search/SearchBar.nvue:97
+    roomNameInputRef.value?.blur?.();
+    roomPasswordInputRef.value?.blur?.();
+    uni.hideKeyboard();
+  }
+
+  function handleOpenTimePicker(): void {
+    uni.hideKeyboard();
+    isTimePickerVisible.value = true;
+  }
+  function handleTimeConfirm(ts: number): void {
+    // picker 输出的是「选中时区的墙上时间」载体，转回 UTC 存
+    startTime.value = wallClockToUtcMs(ts, timezoneIndex.value);
+    isTimePickerVisible.value = false;
+  }
+
+  function handleOpenTimezonePicker(): void {
+    uni.hideKeyboard();
+    isTimezonePickerVisible.value = true;
+  }
+  function handleTimezoneSelect(value: number): void {
+    timezoneIndex.value = value;
+    isTimezonePickerVisible.value = false;
+  }
+
+  function handleOpenDurationPicker(): void {
+    uni.hideKeyboard();
+    isDurationPickerVisible.value = true;
+  }
+  function handleDurationConfirm(totalMinutes: number): void {
+    durationMinutes.value = totalMinutes;
+    isDurationPickerVisible.value = false;
+  }
+
+  function handleOpenMemberPanel(): void {
+    uni.hideKeyboard();
+    isMemberPanelVisible.value = true;
+  }
+  function handleAttendeeSelected(payload: { users: AttendeeUser[] }): void {
+    attendeeList.value = (payload?.users || []).slice();
+    isMemberPanelVisible.value = false;
+  }
+
+  function handleBack(): void {
+    uni.navigateBack();
+  }
+
+  function handleSubmit(): void {
+    if (isSubmitDisabled.value) {
+      if (roomName.value.trim().length === 0) {
+        showToast('请输入房间名称');
+      }
+      return;
+    }
+    if (startTime.value <= Date.now()) {
+      showToast('开始时间不能早于当前时间');
+      return;
+    }
+    if (isRoomEncrypted.value && roomPassword.value.length !== 6) {
+      showToast('请输入 6 位数字进房密码');
+      return;
+    }
+    uni.hideKeyboard();
+    isSubmitting.value = true;
+
+    const targetRoomID = isEditMode.value ? editRoomID.value : generateRoomID();
+    const currentIDs = attendeeIDList.value.slice();
+    // startTime 已是 UTC 毫秒（handleTimeConfirm 时就换算过），直接 /1000 转秒
+    const utcStartMs = startTime.value;
+    const scheduleOptions = {
+      roomName: roomName.value.trim(),
+      password: isRoomEncrypted.value ? roomPassword.value : '',
+      // scheduledStartTime / scheduledEndTime 是 SDK 约定的「秒级时间戳」（types/room.ts:127-129），
+      // 内部 startTime 是毫秒（RoomTimePicker emit 毫秒），传 SDK 前必须 /1000 转秒。
+      scheduleStartTime: Math.floor(utcStartMs / 1000),
+      scheduleEndTime: Math.floor((utcStartMs + durationMinutes.value * 60 * 1000) / 1000),
+      // 新建模式：直接把参会人员塞进 scheduleRoom，一次性建房+加成员（更高效，原子性更好）
+      // 编辑模式：不在 update 调用里传 attendees，避免与下面的 diff 操作冲突（SDK update 行为未明）
+      scheduleAttendees: isEditMode.value ? undefined : currentIDs.slice(),
+      isAllMicrophoneDisabled: isAllMicrophoneDisabled.value,
+      isAllCameraDisabled: isAllCameraDisabled.value,
+      isAllMessageDisabled: isAllMessageDisabled.value,
+      isAllScreenShareDisabled: isAllScreenShareDisabled.value,
+    };
+
+    const task = isEditMode.value
+      ? roomState.updateScheduledRoom({ roomID: targetRoomID, options: scheduleOptions })
+      : roomState.scheduleRoom({ roomID: targetRoomID, options: scheduleOptions });
+
+    task
+      .then(() => {
+        // 编辑模式：diff 原始 vs 当前，分两路调 SDK
+        // - 「旧 ∩ 新 = 保留」不动
+        // - 「旧 - 新」= 被移除的，需要 removeScheduledAttendees
+        // - 「新 - 旧」= 新增的，需要 addScheduledAttendees
+        if (isEditMode.value) {
+          return syncAttendeesDiff(targetRoomID);
+        }
+        // 新建模式：scheduleRoom 已经带 scheduleAttendees，无需再操作
+        return Promise.resolve();
+      })
+      .then(() => {
+        isSubmitting.value = false;
+        uni.$emit('scheduledRoomListChanged', {});
+        if (isEditMode.value) {
+          showToast('保存成功');
+          setTimeout(() => {
+            uni.navigateBack();
+          }, 600);
+          return;
+        }
+        createdRoomID.value = targetRoomID;
+        isInviteSheetVisible.value = true;
+      })
+      .catch((e: any) => {
+        isSubmitting.value = false;
+        showErrorToast(e, isEditMode.value ? '保存失败' : '预定房间失败');
+      });
+  }
+
+  function handleInviteSheetClose(): void {
+    isInviteSheetVisible.value = false;
+    uni.navigateBack();
+  }
+
+  /**
+   * 编辑模式同步参会人员：对比「原始」与「当前」，分别调 add / remove。
+   *
+   * 容错策略：
+   * - 任一操作失败都只 warn + toast，不阻断整个提交（已 update 成功的房间还是要保留）
+   * - 两个操作并行执行（Promise.all），谁先成功谁生效
+   * - 移除的「已被移除」/ 添加的「已存在」等幂等场景，SDK 会自行忽略
+   */
+  function syncAttendeesDiff(roomID: string): Promise<void> {
+    const before = new Set(originalAttendeeIDs.value);
+    const after = new Set(attendeeIDList.value);
+    const toRemove: string[] = [];
+    const toAdd: string[] = [];
+    before.forEach((id) => {
+      if (!after.has(id)) toRemove.push(id);
+    });
+    after.forEach((id) => {
+      if (!before.has(id)) toAdd.push(id);
+    });
+
+    const tasks: Promise<unknown>[] = [];
+    if (toRemove.length > 0) {
+      tasks.push(
+        roomState
+          .removeScheduledAttendees({ roomID, userIDList: toRemove.slice() })
+          .catch((e: any) => {
+            console.warn('[schedule] removeScheduledAttendees failed:', e);
+            showToast('部分成员移除失败');
+          }),
+      );
+    }
+    if (toAdd.length > 0) {
+      tasks.push(
+        roomState
+          .addScheduledAttendees({ roomID, userIDList: toAdd.slice() })
+          .catch((e: any) => {
+            console.warn('[schedule] addScheduledAttendees failed:', e);
+            showToast('部分成员添加失败');
+          }),
+      );
+    }
+    if (tasks.length === 0) return Promise.resolve();
+    return Promise.all(tasks).then(() => undefined);
+  }
+</script>
+
+<style>
+  /* 根容器：CustomNavbar 常驻顶部不滚动，scroll-view 装剩下内容 */
+  .root {
+    flex: 1;
+    background-color: #F2F5FC;
+    flex-direction: column;
+  }
+  /* scroll-view 高度 = safeArea.height - navBarHeight（page 已带 style inline） */
+  .page {
+    flex: 1;
+    flex-direction: column;
+    padding-bottom: 32rpx;
+  }
+
+  .card {
+    margin: 40rpx 32rpx 0;
+    padding: 20rpx 40rpx;
+    background-color: #FFFFFF;
+    border-radius: 12rpx;
+    flex-direction: column;
+  }
+
+  .form-item {
+    flex-direction: row;
+    align-items: center;
+    padding: 20rpx 0;
+  }
+
+  .switch-item {
+    justify-content: space-between;
+  }
+
+  .form-label {
+    width: 176rpx;
+    font-size: 32rpx;
+    color: #2B2E38;
+  }
+
+  .form-input {
+    flex: 1;
+    font-size: 32rpx;
+    font-weight: 500;
+    color: #A2A4A8;
+    lines: 1;
+    padding: 0;
+    text-align: right;
+  }
+
+  .form-value {
+    flex: 1;
+    font-size: 32rpx;
+    font-weight: 500;
+    color: #A2A4A8;
+    text-align: right;
+    lines: 1;
+    text-overflow: ellipsis;
+  }
+
+  .form-arrow {
+    width: 28rpx;
+    height: 28rpx;
+    margin-left: 8rpx;
+  }
+
+  .form-arrow-right {
+    transform: rotate(-90deg);
+  }
+
+  /* 参与成员：头像叠在右侧 + 人数文案，整体右对齐 */
+  .attendee-box {
+    flex: 1;
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-end;
+  }
+
+  .attendee-avatar {
+    width: 48rpx;
+    height: 48rpx;
+    border-radius: 24rpx;
+    margin-left: 8rpx;
+  }
+
+  .attendee-text {
+    font-size: 32rpx;
+    font-weight: 500;
+    color: #A2A4A8;
+    margin-left: 12rpx;
+  }
+
+
+  /* 编辑模式不可修改字段的统一提示（卡片底部 padding-left 与表单左侧一致） */
+  .form-hint-wrap {
+    padding-top: 8rpx;
+    padding-bottom: 8rpx;
+    padding-left: 4rpx;
+    padding-right: 32rpx;
+    flex-direction: row;
+  }
+
+  .form-hint-text {
+    flex: 1;
+    color: #A2A4A8;
+    font-size: 24rpx;
+    line-height: 36rpx;
+  }
+
+  .footer {
+    margin-top: 40rpx;
+    padding: 0 32rpx;
+  }
+
+  .submit-btn {
+    border-radius: 16rpx;
+    background-image: linear-gradient(to right, #006EFF, #0C59F2);
+    flex-direction: row;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .submit-btn-text {
+    color: #FFFFFF;
+    font-size: 32rpx;
+    font-weight: 500;
+    padding: 22rpx 0;
+  }
+</style>

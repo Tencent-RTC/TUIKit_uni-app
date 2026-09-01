@@ -1,5 +1,5 @@
 <template>
-  <view v-if="!expanded" class="tool-panel-collapsed">
+  <view ref="collapsedRef" class="tool-panel-collapsed">
     <view class="tool-row">
       <view v-for="t in visibleCollapsedTools.slice(0, threshold)" :key="t.name" class="tool-cell">
         <component
@@ -19,11 +19,15 @@
     </view>
   </view>
 
-  <!-- 展开态：底部面板 + 全量工具 + 右侧收起按钮（展开态不应用 visible 过滤） -->
-  <view v-else class="tool-panel-mask" @tap="collapse">
-    <view class="tool-panel-content" @tap.stop>
+  <view v-if="isExpandedShow" ref="maskRef" class="tool-panel-mask" @tap="collapse">
+    <view ref="sheetRef" class="tool-panel-content" @tap.stop>
       <view class="tool-grid">
-        <view v-for="t in tools" :key="t.name" class="tool-grid-cell">
+        <view
+          v-for="(t, idx) in visibleCollapsedTools"
+          :key="t.name"
+          class="tool-grid-cell"
+          :style="cellStyle(idx)"
+        >
           <component
             :is="t.component"
             v-bind="t.props || {}"
@@ -44,28 +48,158 @@
 </template>
 
 <script setup lang="ts">
-  import { ref, computed } from 'vue';
+  import { ref, computed, nextTick } from 'vue';
   import type { ToolDescriptor } from './toolDescriptor';
+
   const props = defineProps({
     tools: { type: Array as () => ToolDescriptor[], default: () => [] },
     threshold: { type: Number, default: 5 },
   });
 
-  const expanded = ref<boolean>(false);
+  const animation = uni.requireNativePlugin('animation');
+
   const visibleCollapsedTools = computed<ToolDescriptor[]>(() =>
     props.tools.filter((t) => t.visible !== false)
   );
 
+  const expanded = ref<boolean>(false);
+  const isExpandedShow = ref<boolean>(false);
+  const isAnimating = ref<boolean>(false);
+  /** grid cell 进场开关：v-if 挂载后延一帧置 true，触发 CSS transition */
+  const cellsIn = ref<boolean>(false);
+
+  const collapsedRef = ref<any>(null);
+  const maskRef = ref<any>(null);
+  const sheetRef = ref<any>(null);
+
+  function cellStyle(idx: number): any {
+    const isPreExisting = idx < props.threshold;
+    if (cellsIn.value) {
+      return {
+        opacity: 1,
+        transform: 'translateY(0)',
+        transitionDelay: isPreExisting ? '0ms' : `${(idx - props.threshold) * 26 + 40}ms`,
+      };
+    }
+    // 进场前：已存在的 cell 直接就位（不闪），新增的 cell 下移 + 透明
+    return {
+      opacity: isPreExisting ? 1 : 0,
+      transform: isPreExisting ? 'translateY(0)' : 'translateY(24px)',
+      transitionDelay: '0ms',
+    };
+  }
+
   function expand(): void {
+    if (isAnimating.value || expanded.value) return;
+    isAnimating.value = true;
     expanded.value = true;
+    isExpandedShow.value = true;
+    cellsIn.value = false;
+
+    // 收起态淡出（常驻元素，只改 opacity）
+    const collapsedEl = collapsedRef.value;
+    if (collapsedEl) {
+      animation.transition(collapsedEl, {
+        styles: { opacity: 0 },
+        duration: 160,
+        timingFunction: 'ease-out',
+        needLayout: false,
+        delay: 0,
+      });
+    }
+
+    // 展开态进场：v-if 挂载后延一帧拿到 native 元素再跑动画
+    nextTick(() => {
+      setTimeout(() => {
+        const maskEl = maskRef.value;
+        const sheetEl = sheetRef.value;
+        if (!maskEl || !sheetEl) {
+          isAnimating.value = false;
+          return;
+        }
+        animation.transition(maskEl, {
+          styles: { opacity: 1 },
+          duration: 180,
+          timingFunction: 'ease-out',
+          needLayout: false,
+          delay: 0,
+        });
+        animation.transition(
+          sheetEl,
+          {
+            styles: { transform: 'translateY(0)', opacity: 1 },
+            duration: 280,
+            timingFunction: 'cubic-bezier(0.23, 1, 0.32, 1)',
+            needLayout: false,
+            delay: 0,
+          },
+          (): void => {
+            isAnimating.value = false;
+          },
+        );
+        // grid cell 错峰进场：跟 sheet 滑入同时开始（CSS transition 各自带 delay）
+        cellsIn.value = true;
+      }, 10);
+    });
   }
 
   function collapse(): void {
+    if (isAnimating.value || !expanded.value) return;
+    isAnimating.value = true;
     expanded.value = false;
+    // 新增 cell 先淡出/回落，与 sheet 滑出叠加
+    cellsIn.value = false;
+
+    // 收起态淡入
+    const collapsedEl = collapsedRef.value;
+    if (collapsedEl) {
+      animation.transition(collapsedEl, {
+        styles: { opacity: 1 },
+        duration: 200,
+        timingFunction: 'ease-out',
+        needLayout: false,
+        delay: 100,
+      });
+    }
+
+    const maskEl = maskRef.value;
+    const sheetEl = sheetRef.value;
+    if (!maskEl || !sheetEl) {
+      isExpandedShow.value = false;
+      isAnimating.value = false;
+      return;
+    }
+
+    animation.transition(maskEl, {
+      styles: { opacity: 0 },
+      duration: 150,
+      timingFunction: 'ease-out',
+      needLayout: false,
+      delay: 0,
+    });
+    animation.transition(
+      sheetEl,
+      {
+        styles: { transform: 'translateY(100%)', opacity: 1 },
+        duration: 180,
+        timingFunction: 'cubic-bezier(0.4, 0, 1, 1)',
+        needLayout: false,
+        delay: 0,
+      },
+      (): void => {
+        // 出场动画跑完才卸载，否则会看到瞬间消失
+        isExpandedShow.value = false;
+        isAnimating.value = false;
+      },
+    );
   }
 
   function toggle(): void {
-    expanded.value = !expanded.value;
+    if (expanded.value) {
+      collapse();
+    } else {
+      expand();
+    }
   }
 
   defineExpose({ expand, collapse, toggle, expanded });
@@ -108,6 +242,7 @@
     flex-direction: column;
     justify-content: flex-end;
     background-color: transparent;
+    opacity: 0;
   }
 
   .tool-panel-content {
@@ -121,6 +256,7 @@
     flex-direction: row;
     align-items: flex-start;
     padding: 24rpx;
+    transform: translateY(100%);
   }
 
   /* 展开态:5 列网格。flex: 0 0 20% 让每 cell 占容器 1/5 宽度，左对齐 flex-start */
@@ -136,6 +272,9 @@
     align-items: center;
     justify-content: center;
     box-sizing: border-box;
+    transition-property: transform, opacity;
+    transition-duration: 260ms;
+    transition-timing-function: cubic-bezier(0.23, 1, 0.32, 1);
   }
 
   /* ==================== 折叠/展开按钮 ==================== */

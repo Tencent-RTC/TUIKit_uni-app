@@ -105,27 +105,27 @@ export function useRoomTips(options?: UseRoomTipsOptions) {
         };
       case KickedOutOfRoomReason.ReplacedByAnotherDevice:
         return {
-          title: '您的账号在另一台设备登录',
+          title: '您的账号已在其他设备登录',
         };
       case KickedOutOfRoomReason.KickedByServer:
         return {
-          title: '您已被服务端请出房间',
+          title: '您已被服务器移出房间',
         };
       case KickedOutOfRoomReason.ConnectionTimeout:
         return {
-          title: '房间连接超时',
+          title: '网络连接超时，正在退出房间',
         };
       case KickedOutOfRoomReason.InvalidStatusOnReconnect:
         return {
-          title: '房间状态已变化',
+          title: '房间已解散或您在离线期间已被移出',
         };
       case KickedOutOfRoomReason.RoomLimitExceeded:
         return {
-          title: '房间人数已超过限制',
+          title: '房间人数已达上限，无法加入',
         };
       default:
         return {
-          title: '',
+          title: '您已被移出房间',
         };
     }
   }

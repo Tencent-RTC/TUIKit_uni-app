@@ -56,6 +56,7 @@ object EngineBridge {
     private const val EVT_ON_CALL_REVOKED_BY_ADMIN = "roomListener.onCallRevokedByAdmin"
     private const val EVT_ON_SCHEDULE_ATTENDEES_UPDATED = "roomListener.onScheduleAttendeesUpdated"
     private const val EVT_ON_CONFERENCE_STATUS_UPDATED = "roomListener.onConferenceStatusUpdated"
+    private const val EVT_ON_CONFERENCE_INFO_CHANGED = "roomListener.onConferenceInfoChanged"
 
     private const val FETCH_LIST_COUNT = 20
 
@@ -641,6 +642,12 @@ object EngineBridge {
     private const val PARTICIPANT_STATUS_CALL_REJECTED = 4
     private const val PARTICIPANT_STATUS_IN_ROOM = 5
 
+    /** ts 侧 RoomCallStatus 数值（对齐 types/room.ts）：0=None, 1=Calling, 2=Timeout, 3=Rejected。 */
+    private const val ROOM_CALL_STATUS_NONE = 0
+    private const val ROOM_CALL_STATUS_CALLING = 1
+    private const val ROOM_CALL_STATUS_TIMEOUT = 2
+    private const val ROOM_CALL_STATUS_REJECTED = 3
+
     private fun dispatchParticipantApi(api: String, json: JsonObject?, cb: ResultCallback) {
         try {
             val engine = TUIRoomEngine.sharedInstance()
@@ -1058,7 +1065,13 @@ object EngineBridge {
             conferenceInfo: TUIConferenceListManager.ConferenceInfo,
             modifyFlagList: List<TUIConferenceListManager.ConferenceModifyFlag>
         ) {
-            // ts 侧目前没有该事件需求，按需扩展
+            val flagArray = JsonArray()
+            modifyFlagList.forEach { flagArray.add(Codec.conferenceModifyFlagToTs(it)) }
+            val payload = JsonObject().apply {
+                add("roomInfo", Codec.conferenceInfoToJson(conferenceInfo))
+                add("modifyFlagList", flagArray)
+            }
+            emit(EVT_ON_CONFERENCE_INFO_CHANGED, payload)
         }
 
         override fun onScheduleAttendeesUpdated(
@@ -1087,7 +1100,7 @@ object EngineBridge {
         ) {
             val payload = JsonObject().apply {
                 add("roomInfo", Codec.conferenceInfoToJson(conferenceInfo))
-                addProperty("status", status.ordinal + 1)
+                addProperty("status", Codec.conferenceStatusToTs(status))
             }
             emit(EVT_ON_CONFERENCE_STATUS_UPDATED, payload)
         }
@@ -1408,11 +1421,13 @@ object EngineBridge {
             obj.addProperty("roomName", roomInfo.name ?: "")
             obj.addProperty("roomType", roomInfo.roomType?.value ?: 1)
             obj.add("roomOwner", owner)
+            obj.addProperty("password", roomInfo.password ?: "")
+            obj.addProperty("participantCount", roomInfo.memberCount)
             obj.addProperty("createTime", roomInfo.createTime)
-            obj.addProperty("isMicrophoneDisableForAllUser", roomInfo.isMicrophoneDisableForAllUser)
-            obj.addProperty("isCameraDisableForAllUser", roomInfo.isCameraDisableForAllUser)
-            obj.addProperty("isScreenShareDisableForAllUser", roomInfo.isScreenShareDisableForAllUser)
-            obj.addProperty("isMessageDisableForAllUser", roomInfo.isMessageDisableForAllUser)
+            obj.addProperty("isAllMicrophoneDisabled", roomInfo.isMicrophoneDisableForAllUser)
+            obj.addProperty("isAllCameraDisabled", roomInfo.isCameraDisableForAllUser)
+            obj.addProperty("isAllScreenShareDisabled", roomInfo.isScreenShareDisableForAllUser)
+            obj.addProperty("isAllMessageDisabled", roomInfo.isMessageDisableForAllUser)
             return obj
         }
 
@@ -1421,12 +1436,19 @@ object EngineBridge {
                 return JsonObject().apply { addProperty("roomID", "") }
             }
             val basic = roomInfoToJson(info.basicRoomInfo)
-            basic.addProperty("scheduledStartTime", info.scheduleStartTime)
-            basic.addProperty("scheduledEndTime", info.scheduleEndTime)
+            basic.addProperty("scheduledStartTime", (info.scheduleStartTime / 1000).toInt())
+            basic.addProperty("scheduledEndTime", (info.scheduleEndTime / 1000).toInt())
             basic.addProperty("startReminderInSeconds", info.reminderSecondsBeforeStart)
-            val status = info.status
-            basic.addProperty("roomStatus", if (status != null) status.ordinal + 1 else 1)
+            basic.addProperty("roomStatus", conferenceStatusToTs(info.status))
             return basic
+        }
+
+        fun conferenceStatusToTs(status: TUIConferenceListManager.ConferenceStatus?): Int {
+            return if (status == TUIConferenceListManager.ConferenceStatus.RUNNING) {
+                TUIConferenceListManager.ConferenceStatus.RUNNING.ordinal
+            } else {
+                TUIConferenceListManager.ConferenceStatus.NOT_STARTED.ordinal
+            }
         }
 
         fun attendeeListToJson(users: List<TUIRoomDefine.UserInfo>?): JsonArray {
@@ -1448,8 +1470,19 @@ object EngineBridge {
             if (inv == null) return obj
             obj.add("caller", userInfoToJson(inv.inviter))
             obj.add("callee", userInfoToJson(inv.invitee))
-            obj.addProperty("status", inv.status?.ordinal ?: 0)
+            obj.addProperty("status", invitationStatusToRoomCallStatus(inv.status))
             return obj
+        }
+
+        fun invitationStatusToRoomCallStatus(
+            status: TUIConferenceInvitationManager.InvitationStatus?
+        ): Int {
+            return when (status) {
+                TUIConferenceInvitationManager.InvitationStatus.PENDING -> ROOM_CALL_STATUS_CALLING
+                TUIConferenceInvitationManager.InvitationStatus.TIMEOUT -> ROOM_CALL_STATUS_TIMEOUT
+                TUIConferenceInvitationManager.InvitationStatus.REJECTED -> ROOM_CALL_STATUS_REJECTED
+                else -> ROOM_CALL_STATUS_NONE
+            }
         }
 
         fun invitationListToJson(list: List<TUIConferenceInvitationManager.Invitation>?): JsonArray {
@@ -1473,8 +1506,8 @@ object EngineBridge {
             basic.isMessageDisableForAllUser = getBool(opts, "isAllMessageDisabled", false)
             info.basicRoomInfo = basic
 
-            info.scheduleStartTime = getLong(opts, "scheduleStartTime", 0L)
-            info.scheduleEndTime = getLong(opts, "scheduleEndTime", 0L)
+            info.scheduleStartTime = getInt(opts, "scheduleStartTime", 0) * 1000L
+            info.scheduleEndTime = getInt(opts, "scheduleEndTime", 0) * 1000L
             info.reminderSecondsBeforeStart = getInt(opts, "reminderSecondsBeforeStart", 0)
 
             // SDK scheduleAttendees 是 List<String>（userId 列表），与 ScheduledAttendeesResult 中的 List<UserInfo> 不同。
@@ -1486,19 +1519,52 @@ object EngineBridge {
         fun buildModifyFlagList(opts: JsonObject?): List<TUIConferenceListManager.ConferenceModifyFlag> {
             if (opts == null) return emptyList()
             val flags = ArrayList<TUIConferenceListManager.ConferenceModifyFlag>()
-            if (opts.has("roomName") && !opts.get("roomName").isJsonNull) {
+            fun has(key: String): Boolean = opts.has(key) && !opts.get(key).isJsonNull
+            if (has("roomName")) {
                 flags.add(TUIConferenceListManager.ConferenceModifyFlag.ROOM_NAME)
             }
-            if (opts.has("scheduleStartTime") && !opts.get("scheduleStartTime").isJsonNull) {
+            if (has("scheduleStartTime")) {
                 flags.add(TUIConferenceListManager.ConferenceModifyFlag.SCHEDULE_START_TIME)
             }
-            if (opts.has("scheduleEndTime") && !opts.get("scheduleEndTime").isJsonNull) {
+            if (has("scheduleEndTime")) {
                 flags.add(TUIConferenceListManager.ConferenceModifyFlag.SCHEDULE_END_TIME)
+            }
+            if (has("password")) {
+                flags.add(TUIConferenceListManager.ConferenceModifyFlag.PASSWORD)
+            }
+            if (has("reminderSecondsBeforeStart")) {
+                flags.add(TUIConferenceListManager.ConferenceModifyFlag.REMINDER_SECONDS_BEFORE_START)
+            }
+            if (has("isAllMessageDisabled")) {
+                flags.add(TUIConferenceListManager.ConferenceModifyFlag.DISABLE_MESSAGE)
+            }
+            if (has("isAllCameraDisabled")) {
+                flags.add(TUIConferenceListManager.ConferenceModifyFlag.DISABLE_CAMERA)
+            }
+            if (has("isAllMicrophoneDisabled")) {
+                flags.add(TUIConferenceListManager.ConferenceModifyFlag.DISABLE_MICROPHONE)
+            }
+            if (has("isAllScreenShareDisabled")) {
+                flags.add(TUIConferenceListManager.ConferenceModifyFlag.DISABLE_SCREEN_SHARING)
             }
             return flags
         }
 
         /* ---------------------- 枚举映射 ---------------------- */
+        fun conferenceModifyFlagToTs(flag: TUIConferenceListManager.ConferenceModifyFlag): String {
+            return when (flag) {
+                TUIConferenceListManager.ConferenceModifyFlag.ROOM_NAME -> "roomName"
+                TUIConferenceListManager.ConferenceModifyFlag.SCHEDULE_START_TIME -> "scheduleStartTime"
+                TUIConferenceListManager.ConferenceModifyFlag.SCHEDULE_END_TIME -> "scheduleEndTime"
+                TUIConferenceListManager.ConferenceModifyFlag.PASSWORD -> "password"
+                TUIConferenceListManager.ConferenceModifyFlag.REMINDER_SECONDS_BEFORE_START -> "reminderSecondsBeforeStart"
+                TUIConferenceListManager.ConferenceModifyFlag.DISABLE_MESSAGE -> "isAllMessageDisabled"
+                TUIConferenceListManager.ConferenceModifyFlag.DISABLE_CAMERA -> "isAllCameraDisabled"
+                TUIConferenceListManager.ConferenceModifyFlag.DISABLE_MICROPHONE -> "isAllMicrophoneDisabled"
+                TUIConferenceListManager.ConferenceModifyFlag.DISABLE_SCREEN_SHARING -> "isAllScreenShareDisabled"
+                else -> ""
+            }
+        }
 
         /**
          * 拒绝原因：ts 侧通过 extensionInfo 中是否含 "inOtherRoom" 区分

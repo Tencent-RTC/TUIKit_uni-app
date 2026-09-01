@@ -62,6 +62,7 @@ import ReplayKit
     static let EVT_ON_CALL_REVOKED_BY_ADMIN        = "roomListener.onCallRevokedByAdmin"
     static let EVT_ON_SCHEDULE_ATTENDEES_UPDATED   = "roomListener.onScheduleAttendeesUpdated"
     static let EVT_ON_CONFERENCE_STATUS_UPDATED    = "roomListener.onConferenceStatusUpdated"
+    static let EVT_ON_CONFERENCE_INFO_CHANGED      = "roomListener.onConferenceInfoChanged"
 
     // Participant API
     static let TRANSFER_OWNER                  = "roomParticipantStore.transferOwner"
@@ -932,7 +933,10 @@ extension ObserverWrapper: TUIConferenceListManagerObserver {
     }
 
     func onConferenceInfoChanged(conferenceInfo: TUIConferenceInfo, modifyFlag: TUIConferenceModifyFlag) {
-        // ts 侧目前没有该事件需求，按需扩展
+        owner?.emit(EngineBridge.EVT_ON_CONFERENCE_INFO_CHANGED, [
+            "roomInfo": Codec.conferenceInfoToDict(conferenceInfo),
+            "modifyFlagList": Codec.conferenceModifyFlagToTsList(modifyFlag),
+        ])
     }
 
     func onScheduleAttendeesUpdated(conferenceInfo: TUIConferenceInfo,
@@ -1076,6 +1080,15 @@ fileprivate enum ParticipantStatus: Int {
     case callTimeout = 3
     case callRejected = 4
     case inRoom = 5
+}
+
+/// ts 侧 RoomCallStatus 数值（对齐 types/room.ts）：
+///   0 = None, 1 = Calling, 2 = Timeout, 3 = Rejected
+fileprivate enum RoomCallStatus: Int {
+    case none = 0
+    case calling = 1
+    case timeout = 2
+    case rejected = 3
 }
 
 // MARK: - DeviceRequestHandler
@@ -1304,6 +1317,15 @@ fileprivate enum Codec {
         }
     }
 
+    static func invitationStatusToRoomCallStatus(_ status: TUIInvitationStatus) -> Int {
+        switch status {
+        case .pending:  return RoomCallStatus.calling.rawValue
+        case .timeout:  return RoomCallStatus.timeout.rawValue
+        case .rejected: return RoomCallStatus.rejected.rawValue
+        default:        return RoomCallStatus.none.rawValue
+        }
+    }
+
     static func roomInfoToDict(_ roomInfo: TUIRoomInfo?) -> [String: Any] {
         guard let info = roomInfo else { return ["roomID": ""] }
         let owner: [String: Any] = [
@@ -1316,11 +1338,13 @@ fileprivate enum Codec {
             "roomName": info.name,
             "roomType": info.roomType.rawValue,
             "roomOwner": owner,
+            "password": info.password,
+            "participantCount": info.memberCount,
             "createTime": info.createTime,
-            "isMicrophoneDisableForAllUser": info.isMicrophoneDisableForAllUser,
-            "isCameraDisableForAllUser": info.isCameraDisableForAllUser,
-            "isScreenShareDisableForAllUser": info.isScreenShareDisableForAllUser,
-            "isMessageDisableForAllUser": info.isMessageDisableForAllUser,
+            "isAllMicrophoneDisabled": info.isMicrophoneDisableForAllUser,
+            "isAllCameraDisabled": info.isCameraDisableForAllUser,
+            "isAllScreenShareDisabled": info.isScreenShareDisableForAllUser,
+            "isAllMessageDisabled": info.isMessageDisableForAllUser,
         ]
     }
 
@@ -1344,7 +1368,7 @@ fileprivate enum Codec {
         return [
             "caller": userInfoToDict(inv.inviter),
             "callee": userInfoToDict(inv.invitee),
-            "status": inv.status.rawValue,
+            "status": invitationStatusToRoomCallStatus(inv.status),
         ]
     }
 
@@ -1381,7 +1405,27 @@ fileprivate enum Codec {
         if opts["roomName"] != nil { flag.insert(.roomName) }
         if opts["scheduleStartTime"] != nil { flag.insert(.scheduleStartTime) }
         if opts["scheduleEndTime"] != nil { flag.insert(.scheduleEndTime) }
+        if opts["password"] != nil { flag.insert(.password) }
+        if opts["reminderSecondsBeforeStart"] != nil { flag.insert(.reminderSecondsBeforeStart) }
+        if opts["isAllMessageDisabled"] != nil { flag.insert(.disableMessage) }
+        if opts["isAllCameraDisabled"] != nil { flag.insert(.disableCamera) }
+        if opts["isAllMicrophoneDisabled"] != nil { flag.insert(.disableMicrophone) }
+        if opts["isAllScreenShareDisabled"] != nil { flag.insert(.disableScreenSharing) }
         return flag
+    }
+
+    static func conferenceModifyFlagToTsList(_ flag: TUIConferenceModifyFlag) -> [String] {
+        var list: [String] = []
+        if flag.contains(.roomName) { list.append("roomName") }
+        if flag.contains(.scheduleStartTime) { list.append("scheduleStartTime") }
+        if flag.contains(.scheduleEndTime) { list.append("scheduleEndTime") }
+        if flag.contains(.password) { list.append("password") }
+        if flag.contains(.reminderSecondsBeforeStart) { list.append("reminderSecondsBeforeStart") }
+        if flag.contains(.disableMessage) { list.append("isAllMessageDisabled") }
+        if flag.contains(.disableCamera) { list.append("isAllCameraDisabled") }
+        if flag.contains(.disableMicrophone) { list.append("isAllMicrophoneDisabled") }
+        if flag.contains(.disableScreenSharing) { list.append("isAllScreenShareDisabled") }
+        return list
     }
 
     // MARK: 枚举映射

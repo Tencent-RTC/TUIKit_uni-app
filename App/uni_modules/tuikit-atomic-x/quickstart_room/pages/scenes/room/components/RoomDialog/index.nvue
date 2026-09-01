@@ -24,7 +24,11 @@
         >
           <text
             class="dialog-btn-text"
-            :class="{ 'dialog-btn-text-confirm': !!props.cancelButton, 'dialog-btn-text-confirm-only': !props.cancelButton }"
+            :class="{
+              'dialog-btn-text-confirm': !!props.cancelButton && !props.confirmButtonDanger,
+              'dialog-btn-text-confirm-only': !props.cancelButton && !props.confirmButtonDanger,
+              'dialog-btn-text-confirm-danger': props.confirmButtonDanger,
+            }"
           >{{ props.confirmButton }}</text>
         </view>
       </view>
@@ -43,6 +47,8 @@
     title?: string;
     confirmButton?: string;
     cancelButton?: string;
+    /** 确认按钮红色（危险操作，如「删除」），覆盖默认蓝色 */
+    confirmButtonDanger?: boolean;
     closeOnClickModal?: boolean;
     appendToBody?: boolean;
     modal?: boolean;
@@ -52,6 +58,7 @@
     modelValue: false,
     confirmButton: '',
     cancelButton: '',
+    confirmButtonDanger: false,
     closeOnClickModal: false,
     appendToBody: false,
     modal: false,
@@ -87,6 +94,9 @@
 </script>
 
 <style>
+  /* === 覆盖层：viewport 全屏 + 居中 + 最上层 ===
+     nvue 中嵌套在 list-sheet 这种 position:fixed 父容器内时，必须加 z-index
+     否则会被父级覆盖层遮住导致 dialog 偏上。 */
   .overlay-container {
     position: fixed;
     top: 0;
@@ -132,6 +142,11 @@
   }
 
   /* === 底部按钮 ===
+     必须 view 包 text 两层结构（红线）：
+     - weex <text> 不是 box-model 元素，作为 flex item 时
+       flex: 1 / border-* / height / padding-* 都不生效
+     - 外层 view 当 flex 容器 / 内层 view 当 flex item 撑起 box-model
+     - 内层 text 只承载 color + font-* 样式 */
   .dialog-footer {
     flex-direction: row;
     border-top-width: 1rpx;
@@ -162,6 +177,9 @@
   }
   .dialog-btn-text-confirm {
     color: #1C66E5;
+  }
+  .dialog-btn-text-confirm-danger {
+    color: #E5454D;
   }
   .dialog-btn-text-confirm-only {
     color: #1C66E5;

@@ -63,6 +63,7 @@
   import { ref, onMounted } from 'vue';
   import { useLoginState } from '@/uni_modules/tuikit-atomic-x/state';
   import { ToggleSwitch } from '@/uni_modules/tuikit-atomic-x/components_compatible';
+  import { showToast } from '@/uni_modules/tuikit-atomic-x/utils/toast';
 
   const { loginUserInfo } = useLoginState();
 
@@ -109,10 +110,7 @@
   const handleJoinRoom = () => {
     const trimmedID = (roomID.value || '').trim();
     if (trimmedID.length === 0) {
-      uni.showToast({
-        title: '输入不能为空',
-        icon: 'none'
-      });
+      showToast('输入不能为空');
       return;
     }
     uni.hideKeyboard();

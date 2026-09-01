@@ -31,6 +31,7 @@ import {
   RoomEvent,
   RoomEventHandlers,
   RoomInfo,
+  RoomStatus,
   RoomType,
   RoomUser,
   ScheduleRoomOptions,
@@ -91,7 +92,21 @@ const EventKeys = {
   ON_CALL_REVOKED_BY_ADMIN: 'roomListener.onCallRevokedByAdmin',
   ON_RECORDING_STARTED: 'roomListener.onRecordingStarted',
   ON_RECORDING_STOPPED: 'roomListener.onRecordingStopped',
+  ON_CONFERENCE_INFO_CHANGED: 'roomListener.onConferenceInfoChanged',
+  ON_SCHEDULE_ATTENDEES_UPDATED: 'roomListener.onScheduleAttendeesUpdated',
+  ON_CONFERENCE_STATUS_UPDATED: 'roomListener.onConferenceStatusUpdated',
 } as const;
+
+type ConferenceModifyFlag =
+  | 'roomName'
+  | 'scheduleStartTime'
+  | 'scheduleEndTime'
+  | 'password'
+  | 'reminderSecondsBeforeStart'
+  | 'isAllMessageDisabled'
+  | 'isAllCameraDisabled'
+  | 'isAllMicrophoneDisabled'
+  | 'isAllScreenShareDisabled';
 
 function safeParse<T = any>(text: string): T | null {
   if (!text) return null;
@@ -170,18 +185,23 @@ class RoomStateImpl implements IRoomState {
         break;
       }
       case EventKeys.ON_ADDED_TO_SCHEDULED_ROOM: {
-        this.emit(RoomEvent.onAddedToScheduledRoom, { roomInfo: payload.roomInfo as RoomInfo });
+        const roomInfo = payload.roomInfo as RoomInfo;
+        if (roomInfo?.roomID) this.addOrUpdateScheduledRoom(roomInfo);
+        this.emit(RoomEvent.onAddedToScheduledRoom, { roomInfo });
         break;
       }
       case EventKeys.ON_REMOVED_FROM_SCHEDULED_ROOM: {
+        const roomInfo = payload.roomInfo as RoomInfo;
+        if (roomInfo?.roomID) this.removeScheduledRoom(roomInfo.roomID);
         this.emit(RoomEvent.onRemovedFromScheduledRoom, {
-          roomInfo: payload.roomInfo as RoomInfo,
+          roomInfo,
           operator: payload.operator as RoomUser,
         });
         break;
       }
       case EventKeys.ON_SCHEDULED_ROOM_CANCELLED: {
         const roomInfo = payload.roomInfo as RoomInfo;
+        if (roomInfo?.roomID) this.removeScheduledRoom(roomInfo.roomID);
         // 当前已加入的房间被取消时吞掉事件，离房由 onRoomEnded 触发。
         if (this.currentRoom.value?.roomID !== roomInfo.roomID) {
           this.emit(RoomEvent.onScheduledRoomCancelled, {
@@ -268,9 +288,159 @@ class RoomStateImpl implements IRoomState {
         this.emit(RoomEvent.onRecordingStopped, { roomInfo, operator, reason });
         break;
       }
+      case EventKeys.ON_CONFERENCE_INFO_CHANGED: {
+        const source = payload.roomInfo as RoomInfo;
+        const flagList = (payload.modifyFlagList as ConferenceModifyFlag[]) ?? [];
+        if (!source?.roomID || flagList.length === 0) break;
+        this.patchScheduledRoomByFlags(source, flagList);
+        break;
+      }
+      case EventKeys.ON_SCHEDULE_ATTENDEES_UPDATED: {
+        const source = payload.roomInfo as RoomInfo;
+        const leftUsers = (payload.leftUsers as RoomUser[]) ?? [];
+        const joinedUsers = (payload.joinedUsers as RoomUser[]) ?? [];
+        if (!source?.roomID) break;
+        this.patchScheduleAttendees(source.roomID, leftUsers, joinedUsers);
+        break;
+      }
+      case EventKeys.ON_CONFERENCE_STATUS_UPDATED: {
+        const source = payload.roomInfo as RoomInfo;
+        const status = payload.status as RoomStatus;
+        if (!source?.roomID) break;
+        this.patchRoomStatus(source.roomID, status);
+        break;
+      }
       default:
         break;
     }
+  }
+
+  private applyModifyFlags(target: RoomInfo, source: RoomInfo, flags: ConferenceModifyFlag[]): RoomInfo {
+    const next: RoomInfo = { ...target };
+    flags.forEach((flag) => {
+      switch (flag) {
+        case 'roomName':
+          next.roomName = source.roomName;
+          break;
+        case 'scheduleStartTime':
+          next.scheduledStartTime = source.scheduledStartTime;
+          break;
+        case 'scheduleEndTime':
+          next.scheduledEndTime = source.scheduledEndTime;
+          break;
+        case 'password':
+          next.password = source.password;
+          break;
+        case 'reminderSecondsBeforeStart':
+          next.startReminderInSeconds = source.startReminderInSeconds;
+          break;
+        case 'isAllMessageDisabled':
+          next.isAllMessageDisabled = source.isAllMessageDisabled;
+          break;
+        case 'isAllCameraDisabled':
+          next.isAllCameraDisabled = source.isAllCameraDisabled;
+          break;
+        case 'isAllMicrophoneDisabled':
+          next.isAllMicrophoneDisabled = source.isAllMicrophoneDisabled;
+          break;
+        case 'isAllScreenShareDisabled':
+          next.isAllScreenShareDisabled = source.isAllScreenShareDisabled;
+          break;
+        default:
+          break;
+      }
+    });
+    return next;
+  }
+
+  private patchScheduledRoomByFlags(source: RoomInfo, flags: ConferenceModifyFlag[]): void {
+    const list = this.scheduledRoomList.value;
+    const idx = list.findIndex((r: RoomInfo) => r.roomID === source.roomID);
+    if (idx >= 0) {
+      const next = list.slice();
+      next[idx] = this.applyModifyFlags(list[idx], source, flags);
+      this.scheduledRoomList.value = next;
+    }
+    const cur = this.currentRoom.value;
+    if (cur && cur.roomID === source.roomID) {
+      this.currentRoom.value = this.applyModifyFlags(cur, source, flags);
+    }
+  }
+
+  private patchScheduleAttendees(roomID: string, leftUsers: RoomUser[], joinedUsers: RoomUser[]): void {
+    const leftIDs = new Set(leftUsers.map((u: RoomUser) => u.userID));
+    const mergeAttendees = (prev?: RoomUser[]): RoomUser[] => {
+      const kept = (prev ?? []).filter((u: RoomUser) => !leftIDs.has(u.userID));
+      const existing = new Set(kept.map((u: RoomUser) => u.userID));
+      const added = joinedUsers.filter((u: RoomUser) => !existing.has(u.userID));
+      return kept.concat(added);
+    };
+    const list = this.scheduledRoomList.value;
+    const idx = list.findIndex((r: RoomInfo) => r.roomID === roomID);
+    if (idx >= 0) {
+      const next = list.slice();
+      next[idx] = { ...list[idx], scheduleAttendees: mergeAttendees(list[idx].scheduleAttendees) };
+      this.scheduledRoomList.value = next;
+    }
+    const cur = this.currentRoom.value;
+    if (cur && cur.roomID === roomID) {
+      this.currentRoom.value = { ...cur, scheduleAttendees: mergeAttendees(cur.scheduleAttendees) };
+    }
+  }
+
+  private mergeScheduleAttendees(roomID: string, attendees: RoomUser[], resetFirst: boolean): void {
+    const mergeAttendees = (prev?: RoomUser[]): RoomUser[] => {
+      const base = resetFirst ? [] : (prev ?? []);
+      const existing = new Set(base.map((u: RoomUser) => u.userID));
+      const added = attendees.filter((u: RoomUser) => !existing.has(u.userID));
+      return base.concat(added);
+    };
+    const list = this.scheduledRoomList.value;
+    const idx = list.findIndex((r: RoomInfo) => r.roomID === roomID);
+    if (idx >= 0) {
+      const next = list.slice();
+      next[idx] = { ...list[idx], scheduleAttendees: mergeAttendees(list[idx].scheduleAttendees) };
+      this.scheduledRoomList.value = next;
+    }
+    const cur = this.currentRoom.value;
+    if (cur && cur.roomID === roomID) {
+      this.currentRoom.value = { ...cur, scheduleAttendees: mergeAttendees(cur.scheduleAttendees) };
+    }
+  }
+
+  private patchRoomStatus(roomID: string, status: RoomStatus): void {
+    const list = this.scheduledRoomList.value;
+    const idx = list.findIndex((r: RoomInfo) => r.roomID === roomID);
+    if (idx >= 0) {
+      const next = list.slice();
+      next[idx] = { ...list[idx], roomStatus: status };
+      this.scheduledRoomList.value = next;
+    }
+    const cur = this.currentRoom.value;
+    if (cur && cur.roomID === roomID) {
+      this.currentRoom.value = { ...cur, roomStatus: status };
+    }
+  }
+
+  private addOrUpdateScheduledRoom(roomInfo: RoomInfo): void {
+    const list = this.scheduledRoomList.value;
+    const idx = list.findIndex((r: RoomInfo) => r.roomID === roomInfo.roomID);
+    if (idx >= 0) {
+      const next = list.slice();
+      next[idx] = roomInfo;
+      this.scheduledRoomList.value = next;
+    } else {
+      this.scheduledRoomList.value = [...list, roomInfo];
+    }
+  }
+
+  private removeScheduledRoom(roomID: string): void {
+    const list = this.scheduledRoomList.value;
+    const idx = list.findIndex((r: RoomInfo) => r.roomID === roomID);
+    if (idx < 0) return;
+    const next = list.slice();
+    next.splice(idx, 1);
+    this.scheduledRoomList.value = next;
   }
 
   /** 合并新的 roomInfo 到 currentRoom，保留旧的预约相关字段。 */
@@ -315,8 +485,10 @@ class RoomStateImpl implements IRoomState {
       ApiKeys.GET_SCHEDULED_ATTENDEES,
       { roomID: options.roomID, cursor: options.cursor },
     );
+    const attendees = data?.attendees ?? [];
+    this.mergeScheduleAttendees(options.roomID, attendees, !options.cursor);
     return {
-      attendees: data?.attendees ?? [],
+      attendees,
       cursor: data?.cursor ?? '',
       totalAttendeesCount: data?.totalAttendeesCount ?? 0,
     };
@@ -356,8 +528,6 @@ class RoomStateImpl implements IRoomState {
   }): Promise<void> => {
     setFramework(COMPONENT_ROOM);
     reportKeyMetrics(KeyMetricsKey.T_METRICS_STATE_API_CREATE_ROOM_COUNT);
-    // 进房前广播 beforeEnterRoom：子 state 据此绑定 roomID 并注册底层 observer。
-    // 进房失败不广播 didLeaveRoom：未真正进入房间，无需触发子 state 清理。
     roomLifecycle.beforeEnterRoom(options.roomID);
     const data = await invokeApi<{ roomInfo: RoomInfo }>(ApiKeys.CREATE_AND_JOIN_ROOM, {
       roomID: options.roomID,
@@ -475,7 +645,6 @@ class RoomStateImpl implements IRoomState {
   };
 
   acceptCall = async (options: { roomID: string }): Promise<void> => {
-    // 仅透传底层接受呼叫；底层进房后通过 ON_CURRENT_ROOM_CHANGED 同步 currentRoom。
     await invokeApi(ApiKeys.ACCEPT_CALL, { roomID: options.roomID });
   };
 
@@ -532,11 +701,16 @@ let _instance: IRoomState | null = null;
  * });
  */
 export function useRoomState(): IRoomState {
-  if (!_instance) {
+  // @ts-ignore
+  const shared = (uni as any).$roomState as IRoomState | undefined;
+  if (shared) {
+    _instance = shared;
+  } else {
     _instance = new RoomStateImpl();
+    // @ts-ignore
+    (uni as any).$roomState = _instance;
   }
   reportMetrics('ROOM_STATE');
-  reportKeyMetrics(KeyMetricsKey.T_METRICS_STATE_ROOM_STATE_COUNT);
   return _instance;
 }
 
