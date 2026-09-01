@@ -1,0 +1,619 @@
+<template>
+  <view
+    v-if="props.visible"
+    class="select-member-panel"
+    :style="{ paddingBottom: keyboardHeight + 'px' }"
+  >
+    <!-- CustomNavbar 不再 fixed，让它占自然高度参与 flex 流 -->
+    <CustomNavbar
+      title="添加成员"
+      :showBack="true"
+      :showMenu="false"
+      :showShadow="false"
+      theme="light"
+      backgroundColor="#FFFFFF"
+      titleColor="#1F2229"
+      @back="handleBack"
+    />
+
+    <view class="search-bar">
+      <view class="search-wrap">
+        <image class="search-icon" src="/static/images/room/room_search.png" mode="aspectFit" />
+        <input
+          class="search-input"
+          :value="keyword"
+          placeholder="输入用户ID或名称"
+          :placeholder-style="placeholderStyle"
+          @input="onKeywordInput"
+        />
+      </view>
+    </view>
+
+    <view class="section-title-row">
+      <text class="section-title">最近联系人</text>
+    </view>
+
+    <view v-if="isEmpty" class="empty">
+      <text class="empty-text">{{ emptyText }}</text>
+    </view>
+
+    <scroll-view v-else class="list-scroll" scroll-y="true" :show-scrollbar="false">
+      <view
+        v-for="user in filteredUsers"
+        :key="user.userID"
+        class="user-item"
+        @tap="handleToggle(user)"
+      >
+        <image
+          v-if="isSelected(user.userID) || isLocked(user.userID)"
+          class="checkbox-image"
+          :class="{ 'checkbox-image-disabled': isLocked(user.userID) }"
+          src="/static/images/room/room_selected.png"
+          mode="aspectFit"
+        />
+        <view v-else class="checkbox-image checkbox-default"></view>
+        <image class="user-avatar" :src="user.avatarURL || defaultAvatar" mode="aspectFill" />
+        <text class="user-name" :numberOfLines="1">{{ user.displayName }}</text>
+      </view>
+    </scroll-view>
+
+    <view class="footer">
+      <!--
+        选中数 ≤ SELECTED_AVATAR_LIMIT：头像横滑（原交互）
+        选中数 >  SELECTED_AVATAR_LIMIT：改成「已选择：N人 ⌃」，点击展开已选列表
+      -->
+      <scroll-view
+        v-if="!useSelectedSummary"
+        class="selected-scroll"
+        scroll-x="true"
+        :show-scrollbar="false"
+      >
+        <image
+          v-for="user in selectedUsers"
+          :key="user.userID"
+          class="selected-avatar"
+          :src="user.avatarURL || defaultAvatar"
+          mode="aspectFill"
+        />
+      </scroll-view>
+
+      <view v-else class="selected-summary" @tap="toggleSelectedSheet">
+        <text class="selected-summary-text">已选择：{{ selectedIDs.length }}人</text>
+        <image
+          class="selected-summary-arrow"
+          :class="{ 'selected-summary-arrow--up': !isSelectedSheetVisible }"
+          src="/static/images/room/room_chevron-down.png"
+          mode="aspectFit"
+        />
+      </view>
+
+      <view
+        class="confirm-btn"
+        :class="{ 'confirm-btn-disabled': !canConfirm }"
+        @tap="handleConfirm"
+      >
+        <text class="confirm-btn-text">{{ confirmText }}</text>
+      </view>
+    </view>
+
+    <view
+      v-if="isSelectedSheetVisible"
+      class="selected-sheet-mask"
+      :style="{ width: screenW + 'px', height: screenH + 'px' }"
+      @tap="closeSelectedSheet"
+    >
+      <view class="selected-sheet" @tap.stop>
+        <view class="selected-sheet-handle-row" @tap="closeSelectedSheet">
+          <image
+            class="selected-sheet-handle"
+            src="/static/images/room/room_lineImage.png"
+            mode="aspectFit"
+          />
+        </view>
+        <view class="selected-sheet-title-row">
+          <text class="selected-sheet-title">已选择（{{ selectedIDs.length }}）</text>
+        </view>
+        <scroll-view class="selected-sheet-scroll" scroll-y="true" :show-scrollbar="false">
+          <view v-for="user in selectedUsers" :key="user.userID" class="selected-sheet-item">
+            <image
+              class="user-avatar"
+              :src="user.avatarURL || defaultAvatar"
+              mode="aspectFill"
+            />
+            <text class="user-name" :numberOfLines="1">{{ user.displayName }}</text>
+            <view class="selected-remove-btn" @tap.stop="handleRemoveSelected(user)">
+              <image
+                class="selected-remove-icon"
+                src="/static/images/room/room_password_close.png"
+                mode="aspectFit"
+              />
+            </view>
+          </view>
+        </scroll-view>
+      </view>
+    </view>
+  </view>
+</template>
+
+<script setup lang="ts">
+  import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue';
+  import { useRoomState, useRoomParticipantState } from '@/uni_modules/tuikit-atomic-x/state';
+  import { useContactState } from '@/uni_modules/tuikit-atomic-x/state/ContactState';
+  import CustomNavbar from '@/uni_modules/tuikit-atomic-x/components/CustomNavbar/CustomNavbar.nvue';
+  import { showErrorToast } from '../../utils/errorHandler';
+  import { showToast } from '@/uni_modules/tuikit-atomic-x/utils/toast';
+
+  const MAX_SELECT_COUNT = 300;
+  /** 选中数超过这个值，footer 从「头像横滑」切换为「已选择：N人 ⌃ + 展开列表」 */
+  const SELECTED_AVATAR_LIMIT = 10;
+  const defaultAvatar = 'https://web.sdk.qcloud.com/im/assets/all-in-one/user.png';
+
+  type PickerUser = {
+    userID: string;
+    displayName: string;
+    avatarURL: string;
+  };
+
+  const props = withDefaults(defineProps<{
+    roomID?: string;
+    visible?: boolean;
+    selectOnly?: boolean;
+    initialSelectedIDs?: string[];
+  }>(), {
+    roomID: '',
+    visible: false,
+    selectOnly: false,
+    initialSelectedIDs: () => [] as string[],
+  });
+
+  const emit = defineEmits<{
+    (e: 'close'): void;
+    (e: 'invited', payload: { count: number }): void;
+    /** selectOnly 模式的结果回传：把选中的用户（含头像/昵称）交给外部渲染 */
+    (e: 'selected', payload: { users: PickerUser[] }): void;
+  }>();
+
+  const contactState = useContactState();
+  const roomState = useRoomState();
+  const participantState = useRoomParticipantState();
+
+  const keyword = ref('');
+  const selectedIDs = ref<string[]>([]);
+  const isSubmitting = ref(false);
+  const isSelectedSheetVisible = ref(false);
+
+  const _sysInfo = uni.getSystemInfoSync();
+  const screenW = ref((_sysInfo?.windowWidth ?? 375) as number);
+  const screenH = ref((_sysInfo?.screenHeight ?? _sysInfo?.windowHeight ?? 667) as number);
+
+  const keyboardHeight = ref(0);
+
+  const onKeyboardChange = (res: any): void => {
+    keyboardHeight.value = (res?.height ?? 0) as number;
+  };
+
+  onMounted((): void => {
+    uni.onKeyboardHeightChange(onKeyboardChange);
+  });
+
+  onBeforeUnmount((): void => {
+    uni.offKeyboardHeightChange(onKeyboardChange);
+  });
+
+  watch(
+    () => props.visible,
+    (v) => {
+      if (!v) {
+        if (keyboardHeight.value > 0) {
+          uni.hideKeyboard();
+          keyboardHeight.value = 0;
+        }
+        isSelectedSheetVisible.value = false;
+        return;
+      }
+      keyword.value = '';
+      selectedIDs.value = (props.initialSelectedIDs || []).slice();
+      isSubmitting.value = false;
+      isSelectedSheetVisible.value = false;
+    },
+    { immediate: true },
+  );
+
+  const lockedIDs = computed<string[]>(() => {
+    if (props.selectOnly) return [] as string[];
+    return (participantState.participantList.value || []).map((p: any) => p.userID);
+  });
+
+  const allUsers = computed<PickerUser[]>(() =>
+    (contactState.friendList.value || []).map((f: any) => {
+      const nick = f.friendRemark || f.nickname || '';
+      const uid = f.userID || '';
+      return {
+        userID: uid,
+        displayName: nick.length > 0 ? nick : uid,
+        avatarURL: f.avatarURL || '',
+      } as PickerUser;
+    })
+  );
+
+  const filteredUsers = computed<PickerUser[]>(() => {
+    const kw = keyword.value.trim().toLowerCase();
+    if (kw.length === 0) return allUsers.value;
+    return allUsers.value.filter(
+      (u) =>
+        u.displayName.toLowerCase().indexOf(kw) > -1 ||
+        u.userID.toLowerCase().indexOf(kw) > -1,
+    );
+  });
+
+  const selectedUsers = computed<PickerUser[]>(() =>
+    selectedIDs.value
+      .map((id) => allUsers.value.find((u) => u.userID === id))
+      .filter((u): u is PickerUser => !!u)
+  );
+
+  const canConfirm = computed(() => {
+    if (isSubmitting.value) return false;
+    // selectOnly 模式允许「不选任何人」直接确定（相当于清空已选）
+    return props.selectOnly ? true : selectedIDs.value.length > 0;
+  });
+
+  const useSelectedSummary = computed<boolean>(
+    () => selectedIDs.value.length > SELECTED_AVATAR_LIMIT,
+  );
+
+  const confirmText = computed<string>(() =>
+   `确定(${selectedIDs.value.length})`
+  );
+
+  const placeholderStyle = 'color: #8F8F94; font-size: 28rpx;';
+  const isEmpty = computed(() => filteredUsers.value.length === 0);
+  const emptyText = computed(() =>
+    keyword.value.trim().length > 0 ? '没有匹配的联系人' : '暂无联系人'
+  );
+
+  function isSelected(userID: string): boolean {
+    return selectedIDs.value.indexOf(userID) > -1;
+  }
+
+  function isLocked(userID: string): boolean {
+    return lockedIDs.value.indexOf(userID) > -1;
+  }
+
+  function onKeywordInput(e: any): void {
+    keyword.value = (e?.detail?.value ?? '') as string;
+  }
+
+  function handleToggle(user: PickerUser): void {
+    if (isLocked(user.userID)) {
+      showToast('该成员已在房间中');
+      return;
+    }
+    const idx = selectedIDs.value.indexOf(user.userID);
+    if (idx > -1) {
+      // nvue 下 splice 不一定触发响应式，整体替换数组更稳
+      const next = selectedIDs.value.slice();
+      next.splice(idx, 1);
+      selectedIDs.value = next;
+      return;
+    }
+    if (selectedIDs.value.length >= MAX_SELECT_COUNT) {
+      showToast(`最多只能选择 ${MAX_SELECT_COUNT} 人`);
+      return;
+    }
+    selectedIDs.value = selectedIDs.value.concat([user.userID]);
+  }
+
+  /** 已选列表 sheet 展开/收起 */
+  function toggleSelectedSheet(): void {
+    isSelectedSheetVisible.value = !isSelectedSheetVisible.value;
+  }
+
+  function closeSelectedSheet(): void {
+    isSelectedSheetVisible.value = false;
+  }
+
+  /** 从已选列表移除某人；掉回阈值内时自动收起 sheet（摘要 footer 也会切回头像横滑） */
+  function handleRemoveSelected(user: PickerUser): void {
+    const idx = selectedIDs.value.indexOf(user.userID);
+    if (idx < 0) return;
+    const next = selectedIDs.value.slice();
+    next.splice(idx, 1);
+    selectedIDs.value = next;
+  }
+
+  function handleConfirm(): void {
+    if (!canConfirm.value) return;
+
+    // selectOnly：只回传选中结果，由外部页面自己决定何时调 SDK
+    if (props.selectOnly) {
+      emit('selected', { users: selectedUsers.value.slice() });
+      emit('close');
+      return;
+    }
+
+    if (props.roomID.length === 0) {
+      showToast('房间号缺失');
+      return;
+    }
+    const ids = selectedIDs.value.slice();
+    const count = ids.length;
+    isSubmitting.value = true;
+    // 会中邀请用 callUserToRoom（不是 addScheduledAttendees —— 后者只用于预约房间）
+    roomState
+      .callUserToRoom({ roomID: props.roomID, userIDList: ids })
+      .then(() => {
+        isSubmitting.value = false;
+        showToast('邀请信息已发出，等待成员加入');
+        emit('invited', { count });
+        emit('close');
+      })
+      .catch((e: any) => {
+        isSubmitting.value = false;
+        showErrorToast(e, '呼叫失败');
+      });
+  }
+
+  function handleBack(): void {
+    emit('close');
+  }
+</script>
+
+<style>
+  /* ── 共 1：固定结构 ── */
+  .select-member-panel {
+    position: fixed;
+    background-color: #FFFFFF;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    flex-direction: column;
+    z-index: 100;
+  }
+
+  .search-bar {
+    padding-left: 32rpx;
+    padding-right: 32rpx;
+    padding-top: 16rpx;
+    padding-bottom: 16rpx;
+  }
+
+  .search-wrap {
+    height: 72rpx;
+    background-color: #F2F5FC;
+    border-radius: 12rpx;
+    flex-direction: row;
+    align-items: center;
+    padding-left: 20rpx;
+    padding-right: 20rpx;
+  }
+
+  .search-icon {
+    width: 32rpx;
+    height: 32rpx;
+    margin-right: 12rpx;
+  }
+
+  .search-input {
+    flex: 1;
+    font-size: 28rpx;
+    padding: 0;
+    color: #1F2229;
+  }
+
+  .section-title-row {
+    background-color: #FFFFFF;
+    padding-top: 20rpx;
+    padding-bottom: 12rpx;
+    padding-left: 40rpx;
+    padding-right: 40rpx;
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .section-title {
+    font-size: 26rpx;
+    color: #6B7385;
+  }
+
+  .list-scroll {
+    flex: 1;
+  }
+
+  .user-item {
+    height: 112rpx;
+    flex-direction: row;
+    align-items: center;
+    padding: 20rpx 40rpx;
+    border-bottom: 1rpx solid #F2F5FC;
+  }
+
+  /* 勾选框：选中态用 room_selected.png，未选中态用 .checkbox-default 空框 */
+  .checkbox-image {
+    width: 40rpx;
+    height: 40rpx;
+  }
+
+  .checkbox-default {
+    border-radius: 20rpx;
+    border: 2rpx solid #C5CCDB;
+  }
+
+  /* 已在房间（锁定）：降低透明度表示不可操作 */
+  .checkbox-image-disabled {
+    opacity: 0.4;
+  }
+
+  .user-avatar {
+    width: 64rpx;
+    height: 64rpx;
+    border-radius: 32rpx;
+    margin: 0 12rpx;
+  }
+
+  .user-name {
+    flex: 1;
+    color: #1F2229;
+    font-weight: 400;
+    font-size: 28rpx;
+    line-height: 44rpx;
+    lines: 1;
+    text-overflow: ellipsis;
+  }
+
+  /* ── footer ── */
+  .footer {
+    flex-direction: row;
+    align-items: center;
+    height: 120rpx;
+    border-top: 1rpx solid #F2F5FC;
+    padding-left: 32rpx;
+    padding-right: 32rpx;
+  }
+
+  .selected-scroll {
+    flex: 1;
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .selected-avatar {
+    flex: 0 0 64rpx;
+    width: 64rpx;
+    height: 64rpx;
+    border-radius: 32rpx;
+    margin-right: 12rpx;
+  }
+
+  /* ── footer 摘要模式（选中数 > SELECTED_AVATAR_LIMIT） ── */
+  .selected-summary {
+    flex: 1;
+    flex-grow: 1;
+    flex-shrink: 1;
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .selected-summary-text {
+    font-size: 28rpx;
+    color: #1F2229;
+  }
+
+  .selected-summary-arrow {
+    width: 32rpx;
+    height: 32rpx;
+    margin-left: 8rpx;
+  }
+
+  /* 未展开时箭头朝上（提示可展开），展开后朝下（提示可收起） */
+  .selected-summary-arrow--up {
+    transform: rotate(180deg);
+  }
+
+  /* ── 已选成员列表 sheet ── */
+  /* fixed 宽高由 :style（screenW / screenH）给死，nvue 下 right/bottom:0 撑不开 */
+  .selected-sheet-mask {
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 110;
+    flex-direction: column;
+    justify-content: flex-end;
+    background-color: rgba(0, 0, 0, 0.4);
+  }
+
+  .selected-sheet {
+    background-color: #FFFFFF;
+    flex-grow: 0;
+    flex-shrink: 0;
+    max-height: 900rpx;
+    border-top-left-radius: 24rpx;
+    border-top-right-radius: 24rpx;
+    flex-direction: column;
+    padding-bottom: 34rpx;
+  }
+
+  .selected-sheet-handle-row {
+    height: 48rpx;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .selected-sheet-handle {
+    width: 72rpx;
+    height: 9rpx;
+  }
+
+  .selected-sheet-title-row {
+    padding-left: 40rpx;
+    padding-right: 40rpx;
+    padding-top: 12rpx;
+    padding-bottom: 20rpx;
+  }
+
+  .selected-sheet-title {
+    font-size: 32rpx;
+    font-weight: 600;
+    color: #1F2229;
+  }
+
+  .selected-sheet-scroll {
+    flex-grow: 1;
+    flex-shrink: 1;
+    max-height: 760rpx;
+  }
+
+  .selected-sheet-item {
+    height: 112rpx;
+    flex-direction: row;
+    align-items: center;
+    padding: 20rpx 40rpx;
+    border-bottom: 1rpx solid #F2F5FC;
+  }
+
+  .selected-remove-btn {
+    width: 56rpx;
+    height: 56rpx;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .selected-remove-icon {
+    width: 40rpx;
+    height: 40rpx;
+    opacity: 0.5;
+  }
+
+  .confirm-btn {
+    width: 152rpx;
+    height: 72rpx;
+    border-radius: 36rpx;
+    background-color: #1C66E5;
+    justify-content: center;
+    align-items: center;
+    margin-left: 24rpx;
+  }
+
+  .confirm-btn-disabled {
+    opacity: 0.4;
+  }
+
+  .confirm-btn-text {
+    font-size: 30rpx;
+    font-weight: 500;
+    color: #FFFFFF;
+  }
+
+  .empty {
+    flex: 1;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .empty-text {
+    font-size: 28rpx;
+    color: #8F8F94;
+  }
+
+</style>

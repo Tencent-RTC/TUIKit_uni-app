@@ -28,8 +28,11 @@ import {
   RoomParticipant,
   RoomParticipantEvent,
   RoomParticipantEventHandlers,
+  RoomParticipantRole,
+  RoomParticipantStatus,
 } from '../types/roomParticipant';
 import type { RoomInfo, RoomUser } from '../types/room';
+import { RoomType } from '../types/room';
 import { registerRoomLifecycle, type RoomLifecycleHooks } from './internal/roomLifecycle';
 import { KeyMetricsKey, reportKeyMetrics } from './internal/keyMetrics';
 
@@ -72,6 +75,9 @@ const ApiKeys = {
 
   QUERY_ADMIN_LIST: 'roomParticipantState.queryAdminList',
   QUERY_MESSAGE_DISABLED_USERLIST: 'roomParticipantState.queryMessageDisabledUserList',
+
+  GET_PENDING_CALLS: 'roomStore.getPendingCalls',
+  GET_SCHEDULED_ATTENDEES: 'roomStore.getScheduledAttendees',
 } as const;
 
 const EventKeys = {
@@ -204,7 +210,9 @@ class RoomParticipantStateImpl implements IRoomParticipantState, RoomLifecycleHo
 
   // observer 随 beforeEnterRoom / didLeaveRoom 装卸，nativeEventHandler 提到字段以便 add/remove 用同一引用
   private currentRoomID: string = '';
+  private currentRoomType: RoomType | null = null;
   private observerRegistered = false;
+  private isInitParticipantList = false;
   private readonly nativeEventHandler = (eventName: string, jsonData: string): void => {
     this.handleNativeEvent(eventName, jsonData);
   };
@@ -237,6 +245,7 @@ class RoomParticipantStateImpl implements IRoomParticipantState, RoomLifecycleHo
   afterEnterRoom(info: any): void {
     const roomInfo = info as RoomInfo | null | undefined;
     if (!roomInfo || typeof roomInfo.roomID !== 'string') return;
+    this.currentRoomType = (roomInfo.roomType ?? null) as RoomType | null;
     invokeApi(ApiKeys.QUERY_ADMIN_LIST, '').catch((e) => {
       console.warn('[RoomParticipantState] queryAdminList failed:', e);
     });
@@ -258,6 +267,7 @@ class RoomParticipantStateImpl implements IRoomParticipantState, RoomLifecycleHo
       removeEngineBridgeObserver('RoomParticipantState');
     }
     this.currentRoomID = '';
+    this.currentRoomType = null;
     this.resetState();
   }
 
@@ -280,6 +290,7 @@ class RoomParticipantStateImpl implements IRoomParticipantState, RoomLifecycleHo
     this.participantMap.clear();
     this.invitationMap.clear();
     this.attendeeMap.clear();
+    this.isInitParticipantList = false;
   }
 
   private handleNativeEvent(key: string, jsonData: string): void {
@@ -561,6 +572,69 @@ class RoomParticipantStateImpl implements IRoomParticipantState, RoomLifecycleHo
     this.pendingParticipantList.value = pending;
   }
 
+  private makeParticipant(user: RoomUser | null | undefined, status: RoomParticipantStatus): RoomParticipant {
+    return {
+      userID: user?.userID ?? '',
+      userName: user?.userName ?? '',
+      avatarURL: user?.avatarURL ?? '',
+      nameCard: '',
+      role: RoomParticipantRole.GeneralUser,
+      roomStatus: status,
+      microphoneStatus: DeviceStatus.OFF,
+      cameraStatus: DeviceStatus.OFF,
+      screenShareStatus: DeviceStatus.OFF,
+      isMessageDisabled: false,
+      metaData: {},
+    };
+  }
+
+  private async fetchInvitationList(roomID: string): Promise<void> {
+    if (this.currentRoomType !== RoomType.Standard) return;
+    let cursor = '';
+    this.invitationMap.clear();
+    do {
+      const data = await invokeApi<{ calls?: Array<{ callee?: RoomUser; status?: number }>; cursor?: string }>(
+        ApiKeys.GET_PENDING_CALLS,
+        { roomID, cursor },
+      );
+      const calls = data?.calls ?? [];
+      calls.forEach((call) => {
+        const callee = call.callee;
+        if (!callee || !callee.userID) return;
+        const status = this.roomCallStatusToParticipantStatus(call.status ?? 0);
+        this.invitationMap.set(callee.userID, this.makeParticipant(callee, status));
+      });
+      cursor = data?.cursor ?? '';
+    } while (cursor);
+  }
+
+  private async fetchAttendeeList(roomID: string): Promise<void> {
+    if (this.currentRoomType !== RoomType.Standard) return;
+    let cursor = '';
+    this.attendeeMap.clear();
+    do {
+      const data = await invokeApi<{ attendees?: RoomUser[]; cursor?: string }>(
+        ApiKeys.GET_SCHEDULED_ATTENDEES,
+        { roomID, cursor },
+      );
+      const attendees = data?.attendees ?? [];
+      attendees.forEach((u) => {
+        if (!u.userID) return;
+        this.attendeeMap.set(u.userID, this.makeParticipant(u, RoomParticipantStatus.Scheduled));
+      });
+      cursor = data?.cursor ?? '';
+    } while (cursor);
+  }
+
+  private roomCallStatusToParticipantStatus(callStatus: number): RoomParticipantStatus {
+    switch (callStatus) {
+      case 1: return RoomParticipantStatus.InCalling;   // Calling  → InCalling
+      case 2: return RoomParticipantStatus.CallTimeout; // Timeout  → CallTimeout
+      case 3: return RoomParticipantStatus.CallRejected;// Rejected → CallRejected
+      default: return RoomParticipantStatus.InCalling;  // None / 未知 → 兜底 InCalling
+    }
+  }
+
   /** 参与者列表变更后维护 pending 列表 */
   private updatePendingParticipantList(modifyType: ListModifyType, list: RoomParticipant[]): void {
     switch (modifyType) {
@@ -657,6 +731,15 @@ class RoomParticipantStateImpl implements IRoomParticipantState, RoomLifecycleHo
     );
     this.participantWithScreen.value =
       this.participantList.value.find((p: RoomParticipant) => p.screenShareStatus === DeviceStatus.ON) ?? null;
+
+    if (!this.isInitParticipantList) {
+      const roomID = this.currentRoomID;
+      if (roomID) {
+        this.isInitParticipantList = true;
+        await Promise.all([this.fetchInvitationList(roomID), this.fetchAttendeeList(roomID)]);
+      }
+    }
+
     this.mergePendingParticipants();
     return { participantList: list, cursor: nextCursor };
   };
@@ -860,9 +943,18 @@ class RoomParticipantStateImpl implements IRoomParticipantState, RoomLifecycleHo
   }
 }
 
-// eager 实例化：模块加载时即创建单例，确保 constructor 中的
-// registerRoomLifecycle(this) 在 RoomState 进/退房广播之前完成注册。
-const _instance: RoomParticipantStateImpl = new RoomParticipantStateImpl();
+
+function ensureSharedInstance(): RoomParticipantStateImpl {
+  // @ts-ignore — uni 在 UTS 编译期是 typed class，$roomParticipantState 是运行时挂的字段
+  const shared = (uni as any).$roomParticipantState as RoomParticipantStateImpl | undefined;
+  if (shared) return shared;
+  const created = new RoomParticipantStateImpl();
+  // @ts-ignore
+  (uni as any).$roomParticipantState = created;
+  return created;
+}
+
+ensureSharedInstance();
 
 /**
  * 获取 RoomParticipant 状态管理单例。
@@ -878,7 +970,7 @@ const _instance: RoomParticipantStateImpl = new RoomParticipantStateImpl();
 export function useRoomParticipantState(): IRoomParticipantState {
   reportMetrics('ROOM_PARTICIPANT_STATE');
   reportKeyMetrics(KeyMetricsKey.T_METRICS_STATE_ROOM_PARTICIPANT_STATE_COUNT);
-  return _instance;
+  return ensureSharedInstance();
 }
 
 export default useRoomParticipantState;

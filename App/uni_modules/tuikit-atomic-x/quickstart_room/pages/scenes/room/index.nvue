@@ -18,20 +18,31 @@
       <view class="action-btn-gap"></view>
       <view class="action-btn" @tap="handleCreateRoom">
         <image class="action-btn-icon" src="/static/images/room/room_create.png" mode="aspectFit" />
-        <text class="action-btn-text">创建房间</text>
+        <text class="action-btn-text">新建房间</text>
+      </view>
+      <view class="action-btn-gap"></view>
+      <view class="action-btn" @tap="handleScheduleRoom">
+        <image class="action-btn-icon" src="/static/images/room/room_schedule_room.png" mode="aspectFit" />
+        <text class="action-btn-text">预定房间</text>
       </view>
     </view>
+
+    <RoomScheduleList />
   </view>
 </template>
 
 <script setup>
-  import { ref, onMounted } from 'vue';
-  import { useLoginState } from '@/uni_modules/tuikit-atomic-x/state';
+  import { ref, onMounted, onUnmounted } from 'vue';
+  import { onShow } from '@dcloudio/uni-app';
+  import { useLoginState, useRoomState } from '@/uni_modules/tuikit-atomic-x/state';
   import { reportMetrics } from '@/uni_modules/tuikit-atomic-x';
+  import { showErrorToast } from './utils/errorHandler';
+  import RoomScheduleList from './components/RoomScheduleList/index.nvue';
 
   const { loginUserInfo } = useLoginState();
+  const roomState = useRoomState();
 
-  const defaultAvatarURL = '/static/images/default-avatar.png';
+  const defaultAvatarURL = 'https://web.sdk.qcloud.com/im/assets/all-in-one/user.png';
 
   const safeArea = ref({
     left: 0,
@@ -49,12 +60,34 @@
         safeArea.value = res.safeArea;
       }
     });
+    // 预定 / 修改 / 取消后由对应页面 emit；RoomScheduleList 组件也在监听并自刷新，
+    // 这里再订阅一份以兜底组件 onShow 没命中的时序（比如预定页 → 直接回到首页）
+    uni.$on('scheduledRoomListChanged', fetchScheduledRooms);
   });
+
+  onUnmounted(() => {
+    uni.$off('scheduledRoomListChanged', fetchScheduledRooms);
+  });
+
+  // 从预定页/详情页返回时也刷新一次，避免依赖单一 emit 时序
+  onShow(() => {
+    fetchScheduledRooms();
+  });
+
+  function fetchScheduledRooms() {
+    roomState
+      .getScheduledRoomList({ cursor: '' })
+      .catch((e) => {
+        showErrorToast(e, '获取预定房间失败');
+      });
+  }
 
   const handleBack = () => {
     uni.navigateBack({
       fail: () => {
-        uni.reLaunch({ url: '/pages/index/index' });
+        uni.switchTab({
+          url: '/pages/scenes/chat/conversationList/conversationList'
+        });
       }
     });
   }
@@ -70,23 +103,28 @@
       url: '/pages/scenes/room/create/index'
     });
   }
+
+  const handleScheduleRoom = () => {
+    uni.navigateTo({
+      url: '/pages/scenes/room/schedule/index'
+    });
+  }
 </script>
 
 <style>
   .page {
     flex: 1;
-    background-color: #F2F5FC;
+    background-color: #F8F9FB;
     flex-direction: column;
-    position: relative;
   }
 
   .header {
     flex-direction: row;
     align-items: center;
     padding-top: 96rpx;
-    padding-bottom: 24rpx;
-    padding-left: 32rpx;
-    padding-right: 32rpx;
+    padding-bottom: 26rpx;
+    padding-left: 40rpx;
+    padding-right: 40rpx;
   }
 
   .back-btn {
@@ -122,36 +160,41 @@
     flex: 1;
   }
 
+
+  /* 三个入口横排（设计图：加入 / 创建 / 预定） */
   .actions {
-    position: absolute;
-    bottom: 308rpx;
-    left: 112rpx;
-    right: 112rpx;
-    flex-direction: column;
+    flex-direction: row;
+    margin: 0 40rpx;
+    padding-left: 24rpx;
+    padding-right: 24rpx;
+    padding-top: 26rpx;
+    padding-bottom: 40rpx;
+    border-bottom: 1rpx solid #E7ECF6;
   }
 
   .action-btn {
-    height: 108rpx;
+    flex: 1;
+    height: 160rpx;
     border-radius: 16rpx;
     background-color: #0468FC;
-    flex-direction: row;
+    flex-direction: column;
     justify-content: center;
     align-items: center;
   }
 
   .action-btn-gap {
-    height: 48rpx;
+    width: 40rpx;
   }
 
   .action-btn-icon {
-    width: 40rpx;
-    height: 40rpx;
-    margin-right: 16rpx;
+    width: 48rpx;
+    height: 48rpx;
+    margin-bottom: 18rpx;
   }
 
   .action-btn-text {
     color: #FFFFFF;
-    font-size: 32rpx;
-    font-weight: 600;
+    font-size: 28rpx;
+    font-weight: 500;
   }
 </style>

@@ -84,6 +84,28 @@
       :roomID="roomID"
       @close="isChatPanelOpen = false"
     />
+
+    <AddMemberSheet
+      :visible="isAddMemberSheetOpen"
+      :roomID="roomID"
+      @close="isAddMemberSheetOpen = false"
+      @addMember="isSelectMemberPanelOpen = true"
+      @invite="isInviteInfoSheetOpen = true"
+    />
+
+    <RoomInviteSheet
+      :visible="isInviteInfoSheetOpen"
+      :roomID="roomID"
+      theme="dark"
+      :show-time="false"
+      @close="isInviteInfoSheetOpen = false"
+    />
+
+    <SelectMemberPanel
+      :visible="isSelectMemberPanelOpen"
+      :roomID="roomID"
+      @close="isSelectMemberPanelOpen = false"
+    />
   </view>
 </template>
 
@@ -105,6 +127,10 @@
   import RoomInfo from '../components/RoomInfo/index.nvue';
   import ExitButton from '../components/ExitButton/index.nvue';
   import MembersButton from '../components/MembersButton/index.nvue';
+  import AddMemberButton from '../components/AddMemberButton/index.nvue';
+  import AddMemberSheet from '../components/AddMemberButton/AddMemberSheet.nvue';
+  import RoomInviteSheet from '../components/RoomInviteSheet/index.nvue';
+  import SelectMemberPanel from '../components/SelectMemberPanel/index.nvue';
   import MicButton from '../components/MicButton/index.nvue';
   import CameraButton from '../components/CameraButton/index.nvue';
   import ScreenShareButton from '../components/ScreenShareButton/index.nvue';
@@ -118,10 +144,13 @@
   import ToolPanel from '../components/ToolPanel/index.nvue';
   import type { ToolDescriptor } from '../components/ToolPanel/toolDescriptor';
 
-  const mode = ref<'create' | 'join'>('create');
+  const mode = ref<'create' | 'join' | 'accept'>('create');
   const roomID = ref<string>('');
   const roomName = ref<string>('');
   const isChatPanelOpen = ref<boolean>(false);
+  const isAddMemberSheetOpen = ref<boolean>(false);
+  const isInviteInfoSheetOpen = ref<boolean>(false);
+  const isSelectMemberPanelOpen = ref<boolean>(false);
   const autoEnableCamera = ref<boolean>(false);
   const autoEnableMicrophone = ref<boolean>(true);
   const autoEnableSpeaker = ref<boolean>(true);
@@ -160,13 +189,9 @@
   const isPasswordSheetVisible = ref(false);
 
   // ==================== Tool panel ====================
-  // 展开/收起状态由 ToolPanel 内部维护（避免父组件持双状态对齐），父组件只
-  // 控制"从工具面板点聊天按钮后，把面板收起"这一个动作：暴露一个 toolPanelRef。
+
   const toolPanelRef = ref<any>(null);
 
-  // toolsList 中要用 onRequestStartRecording / onRequestStopRecording，
-  // 这俩是 function declaration，按 Vue 3 标准应该 hoisted，但 nvue <script setup>
-  // 行为略有差异。这里提前到 toolsList 之前，避免任何「找不到名称」风险。
   function onRequestStartRecording() {
     recordingDialog.value = {
       visible: true,
@@ -187,20 +212,6 @@
     };
   }
 
-  /**
-   * toolsList — 房间底部工具描述符
-   *
-   * 用 descriptor + `<component :is>` 模式替代 slot：
-   * - ToolPanel 根据 descriptor.visible 过滤后,可见集合与 threshold 自决是否显示「展开」按钮
-   * - 加新工具/调位置只在主页面改一行
-   * - emit 透传走 listeners.{emitName}
-   *
-   * 关于 visible 字段:
-   * - 这里集中声明"在收起态的可见性"——单一事实来源
-   * - Component 内部的 v-if("visible" computed 等)是实现细节,ToolPanel 不去反推渲染数
-   * - 这里填的 visible 必须与 component 内部 v-if 条件保持一致
-   *   (例如 recording 在这里写 isOwner||isAdmin,在 RecordingButton 内部也是同样条件)
-   */
   const isAdminOrOwner = computed(() => {
     const role = localParticipant.value?.role;
     return role === RoomParticipantRole.Owner || role === RoomParticipantRole.Admin;
@@ -241,6 +252,15 @@
       visible: true,
     },
     {
+      name: 'addMember',
+      component: AddMemberButton,
+      props: { roomID: roomID.value },
+      listeners: {
+        click: handleAddMemberClick,
+      },
+      visible: true,
+    },
+    {
       name: 'recording',
       component: RecordingButton,
       visible: isAdminOrOwner.value,
@@ -250,6 +270,18 @@
       },
     },
   ]);
+
+  function handleAddMemberClick(_payload?: { roomID: string }): void {
+    // 面板挂在页面级（不在 ToolPanel 内），先打开面板再收起 ToolPanel
+    isAddMemberSheetOpen.value = true;
+    toolPanelRef.value?.collapse();
+  }
+
+  /** 成员列表里点「邀请」：直接开选人面板（不再多弹一层入口面板） */
+  function handleMemberInviteClick(): void {
+    toolPanelRef.value?.collapse();
+    isSelectMemberPanelOpen.value = true;
+  }
 
   function handleChatClick(_payload?: { roomID: string }): void {
     // 从 ToolPanel 展开态点聊天：先打开 ChatPanel，再收起面板
@@ -345,6 +377,8 @@
       await roomParticipantState.getParticipantList({ cursor: '' }).catch(() => {});
       initMediaState();
     } else {
+      // 'join'（从列表进房）和 'accept'（接受了邀请）都走 joinRoom API 实际进房
+      // accept 模式下邀请已被服务端鉴权通过，join 不再要求密码
       await tryJoinRoom();
     }
   }
@@ -363,7 +397,6 @@
         isPasswordSheetVisible.value = true;
         return;
       }
-      // 100019: 密码错误 → 仅提示，保持密码框打开让用户重试，不退出页面
       if (code === 100019) {
         isPasswordSheetVisible.value = true;
         showErrorToast(e, '进房密码错误');
@@ -457,7 +490,7 @@
   function triggerExit() {
     closeLocalMicrophone();
     closeLocalCamera();
-    navigateBack();
+    uni.redirectTo({ url: '/pages/scenes/room/index' });
   }
 
   function navigateBack() {
@@ -477,7 +510,10 @@
         return s;
       }
     };
-    mode.value = options?.mode === 'join' ? 'join' : 'create';
+
+    if (options?.mode === 'join') mode.value = 'join';
+    else if (options?.mode === 'accept') mode.value = 'accept';
+    else mode.value = 'create';
     roomID.value = safeDecode(options?.roomID);
     roomName.value = safeDecode(options?.roomName);
     autoEnableCamera.value = options?.autoEnableCamera === '1';

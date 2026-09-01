@@ -1,0 +1,116 @@
+<template>
+  <view v-if="visible" class="mask" @tap="handleCancel">
+    <view class="sheet" @tap.stop>
+      <scroll-view class="option-scroll" scroll-y>
+        <view
+          v-for="(item, index) in options"
+          :key="index"
+          class="option-item"
+          :class="{ 'not-border': index === options.length - 1 }"
+          @tap="handleSelect(index)"
+        >
+          <text
+            class="option-text"
+          >{{ item.label }}</text>
+        </view>
+      </scroll-view>
+      <view class="sheet-gap"></view>
+      <view class="cancel-btn" @tap="handleCancel">
+        <text class="cancel-btn-text">取消</text>
+      </view>
+    </view>
+  </view>
+</template>
+
+<script setup lang="ts">
+  type OptionItem = {
+    value: number;
+    label: string;
+  };
+
+  const props = defineProps({
+    visible: { type: Boolean, default: false },
+    title: { type: String, default: '请选择' },
+    options: { type: Array as () => OptionItem[], default: () => [] },
+    selectedValue: { type: Number, default: -1 },
+  });
+
+  const emit = defineEmits<{
+    (e: 'cancel'): void
+    (e: 'select', value: number): void
+  }>();
+
+  function handleSelect(index: number): void {
+    const item = props.options[index];
+    if (item == null) return;
+    emit('select', item.value);
+  }
+
+  function handleCancel(): void {
+    emit('cancel');
+  }
+</script>
+
+<style>
+  .mask {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 9998;
+    background-color: rgba(0, 0, 0, 0.6);
+    flex-direction: column;
+    justify-content: flex-end;
+  }
+
+  .sheet {
+    background-color: #FFFFFF;
+    border-top-left-radius: 24rpx;
+    border-top-right-radius: 24rpx;
+    flex-direction: column;
+  }
+
+  .option-scroll {
+    padding: 8rpx 0;
+    max-height: 560rpx;
+  }
+
+  .option-item {
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    padding: 32rpx 0;
+    border-bottom-width: 1rpx;
+    border-bottom-style: solid;
+    border-bottom-color: #F2F5FC;
+  }
+
+  .not-border {
+    border-bottom: none;
+  }
+
+  .option-text {
+    font-weight: 500;
+    font-size: 32rpx;
+    color: #22262E;
+  }
+
+  .sheet-gap {
+    flex: 1;
+    height: 14rpx;
+    background-color: #F2F5FC;
+  }
+
+  .cancel-btn {
+    padding: 40rpx 0;
+    flex-direction: row;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .cancel-btn-text {
+    font-size: 32rpx;
+    color: #4B5468;
+  }
+</style>

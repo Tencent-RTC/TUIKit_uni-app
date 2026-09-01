@@ -1,0 +1,431 @@
+<template>
+  <RoomBottomSheet
+    :visible="visible"
+    @close="handleCancel"
+  >
+    <view class="picker-header">
+      <view class="header-btn header-btn-left" @tap="handleCancel">
+        <image class="header-icon" src="/static/images/room/room_collapse.png" mode="aspectFit" />
+      </view>
+      <text class="picker-title">{{ title }}</text>
+      <view class="header-btn header-btn-right" @tap="handleConfirm">
+        <image class="header-icon" src="/static/images/room/room_schedule_selected.png" mode="aspectFit" />
+      </view>
+    </view>
+
+    <!-- 三列滚轮：日期 / 时 / 分（与 RoomDurationPicker 完全同套 wheel picker 机制） -->
+    <view class="picker-area">
+      <view class="picker-highlight"></view>
+
+      <!-- 日期列：自然序列，不循环（DAY_ROUNDS=1，无 scheduleReset） -->
+      <scroll-view
+        class="column"
+        scroll-y
+        :scroll-into-view="dateScrollId"
+        :show-scrollbar="false"
+        @scroll="onDateScroll"
+      >
+        <view
+          v-for="(d, idx) in dateLoopList"
+          :key="`d-${idx}`"
+          :id="`d-${idx}`"
+          class="cell"
+        >
+          <text
+            class="cell-text"
+            :class="idx === dateActiveIdx ? 'text-active' : (idx === dateActiveIdx - 1 || idx === dateActiveIdx + 1 ? 'text-near' : 'text-far')"
+          >{{ d }}</text>
+        </view>
+      </scroll-view>
+
+      <!-- 小时列：循环（HOUR_ROUNDS=9，边界静默 reset 跳中轮） -->
+      <scroll-view
+        class="column"
+        scroll-y
+        :scroll-into-view="hourScrollId"
+        :show-scrollbar="false"
+        @scroll="onHourScroll"
+      >
+        <view
+          v-for="(h, idx) in hourLoopList"
+          :key="`h-${idx}`"
+          :id="`h-${idx}`"
+          class="cell"
+        >
+          <text
+            class="cell-num"
+            :class="idx === hourActiveIdx ? 'text-active' : (idx === hourActiveIdx - 1 || idx === hourActiveIdx + 1 ? 'text-near' : 'text-far')"
+          >{{ h }}</text>
+        </view>
+      </scroll-view>
+
+      <!-- 分钟列：循环（MINUTE_ROUNDS=18，边界静默 reset 跳中轮） -->
+      <scroll-view
+        class="column"
+        scroll-y
+        :scroll-into-view="minuteScrollId"
+        :show-scrollbar="false"
+        @scroll="onMinuteScroll"
+      >
+        <view
+          v-for="(m, idx) in minuteLoopList"
+          :key="`m-${idx}`"
+          :id="`m-${idx}`"
+          class="cell"
+        >
+          <text
+            class="cell-num"
+            :class="idx === minuteActiveIdx ? 'text-active' : (idx === minuteActiveIdx - 1 || idx === minuteActiveIdx + 1 ? 'text-near' : 'text-far')"
+          >{{ m }}</text>
+        </view>
+      </scroll-view>
+    </view>
+
+    <!-- 底部只留安全区，按钮统一放在 header -->
+    <view class="bottom-safe"></view>
+  </RoomBottomSheet>
+</template>
+
+<script setup lang="ts">
+  /**
+   * 开始时间选择面板（日期 / 时 / 分 三列 wheel picker）。
+   *
+   * ── 与 RoomDurationPicker 完全同套机制（参见该文件的 4 个核心设计注释） ──
+   *
+   * 1. ★ scrollTop 单位是 px，CSS cell 高度是 rpx，必须换算 ★
+   * 2. 循环 = 数据重复多轮 + 边界静默 reset（hour/minute 列）
+   * 3. 定位用 scroll-into-view，不用 :scroll-top
+   * 4. 让选中项落进 highlight：scroll-into-view 目标 = activeIdx - CENTER_OFFSET
+   * 5. :class 用内联三元，不要绑函数返回值
+   *
+   * 三列差异：
+   * - 日期：自然序列，无循环概念；初始放在「中间」无所谓，直接 `Math.max(0, idx - 2)` 保证 id 非负即可；scroll 回调不做 reset（DAY_ROUNDS=1，滚到边界就是边界）
+   * - 时 / 分：标准循环列（HOUR_ROUNDS=9 / MINUTE_ROUNDS=18）
+   *
+   * emit:
+   *  - cancel：取消关闭
+   *  - confirm(timestamp)：所选时间戳（毫秒）
+   */
+  import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue';
+  import RoomBottomSheet from '../RoomBottomSheet/index.nvue';
+
+  const title = '选择开始时间';
+
+  const CELL_HEIGHT_RPX = 88; // 与 CSS .cell 一致
+  const CENTER_OFFSET = 2;   // highlight 在第 3 行
+
+  // ── 数据规模（与 DurationPicker 同套：~216 cell 中央轮次） ──
+  const DATE_RANGE_DAYS = 365;
+  const HOUR_ROUNDS = 9;        // 24 × 9 = 216
+  const HOUR_MID_ROUND = 4;     // 中央
+  const MINUTE_ROUNDS = 18;     // 12 × 18 = 216
+  const MINUTE_MID_ROUND = 8;
+  const SAFE_ROUNDS = 2;
+
+  const MINUTE_STEP = 5; // 0/5/10/.../55
+  const weekNames = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+
+  const props = defineProps({
+    visible: { type: Boolean, default: false },
+    /** 初始时间戳（毫秒） */
+    timestamp: { type: Number, default: 0 },
+  });
+
+  const emit = defineEmits<{
+    (e: 'cancel'): void;
+    (e: 'confirm', timestamp: number): void;
+  }>();
+
+  function pad2(n: number): string {
+    return n < 10 ? `0${n}` : String(n);
+  }
+
+  /** 今天 00:00 的时间戳，日期列的基准 */
+  function getTodayStart(): number {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d.getTime();
+  }
+
+  // ── px 换算（与 DurationPicker 完全一致） ──
+  const cellHeightPx = ref<number>(44);
+  onMounted(() => {
+    uni.getSystemInfo({
+      success: (res: any) => {
+        const w = (res?.screenWidth ?? 375) as number;
+        if (w > 0) cellHeightPx.value = (CELL_HEIGHT_RPX / 750) * w;
+      },
+    });
+  });
+
+  // ── 基础数据 ──
+  function buildDayList(days: number): string[] {
+    const base = getTodayStart();
+    const out: string[] = [];
+    for (let i = 0; i < days; i++) {
+      const d = new Date(base + i * 24 * 60 * 60 * 1000);
+      const dateText = `${pad2(d.getMonth() + 1)}月${pad2(d.getDate())}日`;
+      if (i === 0) out.push(`今天 ${dateText}`);
+      else if (i === 1) out.push(`明天 ${dateText}`);
+      else out.push(`${dateText} ${weekNames[d.getDay()]}`);
+    }
+    return out;
+  }
+  function buildLoopList(base: number[], rounds: number): number[] {
+    const list: number[] = [];
+    for (let r = 0; r < rounds; r++) for (let i = 0; i < base.length; i++) list.push(base[i]);
+    return list;
+  }
+  function buildHourList(): number[] {
+    const list: number[] = [];
+    for (let h = 0; h < 24; h++) list.push(h);
+    return list;
+  }
+  function buildMinuteList(): number[] {
+    const list: number[] = [];
+    for (let m = 0; m < 60; m += MINUTE_STEP) list.push(m);
+    return list;
+  }
+
+  // 日期列：自然序列，单轮。头部预置 2 个空 padding cell，因为 target = activeIdx - CENTER_OFFSET
+  // 要求 activeIdx ≥ 2，否则 scroll-into-view 后 highlight 会指向 activeIdx+2 而非 activeIdx
+  // （详见上方注释 4：让选中项落进 highlight 的 scroll-into-view 目标算法）
+  const dateLoopList: string[] = ['', '', ...buildDayList(DATE_RANGE_DAYS)];
+  // 时 / 分列：循环
+  const hourLoopList: number[] = buildLoopList(buildHourList(), HOUR_ROUNDS);
+  const minuteLoopList: number[] = buildLoopList(buildMinuteList(), MINUTE_ROUNDS);
+
+  // ── 时间戳 → 三列初始 idx（基础数据下标，非循环列表下标） ──
+  function calcInitialIdxs(ts: number): { d: number; h: number; m: number } {
+    const target = ts > 0 ? ts : Date.now();
+    const d = new Date(target);
+    const todayStart = getTodayStart();
+    const dayStart = new Date(target);
+    dayStart.setHours(0, 0, 0, 0);
+    const rawDay = Math.round((dayStart.getTime() - todayStart) / (24 * 60 * 60 * 1000));
+    const dIdx = Math.max(0, Math.min(DATE_RANGE_DAYS - 1, rawDay));
+    const hIdx = d.getHours();
+    const totalMinuteCells = Math.ceil(60 / MINUTE_STEP);
+    const rawMin = Math.round(d.getMinutes() / MINUTE_STEP);
+    const mIdx = rawMin >= totalMinuteCells ? totalMinuteCells - 1 : rawMin;
+    return { d: dIdx, h: hIdx, m: mIdx };
+  }
+
+  // active idx（循环列表下标，唯一状态源）
+  const dateActiveIdx = ref<number>(0);
+  const hourActiveIdx = ref<number>(0);
+  const minuteActiveIdx = ref<number>(0);
+
+  // scroll-into-view 目标
+  const dateScrollId = ref<string>('');
+  const hourScrollId = ref<string>('');
+  const minuteScrollId = ref<string>('');
+
+  // locking flags + reset timers
+  let dateLocking = false;
+  let hourLocking = false;
+  let minuteLocking = false;
+  let hourResetTimer: any = null;
+  let minuteResetTimer: any = null;
+
+  function scrollDateToActive(): void {
+    dateLocking = true;
+    const target = Math.max(0, dateActiveIdx.value - CENTER_OFFSET);
+    dateScrollId.value = '';
+    nextTick().then(() => {
+      dateScrollId.value = `d-${target}`;
+      setTimeout(() => { dateLocking = false; }, 200);
+    });
+  }
+  function scrollHourToActive(): void {
+    hourLocking = true;
+    const target = Math.max(0, hourActiveIdx.value - CENTER_OFFSET);
+    hourScrollId.value = '';
+    nextTick().then(() => {
+      hourScrollId.value = `h-${target}`;
+      setTimeout(() => { hourLocking = false; }, 200);
+    });
+  }
+  function scrollMinuteToActive(): void {
+    minuteLocking = true;
+    const target = Math.max(0, minuteActiveIdx.value - CENTER_OFFSET);
+    minuteScrollId.value = '';
+    nextTick().then(() => {
+      minuteScrollId.value = `m-${target}`;
+      setTimeout(() => { minuteLocking = false; }, 200);
+    });
+  }
+
+  watch(
+    () => props.visible,
+    (v) => {
+      if (!v) {
+        if (hourResetTimer != null) clearTimeout(hourResetTimer);
+        if (minuteResetTimer != null) clearTimeout(minuteResetTimer);
+        return;
+      }
+      const init = calcInitialIdxs(props.timestamp);
+      // 日期列：dateLoopList 头有 2 个 padding cell，基础下标 +2 让"今天" 落在 highlight 行
+      dateActiveIdx.value = init.d + 2;
+      // 时 / 分列放中间轮等价位置
+      hourActiveIdx.value = HOUR_MID_ROUND * 24 + init.h;
+      minuteActiveIdx.value = MINUTE_MID_ROUND * 12 + init.m;
+      scrollDateToActive();
+      scrollHourToActive();
+      scrollMinuteToActive();
+    },
+    { immediate: true },
+  );
+
+  function scheduleHourReset(): void {
+    if (hourResetTimer != null) clearTimeout(hourResetTimer);
+    hourResetTimer = setTimeout(() => {
+      const len = 24;
+      const round = Math.floor(hourActiveIdx.value / len);
+      if (round >= SAFE_ROUNDS && round < HOUR_ROUNDS - SAFE_ROUNDS) return;
+      const real = hourActiveIdx.value % len;
+      hourActiveIdx.value = HOUR_MID_ROUND * len + real;
+      scrollHourToActive();
+    }, 150);
+  }
+  function scheduleMinuteReset(): void {
+    if (minuteResetTimer != null) clearTimeout(minuteResetTimer);
+    minuteResetTimer = setTimeout(() => {
+      const len = 12;
+      const round = Math.floor(minuteActiveIdx.value / len);
+      if (round >= SAFE_ROUNDS && round < MINUTE_ROUNDS - SAFE_ROUNDS) return;
+      const real = minuteActiveIdx.value % len;
+      minuteActiveIdx.value = MINUTE_MID_ROUND * len + real;
+      scrollMinuteToActive();
+    }, 150);
+  }
+
+  // ★ scroll 回调反算 idx（scrollTop 是 px，用 cellHeightPx）★
+  function calcIdx(e: any): number {
+    const top = (e?.detail?.scrollTop ?? 0) as number;
+    const unit = cellHeightPx.value > 0 ? cellHeightPx.value : 44;
+    return Math.round(top / unit) + CENTER_OFFSET;
+  }
+
+  function onDateScroll(e: any): void {
+    if (dateLocking) return;
+    const idx = calcIdx(e);
+    dateActiveIdx.value = Math.max(0, Math.min(dateLoopList.length - 1, idx));
+  }
+  function onHourScroll(e: any): void {
+    if (hourLocking) return;
+    const idx = calcIdx(e);
+    hourActiveIdx.value = Math.max(0, Math.min(hourLoopList.length - 1, idx));
+    scheduleHourReset();
+  }
+  function onMinuteScroll(e: any): void {
+    if (minuteLocking) return;
+    const idx = calcIdx(e);
+    minuteActiveIdx.value = Math.max(0, Math.min(minuteLoopList.length - 1, idx));
+    scheduleMinuteReset();
+  }
+
+  onUnmounted(() => {
+    if (hourResetTimer != null) clearTimeout(hourResetTimer);
+    if (minuteResetTimer != null) clearTimeout(minuteResetTimer);
+  });
+
+  // 真实选中值（用基础数据下标，不受循环轮次干扰）
+  // 日期列因头部预置了 CENTER_OFFSET 个 padding cell（让基础下标 0 = 今天 也能 highlight），
+  // 反算真实 day offset 必须减去 CENTER_OFFSET
+  const pickedDay = computed(() => Math.max(0, dateActiveIdx.value - CENTER_OFFSET));
+  const pickedHour = computed(() => hourLoopList[hourActiveIdx.value] ?? 0);
+  const pickedMinute = computed(() => minuteLoopList[minuteActiveIdx.value] ?? 0);
+
+  function handleCancel(): void {
+    emit('cancel');
+  }
+  function handleConfirm(): void {
+    const base = new Date(getTodayStart() + pickedDay.value * 24 * 60 * 60 * 1000);
+    base.setHours(pickedHour.value, pickedMinute.value, 0, 0);
+    emit('confirm', base.getTime());
+  }
+</script>
+
+<style>
+  /* ── 三段式 header（与 RoomDurationPicker 完全一致） ── */
+  .picker-header {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    height: 96rpx;
+    padding: 0 16rpx;
+  }
+  .header-btn {
+    width: 88rpx;
+    height: 88rpx;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+  }
+  .header-icon {
+    width: 48rpx;
+    height: 48rpx;
+  }
+  .picker-title {
+    font-size: 36rpx;
+    font-weight: 500;
+    color: #4F586B;
+  }
+
+  /* ── wheel picker 中间区域（与 RoomDurationPicker 完全一致） ── */
+  .picker-area {
+    flex-direction: row;
+    height: 440rpx;
+    background-color: #FFFFFF;
+    position: relative;
+  }
+  .picker-highlight {
+    position: absolute;
+    top: 176rpx;
+    left: 0;
+    right: 0;
+    height: 88rpx;
+    border-top-width: 1rpx;
+    border-bottom-width: 1rpx;
+    border-top-style: solid;
+    border-bottom-style: solid;
+    border-top-color: #E5E7EB;
+    border-bottom-color: #E5E7EB;
+  }
+
+  .column {
+    flex: 1;
+  }
+
+  .cell {
+    height: 88rpx;
+    flex-direction: row;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .cell-num {
+    font-size: 34rpx;
+  }
+  .cell-text {
+    font-size: 30rpx;
+  }
+
+  /* 三级视觉层次：选中最深、相邻中灰、更远浅灰（与 DurationPicker 完全一致） */
+  .text-active {
+    color: #22262E;
+    font-weight: 500;
+  }
+  .text-near {
+    color: #6B7385;
+  }
+  .text-far {
+    color: #C2C7D0;
+  }
+
+  /* 底部只留安全区（按钮统一放在 header） */
+  .bottom-safe {
+    height: 40rpx;
+  }
+</style>

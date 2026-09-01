@@ -46,6 +46,15 @@
         mode="aspectFit"
       />
     </view>
+
+    <!-- 未进房右侧 action：呼叫 / 取消（与 person 操作互斥，按钮自带 tap.stop 不冒泡） -->
+    <view v-else-if="type === 'notJoined'" class="action-area">
+      <text v-if="isCalling" class="calling-tag">呼叫中</text>
+      <text v-else-if="isRejected" class="rejected-tag">暂不入会</text>
+      <view v-else class="action-btn action-btn-call" @tap.stop="emit('call')">
+        <text class="action-btn-text-call">呼叫</text>
+      </view>
+    </view>
   </view>
 </template>
 
@@ -57,20 +66,41 @@
   import { DeviceStatus, RoomParticipantRole } from '@/uni_modules/tuikit-atomic-x/state';
 
   const props = defineProps({
-    type: { type: String as PropType<'participant' | 'audience'>, required: true },
+    type: { type: String as PropType<'participant' | 'audience' | 'notJoined'>, required: true },
     participant: { type: Object as PropType<RoomParticipant | null>, default: null },
     audience: { type: Object as PropType<RoomUser | null>, default: null },
+    /**
+     * 未进房专用的 RoomUser（type='notJoined' 时必传，其他类型可为空）。
+     * 用单独 prop 而不是塞进 audience，是为了类型清晰，避免误用 audience 上下文。
+     */
+    notJoinedUser: { type: Object as PropType<RoomUser | null>, default: null },
     isAdmin: { type: Boolean, default: false },
     isLocal: { type: Boolean, default: false },
     canControl: { type: Boolean, default: false },
     isWebinar: { type: Boolean, default: false },
+    /**
+     * 该用户是否正在被我呼叫中（用于切「呼叫」→「取消」按钮 + 显示「呼叫中」徽标）。
+     * 仅对 type='notJoined' 有效。
+     */
+    isCalling: { type: Boolean, default: false },
+    /**
+     * 该用户刚拒绝了我的呼叫（显示「暂不入会」徽标，由父组件 3s 后自动清除）。
+     * 仅对 type='notJoined' 有效。
+     */
+    isRejected: { type: Boolean, default: false },
   });
 
-  const emit = defineEmits<{ (e: 'press'): void }>();
+  const emit = defineEmits<{
+    (e: 'press'): void
+    (e: 'call'): void         // 未进房：发起呼叫
+    (e: 'cancelCall'): void   // 未进房：取消呼叫
+  }>();
 
-  const user = computed<RoomParticipant | RoomUser | null>(() =>
-    props.type === 'participant' ? props.participant : props.audience,
-  );
+  const user = computed<RoomParticipant | RoomUser | null>(() => {
+    if (props.type === 'participant') return props.participant;
+    if (props.type === 'audience') return props.audience;
+    return props.notJoinedUser;
+  });
 
   const displayName = computed(() => {
     const u = user.value;
@@ -202,5 +232,42 @@
     width: 40rpx;
     height: 40rpx;
     margin-left: 40rpx;
+  }
+
+  /* ── 未进房：呼叫中徽标 + 呼叫/取消按钮 ── */
+  .calling-tag {
+    color: #D5E0F2;
+    font-weight: 400;
+    font-size: 28rpx;
+    padding: 4rpx 10rpx;
+  }
+
+  .rejected-tag {
+    color: #D5E0F2;
+    font-weight: 400;
+    font-size: 28rpx;
+    padding: 4rpx 10rpx;
+  }
+
+  .action-area {
+    flex-direction: row;
+    align-items: center;
+    margin-left: 24rpx;
+  }
+
+  /* 呼叫：实心蓝 */
+  .action-btn-call {
+    background-color: #6B758A;
+    justify-content: center;
+    align-items: center;
+    padding: 8rpx 20rpx;
+    border-radius: 12rpx;
+  }
+
+  .action-btn-text-call {
+    color: #D5E0F2;
+    font-weight: 400;
+    font-size: 28rpx;
+    line-height: 40rpx;
   }
 </style>

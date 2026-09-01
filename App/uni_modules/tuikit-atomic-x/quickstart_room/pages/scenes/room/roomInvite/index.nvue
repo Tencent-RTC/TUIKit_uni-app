@@ -1,0 +1,456 @@
+<template>
+  <view class="invite-page">
+    <image
+      v-if="callerAvatar.length > 0"
+      class="bg-image"
+      :style="{ width: bgWidth + 'px', height: bgHeight + 'px' }"
+      :src="callerAvatar"
+      mode="aspectFill"
+    />
+    <view
+      class="bg-overlay"
+      :class="{ 'bg-overlay--no-image': callerAvatar.length === 0 }"
+      :style="{ width: bgWidth + 'px', height: bgHeight + 'px' }"
+    ></view>
+
+    <!-- 内容区 -->
+    <view class="content">
+      <image class="avatar" :src="callerAvatar || defaultAvatar" mode="aspectFill" />
+      <text class="invite-text">{{ inviteText }}</text>
+      <text class="room-name" :numberOfLines="2">{{ displayRoomName }}</text>
+      <text v-if="metaText.length > 0" class="meta-text">{{ metaText }}</text>
+    </view>
+
+    <view class="bottom">
+      <view class="slider-track" :style="{ width: trackWidthPx + 'px' }">
+        <text class="slider-label" :style="{ opacity: labelOpacity }">立即加入</text>
+        <view
+          class="slider-thumb"
+          :style="thumbStyle"
+          @touchstart="onThumbTouchStart"
+          @touchmove="onThumbTouchMove"
+          @touchend="onThumbTouchEnd"
+          @touchcancel="onThumbTouchEnd"
+        >
+          <image class="slider-thumb-icon" src="/static/images/room/room_arrow_invite.png" mode="aspectFit" />
+        </view>
+      </view>
+
+      <view class="reject-btn" @tap="handleReject">
+        <text class="reject-text">暂不进入</text>
+      </view>
+    </view>
+  </view>
+</template>
+
+<script setup lang="ts">
+  import { ref, computed, onMounted, onUnmounted } from 'vue';
+  import { onLoad, onUnload } from '@dcloudio/uni-app';
+  import { useRoomState } from '@/uni_modules/tuikit-atomic-x/state';
+  import { showErrorToast } from '../utils/errorHandler';
+  import {
+    ROOM_INVITE_CLOSE_EVENT,
+    ROOM_MAIN_PAGE,
+    clearPendingInvite,
+  } from '@/uni_modules/tuikit-atomic-x/server/roomCallService';
+
+  const roomState = useRoomState();
+
+  const defaultAvatar = '/static/images/room/room_default_avatar.png';
+
+  const roomID = ref('');
+  const roomName = ref('');
+  const callerName = ref('');
+  const callerAvatar = ref('');
+  const ownerName = ref('');
+  const participantCount = ref(0);
+
+  const isHandling = ref(false);
+
+  const inviteText = computed(() =>
+    callerName.value.length > 0 ? `${callerName.value}邀请你加入会议` : '邀请你加入会议'
+  );
+
+  const displayRoomName = computed(() => {
+    if (roomName.value.length > 0) return roomName.value;
+    if (roomID.value.length > 0) return `会议 ${roomID.value}`;
+    return '会议邀请';
+  });
+
+  const metaText = computed(() => {
+    const parts: string[] = [];
+    if (ownerName.value.length > 0) parts.push(`主持人：${ownerName.value}`);
+    if (participantCount.value > 0) parts.push(`参会人：${participantCount.value}人`);
+    return parts.join('  |  ');
+  });
+
+  const _sysInfo = uni.getSystemInfoSync();
+  const _windowWidth = (_sysInfo?.windowWidth ?? 375) as number;
+  const rpx2px = (rpx: number): number => (rpx / 750) * _windowWidth;
+
+  const bgWidth = ref(_windowWidth);
+  const bgHeight = ref((_sysInfo?.screenHeight ?? _sysInfo?.windowHeight ?? 667) as number);
+
+  const trackWidthPx = ref(rpx2px(400));
+  const thumbSizePx = ref(rpx2px(128));
+  const thumbInsetPx = ref(rpx2px(12));
+  const TRIGGER_RATIO = 0.7;
+
+  /**
+   * 滑块拖动：touchmove + Vue 响应式 :style。
+   *
+   * ★ 抖动根因（踩过的坑）：坐标取值必须用 `screenX`。
+   *   `clientX` / `pageX` 在 nvue 上可能是**相对当前元素**的坐标 ——
+   *   滑块自己随手指移动 → 元素相对坐标反向变化 → 正反馈震荡 → 左右抖。
+   *   `screenX` 是屏幕绝对坐标，永不受元素位移影响。
+   *
+   * ponytail: 不上 bindingX（该项目基座未内置 bindingx 模块，bind 返回无 token → 完全不能拖）。
+   */
+  const thumbOffset = ref(0);
+
+  const thumbStyle = computed(() => ({
+    width: thumbSizePx.value + 'px',
+    height: thumbSizePx.value + 'px',
+    borderRadius: thumbSizePx.value / 2 + 'px',
+    transform: `translateX(${thumbOffset.value}px)`,
+  }));
+
+  const labelOpacity = computed((): number => {
+    const max = maxOffset();
+    let op = 1 - (thumbOffset.value / max) * 2;
+    if (op < 0) op = 0;
+    if (op > 1) op = 1;
+    return op;
+  });
+
+  let dragStartX = 0;
+  let dragStartOffset = 0;
+  let isDragging = false;
+
+  function maxOffset(): number {
+    return Math.max(1, trackWidthPx.value - thumbSizePx.value - thumbInsetPx.value * 2);
+  }
+
+  /** 取屏幕绝对横坐标（screenX 优先，见上方抖动根因说明） */
+  function touchScreenX(e: any): number {
+    const t = e?.changedTouches?.[0] ?? e?.touches?.[0];
+    if (!t) return 0;
+    return (t.screenX ?? t.pageX ?? t.clientX ?? 0) as number;
+  }
+
+  function onThumbTouchStart(e: any): void {
+    if (isHandling.value) return;
+    isDragging = true;
+    dragStartX = touchScreenX(e);
+    dragStartOffset = thumbOffset.value;
+  }
+
+  function onThumbTouchMove(e: any): void {
+    if (!isDragging || isHandling.value) return;
+    const max = maxOffset();
+    let next = dragStartOffset + (touchScreenX(e) - dragStartX);
+    if (next < 0) next = 0;
+    if (next > max) next = max;
+    if (next === thumbOffset.value) return;
+    thumbOffset.value = next;
+  }
+
+  function onThumbTouchEnd(): void {
+    if (!isDragging) return;
+    isDragging = false;
+    const max = maxOffset();
+    if (thumbOffset.value / max >= TRIGGER_RATIO) {
+      thumbOffset.value = max;
+      handleAccept();
+      return;
+    }
+    thumbOffset.value = 0;
+  }
+
+  function resetThumb(): void {
+    thumbOffset.value = 0;
+  }
+
+  // ==================== ringing + vibrate ====================
+
+  /**
+   * 来电铃声 + 震动循环。
+   *
+   * 铃声：loop 循环 /static/phone_ringing.mp3（项目已备）。
+   * 震动：每 2 秒触发一次长震动（iOS 上 vibrateLong 会被系统降级为短震）。
+   * 退出页面 / 接听 / 拒绝时统一调 stopRinging() 清理。
+   */
+  let _ringAudioCtx: any = null;
+  let _vibrateTimer: number | null = null;
+
+  function startRinging(): void {
+    // 铃声：nvue 中用 createInnerAudioContext 循环播放 mp3
+    // iOS 静音开关默认会拦截音频 → obeyMuteSwitch: false 让铃音绕过静音
+    try {
+      const ctx: any = uni.createInnerAudioContext();
+      ctx.src = '/static/phone_ringing.mp3';
+      ctx.loop = true;
+      ctx.obeyMuteSwitch = false;
+      ctx.play();
+      _ringAudioCtx = ctx;
+    } catch (e) {
+      console.warn('[roomInvite] createInnerAudioContext failed:', e);
+    }
+
+    // 震动：先立刻震一次，再每 2 秒循环（长震）
+    try {
+      uni.vibrateLong({ type: 'medium' });
+    } catch (e) {
+      // 部分设备可能不支持，忽略
+    }
+    _vibrateTimer = setInterval((): void => {
+      try {
+        uni.vibrateLong({ type: 'medium' });
+      } catch (e) {
+        // 忽略
+      }
+    }, 2000) as unknown as number;
+  }
+
+  function stopRinging(): void {
+    if (_vibrateTimer != null) {
+      clearInterval(_vibrateTimer);
+      _vibrateTimer = null;
+    }
+    if (_ringAudioCtx != null) {
+      try {
+        _ringAudioCtx.stop();
+        _ringAudioCtx.destroy();
+      } catch (e) {
+        // 忽略
+      }
+      _ringAudioCtx = null;
+    }
+  }
+
+  // ==================== accept / reject ====================
+
+  function handleAccept(): void {
+    if (isHandling.value || roomID.value.length === 0) return;
+    isHandling.value = true;
+    stopRinging();
+    clearPendingInvite();
+    roomState
+      .acceptCall({ roomID: roomID.value })
+      .then(() => {
+        uni.redirectTo({
+          url: `${ROOM_MAIN_PAGE}?mode=accept&roomID=${encodeURIComponent(roomID.value)}`,
+          fail: (err: any) => {
+            console.error('[roomInvite] redirect to room main failed:', err);
+            isHandling.value = false;
+            resetThumb();
+            showErrorToast(err, '跳转会议室失败');
+          },
+        });
+      })
+      .catch((e: any) => {
+        resetThumb();
+      });
+  }
+
+  function handleReject(): void {
+    if (isHandling.value || roomID.value.length === 0) {
+      uni.navigateBack();
+      return;
+    }
+    isHandling.value = true;
+    stopRinging();
+    clearPendingInvite();
+    roomState
+      .rejectCall({ roomID: roomID.value })
+      .then(() => {
+        uni.navigateBack();
+      })
+  }
+
+  function onInviteClosed(payload: any): void {
+    const rid = payload?.roomID;
+    if (typeof rid === 'string' && rid.length > 0 && rid !== roomID.value) return;
+    setTimeout(() => uni.navigateBack(), 300);
+  }
+
+  onLoad((options: any) => {
+    const dec = (v: any): string => {
+      const s = (v ?? '').toString();
+      try {
+        return decodeURIComponent(s);
+      } catch (_e) {
+        return s;
+      }
+    };
+    roomID.value = dec(options?.roomID);
+    roomName.value = dec(options?.roomName);
+    callerName.value = dec(options?.callerName);
+    callerAvatar.value = dec(options?.callerAvatar);
+    ownerName.value = dec(options?.ownerName);
+    const c = parseInt(dec(options?.participantCount), 10);
+    participantCount.value = Number.isNaN(c) ? 0 : c;
+    fetchRoomInfoIfNeeded();
+  });
+
+  function fetchRoomInfoIfNeeded(): void {
+    if (roomID.value.length === 0) return;
+    const needName = roomName.value.length === 0;
+    const needOwner = ownerName.value.length === 0;
+    const needCount = participantCount.value === 0;
+    if (!needName && !needOwner && !needCount) return;
+    roomState
+      .getRoomInfo({ roomID: roomID.value })
+      .then((info: any) => {
+        if (needName && typeof info?.roomName === 'string' && info.roomName.length > 0) {
+          roomName.value = info.roomName;
+        }
+        if (needOwner) {
+          const owner = info?.roomOwner;
+          const n = owner?.userName ?? owner?.userID ?? '';
+          if (typeof n === 'string' && n.length > 0) ownerName.value = n;
+        }
+        if (needCount && typeof info?.participantCount === 'number' && info.participantCount > 0) {
+          participantCount.value = info.participantCount;
+        }
+        if (callerName.value.length === 0 && ownerName.value.length > 0) {
+          callerName.value = ownerName.value;
+        }
+      })
+      .catch((e: any) => {
+        console.warn('[roomInvite] getRoomInfo failed:', e);
+      });
+  }
+
+  onMounted(() => {
+    uni.setKeepScreenOn({ keepScreenOn: true });
+    uni.$on(ROOM_INVITE_CLOSE_EVENT, onInviteClosed);
+    startRinging();
+  });
+
+  onUnmounted(() => {
+    uni.setKeepScreenOn({ keepScreenOn: false });
+    uni.$off(ROOM_INVITE_CLOSE_EVENT, onInviteClosed);
+    stopRinging();
+  });
+
+  onUnload(() => {
+    clearPendingInvite();
+  });
+</script>
+
+<style>
+  .invite-page {
+    flex: 1;
+    position: relative;
+    background-color: #1A1D24;
+    flex-direction: column;
+  }
+
+  /* 背景层：iOS nvue 上 right/bottom:0 撑不开绝对定位元素，
+     宽高由 JS 绑 :style（bgWidth / bgHeight）给死，这里只定位左上角 */
+  .bg-image {
+    position: absolute;
+    top: 0;
+    left: 0;
+    opacity: 0.7;
+  }
+
+  .bg-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    background-color: rgba(0, 0, 0, 0.45);
+  }
+
+  /* 无头像时不需要那么重的遮罩（底色本身已是深色） */
+  .bg-overlay--no-image {
+    background-color: rgba(0, 0, 0, 0.15);
+  }
+
+  .content {
+    flex: 1;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding-left: 64rpx;
+    padding-right: 64rpx;
+  }
+
+  .avatar {
+    width: 128rpx;
+    height: 128rpx;
+    border-radius: 64rpx;
+  }
+
+  .invite-text {
+    margin-top: 28rpx;
+    color: #E5E7EB;
+    font-size: 28rpx;
+  }
+
+  .room-name {
+    margin-top: 28rpx;
+    color: #FFFFFF;
+    font-size: 48rpx;
+    font-weight: 600;
+    text-align: center;
+    lines: 2;
+    text-overflow: ellipsis;
+  }
+
+  .meta-text {
+    margin-top: 24rpx;
+    color: #B8BFCC;
+    font-size: 26rpx;
+  }
+
+  /* ==================== 底部滑块 + 拒绝 ==================== */
+  .bottom {
+    flex-direction: column;
+    align-items: center;
+    padding-bottom: 96rpx;
+  }
+
+
+  .slider-track {
+    position: relative;
+    height: 154rpx;
+    border-radius: 100rpx;
+    background-color: rgba(255, 255, 255, 0.16);
+    justify-content: center;
+    align-items: center;
+    overflow: hidden;
+  }
+
+  .slider-label {
+    color: #FFFFFF;
+    font-size: 32rpx;
+  }
+
+  .slider-thumb {
+    position: absolute;
+    top: 12rpx;
+    left: 12rpx;
+    background-color: #1C66E5;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .slider-thumb-icon {
+    width: 44rpx;
+    height: 44rpx;
+  }
+
+  .reject-btn {
+    margin-top: 48rpx;
+    height: 60rpx;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .reject-text {
+    color: #D5E0F2;
+    font-size: 30rpx;
+  }
+</style>

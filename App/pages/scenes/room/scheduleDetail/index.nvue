@@ -1,0 +1,556 @@
+<template>
+  <view class="page" :style="{ minHeight: safeArea.height + 'px' }">
+    <CustomNavbar
+      title="房间详情"
+      :showMenu="canEdit && !isRoomStarted"
+      :showShadow="false"
+      @back="handleBack"
+    >
+      <template #right>
+        <!-- 用 slot 替代默认菜单的「···」图标，保持「编辑」文本。
+             @tap.stop 防止冒泡到 navbar__right 的 tap（避免 menuSelect 兜底被触发） -->
+        <view v-if="canEdit && !isRoomStarted" class="edit-btn" @tap.stop="handleEdit">
+          <text class="edit-btn-text">编辑</text>
+        </view>
+      </template>
+    </CustomNavbar>
+
+    <view class="card card-info">
+      <view class="form-item">
+        <text class="form-label">房间名称</text>
+        <text class="form-value" :numberOfLines="1">{{ roomName }}</text>
+      </view>
+      <view class="form-item" @tap="handleCopyRoomID">
+        <text class="form-label">房间号</text>
+        <view class="form-value-roomid">
+          <text class="form-value" :numberOfLines="1">{{ roomID }}</text>
+          <image class="copy-icon" src="/static/images/room/room_copy.png" mode="aspectFit" />
+        </view>
+      </view>
+      <view class="form-item">
+        <text class="form-label">开始时间</text>
+        <text class="form-value" :numberOfLines="1">{{ startTimeText }}</text>
+      </view>
+      <view class="form-item">
+        <text class="form-label">房间时长</text>
+        <text class="form-value" :numberOfLines="1">{{ durationText }}</text>
+      </view>
+      <!-- 有密码时才显示行（v-if，整行不渲染而不是留空）：
+           复用 .form-value-roomid 视觉模式（右侧带复制图标）；
+           显示/隐藏密码本身由 isRoomEncrypted 决定，与「编辑」对房主可见的逻辑独立 -->
+      <view v-if="isRoomEncrypted" class="form-item" @tap="handleCopyPassword">
+        <text class="form-label">房间密码</text>
+        <view class="form-value-roomid">
+          <text class="form-value" :numberOfLines="1">{{ roomPassword }}</text>
+          <image class="copy-icon" src="/static/images/room/room_copy.png" mode="aspectFit" />
+        </view>
+      </view>
+      <view class="form-item">
+        <text class="form-label">发起人</text>
+        <view class="form-value-owner">
+          <image
+            v-if="ownerAvatar.length > 0"
+            class="owner-avatar"
+            :src="ownerAvatar"
+            mode="aspectFill"
+          />
+          <text class="form-value-line" :numberOfLines="1">{{ ownerText }}</text>
+        </view>
+      </view>
+      <view class="form-item" @tap="handleShowMembers">
+        <text class="form-label">参与成员</text>
+        <view class="form-value-members">
+          <image
+            v-for="u in previewAvatars"
+            :key="u.userID"
+            class="members-avatar"
+            :src="u.avatarURL"
+            mode="aspectFill"
+          />
+          <text class="form-value-line" :numberOfLines="1">{{ attendeesList.length }}人</text>
+          <text class="members-arrow">›</text>
+        </view>
+      </view>
+    </view>
+
+    <view class="card-gap"></view>
+
+    <view class="card card-actions">
+      <view class="action-item" @tap="handleEnterRoom">
+        <text class="action-text-primary">进入房间</text>
+      </view>
+      <view class="action-item" @tap="handleShowInvite">
+        <text class="action-text-primary">邀请成员</text>
+      </view>
+      <!-- 会议已开始 → 取消入口隐藏（一旦有人进入，就不能再"取消"了） -->
+      <template v-if="!isRoomStarted && canEdit">
+        <view class="action-item" @tap="handleCancelRoom">
+          <text class="action-text-danger">取消房间</text>
+        </view>
+      </template>
+    </view>
+
+    <RoomInviteSheet
+      :visible="isInviteSheetVisible"
+      :roomID="roomID"
+      title="邀请成员"
+      @close="isInviteSheetVisible = false"
+    />
+
+    <!-- 房主：取消房间确认 -->
+    <RoomDialog
+      v-model="isCancelDialogVisible"
+      title="取消房间"
+      confirmButton="取消房间"
+      cancelButton="暂不取消"
+      @confirm="handleCancelConfirm"
+      @cancel="isCancelDialogVisible = false"
+    >
+      <text class="dialog-message">{{ cancelConfirmMessage }}</text>
+    </RoomDialog>
+
+    <!-- 参与成员列表弹窗（底部 sheet，复用 RoomBottomSheet 外观） -->
+    <RoomBottomSheet
+      :visible="isMembersSheetVisible"
+      :title="`参与成员（${attendeesList.length}）`"
+      theme="light"
+      @close="handleCloseMembers"
+    >
+      <scroll-view class="members-sheet-list" scroll-y>
+        <view
+          v-for="u in attendeesList"
+          :key="u.userID"
+          class="sheet-member-item"
+        >
+          <image class="member-avatar" :src="u.avatarURL || defaultAvatar" mode="aspectFill" />
+          <text class="member-name" :numberOfLines="1">{{ u.displayName }}</text>
+        </view>
+      </scroll-view>
+    </RoomBottomSheet>
+  </view>
+</template>
+
+<script setup lang="ts">
+  import { ref, computed, onMounted } from 'vue';
+  import { onLoad, onShow } from '@dcloudio/uni-app';
+  import { useLoginState, useRoomState, RoomType } from '@/uni_modules/tuikit-atomic-x/state';
+  import type { RoomInfo, RoomUser } from '@/uni_modules/tuikit-atomic-x/types/room';
+  import RoomInviteSheet from '../components/RoomInviteSheet/index.nvue';
+  import RoomDialog from '../components/RoomDialog/index.nvue';
+  import RoomBottomSheet from '../components/RoomBottomSheet/index.nvue';
+  import CustomNavbar from '@/uni_modules/tuikit-atomic-x/components/CustomNavbar/CustomNavbar.nvue';
+  import { showErrorToast } from '../utils/errorHandler';
+  import { formatDuration, formatFullDateTime } from '../utils/scheduleUtils';
+  import { showToast } from '@/uni_modules/tuikit-atomic-x/utils/toast';
+
+  const cancelConfirmMessage = '取消后，其他成员将无法加入该房间，确定要取消吗？';
+
+  const { loginUserInfo } = useLoginState();
+  const roomState = useRoomState();
+
+  const roomID = ref('');
+  const roomInfo = ref<RoomInfo | null>(null);
+  const scheduledAttendees = ref<RoomUser[]>([]);
+
+  const isInviteSheetVisible = ref(false);
+  const isCancelDialogVisible = ref(false);
+
+  const safeArea = ref({
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    width: 375,
+    height: 750,
+  });
+
+  const canEdit = computed(() => {
+    const owner = roomInfo.value?.roomOwner?.userID ?? '';
+    const me = loginUserInfo.value?.userID ?? '';
+    return owner.length > 0 && me.length > 0 && owner === me;
+  });
+
+  const isRoomStarted = computed(() => {
+    const start = roomInfo.value?.scheduledStartTime ?? 0;
+    if (start <= 0) return false;
+    return Math.floor(Date.now() / 1000) >= start;
+  });
+
+  const roomName = computed(() => roomInfo.value?.roomName || roomID.value);
+  const roomPassword = computed(() => roomInfo.value?.password || '');
+  /** 是否有密码（决定详情页是否渲染「房间密码」一行） */
+  const isRoomEncrypted = computed(() => roomPassword.value.length > 0);
+  const startTimeText = computed(() => formatFullDateTime(roomInfo.value?.scheduledStartTime * 1000));
+  const ownerText = computed(() => {
+    const owner = roomInfo.value?.roomOwner;
+    if (!owner) return '';
+    const nick = (owner as any).userName || (owner as any).nickname || '';
+    return nick.length > 0 ? nick : owner.userID;
+  });
+  const ownerAvatar = computed(() => (roomInfo.value?.roomOwner as any)?.avatarURL || '');
+
+  const defaultAvatar = 'https://web.sdk.qcloud.com/im/assets/all-in-one/user.png';
+  const attendeesList = computed(() => {
+    const list: Array<{ userID: string; displayName: string; avatarURL: string }> = [];
+    const owner = roomInfo.value?.roomOwner;
+    if (owner) {
+      const ownerNick = (owner as any).userName || (owner as any).nickname || '';
+      list.push({
+        userID: owner.userID,
+        displayName: ownerNick.length > 0 ? ownerNick : owner.userID,
+        avatarURL: (owner as any).avatarURL || '',
+      });
+    }
+    const attendees: RoomUser[] = scheduledAttendees.value.length > 0
+      ? scheduledAttendees.value
+      : ((roomInfo.value?.scheduleAttendees || []) as RoomUser[]);
+    for (const u of attendees) {
+      if (owner && u.userID === owner.userID) continue; // 房主已在队首，跳过
+      const nick = (u as any).userName || (u as any).nickname || '';
+      list.push({
+        userID: u.userID,
+        displayName: nick.length > 0 ? nick : u.userID,
+        avatarURL: (u as any).avatarURL || '',
+      });
+    }
+    return list;
+  });
+
+  const MAX_PREVIEW_AVATARS = 4;
+  const previewAvatars = computed(() => {
+    const src = attendeesList.value.slice(0, MAX_PREVIEW_AVATARS);
+    return src.map((u) => ({ userID: u.userID, avatarURL: u.avatarURL || defaultAvatar }));
+  });
+  const durationText = computed(() => {
+    const start = roomInfo.value?.scheduledStartTime ?? 0;
+    const end = roomInfo.value?.scheduledEndTime ?? 0;
+    if (start <= 0 || end <= start) return '';
+    // scheduledStartTime/EndTime 是秒级（types/room.ts），end-start 单位是秒，除以 60 转分钟
+    return formatDuration(Math.round((end - start) / 60));
+  });
+
+  onLoad((options: any) => {
+    roomID.value = options?.roomID ? decodeURIComponent(String(options.roomID)) : '';
+  });
+
+  onMounted(() => {
+    uni.getSystemInfo({
+      success: (res: any) => {
+        safeArea.value = res.safeArea;
+      },
+    });
+  });
+
+  onShow(() => {
+    fetchRoomInfo();
+  });
+
+  function fetchRoomInfo(): void {
+    if (roomID.value.length === 0) return;
+    roomState
+      .getRoomInfo({ roomID: roomID.value })
+      .then((info: RoomInfo) => {
+        roomInfo.value = info;
+        fetchScheduledAttendees();
+      })
+      .catch((e: any) => {
+        showErrorToast(e, '获取房间信息失败');
+      });
+  }
+
+  function fetchScheduledAttendees(): void {
+    if (roomID.value.length === 0) return;
+    const collected: RoomUser[] = [];
+    const MAX_PAGES = 50; // 兜底，防止 SDK bug 致 cursor 永不为空时死循环
+    let pageIndex = 0;
+    let cursor = '';
+    const loopFetch = (): Promise<void> => {
+      return roomState
+        .getScheduledAttendees({ roomID: roomID.value, cursor })
+        .then((res: { attendees: RoomUser[]; cursor: string; totalAttendeesCount: number }) => {
+          if (res?.attendees?.length > 0) collected.push(...res.attendees);
+          pageIndex += 1;
+          // cursor 为空 = 拉完；超过 MAX_PAGES 也强制结束（防御）
+          if (!res?.cursor || pageIndex >= MAX_PAGES) {
+            scheduledAttendees.value = collected;
+            return;
+          }
+          cursor = res.cursor;
+          return loopFetch();
+        });
+    };
+    loopFetch().catch((e: any) => {
+      console.warn('[scheduleDetail] getScheduledAttendees failed:', e);
+    });
+  }
+
+  function handleBack(): void {
+    uni.navigateBack();
+  }
+
+  function handleEdit(): void {
+    const info = roomInfo.value;
+    if (info == null) return;
+    const start = info.scheduledStartTime ?? 0;
+    const end = info.scheduledEndTime ?? 0;
+    // scheduledStartTime/EndTime 是秒级（types/room.ts），end-start 单位是秒，除以 60 转分钟
+    const duration = end > start ? Math.round((end - start) / 60) : 30;
+    const query = [
+      `roomID=${encodeURIComponent(roomID.value)}`,
+      `roomName=${encodeURIComponent(info.roomName || '')}`,
+      `roomType=${info.roomType ?? RoomType.Standard}`,
+      `startTime=${start * 1000}`,
+      `duration=${duration}`,
+      `allMicDisabled=${info.isAllMicrophoneDisabled ? 1 : 0}`,
+      `allCameraDisabled=${info.isAllCameraDisabled ? 1 : 0}`,
+      `allMessageDisabled=${info.isAllMessageDisabled ? 1 : 0}`,
+      `allScreenShareDisabled=${info.isAllScreenShareDisabled ? 1 : 0}`,
+      `password=${encodeURIComponent(info.password || '')}`,
+    ].join('&');
+    uni.navigateTo({ url: `/pages/scenes/room/schedule/index?${query}` });
+  }
+
+  function handleEnterRoom(): void {
+    if (roomID.value.length === 0) return;
+    const query = [
+      'mode=join',
+      `roomID=${encodeURIComponent(roomID.value)}`,
+      'autoEnableCamera=1',
+      'autoEnableMicrophone=1',
+      'autoEnableSpeaker=1',
+    ].join('&');
+    uni.navigateTo({ url: `/pages/scenes/room/main/index?${query}` });
+  }
+
+  function handleShowInvite(): void {
+    isInviteSheetVisible.value = true;
+  }
+
+  /** 房间号 + 复制图标 → 复制到剪贴板 */
+  function handleCopyRoomID(): void {
+    if (roomID.value.length === 0) return;
+    uni.setClipboardData({
+      data: roomID.value,
+      success: () => {
+        showToast('房间号已复制');
+      },
+      fail: () => {
+        showToast('复制失败');
+      },
+    });
+  }
+
+  /** 房间密码行 + 复制图标 → 复制到剪贴板（与 handleCopyRoomID 同模式，toast 区分） */
+  function handleCopyPassword(): void {
+    if (roomPassword.value.length === 0) return;
+    uni.setClipboardData({
+      data: roomPassword.value,
+      success: () => {
+        showToast('密码已复制');
+      },
+      fail: () => {
+        showToast('复制失败');
+      },
+    });
+  }
+
+  /** 参与成员行点击：弹一个全量成员列表 sheet（与 RoomParticipantList 同构） */
+  const isMembersSheetVisible = ref(false);
+  function handleShowMembers(): void {
+    isMembersSheetVisible.value = true;
+  }
+  function handleCloseMembers(): void {
+    isMembersSheetVisible.value = false;
+  }
+
+  function handleCancelRoom(): void {
+    isCancelDialogVisible.value = true;
+  }
+
+  function handleCancelConfirm(): void {
+    isCancelDialogVisible.value = false;
+    roomState
+      .cancelScheduledRoom({ roomID: roomID.value })
+      .then(() => {
+        uni.$emit('scheduledRoomListChanged', {});
+        showToast('已取消房间');
+        setTimeout(() => {
+          uni.navigateBack();
+        }, 600);
+      })
+      .catch((e: any) => {
+        showErrorToast(e, '取消房间失败');
+      });
+  }
+</script>
+
+<style>
+  .page {
+    flex: 1;
+    background-color: #F8F9FB;
+    flex-direction: column;
+  }
+
+  .edit-btn {
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-end;
+  }
+
+  .edit-btn-text {
+    font-size: 32rpx;
+    font-weight: 500;
+    color: #1C66E5;
+  }
+
+  .card {
+    margin: 0 32rpx;
+    background-color: #FFFFFF;
+    border-radius: 12rpx;
+    flex-direction: column;
+  }
+
+  .card-info {
+    padding: 20rpx 40rpx;
+  }
+
+  .card-actions {
+    background-color: transparent;
+  }
+
+  .card-gap {
+    height: 8rpx;
+  }
+
+  /* 房间号行：复制图标 */
+  .form-value-roomid {
+    flex: 1;
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-end;
+  }
+  .form-value-roomid .form-value {
+    text-align: right;
+    margin-right: 12rpx;
+  }
+  .copy-icon {
+    width: 32rpx;
+    height: 32rpx;
+  }
+
+  /* 发起人行：右侧头像 + 名称 */
+  .form-value-owner {
+    flex: 1;
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-end;
+  }
+  .owner-avatar {
+    width: 56rpx;
+    height: 56rpx;
+    border-radius: 28rpx;
+    margin-right: 12rpx;
+  }
+
+  /* 参与成员行：右侧头像 + N人 + 右箭头 */
+  .form-value-members {
+    flex: 1;
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-end;
+  }
+  .members-avatar {
+    width: 56rpx;
+    height: 56rpx;
+    border-radius: 28rpx;
+    margin-right: 12rpx;
+  }
+  .members-arrow {
+    font-size: 36rpx;
+    color: #6B7385;
+    margin-left: 12rpx;
+    line-height: 40rpx;
+  }
+
+  .members-sheet-list {
+    max-height: 600rpx;
+  }
+  .sheet-member-item {
+    flex-direction: row;
+    align-items: center;
+    margin: 0 32rpx;
+    padding: 20rpx 0;
+    border-bottom: 1rpx solid #EDEDED;
+  }
+  .sheet-member-item .member-avatar {
+    margin-right: 20rpx;
+    width: 56rpx;
+    height: 56rpx;
+    border-radius: 28rpx;
+  }
+
+  .form-item {
+    flex-direction: row;
+    align-items: center;
+    padding: 20rpx 0;
+  }
+
+  .form-label {
+    width: 176rpx;
+    font-size: 32rpx;
+    font-weight: 400;
+    color: #2B2E38;
+  }
+
+  .form-value {
+    flex: 1;
+    font-size: 32rpx;
+    font-weight: 500;
+    color: #A2A4A8;
+    text-align: right;
+    lines: 1;
+    text-overflow: ellipsis;
+  }
+
+  .form-value-line {
+    max-width: 360rpx;
+    font-size: 32rpx;
+    font-weight: 500;
+    color: #A2A4A8;
+    text-align: right;
+    lines: 1;
+    text-overflow: ellipsis;
+  }
+
+  /* 操作行整行可点，文字居中（与设计图一致） */
+  .action-item {
+    flex-direction: row;
+    justify-content: center;
+    align-items: center;
+    padding: 22rpx 0 30rpx;
+    background-color: #F0F3FA;
+    border-radius: 16rpx;
+    margin-top: 32rpx;
+  }
+
+  .action-text-primary {
+    font-size: 32rpx;
+    line-height: 36rpx;
+    font-weight: 500;
+    color: #0961F7;
+  }
+
+  .action-text-danger {
+    font-size: 32rpx;
+    line-height: 36rpx;
+    font-weight: 500;
+    color: #ED414D;
+  }
+
+  .dialog-message {
+    font-size: 28rpx;
+    line-height: 44rpx;
+    color: #4F586B;
+    text-align: center;
+  }
+</style>

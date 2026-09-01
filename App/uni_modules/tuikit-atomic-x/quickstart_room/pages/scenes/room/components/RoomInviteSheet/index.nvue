@@ -1,0 +1,276 @@
+<template>
+  <RoomBottomSheet :visible="visible" :title="title" :theme="theme" @close="handleClose">
+    <view class="invite-root">
+      <view class="invite-row">
+        <text class="invite-label">房间名称</text>
+        <text class="invite-value" :numberOfLines="1">{{ displayRoomName }}</text>
+      </view>
+
+      <view v-if="showTime" class="invite-row">
+        <text class="invite-label">房间时间</text>
+        <text class="invite-value" :numberOfLines="1">{{ roomTimeText }}</text>
+      </view>
+
+      <view class="invite-row">
+        <text class="invite-label">房间号</text>
+        <text class="invite-value" :numberOfLines="1">{{ roomIDDisplay }}</text>
+        <view class="invite-copy-btn" @tap.stop="handleCopyRoomID">
+          <image
+            class="invite-copy-icon"
+            :src="theme === 'dark' ? '/static/images/room/room_copy.png' : '/static/images/room/room_copy_dark.png'"
+            mode="aspectFit"
+          />
+        </view>
+      </view>
+
+      <view v-if="hasPassword" class="invite-row">
+        <text class="invite-label">房间密码</text>
+        <text class="invite-value" :numberOfLines="1">{{ roomPassword }}</text>
+        <view class="invite-copy-btn" @tap.stop="handleCopyPassword">
+          <image
+            class="invite-copy-icon"
+            :src="theme === 'dark' ? '/static/images/room/room_copy.png' : '/static/images/room/room_copy_dark.png'"
+            mode="aspectFit"
+          />
+        </view>
+      </view>
+
+      <view class="invite-actions">
+        <view class="invite-copy-all" @tap="handleCopyAll">
+          <text class="invite-copy-all-text">复制房间信息</text>
+        </view>
+      </view>
+
+      <view class="bottom-extra-space" />
+    </view>
+  </RoomBottomSheet>
+</template>
+
+<script setup lang="ts">
+  import { computed, ref, watch } from 'vue';
+  import type { PropType } from 'vue';
+  import { useRoomState } from '@/uni_modules/tuikit-atomic-x/state';
+  import type { RoomInfo } from '@/uni_modules/tuikit-atomic-x/types';
+  import RoomBottomSheet from '../RoomBottomSheet/index.nvue';
+  import {
+    formatFullDateTime,
+    formatRoomIDDisplay,
+  } from '../../utils/scheduleUtils';
+  import { showToast } from '@/uni_modules/tuikit-atomic-x/utils/toast';
+
+  const props = defineProps({
+    visible: { type: Boolean, default: false },
+    title: { type: String, default: '邀请成员' },
+    roomID: { type: String, required: true },
+    showTime: { type: Boolean, default: true },
+    theme: { type: String as PropType<'light' | 'dark'>, default: 'light' },
+  });
+  const emit = defineEmits<{ (e: 'close'): void }>();
+
+  const roomState = useRoomState();
+
+  const roomInfo = ref<RoomInfo | null>(null);
+  let fetchSeq = 0; // 顺序号，过滤旧请求覆盖新数据（快速开关时）
+
+  watch(
+    () => props.visible,
+    (v) => {
+      if (v && props.roomID.length > 0) {
+        const seq = ++fetchSeq;
+        roomState
+          .getRoomInfo({ roomID: props.roomID })
+          .then((info: RoomInfo) => {
+            if (seq !== fetchSeq) return; // 用户已关上重开，旧请求忽略
+            roomInfo.value = info;
+          })
+          .catch((e: any) => {
+            console.warn('[RoomInviteSheet] getRoomInfo failed:', e);
+          });
+      } else {
+        roomInfo.value = null;
+      }
+    },
+    { immediate: true },
+  );
+
+  const displayRoomName = computed(() => {
+    const n = roomInfo.value?.roomName?.trim() ?? '';
+    if (n.length > 0) return n;
+    if (props.roomID.length > 0) return `会议 ${props.roomID}`;
+    return '会议邀请';
+  });
+
+  const roomIDDisplay = computed(() => formatRoomIDDisplay(props.roomID));
+
+  const roomPassword = computed(() => roomInfo.value?.password ?? '');
+  const hasPassword = computed(() => roomPassword.value.length > 0);
+
+  const roomTimeText = computed(() => {
+    const info = roomInfo.value;
+    if (!info) return '';
+    const startSec = info.scheduledStartTime;
+    const endSec = info.scheduledEndTime;
+    if (startSec && endSec && startSec > 0 && endSec > 0) {
+      return `${formatFullDateTime(startSec * 1000)}-${formatFullDateTime(endSec * 1000).slice(-5)}`;
+    }
+    if (info.createTime && info.createTime > 0) {
+      return formatFullDateTime(info.createTime);
+    }
+    return '';
+  });
+
+  const displayText = computed(() => {
+    const lines: string[] = [];
+    lines.push(`房间名称：${displayRoomName.value}`);
+    if (props.showTime && roomTimeText.value.length > 0) {
+      lines.push(`房间时间：${roomTimeText.value}`);
+    }
+    lines.push(`房间号：${roomIDDisplay.value}`);
+    if (hasPassword.value) {
+      lines.push(`房间密码：${roomPassword.value}`);
+    }
+    return lines.join('\n');
+  });
+
+  function copyText(data: string, successText: string): void {
+    if (data.length === 0) return;
+    uni.setClipboardData({
+      data,
+    });
+  }
+
+  function handleCopyRoomID(): void {
+    copyText(props.roomID, '房间号已复制');
+  }
+
+  function handleCopyPassword(): void {
+    copyText(roomPassword.value, '密码已复制');
+  }
+
+  function handleCopyAll(): void {
+    if (!roomInfo.value) {
+      setTimeout(() => {
+        if (roomInfo.value) {
+          copyText(displayText.value, '房间信息已复制');
+        } else {
+          copyText(props.roomID, '房间号已复制');
+        }
+      }, 200);
+      return;
+    }
+    copyText(displayText.value, '房间信息已复制');
+  }
+
+  function handleClose(): void {
+    emit('close');
+  }
+</script>
+
+<style scoped>
+  .invite-root {
+    flex-direction: column;
+  }
+
+  .invite-row {
+    flex-direction: row;
+    align-items: center;
+    padding: 20rpx 32rpx;
+  }
+
+  .invite-row + .invite-row {
+    border-top-width: 1rpx;
+    border-top-style: solid;
+  }
+
+  /* ==================== light 主题（默认）==================== */
+  .theme-light .invite-label {
+    color: #7C8395;
+  }
+
+  .theme-light .invite-value {
+    color: #1A1D24;
+  }
+
+  .theme-light .invite-row + .invite-row {
+    border-top-color: #EFF2F7;
+  }
+
+  .theme-light .invite-copy-all {
+    background-color: #F0F8FF;
+    border-color: #A8C8FF;
+  }
+
+  .theme-light .invite-copy-all-text {
+    color: #0468FC;
+  }
+
+  /* ==================== dark 主题 ==================== */
+
+  .theme-dark .invite-label {
+    color: #969EB4;
+  }
+
+  .theme-dark .invite-value {
+    color: #FFFFFF;
+  }
+
+  .theme-dark .invite-row + .invite-row {
+    border-top-color: #26282C;
+  }
+
+  .theme-dark .invite-copy-all {
+    background-color: #353740;
+    border-color: #353740;
+  }
+
+  .theme-dark .invite-copy-all-text {
+    color: #FFFFFF;
+  }
+
+  .invite-label {
+    font-size: 28rpx;
+    width: 144rpx;
+  }
+
+  .invite-value {
+    max-width: 500rpx;
+    font-size: 30rpx;
+    margin-right: 16rpx;
+    lines: 1;
+    text-overflow: ellipsis;
+  }
+
+  .invite-copy-btn {
+    width: 40rpx;
+    height: 40rpx;
+    justify-content: center;
+    align-items: center;
+    padding: 0;
+  }
+
+  .invite-copy-icon {
+    width: 32rpx;
+    height: 32rpx;
+  }
+
+  .invite-actions {
+    padding: 20rpx 32rpx;
+  }
+
+  .invite-copy-all {
+    padding: 20rpx 0;
+    border-width: 2rpx;
+    border-style: solid;
+    border-radius: 16rpx;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .invite-copy-all-text {
+    font-size: 32rpx;
+  }
+
+  .bottom-extra-space {
+    height: 24rpx;
+  }
+</style>

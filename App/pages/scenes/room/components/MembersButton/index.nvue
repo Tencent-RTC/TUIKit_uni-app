@@ -46,8 +46,9 @@
 
   const participantCount = computed(() => {
     const fromRoom = currentRoom.value?.participantCount;
+    const fromList = participantList.value?.length || 0;
     if (typeof fromRoom === 'number' && fromRoom > 0) return fromRoom;
-    return participantList.value?.length || 0;
+    return fromList;
   });
 
   const isParticipantListVisible = ref(false);

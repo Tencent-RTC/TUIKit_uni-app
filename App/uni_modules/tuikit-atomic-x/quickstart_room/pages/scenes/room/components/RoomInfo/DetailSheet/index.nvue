@@ -30,6 +30,7 @@
   import { computed } from 'vue';
   import { useRoomState } from '@/uni_modules/tuikit-atomic-x/state';
   import DetailItem from './DetailItem.nvue';
+  import { showToast } from '@/uni_modules/tuikit-atomic-x/utils/toast';
 
   const props = defineProps({
     roomID: { type: String, required: true },
@@ -51,7 +52,7 @@
     uni.setClipboardData({
       data: props.roomID,
       success: () => {
-        uni.showToast({ icon: 'none', title: '房间号已复制' });
+        showToast('房间号已复制');
       },
     });
   }
@@ -63,7 +64,7 @@
     uni.setClipboardData({
       data: allInfo,
       success: () => {
-        uni.showToast({ icon: 'none', title: '房间信息复制成功' });
+        showToast('房间信息复制成功');
       },
     });
   }

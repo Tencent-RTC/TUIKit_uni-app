@@ -9,13 +9,21 @@ class RoomViewFlowLayout: UICollectionViewFlowLayout {
     
     // MARK: - Constants
     private struct LayoutConfig {
-        static let itemSize: CGSize = CGSize(width: 176, height: 176)
+        static let preferredItemSize: CGFloat = 176
         static let itemSpacing: CGFloat = 8.0
         static let lineSpacing: CGFloat = 8.0
+        static let horizontalPadding: CGFloat = 8.0
         static let maxColumns: Int = 2
         static let maxRows: Int = 3
         static let maxItemsPerPage: Int = 6
         static let screenSharingPadding: CGFloat = 0
+
+        static func calculatedItemSize(for containerWidth: CGFloat) -> CGSize {
+            let cols = CGFloat(maxColumns)
+            let available = containerWidth - 2 * horizontalPadding - (cols - 1) * itemSpacing
+            let width = min(preferredItemSize, floor(available / cols))
+            return CGSize(width: max(width, 80), height: max(width, 80))
+        }
     }
     
     // MARK: - Initialization
@@ -31,7 +39,7 @@ class RoomViewFlowLayout: UICollectionViewFlowLayout {
     
     private func setupDefaults() {
         scrollDirection = .horizontal
-        itemSize = LayoutConfig.itemSize
+        itemSize = LayoutConfig.calculatedItemSize(for: UIScreen.main.bounds.width)
         minimumInteritemSpacing = LayoutConfig.itemSpacing
         minimumLineSpacing = LayoutConfig.lineSpacing
     }
@@ -166,11 +174,12 @@ class RoomViewFlowLayout: UICollectionViewFlowLayout {
     ) -> [UICollectionViewLayoutAttributes] {
         
         var attributes: [UICollectionViewLayoutAttributes] = []
+        let itemSize = LayoutConfig.calculatedItemSize(for: containerWidth)
         
         let rows = Int(ceil(Double(itemsInPage) / Double(LayoutConfig.maxColumns)))
-        let totalGridWidth = CGFloat(LayoutConfig.maxColumns) * LayoutConfig.itemSize.width +
+        let totalGridWidth = CGFloat(LayoutConfig.maxColumns) * itemSize.width +
                             CGFloat(LayoutConfig.maxColumns - 1) * LayoutConfig.itemSpacing
-        let totalGridHeight = CGFloat(LayoutConfig.maxRows) * LayoutConfig.itemSize.height +
+        let totalGridHeight = CGFloat(LayoutConfig.maxRows) * itemSize.height +
                              CGFloat(LayoutConfig.maxRows - 1) * LayoutConfig.lineSpacing
         
         let standardHorizontalOffset = (containerWidth - totalGridWidth) / 2.0
@@ -180,17 +189,17 @@ class RoomViewFlowLayout: UICollectionViewFlowLayout {
             let indexPath = IndexPath(item: startItemIndex, section: section)
             let attribute = UICollectionViewLayoutAttributes(forCellWith: indexPath)
             attribute.frame = CGRect(
-                x: pageOffsetX + (containerWidth - LayoutConfig.itemSize.width) / 2.0,
-                y: (containerHeight - LayoutConfig.itemSize.height) / 2.0,
-                width: LayoutConfig.itemSize.width,
-                height: LayoutConfig.itemSize.height
+                x: pageOffsetX + (containerWidth - itemSize.width) / 2.0,
+                y: (containerHeight - itemSize.height) / 2.0,
+                width: itemSize.width,
+                height: itemSize.height
             )
             return [attribute]
         }
         
         let verticalOffset: CGFloat
         if pageIndex == 0 {
-            let actualGridHeight = CGFloat(rows) * LayoutConfig.itemSize.height +
+            let actualGridHeight = CGFloat(rows) * itemSize.height +
                                   CGFloat(max(0, rows - 1)) * LayoutConfig.lineSpacing
             verticalOffset = (containerHeight - actualGridHeight) / 2.0
         } else {
@@ -202,13 +211,13 @@ class RoomViewFlowLayout: UICollectionViewFlowLayout {
             let column = itemIndexInPage % LayoutConfig.maxColumns
             
             let x = pageOffsetX + standardHorizontalOffset +
-                   CGFloat(column) * (LayoutConfig.itemSize.width + LayoutConfig.itemSpacing)
+                   CGFloat(column) * (itemSize.width + LayoutConfig.itemSpacing)
             let y = verticalOffset +
-                   CGFloat(row) * (LayoutConfig.itemSize.height + LayoutConfig.lineSpacing)
+                   CGFloat(row) * (itemSize.height + LayoutConfig.lineSpacing)
             
             let indexPath = IndexPath(item: startItemIndex + itemIndexInPage, section: section)
             let attribute = UICollectionViewLayoutAttributes(forCellWith: indexPath)
-            attribute.frame = CGRect(x: x, y: y, width: LayoutConfig.itemSize.width, height: LayoutConfig.itemSize.height)
+            attribute.frame = CGRect(x: x, y: y, width: itemSize.width, height: itemSize.height)
             
             attributes.append(attribute)
         }

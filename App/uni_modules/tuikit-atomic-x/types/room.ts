@@ -95,9 +95,9 @@ export interface RoomInfo {
   readonly createTime?: number;
   /** 房间当前状态 */
   readonly roomStatus?: RoomStatus;
-  /** 预约开始时间（毫秒时间戳） */
+  /** 预约开始时间（秒级时间戳） */
   scheduledStartTime?: number;
-  /** 预约结束时间（毫秒时间戳） */
+  /** 预约结束时间（秒级时间戳） */
   scheduledEndTime?: number;
   /** 开始前多少秒发送提醒通知 */
   startReminderInSeconds?: number;
@@ -113,7 +113,7 @@ export interface RoomInfo {
   isAllScreenShareDisabled?: boolean;
   /** 是否禁用消息发送 */
   isAllMessageDisabled?: boolean;
-  /** 录制信息（房间内开启录制时由底层下发） */
+  /** 录制信息 */
   recordingInfo?: RecordingInfo;
 }
 
@@ -123,9 +123,9 @@ export type ScheduleRoomOptions = {
   roomName?: string;
   /** 加入房间的密码 */
   password?: string;
-  /** 预约开始时间（毫秒时间戳） */
+  /** 预约开始时间（秒级时间戳） */
   scheduleStartTime: number;
-  /** 预约结束时间（毫秒时间戳） */
+  /** 预约结束时间（秒级时间戳） */
   scheduleEndTime: number;
   /** 开始前多少秒发送提醒通知 */
   reminderSecondsBeforeStart?: number;

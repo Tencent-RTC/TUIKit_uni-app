@@ -1,12 +1,14 @@
 <script lang="ts">
   import { loginFromStorage } from './server/loginService';
   import { initCallService } from '@/uni_modules/tuikit-atomic-x/server/callService';
+  import { initRoomCallService } from '@/uni_modules/tuikit-atomic-x/server/roomCallService';
   let firstBackTime = 0
   export default {
     onLaunch: function () {
       console.log('App Launch')
       loginFromStorage();
       initCallService();
+      initRoomCallService();
       uni?.removeStorage({
         key: 'showSecurity',
       });

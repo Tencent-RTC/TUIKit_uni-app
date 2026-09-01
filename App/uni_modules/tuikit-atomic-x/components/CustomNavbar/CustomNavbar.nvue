@@ -13,8 +13,12 @@
       <!-- 左侧区域 -->
       <view class="navbar__left" @tap="handleBack">
         <slot name="left">
-          <view v-if="showBack" class="navbar__back-btn">
-            <image class="navbar__back-icon" :src="arrowLeftIcon" />
+          <view
+            v-if="showBack"
+            class="navbar__back-btn"
+            :class="theme === 'dark' ? 'theme-dark' : 'theme-light'"
+          >
+            <image class="navbar__back-icon" :src="backIconSrc" />
           </view>
         </slot>
       </view>
@@ -42,20 +46,22 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue';
 import arrowLeftIcon from './assets/nvue_arrow-left.png';
+import arrowLeftDarkIcon from './assets/nvue_arrow-left_dark.png';
 import menuIcon from './assets/nvue_dots.png';
 
 /**
  * CustomNavbar - 自定义导航栏组件
- * 
+ *
  * @description 适用于 Uniapp NVue (App端) 的自定义导航栏，支持配置驱动模式
- * 
+ *
  * @property {String} title - 导航栏标题
  * @property {Boolean} showBack - 是否显示返回按钮，默认 true
  * @property {Boolean} showShadow - 是否显示底部阴影，默认 true
  * @property {String} backgroundColor - 导航栏背景色，默认 #FFFFFF
  * @property {String} titleColor - 标题颜色，默认 #333333
  * @property {String} homePath - 首页路径，默认 /pages/index/index
- * 
+ * @property {String} theme - 主题 'light' | 'dark'，dark 下返回箭头自动切到 nvue_arrow-left_dark.png
+ *
  * @event {Function} back - 返回按钮点击事件，返回 { type: 'back' | 'home' }
  * @event {Function} menuSelect - 菜单选择事件，返回 { code: string, label: string, index: number }
  */
@@ -99,6 +105,11 @@ const props = defineProps({
   homePath: {
     type: String,
     default: '/pages/index/index'
+  },
+  // 主题：light | dark（dark 下返回图标自动切到 nvue_arrow-left_dark.png）
+  theme: {
+    type: String,
+    default: 'light'
   }
 });
 
@@ -127,6 +138,9 @@ const navbarStyle = computed(() => ({
 const titleStyle = computed(() => ({
   color: props.titleColor
 }));
+
+// 返回图标：dark 下切到白底版（避免深底上黑图标看不见）
+const backIconSrc = computed(() => (props.theme === 'dark' ? arrowLeftDarkIcon : arrowLeftIcon));
 
 /**
  * 处理返回按钮点击
@@ -193,6 +207,11 @@ const handleMenuTap = () => {
 .navbar__back-icon {
   width: 54rpx;
   height: 54rpx;
+}
+
+.theme-dark .navbar__back-icon {
+  width: 32rpx;
+  height: 32rpx;
 }
 
 /* 中间标题区域 - 绝对定位实现视觉居中 */

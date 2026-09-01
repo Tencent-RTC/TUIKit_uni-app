@@ -1,0 +1,70 @@
+<template>
+  <view class="bottom-btn">
+    <view class="bottom-icon-box" :class="{ 'bottom-icon-box-webinar': isWebinar }" @tap="handleTap">
+      <image class="bottom-icon" src="/static/images/room/room_invate_tool.png" mode="aspectFit" />
+      <text class="bottom-text">邀请</text>
+    </view>
+  </view>
+</template>
+
+<script setup lang="ts">
+  /**
+   * 会中「添加成员」工具按钮（纯按钮，只负责 emit）。
+   *
+   * 三入口面板由 main 页面持有（AddMemberSheet），
+   * 不能放在本组件内 —— ToolPanel 收起时会销毁本组件实例，弹窗状态会一起丢失。
+   */
+  import { showToast } from '@/uni_modules/tuikit-atomic-x/utils/toast';
+
+  const props = defineProps({
+    roomID: { type: String, default: '' },
+    isWebinar: { type: Boolean, default: false },
+  });
+
+  const emit = defineEmits(['click']);
+
+  function handleTap(): void {
+    if (props.roomID.length === 0) {
+      showToast('房间号缺失');
+      return;
+    }
+    emit('click', { roomID: props.roomID });
+  }
+</script>
+
+<style>
+  .bottom-btn {
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .bottom-icon-box {
+    width: 104rpx;
+    height: 104rpx;
+    border-radius: 20rpx;
+    background-color: #2A2D38;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .bottom-icon-box-webinar {
+    width: 80rpx;
+    height: 80rpx;
+    border-radius: 16rpx;
+  }
+
+  .bottom-icon {
+    width: 48rpx;
+    height: 48rpx;
+  }
+
+  .bottom-text {
+    color: #FFFFFF;
+    font-size: 20rpx;
+    margin-top: 6rpx;
+    lines: 1;
+    text-overflow: ellipsis;
+  }
+</style>
