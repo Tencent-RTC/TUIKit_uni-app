@@ -5,17 +5,16 @@
   >
     <view class="text-msg__highlight">
       <view
-        v-if="quoteMessage"
+        v-if="quoteMessage != null"
         class="text-msg__quote text-msg__quote--no-select"
+        :class="'text-msg__quote--' + (isSelf ? 'out' : 'in')"
         @tap="handleReferenceTap"
       >
         <view class="text-msg__quote-header">
-          
           <text class="text-msg__quote-sender text-msg__text--no-select">{{ quoteSender }}</text>
         </view>
         <view class="text-msg__quote-body">
-          
-          <text class="text-msg__quote-text text-msg__text--no-select">{{ quoteAbstract }}</text>
+          <text class="text-msg__quote-text text-msg__text--no-select" :lines="1">{{ quoteAbstract }}</text>
         </view>
       </view>
 
@@ -32,15 +31,50 @@
           </template>
         </view>
       </view>
+
+      <!-- 译文区：与原文之间用细分隔线区隔，整体在气泡内自然延展 -->
+      <view v-if="translateBoxVisible" class="text-msg__translate">
+        <view class="text-msg__translate-divider" />
+        <text v-if="isTranslating" class="text-msg__translate-text text-msg__text--no-select">...</text>
+        <view v-else class="text-msg__translate-content">
+          <text class="text-msg__translate-text text-msg__text--no-select">{{ translatedText }}</text>
+          <view class="text-msg__translate-footer">
+            <image class="text-msg__translate-footer-icon" :src="translateFooterIcon" mode="aspectFit" />
+            <text class="text-msg__translate-footer-text text-msg__text--no-select">由 IM 提供翻译支持</text>
+          </view>
+        </view>
+      </view>
     </view>
   </view>
 </template>
 
 <script setup lang="uts">
-import { computed } from 'vue'
-import { parseTextToSegments, hasEmoji, type TextOrEmojiSegment } from '../../../../utils/emojiUtils'
+import { computed, ref, watch, onMounted, onUnmounted, nextTick } from 'vue'
+import { parseTextToSegments, hasEmoji, transformEmojiKeyToName, type TextOrEmojiSegment } from '../../../../utils/emojiUtils'
 
-import { MessageType } from '../../../../types/message'
+import {
+  setMessageTranslateVisibleMapEntry,
+  setMessageTranslatedContentEntry,
+  deleteMessageTranslateVisibleMapEntry
+} from '@/uni_modules/tuikit-atomic-x/utils/messageTranslateVisibleMapStore.uts'
+import { isCallMessage, parseCallMessageData, isVideoCall } from '../../../../utils/callMessageUtils'
+import { useMessageActionState } from '../../../../state/MessageActionState'
+import translateFooterIcon from '../../assets/msg_translate.png'
+
+// 从 UTSJSONObject 读出的 messageType / status 是原始 Number，与 enum 实例比较恒不相等
+// （Kotlin 下 Number != enum object），因此统一用数值字面量，与 Message.uvue 的做法一致
+const MSG_TYPE_TEXT = 1
+const MSG_TYPE_IMAGE = 2
+const MSG_TYPE_VIDEO = 3
+const MSG_TYPE_AUDIO = 4
+const MSG_TYPE_FILE = 5
+const MSG_TYPE_FACE = 6
+const MSG_TYPE_TIPS = 7
+const MSG_TYPE_CUSTOM = 8
+const MSG_TYPE_MERGED = 9
+const MSG_TYPE_STREAM = 10
+const MSG_STATUS_REVOKED = 4
+const MSG_STATUS_DELETED = 5
 
 type Props = {
   message: any | null
@@ -52,6 +86,11 @@ function getCurrentMessage(): any | null {
   const raw: any | null = props.message
   if (raw == null) return null
   return raw
+}
+
+/** typed instance → UTSJSONObject 的唯一安全转换（硬转 as UTSJSONObject 会抛 NPE） */
+function toUTSJSONObject(value: any | null): UTSJSONObject {
+  return JSON.parse<UTSJSONObject>(JSON.stringify(value ?? new UTSJSONObject())) ?? new UTSJSONObject()
 }
 
 function getPayloadText(obj: any | null): string {
@@ -82,18 +121,26 @@ function getQuoteAbstractText(quote: any | null): string {
   if (quote == null) return ''
   const q: UTSJSONObject = quote as UTSJSONObject
   const type: any | null = q['messageType']
-  if (type == MessageType.TEXT) {
+  if (type == MSG_TYPE_TEXT) {
     return getPayloadText(q['messagePayload'] ?? null)
   }
-  if (type == MessageType.IMAGE) return '[图片]'
-  if (type == MessageType.VIDEO) return '[视频]'
-  if (type == MessageType.AUDIO) return '[语音]'
-  if (type == MessageType.FILE) return '[文件]'
-  if (type == MessageType.FACE) return '[表情]'
-  if (type == MessageType.CUSTOM) return '[自定义消息]'
-  if (type == MessageType.MERGED) return '[聊天记录]'
-  if (type == MessageType.TIPS) return '[系统消息]'
-  if (type == MessageType.STREAM) return '[流式消息]'
+  if (type == MSG_TYPE_IMAGE) return '[图片]'
+  if (type == MSG_TYPE_VIDEO) return '[视频]'
+  if (type == MSG_TYPE_AUDIO) return '[语音]'
+  if (type == MSG_TYPE_FILE) return '[文件]'
+  if (type == MSG_TYPE_FACE) return '[表情]'
+  if (type == MSG_TYPE_CUSTOM) {
+    // 通话信令是自定义消息，摘要要还原成"[视频通话]/[语音通话]"，
+    // 否则引用后气泡里只显示"[自定义消息]"
+    if (isCallMessage(quote)) {
+      const callData = parseCallMessageData(quote)
+      return isVideoCall(callData) ? '[视频通话]' : '[语音通话]'
+    }
+    return '[自定义消息]'
+  }
+  if (type == MSG_TYPE_MERGED) return '[聊天记录]'
+  if (type == MSG_TYPE_TIPS) return '[系统消息]'
+  if (type == MSG_TYPE_STREAM) return '[流式消息]'
   return '[消息]'
 }
 
@@ -134,20 +181,250 @@ const quoteSender = computed((): string => {
   return getSenderName(q['sender'] ?? null)
 })
 
+const quoteStatus = computed((): any | null => {
+  const quote = quoteMessage.value
+  if (quote == null) return null
+  const q: UTSJSONObject = quote as UTSJSONObject
+  return q['status']
+})
+
 const quoteAbstract = computed((): string => {
-  return getQuoteAbstractText(quoteMessage.value)
+  const quote = quoteMessage.value
+  if (quote == null) return ''
+  const st: any | null = quoteStatus.value
+  // 原消息被删除 / 撤回时给出明确提示，而不是让引用块空掉
+  if (st == MSG_STATUS_DELETED) return '原消息已删除'
+  if (st == MSG_STATUS_REVOKED) return '原消息已撤回'
+  return transformEmojiKeyToName(getQuoteAbstractText(quote))
 })
 
 const handleReferenceTap = () => {
   const quote = quoteMessage.value
   if (quote == null) return
+  const st: any | null = quoteStatus.value
+  // 原消息已不存在，点击不再跳转
+  if (st == MSG_STATUS_DELETED || st == MSG_STATUS_REVOKED) return
   const q: UTSJSONObject = quote as UTSJSONObject
   const idRaw: any | null = q['msgID']
   const id: string = typeof idRaw == 'string' ? (idRaw as string) : ''
   if (id.length > 0) {
-    uni.$emit('scrollToMessage', id)
+    // uvue 的 uni.$on 回调只接受单个参数，统一用对象负载：{ msgID, message }
+    uni.$emit('scrollToMessage', { msgID: id, message: quote })
   }
 }
+
+// ==================== 消息翻译 ====================
+/** 译文可见态持久化 key：仅记录用户主动隐藏的 msgID（值 false），缺省视为可见 */
+const TRANSLATE_STORAGE_KEY = 'tuikit_message_translate_visible_v1'
+
+const msgID = computed((): string => {
+  const message = getCurrentMessage()
+  if (message == null) return ''
+  const mObj: UTSJSONObject = message as UTSJSONObject
+  const idRaw: any | null = mObj['msgID']
+  return typeof idRaw == 'string' ? (idRaw as string) : ''
+})
+
+/** 译文以原文为 key 缓存在 messagePayload.translatedText 中 */
+const translatedText = computed((): string => {
+  const sourceText: string = messageText.value
+  if (sourceText.length == 0) return ''
+  const message = getCurrentMessage()
+  if (message == null) return ''
+  const mObj: UTSJSONObject = message as UTSJSONObject
+  const payloadRaw: any | null = mObj['messagePayload']
+  if (payloadRaw == null) return ''
+  const payload: UTSJSONObject = payloadRaw as UTSJSONObject
+  const mapRaw: any | null = payload['translatedText']
+  if (mapRaw == null) return ''
+  const mapObj: UTSJSONObject = mapRaw as UTSJSONObject
+  const v: any | null = mapObj[sourceText]
+  return typeof v == 'string' ? (v as string) : ''
+})
+
+const isTranslating = ref(false)
+
+function readVisibleStore(): UTSJSONObject {
+  try {
+    const raw: any | null = uni.getStorageSync(TRANSLATE_STORAGE_KEY)
+    if (raw != null && typeof raw == 'object') {
+      return raw as UTSJSONObject
+    }
+    if (typeof raw == 'string' && (raw as string).length > 0) {
+      const parsed: UTSJSONObject | null = JSON.parse<UTSJSONObject>(raw as string)
+      if (parsed != null) return parsed
+    }
+  } catch (e: any) {}
+  return new UTSJSONObject()
+}
+
+function writeVisibleStore(store: UTSJSONObject): void {
+  try {
+    uni.setStorageSync(TRANSLATE_STORAGE_KEY, store)
+  } catch (e: any) {
+    console.error('[TextMessage] writeVisibleStore failed:', `${e}`)
+  }
+}
+
+const showTranslation = ref(true)
+
+const translateBoxVisible = computed((): boolean => {
+  return isTranslating.value || (translatedText.value.length > 0 && showTranslation.value)
+})
+
+/**
+ * 把译文状态上报给全局 Map —— MessageActions 据此决定按钮显示"翻译"还是"隐藏"。
+ * 必须在 onMounted / translatedText 变化 / showTranslation 变化时都调用，
+ * 否则 MessageActions 读到空记录会一直显示"翻译"。
+ */
+const syncVisibleMap = (): void => {
+  const id: string = msgID.value
+  if (id.length == 0) return
+  const hasContent: boolean = translatedText.value.length > 0
+  setMessageTranslatedContentEntry(id, hasContent)
+  setMessageTranslateVisibleMapEntry(id, hasContent && showTranslation.value)
+}
+
+// 仅写 false（true 即默认值，不写以节省空间）
+const persistShowTranslation = (visible: boolean): void => {
+  const id: string = msgID.value
+  if (id.length == 0) return
+  const store: UTSJSONObject = readVisibleStore()
+  if (visible) {
+    // 恢复可见：写回 true（读取端只判定 false，等价于删除记录，且不依赖 UTSJSONObject.delete）
+    if (store[id] == false) {
+      store[id] = true
+      writeVisibleStore(store)
+    }
+  } else if (store[id] != false) {
+    store[id] = false
+    writeVisibleStore(store)
+  }
+}
+
+/** 通知 MessageList：气泡长高了，必要时滚动让译文完整可见（避免被输入框遮挡） */
+const notifyBoxGrow = (): void => {
+  const id: string = msgID.value
+  if (id.length == 0) return
+  nextTick((): void => {
+    uni.$emit('messageBoxGrow', { msgID: id })
+  })
+}
+
+watch((): string => translatedText.value, (newText: string): void => {
+  if (isTranslating.value && newText.length > 0) {
+    isTranslating.value = false
+  }
+  if (newText.length > 0) notifyBoxGrow()
+  syncVisibleMap()
+})
+
+watch((): boolean => showTranslation.value, (visible: boolean): void => {
+  syncVisibleMap()
+  persistShowTranslation(visible)
+})
+
+/**
+ * 取事件负载里的 msgID
+ *
+ * 必须用 JSON round-trip 而非 `data as UTSJSONObject`：事件总线传过来的对象硬转
+ * UTSJSONObject 会抛 NPE（规则同 utils/toMap.uts 的注释），异常在 handler 内被吞掉后
+ * 整个回调静默失效 —— 表现就是"译文能显示（不依赖事件）但点隐藏没反应"。
+ * 写法对齐同目录 AudioMessage.uvue 已验证可用的 handleConvertHide。
+ */
+function payloadMsgID(data: any): string {
+  const obj: UTSJSONObject = toUTSJSONObject(data)
+  const raw: any | null = obj['msgID']
+  return raw != null ? `${raw}` : ''
+}
+
+/**
+ * 翻译 action 懒加载
+ *
+ * 不在 onMounted 建 store：MessageActionState.getInstance 会走 native createStore，
+ * 列表里每条文本消息都建一个代价太大。只在用户真正触发翻译时才创建。
+ */
+let translateAction: ((sourceTextList: string[], sourceLanguage: string | null, targetLanguage: string) => Promise<void>) | null = null
+
+const ensureTranslateAction = (): void => {
+  if (translateAction != null) return
+  const obj = useMessageActionState({ message: toUTSJSONObject(props.message) })
+  translateAction = obj.translateText
+}
+
+/** 翻译目标语言。暂用默认 'zh'，后续可由 props / 配置注入 */
+const TRANSLATE_TARGET_LANGUAGE = 'zh'
+
+/**
+ * 译文显隐 toggle —— 由 MessageActions 广播 'messageTranslateToggle' 触发
+ *
+ * 决策放在本组件（showTranslation 的唯一持有者），而不是让 MessageActions 先判断再发
+ * Start/Hide 两种事件：后者依赖跨组件同步的全局 Map，Map 没命中时点击会错误地走
+ * "展示"分支，表现就是"点隐藏没反应"。这里自己判断，状态永远自洽。
+ */
+const handleTranslateToggle = (data: any): void => {
+  if (payloadMsgID(data) != msgID.value) return
+
+  // 1. 正在展示（含 loading 中）→ 收起
+  if (isTranslating.value || (translatedText.value.length > 0 && showTranslation.value)) {
+    isTranslating.value = false
+    showTranslation.value = false
+    return
+  }
+
+  showTranslation.value = true
+
+  // 2. 已有译文缓存 → 直接展示，不再调 SDK
+  if (translatedText.value.length > 0) {
+    isTranslating.value = false
+    notifyBoxGrow()
+    return
+  }
+
+  // 3. 没有译文 → 进 loading 并拉取；结果通过 messagePayload.translatedText 回流
+  isTranslating.value = true
+  const sourceText: string = messageText.value
+  ensureTranslateAction()
+  // 拷到局部 const 再调用：模块级 let 在闭包里被 mutate，Kotlin 拒绝 smart cast
+  const action = translateAction
+  if (action == null || sourceText.length == 0) {
+    isTranslating.value = false
+    uni.showToast({ title: '翻译失败', icon: 'none' })
+    return
+  }
+  const sourceList: string[] = [sourceText]
+  action(sourceList, null, TRANSLATE_TARGET_LANGUAGE).catch((err: any | null): void => {
+    console.error('[TextMessage] translateText failed:', `${err}`)
+    isTranslating.value = false
+    let toastTitle = '翻译失败'
+    if (err != null) {
+      const errObj: UTSJSONObject = toUTSJSONObject(err)
+      const msgRaw: any | null = errObj['message']
+      if (typeof msgRaw == 'string' && (msgRaw as string).length > 0) {
+        toastTitle = msgRaw as string
+      }
+    }
+    uni.showToast({ title: toastTitle, icon: 'none' })
+  })
+}
+
+onMounted(() => {
+  // 跨会话恢复上次"隐藏译文"的选择
+  const id: string = msgID.value
+  if (id.length > 0) {
+    const store: UTSJSONObject = readVisibleStore()
+    if (store[id] == false) {
+      showTranslation.value = false
+    }
+  }
+  uni.$on('messageTranslateToggle', handleTranslateToggle)
+  syncVisibleMap()
+})
+
+onUnmounted(() => {
+  uni.$off('messageTranslateToggle', handleTranslateToggle)
+  deleteMessageTranslateVisibleMapEntry(msgID.value)
+})
 </script>
 
 <style>
@@ -180,13 +457,23 @@ const handleReferenceTap = () => {
   background-color: transparent;
 }
 
+/* 气泡内引用块：左侧竖条 + 发送者 + 单行内容摘要 */
 .text-msg__quote {
-  background-color: rgba(0, 0, 0, 0.05);
   border-left-width: 4rpx;
-  border-left-color: #999;
-  border-radius: 8rpx;
-  padding: 16rpx;
-  margin-bottom: 12rpx;
+  border-left-style: solid;
+  border-left-color: #D5D5D5;
+  border-radius: 0 8rpx 8rpx 0;
+  padding: 6rpx 12rpx;
+  margin-bottom: 16rpx;
+}
+
+/* 引用块背景按发送方区分（uvue 不支持后代选择器，必须用修饰类） */
+.text-msg__quote--in {
+  background-color: #E4E4E4;
+}
+
+.text-msg__quote--out {
+  background-color: #D5E2F5;
 }
 
 .text-msg__quote--no-select {
@@ -198,7 +485,7 @@ const handleReferenceTap = () => {
 
 .text-msg__quote-sender {
   font-size: 24rpx;
-  color: #333;
+  color: #888888;
   font-weight: 500;
 }
 
@@ -207,8 +494,9 @@ const handleReferenceTap = () => {
 }
 
 .text-msg__quote-text {
-  font-size: 26rpx;
-  color: #666;
+  font-size: 24rpx;
+  color: #888888;
+  text-overflow: ellipsis;
 }
 
 .text-msg__text--no-select {
@@ -246,5 +534,48 @@ const handleReferenceTap = () => {
 .text-msg__emoji {
   width: 40rpx;
   height: 40rpx;
+}
+
+/* 译文区：与原文之间用细分隔线区隔，整体在气泡内自然延展 */
+.text-msg__translate {
+  flex-direction: column;
+  margin-top: 16rpx;
+}
+
+.text-msg__translate-divider {
+  height: 1rpx;
+  background-color: rgba(0, 0, 0, 0.08);
+  margin-bottom: 16rpx;
+}
+
+.text-msg__translate-content {
+  flex-direction: column;
+}
+
+.text-msg__translate-text {
+  font-size: 32rpx;
+  line-height: 44rpx;
+  color: #1A1A1A;
+  white-space: normal;
+}
+
+/* "由 IM 提供翻译支持" 来源说明 */
+.text-msg__translate-footer {
+  flex-direction: row;
+  align-items: center;
+  margin-top: 12rpx;
+}
+
+.text-msg__translate-footer-icon {
+  width: 24rpx;
+  height: 24rpx;
+  margin-right: 8rpx;
+  opacity: 0.4;
+}
+
+.text-msg__translate-footer-text {
+  font-size: 22rpx;
+  line-height: 30rpx;
+  color: rgba(0, 0, 0, 0.4);
 }
 </style>

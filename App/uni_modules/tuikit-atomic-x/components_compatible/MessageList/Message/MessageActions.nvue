@@ -1,21 +1,24 @@
 <template>
   <view class="msg-actions" @tap="handleMaskTap">
     <view ref="panelRef" class="msg-actions__panel" :style="panelStyle" @tap.stop>
-      <view v-if="canCopy" class="msg-actions__item" @tap="handleCopy">
-        <image class="msg-actions__icon" :src="copyIconSrc" mode="aspectFit"></image>
-        <text class="msg-actions__text">复制</text>
-      </view>
-      <view class="msg-actions__item" @tap="handleDelete">
-        <image class="msg-actions__icon" :src="deleteIconSrc" mode="aspectFit"></image>
-        <text class="msg-actions__text">删除</text>
-      </view>
-      <view v-if="canConvertVoice" class="msg-actions__item" @tap="handleVoiceToText">
-        <image class="msg-actions__icon" :src="voiceToTextIconSrc" mode="aspectFit"></image>
-        <text class="msg-actions__text">{{ voiceActionLabel }}</text>
-      </view>
-      <view v-if="canRecall" class="msg-actions__item" @tap="handleRecall">
-        <image class="msg-actions__icon" :src="recallIconSrc" mode="aspectFit"></image>
-        <text class="msg-actions__text">撤回</text>
+      <!-- 操作项由 actionConfig 配置渲染，超出 ACTIONS_PER_ROW 个自动换行 -->
+      <view
+        v-for="(row, rowIndex) in actionRows"
+        :key="rowIndex"
+        class="msg-actions__row-wrap"
+      >
+        <view class="msg-actions__row">
+          <view
+            v-for="item in row"
+            :key="item.key"
+            class="msg-actions__item"
+            @tap="handleActionTap(item)"
+          >
+            <image class="msg-actions__icon" :src="item.icon" mode="aspectFit"></image>
+            <text class="msg-actions__text">{{ item.label }}</text>
+          </view>
+        </view>
+        <view v-if="rowIndex < actionRows.length - 1" class="msg-actions__divider"></view>
       </view>
     </view>
     <view class="msg-actions__arrow" :style="arrowStyle"></view>
@@ -26,16 +29,27 @@
 import { MessageStatus, MessageType } from '../../../types/message'
 import { useMessageActionState } from '../../../state/MessageActionState'
 import { throttle } from '../../../utils/lodash'
+import { isCallMessage } from '../../../utils/callMessageUtils'
 
 var ARROW_SIZE = 24
 var GAP = 20
 // 节流窗口：1000ms 足以覆盖 iOS 关闭动画 300ms + 用户连点的反应间隔，避免重复网络请求 / 重复 emit
 var ACTION_THROTTLE_WAIT = 1000
+// 每行最多展示的操作项数量，超出则换行
+var ACTIONS_PER_ROW = 4
+// 翻译目标语言，后续可由 props / 配置注入
+var TRANSLATE_TARGET_LANGUAGE = 'zh'
+// 译文可见态存储 key：仅持久化用户主动"隐藏"的 msgID（值固定 false），
+// 与语音转文字的 tuikit_audio_convert_visible_v1 同一范式
+var TRANSLATE_STORAGE_KEY = 'tuikit_message_translate_visible_v1'
+// 引用功能开关：false 时只隐藏长按面板入口，气泡内引用块渲染 / 已引用消息的发送都不受影响
+var QUOTE_ENTRY_ENABLED = false
 
 export default {
   name: 'MessageActions',
   props: {
     message: { type: Object, required: true },
+    // 操作项 key 列表（string[]）：非空时按顺序裁剪与排序，为空则展示全部可用项
     actions: { type: Array, default: function() { return [] } }
   },
   data() {
@@ -51,7 +65,11 @@ export default {
       copyIconSrc: '/uni_modules/tuikit-atomic-x/static/assets/message-list/msg_copy.png',
       deleteIconSrc: '/uni_modules/tuikit-atomic-x/static/assets/message-list/msg_delete.png',
       recallIconSrc: '/uni_modules/tuikit-atomic-x/static/assets/message-list/msg_recall.png',
-      voiceToTextIconSrc: '/uni_modules/tuikit-atomic-x/static/assets/message-list/msg_voice_to_text.png'
+      voiceToTextIconSrc: '/uni_modules/tuikit-atomic-x/static/assets/message-list/msg_voice_to_text.png',
+      forwardIconSrc: '/uni_modules/tuikit-atomic-x/static/assets/message-list/msg_forward.png',
+      quoteIconSrc: '/uni_modules/tuikit-atomic-x/static/assets/message-list/msg_quote.png',
+      translateIconSrc: '/uni_modules/tuikit-atomic-x/static/assets/message-list/msg_translate.png',
+      hideIconSrc: '/uni_modules/tuikit-atomic-x/static/assets/message-list/msg_hide.png'
     }
   },
   computed: {
@@ -63,6 +81,28 @@ export default {
       return false
     },
     canConvertVoice() { return this.message.messageType === MessageType.AUDIO },
+    /** 消息是否可被转发：撤回/删除、系统消息、通话信令消息除外 */
+    canForward() {
+      if (!this.message) return false
+      if (this.message.status === MessageStatus.REVOKED || this.message.status === MessageStatus.DELETED) return false
+      if (this.message.messageType === MessageType.TIPS) return false
+      if (this.message.messageType === MessageType.CUSTOM && isCallMessage(this.message)) return false
+      return true
+    },
+    /** 消息是否可被引用：撤回/删除、系统消息除外 */
+    canQuote() {
+      if (!this.message) return false
+      if (this.message.status === MessageStatus.REVOKED || this.message.status === MessageStatus.DELETED) return false
+      if (this.message.messageType === MessageType.TIPS) return false
+      return true
+    },
+    /** 仅文本消息可翻译；已撤回/已删除的消息不提供翻译 */
+    canTranslate() {
+      if (!this.message) return false
+      if (this.message.messageType !== MessageType.TEXT) return false
+      if (this.message.status === MessageStatus.REVOKED || this.message.status === MessageStatus.DELETED) return false
+      return !!(this.message.messagePayload && this.message.messagePayload.text)
+    },
     /**
      * 语音转文字按钮的 label 与是否处于"隐藏文字"模式
      * 判定：当前消息已有 asrText 且 AudioMessage 当前展示该文本 → "隐藏文字"，否则 "转文字"
@@ -74,30 +114,60 @@ export default {
     },
     voiceTextVisible() {
       if (!this.voiceTextHasContent) return false
-      var msgID = this.message.msgID
-      // 1. 运行时 Map（同会话最准）
-      var map = uni.__audioConvertVisibleMap__
-      if (map && typeof map.has === 'function' && map.has(msgID)) {
-        return map.get(msgID) === true
-      }
-      // 2. 本地存储（跨会话持久化"隐藏"记录；仅记录 false，缺省视为 true）
-      try {
-        var raw = uni.getStorageSync('tuikit_audio_convert_visible_v1')
-        var store = null
-        if (raw && typeof raw === 'object') {
-          store = raw
-        } else if (typeof raw === 'string' && raw) {
-          store = JSON.parse(raw)
-        }
-        if (store && store[msgID] === false) {
-          return false
-        }
-      } catch (e) {}
-      // 3. 默认可见
-      return true
+      return this._readVisibleFlag(uni.__audioConvertVisibleMap__, 'tuikit_audio_convert_visible_v1')
     },
     voiceActionLabel() {
       return this.voiceTextVisible ? '隐藏文字' : '转文字'
+    },
+    /** 是否已有译文（按原文做 key 缓存在 payload.translatedText 里） */
+    translateHasContent() {
+      var payload = this.message && this.message.messagePayload
+      var sourceText = (payload && payload.text) || ''
+      var map = payload && payload.translatedText
+      if (!map || !sourceText) return false
+      return !!map[sourceText]
+    },
+    translateVisible() {
+      if (!this.translateHasContent) return false
+      return this._readVisibleFlag(uni.__messageTranslateVisibleMap__, TRANSLATE_STORAGE_KEY)
+    },
+    translateActionLabel() {
+      return this.translateVisible ? '隐藏' : '翻译'
+    },
+    /** 统一在此配置每个操作项的 key / 文案 / 图标 / 显隐条件 / 处理函数 */
+    actionConfig() {
+      return [
+        { key: 'copy', label: '复制', icon: this.copyIconSrc, visible: this.canCopy, handler: this.handleCopy },
+        { key: 'delete', label: '删除', icon: this.deleteIconSrc, visible: true, handler: this.handleDelete },
+        { key: 'voiceToText', label: this.voiceActionLabel, icon: this.voiceToTextIconSrc, visible: this.canConvertVoice, handler: this.handleVoiceToText },
+        { key: 'recall', label: '撤回', icon: this.recallIconSrc, visible: this.canRecall, handler: this.handleRecall },
+        { key: 'forward', label: '转发', icon: this.forwardIconSrc, visible: this.canForward, handler: this.handleForward },
+        { key: 'quote', label: '引用', icon: this.quoteIconSrc, visible: QUOTE_ENTRY_ENABLED && this.canQuote, handler: this.handleQuote },
+        { key: 'translate', label: this.translateActionLabel, icon: this.translateVisible ? this.hideIconSrc : this.translateIconSrc, visible: this.canTranslate, handler: this.handleTranslate }
+      ]
+    },
+    visibleActions() {
+      var available = this.actionConfig.filter(function(item) { return item.visible })
+      var configured = this.actions
+      if (!configured || configured.length === 0) return available
+      var result = []
+      configured.forEach(function(key) {
+        var found = null
+        for (var i = 0; i < available.length; i++) {
+          if (available[i].key === key) { found = available[i]; break }
+        }
+        if (found) result.push(found)
+      })
+      return result
+    },
+    /** 按 ACTIONS_PER_ROW 切分成多行 */
+    actionRows() {
+      var rows = []
+      var list = this.visibleActions
+      for (var i = 0; i < list.length; i += ACTIONS_PER_ROW) {
+        rows.push(list.slice(i, i + ACTIONS_PER_ROW))
+      }
+      return rows
     },
     /**
      * 视口安全区度量（rpx）—— 一处算好，panelTopRpx / _measureAndPosition 复用
@@ -105,7 +175,6 @@ export default {
     viewportMinRpx() {
       var si = uni.getSystemInfoSync()
       var sw = si.windowWidth || 375
-      var sh = si.screenHeight || si.windowHeight || 667
       var navH = si.platform === 'android' ? 48 : 44
       var safeTop = (si.safeArea && si.safeArea.top) ? si.safeArea.top : 0
       return (safeTop + navH + 8) / sw * 750
@@ -193,13 +262,16 @@ export default {
     }
   },
   created() {
-    // 防抖包装 4 个动作按钮：leading 立即执行，1000ms 内的连点全部忽略
+    // 防抖包装动作按钮：leading 立即执行，1000ms 内的连点全部忽略
     // 每个组件实例独立 throttle，组件销毁时自然回收
     var self = this
     this.handleCopy = throttle(function() { self._handleCopyImpl() }, ACTION_THROTTLE_WAIT, { leading: true, trailing: false })
     this.handleDelete = throttle(function() { self._handleDeleteImpl() }, ACTION_THROTTLE_WAIT, { leading: true, trailing: false })
     this.handleRecall = throttle(function() { self._handleRecallImpl() }, ACTION_THROTTLE_WAIT, { leading: true, trailing: false })
     this.handleVoiceToText = throttle(function() { self._handleVoiceToTextImpl() }, ACTION_THROTTLE_WAIT, { leading: true, trailing: false })
+    this.handleForward = throttle(function() { self._handleForwardImpl() }, ACTION_THROTTLE_WAIT, { leading: true, trailing: false })
+    this.handleQuote = throttle(function() { self._handleQuoteImpl() }, ACTION_THROTTLE_WAIT, { leading: true, trailing: false })
+    this.handleTranslate = throttle(function() { self._handleTranslateImpl() }, ACTION_THROTTLE_WAIT, { leading: true, trailing: false })
   },
   mounted() {
     this.actionState = useMessageActionState({ message: this.message })
@@ -207,6 +279,30 @@ export default {
   beforeDestroy() { if (this.actionState) this.actionState.destroyStore() },
   beforeUnmount() { if (this.actionState) this.actionState.destroyStore() },
   methods: {
+    /**
+     * 读取「可见态」：运行时 Map 优先，其次本地存储（仅持久化 false），缺省 true
+     * 语音转文字与消息翻译共用同一范式
+     */
+    _readVisibleFlag(runtimeMap, storageKey) {
+      var msgID = this.message.msgID
+      if (runtimeMap && typeof runtimeMap.has === 'function' && runtimeMap.has(msgID)) {
+        return runtimeMap.get(msgID) === true
+      }
+      try {
+        var raw = uni.getStorageSync(storageKey)
+        var store = null
+        if (raw && typeof raw === 'object') {
+          store = raw
+        } else if (typeof raw === 'string' && raw) {
+          store = JSON.parse(raw)
+        }
+        if (store && store[msgID] === false) return false
+      } catch (e) {}
+      return true
+    },
+    handleActionTap(item) {
+      if (item && item.handler) item.handler()
+    },
     setTriggerPosition(position) {
       this.triggerPosition = {
         x: position.x, y: position.y,
@@ -283,6 +379,16 @@ export default {
       try { await this.actionState.revoke(); this.safeClose() }
       catch (e) { uni.showToast({ title: '撤回失败', icon: 'none', duration: 2000 }); this.safeClose() }
     },
+    /** 转发：仅广播意图，目标会话选择与实际转发由 Message.nvue 内置的 ForwardPicker 闭环 */
+    _handleForwardImpl() {
+      this.$emit('action', { key: 'forward', text: '转发' })
+      this.safeClose()
+    },
+    /** 引用：仅广播意图，引用条渲染与发送由 MessageInput 处理 */
+    _handleQuoteImpl() {
+      this.$emit('action', { key: 'quote', text: '引用' })
+      this.safeClose()
+    },
     /**
      * 语音转文字 / 隐藏文字（toggle，与 Vue3 行为一致）
      * - 当前未展示 asrText：触发转换流程（若已有缓存 SDK 一般立即返回）
@@ -318,6 +424,39 @@ export default {
         }
         uni.showToast({ title: toastTitle, icon: 'none' })
       })
+    },
+    /**
+     * 翻译 / 隐藏译文（toggle，与语音转文字同一范式）
+     * - 已展示译文：广播 messageTranslateHide，TextMessage 收到后隐藏
+     * - 未展示：广播 messageTranslateStart 进 loading，已有缓存直接返回，否则调 SDK
+     */
+    _handleTranslateImpl() {
+      var msgID = this.message.msgID
+      var visible = this.translateVisible
+      this.$emit('action', { key: visible ? 'translateHide' : 'translate', text: this.translateActionLabel })
+      this.safeClose()
+
+      if (visible) {
+        uni.$emit('messageTranslateHide', { msgID: msgID })
+        return
+      }
+
+      uni.$emit('messageTranslateStart', { msgID: msgID })
+
+      // 已有译文缓存：TextMessage 收到 start 后直接展示，无需再请求
+      if (this.translateHasContent) return
+
+      var sourceText = (this.message.messagePayload && this.message.messagePayload.text) || ''
+      if (!this.actionState || !this.actionState.translateText || !sourceText) {
+        uni.$emit('messageTranslateError', { msgID: msgID })
+        uni.showToast({ title: '翻译失败', icon: 'none' })
+        return
+      }
+      this.actionState.translateText([sourceText], undefined, TRANSLATE_TARGET_LANGUAGE).catch(function(err) {
+        console.error('[MessageActions] translateText failed:', err)
+        uni.$emit('messageTranslateError', { msgID: msgID })
+        uni.showToast({ title: (err && err.message) ? err.message : '翻译失败', icon: 'none' })
+      })
     }
   }
 }
@@ -325,10 +464,13 @@ export default {
 
 <style>
 .msg-actions { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(255, 255, 255, 0.01); z-index: 999; }
-.msg-actions__panel { position: absolute; flex-direction: row; background-color: #FFFFFF; border-radius: 12rpx; box-shadow: 0 8rpx 24rpx rgba(0, 0, 0, 0.25); padding: 33rpx 0 22rpx; z-index: 1000; justify-content: center; align-items: center; left: auto; right: auto; }
-.msg-actions__item { flex-direction: column; align-items: center; justify-content: center; min-width: 114rpx; margin: 0rpx 16rpx; }
-.msg-actions__item:first-child { margin-left: 0rpx; }
-.msg-actions__item:last-child { margin-right: 0rpx; }
+.msg-actions__panel { position: absolute; flex-direction: column; background-color: #FFFFFF; border-radius: 12rpx; box-shadow: 0 8rpx 24rpx rgba(0, 0, 0, 0.25); padding: 33rpx 0 22rpx; max-width: 500rpx; z-index: 1000; justify-content: center; align-items: flex-start; left: auto; right: auto; }
+.msg-actions__row-wrap { flex-direction: column; align-items: flex-start; }
+.msg-actions__row { flex-direction: row; justify-content: flex-start; align-items: center; }
+/* 多行之间的隔断线 */
+.msg-actions__divider { width: 440rpx; height: 2rpx; background-color: rgba(0, 0, 0, 0.08); margin: 20rpx 30rpx; }
+/* 固定单元格宽度 = 面板最大宽度(500) / 每行个数(4)，保证换行后各行列对齐 */
+.msg-actions__item { flex-direction: column; align-items: center; justify-content: center; width: 125rpx; margin: 0rpx; }
 .msg-actions__item:active { opacity: 0.6; }
 .msg-actions__icon { width: 36rpx; height: 36rpx; margin-bottom: 10rpx; }
 .msg-actions__text { font-size: 20rpx; color: rgba(0, 0, 0, 0.55); text-align: center; }

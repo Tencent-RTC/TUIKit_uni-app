@@ -3,12 +3,13 @@
     <RecalledMessage v-if="message.status === MessageStatus.REVOKED" :message="message" :conversationID="conversationID" />
     <GroupTipMessage v-else-if="isSystemMessage || isGroupCreateMessage" :message="message" />
     <component v-else-if="isCustomCenterMessage" :is="centerCustomComponent" :message="message" :conversationID="conversationID" />
+    <view v-if="highlight" ref="centerHighlightOverlayRef" class="msg__highlight-overlay"></view>
   </view>
   <view v-else class="msg msg--no-select" :class="messageClasses" :data-message-id="message.msgID" @touchstart="handleTouchStart" @touchend="handleTouchEnd" @tap.stop="handleTap" @touchmove.stop.prevent="handleTouchMove">
     <Avatar v-if="showAvatar" :src="message.from.avatarURL" :name="displayName" :size="80" defaultAvatarType="user" class="msg__avatar" />
     <view class="msg__main msg__main--no-select" :class="'msg__main--'+ (message.isSentBySelf ? 'out' : 'in')">
       <view v-if="showNickname" class="msg__nickname">
-        <text class="msg__nickname-text msg__text--no-select">{{ displayName }}</text>
+        <text class="msg__nickname-text msg__text--no-select" :numberOfLines="1">{{ displayName }}</text>
       </view>
 
       <view class="msg__bubble msg__bubble--no-select" :class="'msg__bubble--'+ (message.isSentBySelf ? 'out' : 'in')" @longpress="handleLongPress" @tap.stop="handleMessageContentTap" @touchstart.stop="handleBubbleTouchStart" @touchmove.stop="">
@@ -21,12 +22,21 @@
         <view v-if="showReadStatus" class="msg__read-status">
           <text class="msg__read-text msg__text--no-select">{{ readStatusText }}</text>
         </view>
+        <view v-if="highlight" ref="highlightOverlayRef" class="msg__highlight-overlay"></view>
       </view>
       <view v-if="showTime" class="msg__time" @tap.stop="handleMessageContentTap" style="background-color: black;">
         <text class="msg__time-text msg__text--no-select">{{ formatMessageTime(message.timestamp) }}</text>
       </view>
     </view>
-    <MessageActions v-if="showActions" ref="messageActionsRef" :message="message" :actions="messageActionList" @close="handleActionsClose" />
+    <MessageActions v-if="showActions" ref="messageActionsRef" :message="message" :actions="messageActionList" @close="handleActionsClose" @action="handleAction" />
+
+    <!-- 转发目标选择器：组件内部自洽，选中后直接调 forwardMessages，不抛给业务层 -->
+    <ForwardPicker
+      v-if="showForwardPicker"
+      :excludeConversationID="conversationID"
+      @select="handleForwardSelect"
+      @close="handleForwardPickerClose"
+    />
   </view>
 </template>
 
@@ -44,8 +54,10 @@
   import CustomMessage from './CustomMessage/CustomMessage.nvue'
   import MergerMessage from './MergerMessage/MergerMessage.nvue'
   import MessageActions from './MessageActions.nvue'
+  import ForwardPicker from './ForwardPicker.nvue'
   import type { MessageInfo } from '../../../types/message'
-  import { MessageType, MessageStatus } from '../../../types/message'
+  import { MessageType, MessageStatus, MessageForwardType } from '../../../types/message'
+  import { useMessageListState } from '../../../state/MessageListState'
   import { formatTime } from '../../../utils/timeUtils'
   import { isGroupCallMessage, isCallMessage, isVideoCall, parseCallMessageData, CallType } from '../../../utils/callMessageUtils'
   import {
@@ -92,8 +104,12 @@
   }>()
 
   const showActions = ref(false)
+  // 转发目标选择器可见性（组件内部状态，不外泄）
+  const showForwardPicker = ref(false)
   const messageActionsRef = ref(null)
   const messageContentRef = ref(null)
+  const highlightOverlayRef = ref(null)
+  const centerHighlightOverlayRef = ref(null)
   const loadingIconRef = ref(null)
   const loadingAnimationTimer = ref<number | null>(null)
   const loadingStartTimer = ref<number | null>(null)
@@ -249,10 +265,10 @@
   }
 
   const playHighlightAnimation = () => {
-    const contentEl = messageContentRef.value?.$el || messageContentRef.value
-    if (!contentEl || !contentEl.children || !contentEl.children[0]) return
+    const contentEl = highlightOverlayRef.value || centerHighlightOverlayRef.value
+    if (!contentEl) return
 
-    const highlightEl = contentEl.children[0]
+    const highlightEl = contentEl
     let count = 0
     const maxCount = 6
 
@@ -549,14 +565,69 @@
       isLongPressing.value = false
     }, 100)
   }
+
+  const handleAction = (action: { key: string; text: string }) => {
+    if (!action || !action.key) return
+
+    if (action.key === 'forward') {
+      setTimeout(() => {
+        showForwardPicker.value = true
+      }, 320)
+      return
+    }
+
+    if (action.key === 'quote') {
+      setTimeout(() => {
+        uni.$emit('atomicx-quote', {
+          conversationID: props.conversationID,
+          message: props.message,
+        })
+      }, 320)
+      return
+    }
+  }
+
+  const handleForwardPickerClose = () => {
+    showForwardPicker.value = false
+  }
+
+  const handleForwardSelect = async (targetConversationID: string) => {
+    showForwardPicker.value = false
+
+    if (!targetConversationID) return
+
+    try {
+      const { forwardMessages } = useMessageListState({ conversationID: props.conversationID })
+      await forwardMessages(
+        [props.message],
+        { forwardType: MessageForwardType.SEPARATE },
+        targetConversationID
+      )
+      uni.showToast({ title: '已转发', icon: 'none' })
+    } catch (error) {
+      console.error('[Message] forwardMessages failed:', error)
+      uni.showToast({ title: '转发失败', icon: 'none', duration: 2000 })
+    }
+  }
 </script>
 
 <style>
   .msg {
+    position: relative;
     flex-direction: row;
     padding: 20rpx 22rpx;
     align-items: flex-start;
     flex: 1;
+  }
+
+  .msg__highlight-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: transparent;
+    z-index: 10;
   }
 
   /* 禁用整个消息容器的选择 */
@@ -620,9 +691,12 @@
   }
 
   .msg__nickname-text {
+    max-width: 500rpx;
     font-size: 24rpx;
     line-height: 34rpx;
     color: rgba(0, 0, 0, 0.4);
+    lines: 1;
+    text-overflow: ellipsis;
   }
 
   .msg__bubble {

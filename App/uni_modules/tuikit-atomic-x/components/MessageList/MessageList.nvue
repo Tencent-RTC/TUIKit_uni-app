@@ -139,6 +139,10 @@ const cellRefs: any[] = []
 const isFirstLoad = ref(true)
 const currentHighlightID = ref('')
 const pendingScrollMessage = ref<MessageInfo | null>(null)
+const internalLocateMessage = ref<MessageInfo | null>(null)
+const activeLocateMessage = computed<MessageInfo | null>(
+  () => internalLocateMessage.value ?? props.locateMessage ?? null
+)
 const readyCellCount = ref(0)
 let firstScreenStarted = false
 let firstScreenUserScrolled = false
@@ -369,23 +373,31 @@ const handleScrollToBottomTap = () => {
   scrollToBottom(true)
 }
 
+// 正在定位中的 msgID：同一目标重复触发时直接跳过，避免 loadMessages 被并发调用多次
+let locatingMessageID: string = ''
+
 const scrollToMessage = async (message: MessageInfo, animated = true) => {
   const messageID = message?.msgID
   if (!messageID) return
-
+  if (locatingMessageID === messageID) return
 
   if (isMessageInList(messageID)) {
     doScrollToMessage(messageID, animated)
     return
   }
 
-  await locateToMessage(message)
+  locatingMessageID = messageID
+  try {
+    await locateToMessage(message)
 
-  await nextTick()
-  const timer = addTimer(setTimeout(() => {
-    doScrollToMessage(messageID, animated)
-    clearTimer(timer)
-  }, 100))
+    await nextTick()
+    const timer = addTimer(setTimeout(() => {
+      doScrollToMessage(messageID, animated)
+      clearTimer(timer)
+    }, 100))
+  } finally {
+    locatingMessageID = ''
+  }
 }
 
 const doScrollToMessage = (messageID: string, animated = true, highlight = true) => {
@@ -478,7 +490,7 @@ const startFirstScreenFinalize = () => {
   if (firstScreenStarted) return
   firstScreenStarted = true
 
-  const locateMsg = props.locateMessage
+  const locateMsg = activeLocateMessage.value
 
   if (locateMsg && locateMsg.msgID) {
     nextTick(() => {
@@ -584,10 +596,23 @@ watch(messageList, (newMessages, oldMessages) => {
   }
 }, { immediate: false })
 
-watch(() => props.locateMessage, (newMessage) => {
+
+let suppressLocateWatch = false
+
+watch(activeLocateMessage, (newMessage) => {
+  if (suppressLocateWatch) {
+    suppressLocateWatch = false
+    return
+  }
   if (newMessage && newMessage.msgID && !isFirstLoad.value) {
     nextTick(() => {
       scrollToMessage(newMessage, true)
+      if (internalLocateMessage.value === newMessage) {
+        if (props.locateMessage && props.locateMessage.msgID) {
+          suppressLocateWatch = true
+        }
+        internalLocateMessage.value = null
+      }
     })
   }
 })
@@ -607,7 +632,14 @@ onMounted(() => {
   }
 
   uni.$on('audioConvertStreamGrow', handleAudioConvertStreamGrow)
+  uni.$on('messageBoxGrow', handleAudioConvertStreamGrow)
+  uni.$on('scrollToMessage', handleScrollToMessageEvent)
 })
+
+const handleScrollToMessageEvent = (msgID: string, cursor?: any) => {
+  if (!msgID) return
+  internalLocateMessage.value = { ...(cursor || { msgID }) } as MessageInfo
+}
 
 const handleAudioConvertStreamGrow = (data: { msgID: string; boxRef?: any }) => {
   if (!data || !data.msgID) return
@@ -679,6 +711,8 @@ onBeforeUnmount(() => {
   }
   clearConversationUnreadCount(props.conversationID);
   uni.$off('audioConvertStreamGrow', handleAudioConvertStreamGrow)
+  uni.$off('messageBoxGrow', handleAudioConvertStreamGrow)
+  uni.$off('scrollToMessage', handleScrollToMessageEvent)
   destroyStore()
 })
 

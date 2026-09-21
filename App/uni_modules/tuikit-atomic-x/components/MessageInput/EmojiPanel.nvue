@@ -89,7 +89,6 @@ const handleEmojiTap = (emoji) => {
 
 .emoji-list {
   flex: 1;
-  /* nvue 中 list 默认就会撑满父容器，但显式写一下更安全 */
 }
 
 /* Cell 样式 
@@ -102,18 +101,17 @@ const handleEmojiTap = (emoji) => {
 /* 每一行的容器 */
 .emoji-row {
   flex-direction: row;       /* 必须显式声明横向排列 */
-  padding-left: 48rpx;       /* 整体左边距 */
-  padding-right: 48rpx;      /* 整体右边距 */
+  padding-left: 51rpx;       /* 整体左边距 */
+  padding-right: 51rpx;      /* 整体右边距 */
   height: 104rpx;            /* 给每一行定高，性能最好 */
   align-items: center;       /* 垂直居中 */
-  justify-content: space-around; /* 左对齐，防止最后一行元素被拉伸或两端对齐 */
 }
 
 /* 单个表情容器 */
 .emoji-item {
   width: 60rpx;             /* 固定宽度 */
   height: 60rpx;
-  margin-right: 8rpx;       /* item 之间的间距 */
+  margin-right: 24rpx;       /* item 之间的间距 */
   justify-content: center;
   align-items: center;
   border-radius: 8rpx;

@@ -167,7 +167,11 @@ export const parseMessageToRichTextNodes = (message: MessageInfo): RichTextNode[
   return [{ type: 'text', text: abstract }];
 }
 
-const getMessageAbstract = (message: MessageInfo): string => {
+/**
+ * 消息摘要
+ * @param withSenderName 是否带群聊发送者前缀（引用场景由调用方自己渲染发送者，需要传 false）
+ */
+const getMessageAbstract = (message: MessageInfo, withSenderName: boolean = true): string => {
   if (message.status === MessageStatus.REVOKED) {
     const senderName = getSenderName(message)
     if (senderName.length > 0) {
@@ -234,7 +238,7 @@ const getMessageAbstract = (message: MessageInfo): string => {
   const isGroup = m.conversationType === ConversationType.GROUP
     || !!m.groupID
     || (m.conversationID || '').startsWith('group_');
-  if (isGroup && message.messageType !== MessageType.TIPS && !isCallMessage(message)) {
+  if (withSenderName && isGroup && message.messageType !== MessageType.TIPS && !isCallMessage(message)) {
     const senderName = getSenderName(message);
     return senderName ? `${senderName}: ${messageContent}` : messageContent;
   }

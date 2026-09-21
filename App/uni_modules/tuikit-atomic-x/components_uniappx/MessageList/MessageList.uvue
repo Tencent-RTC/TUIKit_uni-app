@@ -177,6 +177,11 @@ let _listTransformOnNewMessage: (() => Promise<void>) | null = null
 
 let _handleAudioConvertStreamGrow: ((data: any) => void) | null = null
 
+let _handleScrollToMessageEvent: ((data: any) => void) | null = null
+
+/** 正在定位中的 msgID：同一目标重复触发时直接跳过，避免 loadMessages 被并发调用多次 */
+let _locatingMessageID: string = ''
+
 let _isLocatingMessage: boolean = false
 
 let _pendingFinalizeVisibility: boolean = false
@@ -197,8 +202,14 @@ const clearAllTimers = () => {
 }
 
 const setCellRef = (el: any, index: number) => {
-  if (el && cellRefs[index] !== el) {
-    const isNew = !cellRefs[index]
+  if (el == null || index < 0) return
+  // UTS 数组不支持稀疏写入：index 超出长度时先用 null 补位，否则 cellRefs[index] 读写都会抛越界
+  while (cellRefs.length <= index) {
+    cellRefs.push(null)
+  }
+  const prev: any | null = cellRefs[index]
+  if (prev !== el) {
+    const isNew: boolean = prev == null
     cellRefs[index] = el
     if (isNew) {
       readyCellCount.value++
@@ -744,8 +755,41 @@ onMounted(() => {
   const handler: ((data: any) => void) | null = _handleAudioConvertStreamGrow
   if (handler != null) {
     uni.$on('audioConvertStreamGrow', handler)
+    // 译文展开同样会把气泡撑高，复用同一套跟随滚动逻辑
+    uni.$on('messageBoxGrow', handler)
+  }
+  // UTS 下 const 箭头函数不 hoist，统一走模块级 let 引用（与 _handleAudioConvertStreamGrow 同一范式）
+  const scrollHandler: ((data: any) => void) | null = _handleScrollToMessageEvent
+  if (scrollHandler != null) {
+    uni.$on('scrollToMessage', scrollHandler)
   }
 })
+
+/**
+ * 引用块点击 → 定位到原消息
+ * payload: { msgID: string, message?: any }（uvue 的 uni.$on 回调只接受单个参数）
+ * 原消息不在当前列表时，scrollToMessage 内部会先 locateToMessage 拉取上下文
+ */
+const handleScrollToMessageEvent = (data: any): void => {
+  const dataObj: UTSJSONObject = toUTSJSONObject(data ?? new UTSJSONObject())
+  const msgIDRaw: any | null = dataObj['msgID']
+  const msgID: string = msgIDRaw != null ? `${msgIDRaw}` : ''
+  if (msgID.length == 0) return
+  // 同一目标重复点击时跳过，避免 loadMessages 被并发调用多次
+  if (_locatingMessageID == msgID) return
+  _locatingMessageID = msgID
+
+  const cursor: any | null = dataObj['message']
+  const target: UTSJSONObject = cursor != null ? toUTSJSONObject(cursor) : dataObj
+  scrollToMessage(target, true).then((): void => {
+    _locatingMessageID = ''
+  }).catch((e: any | null): void => {
+    console.warn('[MessageList] scrollToMessage failed:', `${e}`)
+    _locatingMessageID = ''
+  })
+}
+
+_handleScrollToMessageEvent = handleScrollToMessageEvent
 
 const handleAudioConvertStreamGrow = (data: any): void => {
   const dataObj: UTSJSONObject = toUTSJSONObject(data ?? new UTSJSONObject())
@@ -787,9 +831,15 @@ onBeforeUnmount(() => {
   _pendingFinalizeVisibility = false
   clearAllTimers()
   conversationListState.clearConversationUnreadCount(props.conversationID)
+  _locatingMessageID = ''
   const handler: ((data: any) => void) | null = _handleAudioConvertStreamGrow
   if (handler != null) {
     uni.$off('audioConvertStreamGrow', handler)
+    uni.$off('messageBoxGrow', handler)
+  }
+  const scrollHandler: ((data: any) => void) | null = _handleScrollToMessageEvent
+  if (scrollHandler != null) {
+    uni.$off('scrollToMessage', scrollHandler)
   }
   destroyStore()
 })
@@ -806,6 +856,9 @@ const getLastMessageCellPosition = async (): Promise<number> => {
   // 避免切会话/列表变短后命中已销毁的旧 cell 导致测量失真。
   const lastIndex: number = messageItems.value.length - 1
   if (lastIndex < 0) return 9999
+  // UTS/Kotlin 下数组越界会抛 IndexOutOfBoundsException（不像 JS 返回 undefined）：
+  // cell 尚未挂载时 cellRefs 可能比 messageItems 短，必须先比长度
+  if (lastIndex >= cellRefs.length) return 9999
   const lastCell = cellRefs[lastIndex]
   if (lastCell == null) return 9999
   try {

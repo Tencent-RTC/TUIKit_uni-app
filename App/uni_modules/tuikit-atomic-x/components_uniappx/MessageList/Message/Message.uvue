@@ -26,7 +26,15 @@
         <text class="msg__time-text msg__text--no-select">{{ formatMessageTime(messageTimestamp) }}</text>
       </view>
     </view>
-    <MessageActions v-if="showActions" :message="message" :actions="messageActionList" :triggerPosition="longPressPosition" @close="handleActionsClose" />
+    <MessageActions v-if="showActions" :message="message" :actions="messageActionList" :triggerPosition="longPressPosition" @close="handleActionsClose" @action="handleAction" />
+
+    <!-- 转发目标选择器：组件内部自洽，选中后直接调 forwardMessages，不抛给业务层 -->
+    <ForwardPicker
+      v-if="showForwardPicker"
+      :excludeConversationID="conversationID"
+      @select="handleForwardSelect"
+      @close="handleForwardPickerClose"
+    />
   </view>
 </template>
 
@@ -44,6 +52,8 @@
   import CustomMessage from './CustomMessage/CustomMessage.uvue'
   import MergerMessage from './MergerMessage/MergerMessage.uvue'
   import MessageActions from './MessageActions.uvue'
+  import ForwardPicker from './ForwardPicker.uvue'
+  import { useMessageListState } from '../../../state/MessageListState'
   import { formatTime } from '../../../utils/timeUtils'
   import { isGroupCallMessage, isCallMessage, isVideoCall, parseCallMessageData } from '../../../utils/callMessageUtils'
   import {
@@ -153,6 +163,8 @@ const props = withDefaults(defineProps<Props>(), {
   }>()
 
   const showActions = ref(false)
+  // 转发目标选择器可见性（组件内部状态，不外泄）
+  const showForwardPicker = ref(false)
   const messageContentRef = ref(null)
   const loadingIconRef = ref(null)
   const flashOverlayRef = ref<UniElement | null>(null)  // 独立 DOM 覆盖在 messageContentRef 上做 backgroundColor 渐变
@@ -817,6 +829,59 @@ watch(
     setTimeout(() => {
       isLongPressing.value = false
     }, 100)
+  }
+
+  /**
+   * MessageActions 非自洽操作的回传（转发 / 引用）
+   * 均延后到浮层收起后再执行，否则全屏遮罩还在，转发页/键盘会被吞掉
+   */
+  const handleAction = (action: any | null): void => {
+    if (action == null) return
+    const actionObj: UTSJSONObject = toUTSJSONObject(action)
+    const keyRaw: any | null = actionObj['key']
+    const key: string = typeof keyRaw == 'string' ? (keyRaw as string) : ''
+    if (key.length == 0) return
+
+    if (key == 'forward') {
+      setTimeout((): void => {
+        showForwardPicker.value = true
+      }, 320)
+      return
+    }
+
+    if (key == 'quote') {
+      setTimeout((): void => {
+        uni.$emit('atomicx-quote', {
+          conversationID: props.conversationID,
+          message: props.message,
+        })
+      }, 320)
+      return
+    }
+  }
+
+  const handleForwardPickerClose = (): void => {
+    showForwardPicker.value = false
+  }
+
+  const handleForwardSelect = (targetConversationID: string): void => {
+    showForwardPicker.value = false
+    if (targetConversationID.length == 0) return
+
+    const messageListState = useMessageListState({ conversationID: props.conversationID })
+    const messageListParam: any[] = [props.message]
+    // forwardOption 会被 JSON.stringify 传给原生，enum 序列化结果不确定，直接用数值
+    // （MessageForwardType.SEPARATE = 0 / MERGED = 1）
+    const forwardOption: UTSJSONObject = new UTSJSONObject()
+    forwardOption['forwardType'] = 0
+    messageListState.forwardMessages(messageListParam, forwardOption, targetConversationID)
+      .then((): void => {
+        uni.showToast({ title: '已转发', icon: 'none' })
+      })
+      .catch((error: any | null): void => {
+        console.error('[Message] forwardMessages failed:', `${error}`)
+        uni.showToast({ title: '转发失败', icon: 'none', duration: 2000 })
+      })
   }
 </script>
 

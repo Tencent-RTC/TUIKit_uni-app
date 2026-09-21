@@ -7,20 +7,17 @@
       <view
         v-if="quoteMessage"
         class="text-msg__quote text-msg__quote--no-select"
+        :class="'text-msg__quote--' + (message.isSentBySelf ? 'out' : 'in')"
         @tap="handleReferenceTap"
       >
         <view class="text-msg__quote-header">
-          <text class="text-msg__quote-sender text-msg__text--no-select">{{ quoteMessage.msgSender || '' }}</text>
+          <text class="text-msg__quote-sender text-msg__text--no-select">{{ quoteSenderName }}</text>
         </view>
         <view class="text-msg__quote-body">
-          <text class="text-msg__quote-text text-msg__text--no-select">{{ quoteMessage.msgAbstract || '' }}</text>
+          <text class="text-msg__quote-text text-msg__text--no-select" :numberOfLines="1">{{ quoteAbstract }}</text>
         </view>
       </view>
 
-      <!-- 渲染策略：
-           - 纯文本（不含 [TUIEmoji_*]）：单个 <text> 节点，性能最优 + 自动换行 + 原生字号控制
-           - 含 emoji：字符级 view + flex-wrap，每个字符 / emoji 独立节点，align-items:center 强制居中
-             代价是节点数增加，仅在 ~20% 含 emoji 消息中付出 -->
       <view class="text-msg__body text-msg__body--no-select">
         <text v-if="!hasEmojiInText" class="text-msg__plain text-msg__text--no-select">{{ messageText }}</text>
         <view v-else class="text-msg__line">
@@ -30,14 +27,36 @@
           </template>
         </view>
       </view>
+
+      <view
+        v-if="translateBoxVisible"
+        ref="translateBoxRef"
+        class="text-msg__translate"
+        :style="translateBoxInitStyle"
+      >
+        <view class="text-msg__translate-divider" />
+        <text v-if="isTranslating" class="text-msg__translate-text text-msg__text--no-select">...</text>
+        <view v-else ref="translateTextRef" :style="translateTextInitStyle">
+          <text class="text-msg__translate-text text-msg__text--no-select">{{ translatedText }}</text>
+          <view class="text-msg__translate-footer">
+            <image class="text-msg__translate-footer-icon" :src="translateFooterIcon" mode="aspectFit" />
+            <text class="text-msg__translate-footer-text text-msg__text--no-select">由 IM 提供翻译支持</text>
+          </view>
+        </view>
+      </view>
     </view>
   </view>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import type { MessageInfo } from '../../../../types/message'
-import { parseTextToSegments, hasEmoji } from '../../../../utils/emojiUtils'
+import { MessageStatus } from '../../../../types/message'
+import { getMessageAbstract } from '../../../ConversationList/utils'
+import { parseTextToSegments, hasEmoji, transformEmojiKeyToName } from '../../../../utils/emojiUtils'
+import translateFooterIcon from '../../assets/msg_translate.png'
+
+const animation = uni.requireNativePlugin('animation')
 
 interface Props {
   message: MessageInfo
@@ -54,14 +73,225 @@ const hasEmojiInText = computed(() => hasEmoji(messageText.value))
 const segments = computed(() => hasEmojiInText.value ? parseTextToSegments(messageText.value) : [])
 
 const quoteMessage = computed(() => {
-  return props.message.quoteMessageInfo
+  return (props.message as any)?.quoteInfo || null
+})
+
+const quoteSenderName = computed<string>(() => {
+  const sender = quoteMessage.value?.sender
+  if (!sender) return ''
+  return sender.nameCard || sender.friendRemark || sender.nickname || sender.userID || ''
+})
+
+const quoteAbstract = computed<string>(() => {
+  const quote = quoteMessage.value
+  if (!quote) return ''
+  if (quote.status === MessageStatus.DELETED) return '原消息已删除'
+  if (quote.status === MessageStatus.REVOKED) return '原消息已撤回'
+  return transformEmojiKeyToName(getMessageAbstract(quote as any, false))
 })
 
 const handleReferenceTap = () => {
-  if (quoteMessage.value?.msgID) {
-    uni.$emit('scrollToMessage', quoteMessage.value.msgID)
+  const quote = quoteMessage.value
+  if (!quote?.msgID) return
+  if (quote.status === MessageStatus.DELETED || quote.status === MessageStatus.REVOKED) return
+  uni.$emit('scrollToMessage', quote.msgID, quote)
+}
+
+const TRANSLATE_STORAGE_KEY = 'tuikit_message_translate_visible_v1'
+
+const translatedText = computed<string>(() => {
+  const payload: any = (props.message as any)?.messagePayload
+  const sourceText = payload?.text || ''
+  const map = payload?.translatedText
+  if (!map || !sourceText) return ''
+  return map[sourceText] || ''
+})
+
+const isTranslating = ref(false)
+const translateBoxRef = ref<any>(null)
+const translateTextRef = ref<any>(null)
+const curtainPhase = ref<'idle' | 'pending' | 'done'>('idle')
+
+const curtainOrigin = computed(() => {
+  return (props.message as any)?.isSentBySelf ? '100% 0' : '0 0'
+})
+
+const translateBoxInitStyle = computed(() => {
+  if (isTranslating.value) return {}
+  if (curtainPhase.value === 'pending') {
+    return { opacity: 0, transform: 'scale(0, 0)', transformOrigin: curtainOrigin.value }
+  }
+  if (curtainPhase.value === 'done') {
+    return { opacity: 1, transform: 'scale(1, 1)', transformOrigin: curtainOrigin.value }
+  }
+  return {}
+})
+
+const translateTextInitStyle = computed(() => {
+  if (isTranslating.value) return {}
+  if (curtainPhase.value === 'pending') return { opacity: 0 }
+  if (curtainPhase.value === 'done') return { opacity: 1 }
+  return {}
+})
+
+const CURTAIN_BOX_DURATION = 360
+const CURTAIN_TEXT_DELAY = 120
+const CURTAIN_TEXT_DURATION = 240
+const playCurtainAnimation = () => {
+  let attempt = 0
+  const tryAnimate = () => {
+    attempt += 1
+    const boxEl = translateBoxRef.value
+    const textEl = translateTextRef.value
+    if (boxEl) {
+      animation.transition(boxEl, {
+        styles: { opacity: 1, transform: 'scale(1, 1)', transformOrigin: curtainOrigin.value },
+        duration: CURTAIN_BOX_DURATION,
+        timingFunction: 'cubic-bezier(0.16, 1, 0.3, 1)',
+        delay: 0
+      })
+      if (textEl) {
+        animation.transition(textEl, {
+          styles: { opacity: 1 },
+          duration: CURTAIN_TEXT_DURATION,
+          timingFunction: 'ease-out',
+          delay: CURTAIN_TEXT_DELAY
+        })
+      }
+      const totalDuration = Math.max(CURTAIN_BOX_DURATION, CURTAIN_TEXT_DELAY + CURTAIN_TEXT_DURATION)
+      setTimeout(() => { curtainPhase.value = 'done' }, totalDuration + 50)
+      return
+    }
+    if (attempt < 3) {
+      setTimeout(tryAnimate, 32)
+    } else {
+      console.error('[TextMessage] curtain anim: ref unavailable, fallback to done state')
+      curtainPhase.value = 'done'
+    }
+  }
+  nextTick(() => { setTimeout(tryAnimate, 16) })
+}
+
+const readVisibleStore = (): Record<string, boolean> => {
+  try {
+    const raw = uni.getStorageSync(TRANSLATE_STORAGE_KEY)
+    if (raw && typeof raw === 'object') return raw as Record<string, boolean>
+    if (typeof raw === 'string' && raw) {
+      return JSON.parse(raw) as Record<string, boolean>
+    }
+  } catch (e) {}
+  return {}
+}
+
+const writeVisibleStore = (store: Record<string, boolean>) => {
+  try {
+    uni.setStorageSync(TRANSLATE_STORAGE_KEY, store)
+  } catch (e) {
+    console.error('[TextMessage] writeVisibleStore failed:', e)
   }
 }
+
+const showTranslation = ref<boolean>((() => {
+  const store = readVisibleStore()
+  return store[props.message.msgID] === false ? false : true
+})())
+
+
+const translateBoxVisible = computed(() => {
+  return isTranslating.value || (!!translatedText.value && showTranslation.value)
+})
+
+const getVisibleMap = (): Map<string, boolean> => {
+  const u: any = uni as any
+  if (!u.__messageTranslateVisibleMap__) {
+    u.__messageTranslateVisibleMap__ = new Map<string, boolean>()
+  }
+  return u.__messageTranslateVisibleMap__
+}
+
+const syncVisibleMap = () => {
+  getVisibleMap().set(props.message.msgID, !!translatedText.value && showTranslation.value)
+}
+
+// 仅写 false（true 即默认值，不写以节省空间）
+const persistShowTranslation = (visible: boolean) => {
+  const store = readVisibleStore()
+  if (visible) {
+    if (props.message.msgID in store) {
+      delete store[props.message.msgID]
+      writeVisibleStore(store)
+    }
+  } else if (store[props.message.msgID] !== false) {
+    store[props.message.msgID] = false
+    writeVisibleStore(store)
+  }
+}
+
+/** 通知 MessageList：气泡长高了，必要时滚动让译文完整可见（避免被输入框遮挡） */
+const notifyBoxGrow = () => {
+  nextTick(() => {
+    uni.$emit('messageBoxGrow', {
+      msgID: props.message.msgID,
+      boxRef: translateBoxRef.value
+    })
+  })
+}
+
+watch(translatedText, (newText) => {
+  if (isTranslating.value && newText) {
+    curtainPhase.value = 'pending'
+    isTranslating.value = false
+    playCurtainAnimation()
+  }
+  if (newText) notifyBoxGrow()
+  syncVisibleMap()
+})
+
+watch(showTranslation, (visible) => {
+  syncVisibleMap()
+  persistShowTranslation(visible)
+})
+
+const handleTranslateStart = (data: { msgID: string }) => {
+  if (data?.msgID !== props.message.msgID) return
+  showTranslation.value = true
+  if (translatedText.value) {
+    curtainPhase.value = 'pending'
+    isTranslating.value = false
+    playCurtainAnimation()
+    notifyBoxGrow()
+  } else {
+    isTranslating.value = true
+  }
+}
+
+const handleTranslateError = (data: { msgID: string }) => {
+  if (data?.msgID === props.message.msgID) {
+    isTranslating.value = false
+  }
+}
+
+const handleTranslateHide = (data: { msgID: string }) => {
+  if (data?.msgID === props.message.msgID) {
+    isTranslating.value = false
+    showTranslation.value = false
+    curtainPhase.value = 'idle'
+  }
+}
+
+onMounted(() => {
+  uni.$on('messageTranslateStart', handleTranslateStart)
+  uni.$on('messageTranslateError', handleTranslateError)
+  uni.$on('messageTranslateHide', handleTranslateHide)
+  syncVisibleMap()
+})
+
+onUnmounted(() => {
+  uni.$off('messageTranslateStart', handleTranslateStart)
+  uni.$off('messageTranslateError', handleTranslateError)
+  uni.$off('messageTranslateHide', handleTranslateHide)
+  try { getVisibleMap().delete(props.message.msgID) } catch (e) {}
+})
 </script>
 
 <style>
@@ -97,13 +327,21 @@ const handleReferenceTap = () => {
   background-color: transparent;
 }
 
+/* 气泡内引用块：左侧竖条 + 发送者 + 单行内容摘要 */
 .text-msg__quote {
-  background-color: rgba(0, 0, 0, 0.05);
-  border-left-width: 4rpx;
-  border-left-color: #999;
-  border-radius: 8rpx;
-  padding: 16rpx;
-  margin-bottom: 12rpx;
+  border-radius: 0 8rpx 8rpx 0;
+  padding: 6rpx 12rpx;
+  margin-bottom: 16rpx;
+  border-left: 4rpx solid #D5D5D5;
+}
+
+/* 引用块背景按发送方区分（nvue 不支持后代选择器，必须用修饰类） */
+.text-msg__quote--in {
+  background-color: #E4E4E4;
+}
+
+.text-msg__quote--out {
+  background-color: #D5E2F5;
 }
 
 .text-msg__quote--no-select {
@@ -118,8 +356,8 @@ const handleReferenceTap = () => {
 
 .text-msg__quote-sender {
   font-size: 24rpx;
-  color: #333;
   font-weight: 500;
+  color: #888888;
 }
 
 .text-msg__quote-body {
@@ -127,8 +365,10 @@ const handleReferenceTap = () => {
 }
 
 .text-msg__quote-text {
-  font-size: 26rpx;
-  color: #666;
+  font-size: 24rpx;
+  color: #888888;
+  lines: 1;
+  text-overflow: ellipsis;
 }
 
 .text-msg__text--no-select {
@@ -174,5 +414,48 @@ const handleReferenceTap = () => {
 .text-msg__emoji {
   width: 40rpx;
   height: 40rpx;
+}
+
+/* 译文区：与原文之间用细分隔线区隔，整体在气泡内自然延展 */
+.text-msg__translate {
+  flex-direction: column;
+  margin-top: 16rpx;
+}
+
+.text-msg__translate-divider {
+  height: 1rpx;
+  background-color: rgba(0, 0, 0, 0.08);
+  margin-bottom: 16rpx;
+}
+
+.text-msg__translate-text {
+  font-size: 32rpx;
+  line-height: 44rpx;
+  color: #1A1A1A;
+  word-wrap: break-word;
+  word-break: break-all;
+  white-space: normal;
+  /* nvue text 需父容器有宽度约束才换行，显式声明保证多行展示 */
+  lines: 0;
+}
+
+/* "由 IM 提供翻译支持" 来源说明 */
+.text-msg__translate-footer {
+  flex-direction: row;
+  align-items: center;
+  margin-top: 12rpx;
+}
+
+.text-msg__translate-footer-icon {
+  width: 24rpx;
+  height: 24rpx;
+  margin-right: 8rpx;
+  opacity: 0.4;
+}
+
+.text-msg__translate-footer-text {
+  font-size: 22rpx;
+  line-height: 30rpx;
+  color: rgba(0, 0, 0, 0.4);
 }
 </style>

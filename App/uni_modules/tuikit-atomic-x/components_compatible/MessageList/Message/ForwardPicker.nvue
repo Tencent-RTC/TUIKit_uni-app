@@ -1,0 +1,279 @@
+<template>
+  <view class="fwd-picker">
+    <CustomNavbar
+      title="选择"
+      :showBack="false"
+      :showMenu="true"
+      :showShadow="false"
+      @back="handleClose"
+      @menuSelect="noop"
+    >
+      <template v-slot:left>
+        <view class="fwd-picker__cancel" @tap.stop="handleClose">
+          <text class="fwd-picker__cancel-text">取消</text>
+        </view>
+      </template>
+      <template v-slot:right>
+        <view class="fwd-picker__nav-right" @tap.stop="noop"></view>
+      </template>
+    </CustomNavbar>
+
+    <view class="fwd-picker__search">
+      <view class="fwd-picker__search-wrapper">
+        <view class="fwd-picker__search-inner" :class="keyword ? 'fwd-picker__search-inner--left' : ''">
+          <image class="fwd-picker__search-icon" :src="searchIconSrc" mode="aspectFit" />
+          <input
+            class="fwd-picker__search-input"
+            type="text"
+            :value="keyword"
+            placeholder="搜索"
+            placeholder-class="fwd-picker__search-placeholder"
+            @input="handleSearchInput"
+          />
+        </view>
+      </view>
+    </view>
+
+    <scroll-view
+      class="fwd-picker__list"
+      scroll-y
+      :show-scrollbar="false"
+    >
+      <view class="fwd-picker__section">
+        <text class="fwd-picker__section-title">最近聊天</text>
+      </view>
+
+      <view v-if="targetList.length === 0" class="fwd-picker__empty">
+        <text class="fwd-picker__empty-text">{{ keyword ? '没有匹配的聊天' : '暂无可转发的会话' }}</text>
+      </view>
+
+      <view
+        v-for="(item, index) in targetList"
+        :key="item.conversationID"
+        class="fwd-picker__item"
+        @tap.stop="handleSelect(item)"
+      >
+        <Avatar
+          :src="item.avatarURL"
+          :name="item.title"
+          :size="80"
+          :defaultAvatarType="item.defaultAvatarType"
+          class="fwd-picker__avatar"
+        />
+        <view class="fwd-picker__info">
+          <text class="fwd-picker__name">{{ item.title }}</text>
+        </view>
+      </view>
+
+      <!-- 底部留白，避免最后一项贴边 -->
+      <view class="fwd-picker__list-footer" />
+    </scroll-view>
+  </view>
+</template>
+
+<script>
+import Avatar from '../../Avatar/Avatar.nvue'
+import CustomNavbar from '../../CustomNavbar/CustomNavbar.nvue'
+import { useConversationListState } from '../../../state/ConversationListState'
+import { ConversationType } from '../../../types/conversation'
+
+export default {
+  name: 'ForwardPicker',
+  components: { Avatar, CustomNavbar },
+  props: {
+    // 转发来源会话：从列表中排除，避免转发给自己所在的当前会话
+    excludeConversationID: { type: String, default: '' }
+  },
+  data() {
+    return {
+      keyword: '',
+      storeInstance: null,
+      searchIconSrc: '/uni_modules/tuikit-atomic-x/static/icon/search.png'
+    }
+  },
+  computed: {
+    targetList() {
+      var inst = this.storeInstance
+      var list = (inst && inst.state && inst.state.conversationList) || []
+      var result = []
+      var kw = this.keyword.trim().toLowerCase()
+      var exclude = this.excludeConversationID
+
+      list.forEach(function(conv) {
+        if (!conv || !conv.conversationID) return
+        if (exclude && conv.conversationID === exclude) return
+
+        var isGroup = conv.type === ConversationType.GROUP
+        var fallbackID = isGroup
+          ? conv.conversationID.replace('group_', '')
+          : conv.conversationID.replace('c2c_', '')
+        var title = conv.title || fallbackID
+
+        if (kw && title.toLowerCase().indexOf(kw) === -1) return
+
+        result.push({
+          conversationID: conv.conversationID,
+          title: title,
+          avatarURL: conv.avatarURL || '',
+          defaultAvatarType: isGroup ? (conv.groupType || 'work') : 'user'
+        })
+      })
+
+      return result
+    }
+  },
+  created() {
+    this.storeInstance = useConversationListState('ForwardPicker')
+  },
+  mounted() {
+    var inst = this.storeInstance
+    var list = (inst && inst.state && inst.state.conversationList) || []
+    if (list.length === 0) {
+      inst.loadConversations({ pageSize: 100 }).catch(function(e) {
+        console.warn('[ForwardPicker] loadConversations failed:', e)
+      })
+    }
+  },
+  methods: {
+    handleSearchInput(e) {
+      this.keyword = (e && e.detail && e.detail.value) || ''
+    },
+    handleSelect(item) {
+      this.$emit('select', item.conversationID)
+    },
+    handleClose() {
+      this.$emit('close')
+    },
+    noop() {}
+  }
+}
+</script>
+
+<style>
+.fwd-picker {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #ffffff;
+  flex-direction: column;
+  z-index: 9990;
+}
+
+.fwd-picker__cancel {
+  width: auto;
+  padding-left: 0;
+  justify-content: flex-start;
+}
+
+.fwd-picker__cancel-text {
+  font-size: 32rpx;
+  color: rgba(0, 0, 0, 0.9);
+}
+
+.fwd-picker__nav-right {
+  width: 100rpx;
+  height: 88rpx;
+}
+
+.fwd-picker__search {
+  padding: 8rpx 32rpx 24rpx;
+}
+
+.fwd-picker__search-wrapper {
+  background-color: #F0F2F7;
+  border-radius: 8rpx;
+  padding: 16rpx 24rpx;
+}
+
+.fwd-picker__search-inner {
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+}
+
+.fwd-picker__search-inner--left {
+  justify-content: flex-start;
+}
+
+.fwd-picker__search-icon {
+  width: 32rpx;
+  height: 32rpx;
+  margin-right: 8rpx;
+  opacity: 0.4;
+}
+
+.fwd-picker__search-input {
+  font-size: 28rpx;
+  line-height: 40rpx;
+  color: rgba(0, 0, 0, 0.9);
+  width: 500rpx;
+}
+
+.fwd-picker__search-placeholder {
+  font-size: 28rpx;
+  color: rgba(0, 0, 0, 0.4);
+}
+
+.fwd-picker__list {
+  flex: 1;
+}
+
+.fwd-picker__section {
+  background-color: #F5F7FA;
+  padding: 10rpx 32rpx;
+}
+
+.fwd-picker__section-title {
+  font-size: 24rpx;
+  line-height: 34rpx;
+  color: rgba(0, 0, 0, 0.4);
+}
+
+.fwd-picker__item {
+  flex-direction: row;
+  align-items: center;
+  padding: 20rpx 32rpx;
+  border-bottom-width: 1rpx;
+  border-bottom-style: solid;
+  border-bottom-color: #F0F2F7;
+}
+
+.fwd-picker__item:active {
+  background-color: #F5F5F5;
+}
+
+.fwd-picker__avatar {
+  margin-right: 24rpx;
+}
+
+.fwd-picker__info {
+  flex: 1;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.fwd-picker__name {
+  font-size: 32rpx;
+  line-height: 44rpx;
+  color: rgba(0, 0, 0, 0.9);
+  lines: 1;
+  text-overflow: ellipsis;
+}
+
+.fwd-picker__empty {
+  align-items: center;
+  justify-content: center;
+  padding: 80rpx 0;
+}
+
+.fwd-picker__empty-text {
+  font-size: 28rpx;
+  color: rgba(0, 0, 0, 0.4);
+}
+
+.fwd-picker__list-footer {
+  height: 40rpx;
+}
+</style>
