@@ -10,8 +10,10 @@ import android.util.Log
 import android.view.KeyEvent
 import android.view.View
 import android.view.ViewGroup
+import android.view.Window
 import android.view.animation.DecelerateInterpolator
 import android.widget.FrameLayout
+import androidx.core.view.WindowCompat
 import androidx.activity.ComponentActivity
 import androidx.lifecycle.findViewTreeLifecycleOwner
 import androidx.lifecycle.setViewTreeLifecycleOwner
@@ -96,6 +98,8 @@ class AlbumPickerManager private constructor() {
         mainHandler.post {
             // Remove existing overlay if any
             removeOverlay()
+            // 快照宿主原始窗口状态（Window.decorFitsSystemWindows 属性 + decorView.systemUiVisibility），关闭时原样恢复
+            snapshotWindowState(activity)
 
             val decorView = activity.window.decorView as? ViewGroup ?: run {
                 console.error("$TAG decorView is null")
@@ -145,7 +149,7 @@ class AlbumPickerManager private constructor() {
             val listener = object : AlbumPickerListener {
                 override fun onPickConfirm(pickedAlbumMedias: List<AlbumMedia>, textMessage: String?) {
                     console.log("$TAG onPickConfirm, count: ${pickedAlbumMedias.size}")
-
+					
                     val callbacks = sessionCallbacks[sessionId]
                     if (callbacks == null) {
                         console.error("$TAG onPickConfirm: sessionId not found")
@@ -153,7 +157,9 @@ class AlbumPickerManager private constructor() {
                     }
 
                     mainHandler.post {
-                        animateRemoveOverlay(null)
+                        animateRemoveOverlay{
+							restoreWindowState(activity)
+						}
                     }
 
                     val serialized = pickedAlbumMedias.map { serializeAlbumMedia(it) }
@@ -206,6 +212,7 @@ class AlbumPickerManager private constructor() {
 
                     mainHandler.post {
                         animateRemoveOverlay {
+							restoreWindowState(activity)
                             callbacks.onCancel()
                             cleanup(sessionId)
                         }
@@ -243,6 +250,34 @@ class AlbumPickerManager private constructor() {
     }
 
     fun isShowing(): Boolean = overlayContainer != null
+
+    private var savedSystemUiVisibility: Int? = null
+    private var savedDecorFitsSystemWindows: Boolean? = null
+
+    private fun snapshotWindowState(activity: Activity) {
+        savedSystemUiVisibility = activity.window.decorView.systemUiVisibility
+        savedDecorFitsSystemWindows = readDecorFitsSystemWindows(activity.window)
+    }
+
+    // AlbumPicker 的 applyEdgeToEdge 会同时修改 Window.decorFitsSystemWindows 属性与
+    // decorView.systemUiVisibility，关闭时需成对恢复：
+    // - decorFitsSystemWindows 停留 false 会让内容延伸到导航栏下，MessageInput 被压住；
+    // - systemUiVisibility 被清掉 LAYOUT_FULLSCREEN 会激活 adjustResize，键盘弹出时双重位移。
+    private fun restoreWindowState(activity: Activity) {
+        val decorView = activity.window.decorView
+        WindowCompat.setDecorFitsSystemWindows(activity.window, savedDecorFitsSystemWindows ?: true)
+        savedSystemUiVisibility?.let { decorView.systemUiVisibility = it }
+    }
+
+    private fun readDecorFitsSystemWindows(window: Window): Boolean? {
+        return try {
+            val field = Window::class.java.getDeclaredField("mDecorFitsSystemWindows")
+            field.isAccessible = true
+            field.getBoolean(window)
+        } catch (e: Exception) {
+            null
+        }
+    }
 
     fun handleBackPressed() {
         val activity = hostActivity ?: return

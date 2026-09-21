@@ -9,43 +9,24 @@
       @touchstart.stop
       @touchend.stop
     >
-      <view 
-        v-if="canCopy"
-        class="msg-actions__item msg-actions__item--first"
-        @touchstart.stop
-        @touchend.stop="handleCopy"
+      <view
+        v-for="(row, rowIndex) in actionRows"
+        :key="rowIndex"
+        class="msg-actions__row-wrap"
       >
-        <image class="msg-actions__icon" :src="copyIcon" mode="aspectFit"></image>
-        <text class="msg-actions__text">复制</text>
-      </view>
-      
-      <view 
-        class="msg-actions__item"
-        @touchstart.stop
-        @touchend.stop="handleDelete"
-      >
-        <image class="msg-actions__icon" :src="deleteIcon" mode="aspectFit"></image>
-        <text class="msg-actions__text">删除</text>
-      </view>
-      
-      <view 
-        v-if="canConvertVoice"
-        class="msg-actions__item"
-        @touchstart.stop
-        @touchend.stop="handleVoiceToText"
-      >
-        <image class="msg-actions__icon" :src="voiceToTextIcon" mode="aspectFit"></image>
-        <text class="msg-actions__text">{{ voiceActionLabel }}</text>
-      </view>
-      
-      <view 
-        v-if="canRecall"
-        class="msg-actions__item msg-actions__item--last"
-        @touchstart.stop
-        @touchend.stop="handleRecall"
-      >
-        <image class="msg-actions__icon" :src="recallIcon" mode="aspectFit"></image>
-        <text class="msg-actions__text">撤回</text>
+        <view class="msg-actions__row">
+          <view
+            v-for="item in row"
+            :key="item.key"
+            class="msg-actions__item"
+            @touchstart.stop
+            @touchend.stop="handleActionTap(item)"
+          >
+            <image class="msg-actions__icon" :src="item.icon" mode="aspectFit"></image>
+            <text class="msg-actions__text">{{ item.label }}</text>
+          </view>
+        </view>
+        <view v-if="rowIndex < actionRows.length - 1" class="msg-actions__divider"></view>
       </view>
     </view>
     
@@ -55,15 +36,20 @@
 
 <script setup lang="uts">
 import { computed, ref, onMounted, onUnmounted, nextTick, watch } from 'vue'
-import { MessageStatus, MessageType } from '../../../types/message'
 import type { MessageInfo } from '../../../types/message'
 import { useMessageActionState } from '../../../state/MessageActionState'
 import { throttle } from '../../../utils/lodash'
+import { isCallMessage } from '../../../utils/callMessageUtils'
 import { getAudioConvertVisibleMap } from '@/uni_modules/tuikit-atomic-x/utils/audioConvertVisibleMapStore.uts'
+import { isMessageTranslateVisible } from '@/uni_modules/tuikit-atomic-x/utils/messageTranslateVisibleMapStore.uts'
 
 import copyIcon from '../assets/msg_copy.png'
 import deleteIcon from '../assets/msg_delete.png'
+import forwardIcon from '../assets/msg_forward.png'
+import hideIcon from '../assets/msg_hide.png'
+import quoteIcon from '../assets/msg_quote.png'
 import recallIcon from '../assets/msg_recall.png'
+import translateIcon from '../assets/msg_translate.png'
 import voiceToTextIcon from '../assets/msg_voice_to_text.png'
 
 function toUTSJSONObject(value: any | null): UTSJSONObject {
@@ -101,6 +87,16 @@ function safeHideLoading(): void {
   } catch (_e: any) {
   }
 }
+
+// 从 UTSJSONObject 读出的 messageType / status 是原始 Number，与 enum 实例比较恒不相等
+// （Kotlin 下 Number != enum object），因此统一用数值字面量，与 Message.uvue 的做法一致
+// MessageType: TEXT=1 AUDIO=4 TIPS=7 CUSTOM=8 / MessageStatus: REVOKED=4 DELETED=5
+const MSG_TYPE_TEXT = 1
+const MSG_TYPE_AUDIO = 4
+const MSG_TYPE_TIPS = 7
+const MSG_TYPE_CUSTOM = 8
+const MSG_STATUS_REVOKED = 4
+const MSG_STATUS_DELETED = 5
 
 // 箭头几何参数（rpx，与 .msg-actions__arrow width/height 保持一致）
 const ARROW_SIZE = 24
@@ -167,7 +163,7 @@ const safeClose = () => {
 const canCopy = computed((): boolean => {
   const messageObj: UTSJSONObject = toUTSJSONObject(props.message)
   const mt: any | null = messageObj['messageType']
-  if (mt !== 1) return false
+  if (mt != MSG_TYPE_TEXT) return false
   const body: any | null = messageObj['messagePayload']
   if (body == null) return false
   const bodyObj: UTSJSONObject = toUTSJSONObject(body)
@@ -183,7 +179,7 @@ const canRecall = computed((): boolean => {
   }
 
   const st: any | null = messageObj['status']
-  if (st == MessageStatus.REVOKED || st == MessageStatus.DELETED) {
+  if (st == MSG_STATUS_REVOKED || st == MSG_STATUS_DELETED) {
     return false
   }
 
@@ -202,7 +198,33 @@ const canRecall = computed((): boolean => {
 const canConvertVoice = computed((): boolean => {
   const messageObj: UTSJSONObject = toUTSJSONObject(props.message)
   const mt: any | null = messageObj['messageType']
-  return mt == 4
+  return mt == MSG_TYPE_AUDIO
+})
+
+/** 已撤回 / 已删除的消息不再提供转发、引用、翻译 */
+const isDeadMessage = computed((): boolean => {
+  const messageObj: UTSJSONObject = toUTSJSONObject(props.message)
+  const st: any | null = messageObj['status']
+  return st == MSG_STATUS_REVOKED || st == MSG_STATUS_DELETED
+})
+
+// 消息是否可被转发：撤回/删除、系统提示、通话信令不支持
+const canForward = computed((): boolean => {
+  if (isDeadMessage.value) return false
+  const messageObj: UTSJSONObject = toUTSJSONObject(props.message)
+  const mt: any | null = messageObj['messageType']
+  if (mt == MSG_TYPE_TIPS) return false
+  if (mt == MSG_TYPE_CUSTOM && isCallMessage(props.message)) return false
+  return true
+})
+
+// 消息是否可被引用：撤回/删除、系统提示不支持
+const canQuote = computed((): boolean => {
+  if (isDeadMessage.value) return false
+  const messageObj: UTSJSONObject = toUTSJSONObject(props.message)
+  const mt: any | null = messageObj['messageType']
+  if (mt == MSG_TYPE_TIPS) return false
+  return true
 })
 
 /**
@@ -263,21 +285,72 @@ const voiceActionLabel = computed(() => {
   return voiceTextVisible.value ? '隐藏文字' : '转文字'
 })
 
+// ==================== 消息翻译 ====================
+// 翻译的实际执行（调 SDK、显隐状态）都在 TextMessage.uvue，这里只负责能否显示该操作项 + 文案
+
+/** 取消息原文，仅用于判断该消息是否可翻译 */
+const messageSourceText = computed((): string => {
+  const messageObj: UTSJSONObject = toUTSJSONObject(props.message)
+  const body: any | null = messageObj['messagePayload']
+  if (body == null) return ''
+  const bodyObj: UTSJSONObject = toUTSJSONObject(body)
+  const t: any | null = bodyObj['text']
+  return typeof t == 'string' ? (t as string) : ''
+})
+
+// 仅文本消息可翻译；已撤回/已删除的消息不提供翻译
+const canTranslate = computed((): boolean => {
+  if (isDeadMessage.value) return false
+  const messageObj: UTSJSONObject = toUTSJSONObject(props.message)
+  const mt: any | null = messageObj['messageType']
+  if (mt != MSG_TYPE_TEXT) return false
+  return messageSourceText.value.length > 0
+})
+
+/** 当前消息 msgID */
+const currentMsgID = computed((): string => {
+  const messageObj: UTSJSONObject = toUTSJSONObject(props.message)
+  const idVal: any | null = messageObj['msgID']
+  return idVal != null ? `${idVal}` : ''
+})
+
+/**
+ * 译文是否正展示 —— 只用于决定按钮文案是"翻译"还是"隐藏"
+ *
+ * 读 TextMessage 上报的运行时状态（模块级 Map，非响应式，但本面板每次长按都重建，
+ * 首次求值即为当前值）。即使读错，点击行为仍由 TextMessage 自己 toggle，不会出错。
+ */
+const translateVisible = computed((): boolean => {
+  return isMessageTranslateVisible(currentMsgID.value)
+})
+
+const translateActionLabel = computed((): string => {
+  return translateVisible.value ? '隐藏' : '翻译'
+})
+
+/** 视口安全区度量结果（UTS 不支持直接声明对象字面量类型，必须具名） */
+type ViewportRpx = {
+  minTop: number
+  maxBottom: number
+}
+
 /**
  * 视口安全区度量（rpx）—— 一处算好，panelTopRpx / measureAndPosition 复用
  */
-const viewportRpx = (): { minTop: number, maxBottom: number } => {
-  const si: any = uni.getSystemInfoSync()
-  const sw: number = (si.windowWidth as number) ?? 375
-  const sh: number = (si.screenHeight as number) ?? (si.windowHeight as number) ?? 667
+const viewportRpx = (): ViewportRpx => {
+  // 不能标注 `si: any`：UTS 下 any 会丢失字段类型，属性访问直接报"找不到名称 xxx"
+  const si = uni.getSystemInfoSync()
+  const sw: number = si.windowWidth
+  const screenH: number = si.screenHeight
+  const sh: number = screenH > 0 ? screenH : si.windowHeight
   const navH: number = si.platform == 'android' ? 48 : 44
-  const safeTop: number = (si.safeArea?.top as number) ?? 0
-  const safeBottomRaw: number = (si.safeArea?.bottom as number) ?? sh
+  const safeTop: number = si.safeArea?.top ?? 0
+  const safeBottomRaw: number = si.safeArea?.bottom ?? sh
   const safeBottom: number = (sh - safeBottomRaw) > 0 ? (sh - safeBottomRaw) : 0
   return {
     minTop: (safeTop + navH + 8) / sw * 750,
     maxBottom: (sh - safeBottom - 8) / sw * 750,
-  }
+  } as ViewportRpx
 }
 
 /**
@@ -289,7 +362,9 @@ const panelTopRpx = computed((): number => {
   const ph: number = panelHeightRpx.value
   const want: number = showBelow.value ? (tp.y + tp.messageHeight + GAP) : (tp.y - ph - GAP)
   if (ph <= 0) return want
-  const { minTop, maxBottom } = viewportRpx()
+  const vp: ViewportRpx = viewportRpx()
+  const minTop: number = vp.minTop
+  const maxBottom: number = vp.maxBottom
   // 长消息占满屏：上下都放不下 → 居中
   if (isCentered.value) return Math.round((minTop + maxBottom - ph) / 2)
   return Math.max(minTop, Math.min(want, maxBottom - ph))
@@ -570,6 +645,119 @@ const handleVoiceToText = (_arg: any | null): void => {
   })
 }
 
+/** 转发：面板内不做实际转发，交给 Message.uvue 打开 ForwardPicker */
+const handleForward = (_arg: any | null): void => {
+  emit('action', { key: 'forward', text: '转发' })
+  safeClose()
+}
+
+/** 引用：交给 Message.uvue 广播 atomicx-quote，MessageInput 接管 */
+const handleQuote = (_arg: any | null): void => {
+  emit('action', { key: 'quote', text: '引用' })
+  safeClose()
+}
+
+/**
+ * 翻译 / 隐藏译文
+ *
+ * 这里只广播一个 toggle，显隐判断与 SDK 调用都在 TextMessage 里完成 ——
+ * 它才是 showTranslation 的持有者。之前在本组件先判断再发 Start/Hide 两种事件，
+ * 依赖跨组件的全局 Map，Map 没命中时会错误地走"展示"分支（表现为点隐藏没反应）。
+ * 本组件保留的 translateVisible 仅用于按钮文案，判错也只是文案不准，不影响行为。
+ */
+const handleTranslate = (_arg: any | null): void => {
+  const msgID: string = currentMsgID.value
+
+  emit('action', { key: translateVisible.value ? 'translateHide' : 'translate', text: translateActionLabel.value })
+  safeClose()
+
+  uni.$emit('messageTranslateToggle', { msgID })
+}
+
+// ==================== 操作项配置 ====================
+// 每行最多展示的操作项数量，超出则换行
+const ACTIONS_PER_ROW = 4
+
+type ActionItem = {
+  key: string
+  label: string
+  icon: string
+  visible: boolean
+}
+
+// 引用功能开关：false 时只隐藏长按面板入口，气泡内引用块渲染 / 已引用消息的发送都不受影响
+const QUOTE_ENTRY_ENABLED = false
+
+// 统一在此配置每个操作项的 key / 文案 / 图标 / 显隐条件，处理函数在 handleActionTap 按 key 分发
+const actionConfig = computed((): ActionItem[] => {
+  const list: ActionItem[] = []
+  list.push({ key: 'copy', label: '复制', icon: copyIcon, visible: canCopy.value } as ActionItem)
+  list.push({ key: 'delete', label: '删除', icon: deleteIcon, visible: true } as ActionItem)
+  list.push({ key: 'voiceToText', label: voiceActionLabel.value, icon: voiceToTextIcon, visible: canConvertVoice.value } as ActionItem)
+  list.push({ key: 'recall', label: '撤回', icon: recallIcon, visible: canRecall.value } as ActionItem)
+  list.push({ key: 'forward', label: '转发', icon: forwardIcon, visible: canForward.value } as ActionItem)
+  list.push({ key: 'quote', label: '引用', icon: quoteIcon, visible: QUOTE_ENTRY_ENABLED && canQuote.value } as ActionItem)
+  list.push({
+    key: 'translate',
+    label: translateActionLabel.value,
+    icon: translateVisible.value ? hideIcon : translateIcon,
+    visible: canTranslate.value
+  } as ActionItem)
+  return list
+})
+
+// actions prop 为操作项 key 列表：非空时按顺序裁剪与排序，为空则展示全部可用项
+const visibleActions = computed((): ActionItem[] => {
+  const available: ActionItem[] = actionConfig.value.filter((item: ActionItem): boolean => item.visible)
+  const configured: any[] = props.actions ?? ([] as any[])
+  if (configured.length == 0) {
+    return available
+  }
+  const result: ActionItem[] = []
+  configured.forEach((keyRaw: any) => {
+    const key: string = keyRaw != null ? `${keyRaw}` : ''
+    if (key.length == 0) return
+    available.forEach((item: ActionItem) => {
+      if (item.key == key) {
+        result.push(item)
+      }
+    })
+  })
+  return result
+})
+
+// 按 ACTIONS_PER_ROW 切分成多行
+const actionRows = computed((): ActionItem[][] => {
+  const rows: ActionItem[][] = []
+  const list: ActionItem[] = visibleActions.value
+  let i: number = 0
+  while (i < list.length) {
+    const end: number = Math.min(i + ACTIONS_PER_ROW, list.length)
+    rows.push(list.slice(i, end))
+    i += ACTIONS_PER_ROW
+  }
+  return rows
+})
+
+const handleActionTap = (item: ActionItem): void => {
+  const key: string = item.key
+  if (key == 'copy') {
+    handleCopy(null)
+  } else if (key == 'delete') {
+    handleDelete(null)
+  } else if (key == 'voiceToText') {
+    handleVoiceToText(null)
+  } else if (key == 'recall') {
+    handleRecall(null)
+  } else if (key == 'forward') {
+    handleForward(null)
+  } else if (key == 'quote') {
+    handleQuote(null)
+  } else if (key == 'translate') {
+    handleTranslate(null)
+  }
+}
+
 /**
  * 测量真实 panel 尺寸 + 判定上下方向
  * 用 uvue 标准的 UniElement.getBoundingClientRect() 同步获取渲染后的实际宽高
@@ -586,8 +774,8 @@ const measureAndPosition = () => {
   try {
     // uvue: panelEl 是 UniElement（ref<any> 静态推断不出具体类型，强转 UniElement）
     const rect: DOMRect = (panelEl as UniElement).getBoundingClientRect()
-    const si: any = uni.getSystemInfoSync()
-    const sw: number = (si.windowWidth as number) ?? 375
+    const si = uni.getSystemInfoSync()
+    const sw: number = si.windowWidth
     // rect.width / height 是 px，转 rpx（px / sw * 750）
     panelWidthRpx.value = Math.round(rect.width / sw * 750)
     panelHeightRpx.value = Math.round(rect.height / sw * 750)
@@ -598,7 +786,9 @@ const measureAndPosition = () => {
       return
     }
     const tp: TriggerPosition = triggerPosition.value
-    const { minTop, maxBottom } = viewportRpx()
+    const vp: ViewportRpx = viewportRpx()
+    const minTop: number = vp.minTop
+    const maxBottom: number = vp.maxBottom
     const ph: number = panelHeightRpx.value
     const inSafeArea = (top: number): boolean => top >= minTop && top + ph <= maxBottom
     const canBelow: boolean = inSafeArea(tp.y + tp.messageHeight + GAP)
@@ -683,32 +873,46 @@ watch((): any | null => props.triggerPosition ?? null, (position: any | null): v
 
 .msg-actions__panel {
   position: absolute;
-  flex-direction: row;
+  flex-direction: column;
   background-color: #FFFFFF;
   border-radius: 12rpx;
   box-shadow: 0 8rpx 24rpx rgba(0, 0, 0, 0.25);
   padding: 33rpx 0 22rpx;
+  /* 与文本气泡 max-width 保持一致，4 个 item 正好占满一行 */
+  max-width: 500rpx;
   z-index: 1001;
   justify-content: center;
-  align-items: center;
+  align-items: flex-start;
   left: auto;
   right: auto;
+}
+
+.msg-actions__row-wrap {
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.msg-actions__row {
+  flex-direction: row;
+  justify-content: flex-start;
+  align-items: center;
+}
+
+/* 多行之间的隔断线 */
+.msg-actions__divider {
+  width: 420rpx;
+  height: 2rpx;
+  background-color: #F0F2F7;
+  margin: 20rpx 40rpx;
 }
 
 .msg-actions__item {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  min-width: 114rpx;
-  margin: 0rpx 16rpx;
-}
-
-.msg-actions__item--first {
-  margin-left: 0rpx;
-}
-
-.msg-actions__item--last {
-  margin-right: 0rpx;
+  /* 固定单元格宽度（500 / 4），保证换行后各列对齐 */
+  width: 125rpx;
+  margin: 0rpx;
 }
 
 .msg-actions__icon {

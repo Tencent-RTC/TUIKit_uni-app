@@ -1,14 +1,20 @@
 <template>
   <view class="text-msg text-msg--no-select" :class="['text-msg__content', 'text-msg__content--'+ (message.isSentBySelf ? 'out' : 'in')]">
     <view class="text-msg__highlight">
-      <view v-if="quoteMessage" class="text-msg__quote text-msg__quote--no-select" @tap="handleReferenceTap">
+      <view
+        v-if="quoteMessage"
+        class="text-msg__quote text-msg__quote--no-select"
+        :class="'text-msg__quote--' + (message.isSentBySelf ? 'out' : 'in')"
+        @tap="handleReferenceTap"
+      >
         <view class="text-msg__quote-header">
-          <text class="text-msg__quote-sender text-msg__text--no-select">{{ quoteMessage.msgSender || '' }}</text>
+          <text class="text-msg__quote-sender text-msg__text--no-select">{{ quoteSenderName }}</text>
         </view>
         <view class="text-msg__quote-body">
-          <text class="text-msg__quote-text text-msg__text--no-select">{{ quoteMessage.msgAbstract || '' }}</text>
+          <text class="text-msg__quote-text text-msg__text--no-select">{{ quoteAbstract }}</text>
         </view>
       </view>
+
       <view class="text-msg__body text-msg__body--no-select">
         <text v-if="!hasEmojiInText" class="text-msg__plain text-msg__text--no-select">{{ messageText }}</text>
         <view v-else class="text-msg__line">
@@ -19,29 +25,258 @@
         </view>
         <view class="text-msg__touch-overlay"></view>
       </view>
+
+      <view
+        v-if="translateBoxVisible"
+        ref="translateBoxRef"
+        class="text-msg__translate"
+        :style="translateBoxInitStyle"
+      >
+        <view class="text-msg__translate-divider"></view>
+        <text v-if="isTranslating" class="text-msg__translate-text text-msg__text--no-select">...</text>
+        <view v-else ref="translateTextRef" :style="translateTextInitStyle">
+          <text class="text-msg__translate-text text-msg__text--no-select">{{ translatedText }}</text>
+          <view class="text-msg__translate-footer">
+            <image class="text-msg__translate-footer-icon" :src="translateFooterIconSrc" mode="aspectFit" />
+            <text class="text-msg__translate-footer-text text-msg__text--no-select">由 IM 提供翻译支持</text>
+          </view>
+        </view>
+      </view>
     </view>
   </view>
 </template>
 
 <script>
-import { parseTextToSegments, hasEmoji } from '../../../../utils/emojiUtils'
+import { parseTextToSegments, hasEmoji, transformEmojiKeyToName } from '../../../../utils/emojiUtils'
+import { MessageStatus } from '../../../../types/message'
+import { getMessageAbstract } from '../../../ConversationList/utils'
+
+var TRANSLATE_STORAGE_KEY = 'tuikit_message_translate_visible_v1'
+var CURTAIN_BOX_DURATION = 360
+var CURTAIN_TEXT_DELAY = 120
+var CURTAIN_TEXT_DURATION = 240
 
 export default {
   name: 'TextMessage',
   props: {
     message: { type: Object, required: true }
   },
+  data: function() {
+    var self = this
+    var store = {}
+    try {
+      var raw = uni.getStorageSync(TRANSLATE_STORAGE_KEY)
+      if (raw && typeof raw === 'object') store = raw
+      else if (typeof raw === 'string' && raw) store = JSON.parse(raw)
+    } catch (e) {}
+    return {
+      animation: uni.requireNativePlugin('animation'),
+      isTranslating: false,
+      // 'idle' | 'pending' | 'done'
+      curtainPhase: 'idle',
+      showTranslation: store[self.message.msgID] === false ? false : true,
+      translateFooterIconSrc: '/uni_modules/tuikit-atomic-x/static/assets/message-list/msg_translate.png'
+    }
+  },
   computed: {
     messageText() { return (this.message.messagePayload && this.message.messagePayload.text) || '' },
     hasEmojiInText() { return hasEmoji(this.messageText) },
     // 仅在含 emoji 时才走字符级切分，纯文本场景零开销
     segments() { return this.hasEmojiInText ? parseTextToSegments(this.messageText) : [] },
-    quoteMessage() { return this.message.quoteMessageInfo }
+    quoteMessage() { return this.message.quoteInfo || null },
+    quoteSenderName() {
+      var sender = this.quoteMessage && this.quoteMessage.sender
+      if (!sender) return ''
+      return sender.nameCard || sender.friendRemark || sender.nickname || sender.userID || ''
+    },
+    quoteAbstract() {
+      var quote = this.quoteMessage
+      if (!quote) return ''
+      // 原消息被撤回 / 删除：引用块保留并给出提示，不能整块消失
+      if (quote.status === MessageStatus.DELETED) return '原消息已删除'
+      if (quote.status === MessageStatus.REVOKED) return '原消息已撤回'
+      // 复用统一摘要：覆盖通话（[视频通话] / [语音通话]）等 CUSTOM 子类型，
+      // 且传 false 不带群聊发送者前缀（发送者由上面的 header 单独渲染）
+      return transformEmojiKeyToName(getMessageAbstract(quote, false))
+    },
+    /** 译文按原文做 key 缓存在 payload.translatedText 里 */
+    translatedText() {
+      var payload = this.message.messagePayload
+      var sourceText = (payload && payload.text) || ''
+      var map = payload && payload.translatedText
+      if (!map || !sourceText) return ''
+      return map[sourceText] || ''
+    },
+    translateBoxVisible() {
+      return this.isTranslating || (!!this.translatedText && this.showTranslation)
+    },
+    curtainOrigin() {
+      return this.message.isSentBySelf ? '100% 0' : '0 0'
+    },
+    translateBoxInitStyle() {
+      if (this.isTranslating) return {}
+      if (this.curtainPhase === 'pending') {
+        return { opacity: 0, transform: 'scale(0, 0)', transformOrigin: this.curtainOrigin }
+      }
+      if (this.curtainPhase === 'done') {
+        return { opacity: 1, transform: 'scale(1, 1)', transformOrigin: this.curtainOrigin }
+      }
+      return {}
+    },
+    translateTextInitStyle() {
+      if (this.isTranslating) return {}
+      if (this.curtainPhase === 'pending') return { opacity: 0 }
+      if (this.curtainPhase === 'done') return { opacity: 1 }
+      return {}
+    }
   },
+  watch: {
+    translatedText: function(newText) {
+      if (this.isTranslating && newText) {
+        this.curtainPhase = 'pending'
+        this.isTranslating = false
+        this.playCurtainAnimation()
+      }
+      if (newText) this.notifyBoxGrow()
+      this.syncVisibleMap()
+    },
+    showTranslation: function(visible) {
+      this.syncVisibleMap()
+      this.persistShowTranslation(visible)
+    }
+  },
+  mounted() {
+    uni.$on('messageTranslateStart', this.handleTranslateStart)
+    uni.$on('messageTranslateError', this.handleTranslateError)
+    uni.$on('messageTranslateHide', this.handleTranslateHide)
+    this.syncVisibleMap()
+  },
+  beforeDestroy() { this.cleanup() },
+  beforeUnmount() { this.cleanup() },
   methods: {
+    cleanup() {
+      uni.$off('messageTranslateStart', this.handleTranslateStart)
+      uni.$off('messageTranslateError', this.handleTranslateError)
+      uni.$off('messageTranslateHide', this.handleTranslateHide)
+      try { this.getVisibleMap().delete(this.message.msgID) } catch (e) {}
+    },
+    /**
+     * 点击引用块 → 定位到被引用的原消息
+     * 原消息已被删除 / 撤回时不再跳转也不闪烁：目标消息已不存在，
+     * locate 只会白拉一次上下文并让列表乱跳。
+     */
     handleReferenceTap() {
-      if (this.quoteMessage && this.quoteMessage.msgID) {
-        uni.$emit('scrollToMessage', this.quoteMessage.msgID)
+      var quote = this.quoteMessage
+      if (!quote || !quote.msgID) return
+      if (quote.status === MessageStatus.DELETED || quote.status === MessageStatus.REVOKED) return
+      uni.$emit('scrollToMessage', quote.msgID, quote)
+    },
+    getVisibleMap() {
+      if (!uni.__messageTranslateVisibleMap__) {
+        uni.__messageTranslateVisibleMap__ = new Map()
+      }
+      return uni.__messageTranslateVisibleMap__
+    },
+    syncVisibleMap() {
+      this.getVisibleMap().set(this.message.msgID, !!this.translatedText && this.showTranslation)
+    },
+    readVisibleStore() {
+      try {
+        var raw = uni.getStorageSync(TRANSLATE_STORAGE_KEY)
+        if (raw && typeof raw === 'object') return raw
+        if (typeof raw === 'string' && raw) return JSON.parse(raw)
+      } catch (e) {}
+      return {}
+    },
+    // 仅写 false（true 即默认值，不写以节省空间）
+    persistShowTranslation(visible) {
+      var store = this.readVisibleStore()
+      var msgID = this.message.msgID
+      if (visible) {
+        if (msgID in store) {
+          delete store[msgID]
+          this.writeVisibleStore(store)
+        }
+      } else if (store[msgID] !== false) {
+        store[msgID] = false
+        this.writeVisibleStore(store)
+      }
+    },
+    writeVisibleStore(store) {
+      try {
+        uni.setStorageSync(TRANSLATE_STORAGE_KEY, store)
+      } catch (e) {
+        console.error('[TextMessage] writeVisibleStore failed:', e)
+      }
+    },
+    /** 通知 MessageList：气泡长高了，必要时滚动让译文完整可见（避免被输入框遮挡） */
+    notifyBoxGrow() {
+      var self = this
+      this.$nextTick(function() {
+        uni.$emit('messageBoxGrow', {
+          msgID: self.message.msgID,
+          boxRef: self.$refs.translateBoxRef
+        })
+      })
+    },
+    /** 译文展开的「拉幕」动画：盒子缩放展开 + 文本延迟淡入 */
+    playCurtainAnimation() {
+      var self = this
+      var attempt = 0
+      var tryAnimate = function() {
+        attempt += 1
+        var boxEl = self.$refs.translateBoxRef
+        var textEl = self.$refs.translateTextRef
+        if (boxEl) {
+          self.animation.transition(boxEl, {
+            styles: { opacity: 1, transform: 'scale(1, 1)', transformOrigin: self.curtainOrigin },
+            duration: CURTAIN_BOX_DURATION,
+            timingFunction: 'cubic-bezier(0.16, 1, 0.3, 1)',
+            delay: 0
+          })
+          if (textEl) {
+            self.animation.transition(textEl, {
+              styles: { opacity: 1 },
+              duration: CURTAIN_TEXT_DURATION,
+              timingFunction: 'ease-out',
+              delay: CURTAIN_TEXT_DELAY
+            })
+          }
+          var totalDuration = Math.max(CURTAIN_BOX_DURATION, CURTAIN_TEXT_DELAY + CURTAIN_TEXT_DURATION)
+          setTimeout(function() { self.curtainPhase = 'done' }, totalDuration + 50)
+          return
+        }
+        if (attempt < 3) {
+          setTimeout(tryAnimate, 32)
+        } else {
+          console.error('[TextMessage] curtain anim: ref unavailable, fallback to done state')
+          self.curtainPhase = 'done'
+        }
+      }
+      this.$nextTick(function() { setTimeout(tryAnimate, 16) })
+    },
+    handleTranslateStart(data) {
+      if (!data || data.msgID !== this.message.msgID) return
+      this.showTranslation = true
+      if (this.translatedText) {
+        this.curtainPhase = 'pending'
+        this.isTranslating = false
+        this.playCurtainAnimation()
+        this.notifyBoxGrow()
+      } else {
+        this.isTranslating = true
+      }
+    },
+    handleTranslateError(data) {
+      if (data && data.msgID === this.message.msgID) {
+        this.isTranslating = false
+      }
+    },
+    handleTranslateHide(data) {
+      if (data && data.msgID === this.message.msgID) {
+        this.isTranslating = false
+        this.showTranslation = false
+        this.curtainPhase = 'idle'
       }
     }
   }
@@ -55,12 +290,18 @@ export default {
 .text-msg__content--in { background-color: #F0F2F7; border-radius: 4rpx 20rpx 20rpx 20rpx; }
 .text-msg__content--out { background-color: #CCE2FF; border-radius: 20rpx 4rpx 20rpx 20rpx; }
 .text-msg__highlight { flex: 1; padding: 20rpx 24rpx; background-color: transparent; }
-.text-msg__quote { background-color: rgba(0, 0, 0, 0.05); border-left-width: 4rpx; border-left-color: #999; border-radius: 8rpx; padding: 16rpx; margin-bottom: 12rpx; }
+
+/* 气泡内引用块：左侧竖条 + 发送者 + 内容摘要 */
+.text-msg__quote { border-radius: 0 8rpx 8rpx 0; padding: 6rpx 12rpx; margin-bottom: 16rpx; border-left-width: 4rpx; border-left-style: solid; border-left-color: #D5D5D5; }
+/* 引用块背景按发送方区分（nvue 不支持后代选择器，必须用修饰类） */
+.text-msg__quote--in { background-color: #E4E4E4; }
+.text-msg__quote--out { background-color: #D5E2F5; }
 .text-msg__quote--no-select { user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
 .text-msg__quote-header { margin-bottom: 8rpx; }
-.text-msg__quote-sender { font-size: 24rpx; color: #333; font-weight: 500; }
+.text-msg__quote-sender { font-size: 24rpx; font-weight: 500; color: #888888; }
 .text-msg__quote-body { max-width: 100%; }
-.text-msg__quote-text { font-size: 26rpx; color: #666; }
+.text-msg__quote-text { font-size: 24rpx; color: #888888; lines: 1; text-overflow: ellipsis; }
+
 .text-msg__text--no-select { user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
 .text-msg__body { flex-direction: column; position: relative; }
 .text-msg__body--no-select { user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
@@ -69,4 +310,13 @@ export default {
 .text-msg__line { flex-direction: row; flex-wrap: wrap; align-items: center; }
 .text-msg__char { font-size: 32rpx; line-height: 44rpx; color: #1A1A1A; }
 .text-msg__emoji { width: 40rpx; height: 40rpx; }
+
+/* 译文区：与原文之间用细分隔线区隔，整体在气泡内自然延展 */
+.text-msg__translate { flex-direction: column; margin-top: 16rpx; }
+.text-msg__translate-divider { height: 1rpx; background-color: rgba(0, 0, 0, 0.08); margin-bottom: 16rpx; }
+.text-msg__translate-text { font-size: 32rpx; line-height: 44rpx; color: #1A1A1A; word-wrap: break-word; word-break: break-all; white-space: normal; lines: 0; }
+/* "由 IM 提供翻译支持" 来源说明 */
+.text-msg__translate-footer { flex-direction: row; align-items: center; margin-top: 12rpx; }
+.text-msg__translate-footer-icon { width: 24rpx; height: 24rpx; margin-right: 8rpx; opacity: 0.4; }
+.text-msg__translate-footer-text { font-size: 22rpx; line-height: 30rpx; color: rgba(0, 0, 0, 0.4); }
 </style>

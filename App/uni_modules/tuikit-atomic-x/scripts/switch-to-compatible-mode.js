@@ -14,7 +14,7 @@
  *           server_compatible -> server
  *   2. 文件：utils/setSdkLanguageFromSystem_compatible.ts -> utils/setSdkLanguageFromSystem.ts
  *   3. 内容替换：扫描转换后的目录，将文件中的 _compatible 引用路径替换为正式路径
- *   4. 删除：__tests__ 目录（兼容模式不需要）
+ *   4. 删除：__tests__、quickstart_room 目录（兼容模式不需要）
  */
 
 const fs = require('fs');
@@ -40,6 +40,7 @@ const FILE_MAPPINGS = [
 // 需要删除的目录
 const DIRS_TO_DELETE = [
   '__tests__',
+  'quickstart_room',
 ];
 
 /**

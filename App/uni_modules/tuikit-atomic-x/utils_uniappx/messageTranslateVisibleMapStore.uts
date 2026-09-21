@@ -1,0 +1,56 @@
+/**
+ * TextMessage 译文状态 Map 全局单例（UTS 跨端）
+ *
+ * uvue 下不能像 nvue 那样往 uni 对象上挂 __messageTranslateVisibleMap__，
+ * 改用模块级 let Map 单例 + getter/setter 函数（与 audioConvertVisibleMapStore 同一范式）
+ *
+ * 两张表分别表示：
+ * - visible：译文当前是否正展示（用户 toggle 的结果）
+ * - content：该消息是否已有译文缓存（决定点"翻译"是否还需要调 SDK）
+ *
+ * 唯一写入端是 TextMessage.uvue（它持有 messagePayload.translatedText 的真实读取逻辑）；
+ * MessageActions.uvue 只读，用来决定按钮显示"翻译"还是"隐藏"。
+ * 这样避免在 MessageActions 里二次解析 payload —— UTSJSONObject 的 [key] 按 dot-path
+ * 解析，用消息原文作 key 取译文并不可靠。
+ */
+
+let _visibleMap: Map<string, boolean> = new Map<string, boolean>()
+let _contentMap: Map<string, boolean> = new Map<string, boolean>()
+
+// ==================== 译文是否正展示 ====================
+
+export function setMessageTranslateVisibleMapEntry(msgID: string, visible: boolean): void {
+  _visibleMap.set(msgID, visible)
+}
+
+export function deleteMessageTranslateVisibleMapEntry(msgID: string): void {
+  _visibleMap.delete(msgID)
+  _contentMap.delete(msgID)
+}
+
+export function getMessageTranslateVisibleMap(): Map<string, boolean> {
+  return _visibleMap
+}
+
+/** 译文当前是否正展示；无记录（消息未挂载 / 无译文）视为未展示 */
+export function isMessageTranslateVisible(msgID: string): boolean {
+  if (!_visibleMap.has(msgID)) return false
+  return _visibleMap.get(msgID) == true
+}
+
+// ==================== 是否已有译文缓存 ====================
+
+export function setMessageTranslatedContentEntry(msgID: string, hasContent: boolean): void {
+  _contentMap.set(msgID, hasContent)
+}
+
+/** 是否已有译文缓存；无记录视为没有，点击"翻译"会走一次 SDK（native 侧命中缓存也很快） */
+export function hasMessageTranslatedContent(msgID: string): boolean {
+  if (!_contentMap.has(msgID)) return false
+  return _contentMap.get(msgID) == true
+}
+
+export function clearMessageTranslateVisibleMap(): void {
+  _visibleMap = new Map<string, boolean>()
+  _contentMap = new Map<string, boolean>()
+}

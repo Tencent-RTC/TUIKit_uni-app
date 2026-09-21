@@ -63,6 +63,7 @@ const DIRS_TO_DELETE = [
   'pages_compatible',
   'quickstart',
   'quickstart_compatible',
+  'quickstart_room',
   'server',
   'server_compatible',
   'state',

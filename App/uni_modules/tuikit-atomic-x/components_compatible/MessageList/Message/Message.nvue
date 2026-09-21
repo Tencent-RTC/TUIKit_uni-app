@@ -3,6 +3,7 @@
     <RecalledMessage v-if="message.status === MessageStatus.REVOKED" :message="message" :conversationID="conversationID" />
     <GroupTipMessage v-else-if="isSystemMessage || isGroupCreateMessage" :message="message" />
     <component v-else-if="isCustomCenterMessage" :is="centerCustomComponent" :message="message" :conversationID="conversationID" />
+    <view v-if="highlight" ref="centerHighlightOverlayRef" class="msg__highlight-overlay"></view>
   </view>
   <view v-else class="msg msg--no-select" :class="messageClasses" :data-message-id="message.msgID" @touchstart="handleTouchStart" @touchend="handleTouchEnd" @tap.stop="handleTap" @touchmove.stop.prevent="handleTouchMove">
     <Avatar v-if="showAvatar" :src="message.from.avatarURL" :name="displayName" :size="80" defaultAvatarType="user" lazy class="msg__avatar" />
@@ -21,12 +22,23 @@
         <view v-if="showReadStatus" class="msg__read-status">
           <text class="msg__read-text msg__text--no-select">{{ readStatusText }}</text>
         </view>
+        <!-- 定位到原消息时的闪烁层：只盖消息体（气泡），不闪头像/昵称/时间；
+             无手势绑定，不拦截气泡的 tap / longpress -->
+        <view v-if="highlight" ref="highlightOverlayRef" class="msg__highlight-overlay"></view>
       </view>
       <view v-if="showTime" class="msg__time" @tap.stop="handleMessageContentTap" style="background-color: black;">
         <text class="msg__time-text msg__text--no-select">{{ formatMessageTime(message.timestamp) }}</text>
       </view>
     </view>
-    <MessageActions v-if="showActions" ref="messageActionsRef" :message="message" :actions="messageActionList" @close="handleActionsClose" />
+    <MessageActions v-if="showActions" ref="messageActionsRef" :message="message" :actions="messageActionList" @close="handleActionsClose" @action="handleAction" />
+
+    <!-- 转发目标选择器：组件内部自洽，选中后直接调 forwardMessages，不抛给业务层 -->
+    <ForwardPicker
+      v-if="showForwardPicker"
+      :excludeConversationID="conversationID"
+      @select="handleForwardSelect"
+      @close="handleForwardPickerClose"
+    />
   </view>
 </template>
 
@@ -43,7 +55,9 @@ import FaceMessage from './FaceMessage/FaceMessage.nvue'
 import CustomMessage from './CustomMessage/CustomMessage.nvue'
 import MergerMessage from './MergerMessage/MergerMessage.nvue'
 import MessageActions from './MessageActions.nvue'
-import { MessageType, MessageStatus } from '../../../types/message'
+import ForwardPicker from './ForwardPicker.nvue'
+import { MessageType, MessageStatus, MessageForwardType } from '../../../types/message'
+import { useMessageListState } from '../../../state/MessageListState'
 import { formatTime } from '../../../utils/timeUtils'
 import { isGroupCallMessage, isCallMessage, isVideoCall, parseCallMessageData, CallType } from '../../../utils/callMessageUtils'
 import { useCallState, CallErrorCode } from '../../../state_compatible/CallState'
@@ -65,7 +79,8 @@ export default {
     FaceMessage,
     CustomMessage,
     MergerMessage,
-    MessageActions
+    MessageActions,
+    ForwardPicker
   },
   props: {
     message: { type: Object, required: true },
@@ -86,6 +101,8 @@ export default {
     return {
       MessageStatus: MessageStatus,
       showActions: false,
+      // 转发目标选择器可见性（组件内部状态，不外泄）
+      showForwardPicker: false,
       longPressPosition: { x: 0, y: 0 },
       lastTouchPosition: { x: 0, y: 0 },
       isLongPressing: false,
@@ -183,11 +200,16 @@ export default {
     }
   },
   watch: {
-    highlight: function(newVal) {
-      if (newVal) {
-        var self = this
-        this.$nextTick(function() { self.playHighlightAnimation() })
-      }
+    // immediate：原消息不在列表内、拉取上下文后 cell 才挂载的情况，
+    // 此时 highlight 在挂载时就已是 true，非 immediate 的 watch 不会触发
+    highlight: {
+      handler: function(newVal) {
+        if (newVal) {
+          var self = this
+          this.$nextTick(function() { self.playHighlightAnimation() })
+        }
+      },
+      immediate: true
     },
     'message.status': {
       handler: function(newStatus) {
@@ -224,12 +246,27 @@ export default {
       if (!timestamp) return ''
       return formatTime(timestamp * 1000)
     },
-    playHighlightAnimation() {
-      var contentEl = this.$refs.messageContentRef
-      if (!contentEl) return
-      var el = contentEl.$el || contentEl
-      if (!el || !el.children || !el.children[0]) return
-      var highlightEl = el.children[0]
+    /**
+     * 高亮闪烁：动画作用在气泡内独立的遮罩层，不改消息内容元素的背景色。
+     * 通话等自定义消息的内容卡片自带不透明背景，直接改内容元素会被挡住；
+     * 且动画收尾会把该元素背景写成 transparent，破坏气泡原本的底色。
+     * 遮罩层没有手势绑定，不会拦截气泡的 tap / longpress。
+     *
+     * @param retry 已重试次数：原消息不在列表内时先拉上下文再滚动，
+     *              cell 挂载可能晚于 highlight 置位，此时 ref 还没就位，需要补一次
+     */
+    playHighlightAnimation(retry) {
+      var retryCount = retry || 0
+      // 高亮期已过（MessageList 3s 后清掉）就不必再补
+      if (!this.highlight) return
+      var highlightEl = this.$refs.highlightOverlayRef || this.$refs.centerHighlightOverlayRef
+      if (!highlightEl) {
+        if (retryCount < 10) {
+          var self = this
+          setTimeout(function() { self.playHighlightAnimation(retryCount + 1) }, 100)
+        }
+        return
+      }
       var count = 0
       var maxCount = 6
       var animation = this.animation
@@ -421,6 +458,63 @@ export default {
       this.showActions = false
       var self = this
       setTimeout(function() { self.isLongPressing = false }, 100)
+    },
+    /**
+     * 处理 MessageActions 抛出的操作事件
+     *
+     * 转发 / 引用均在组件库内部闭环，不抛给业务层：
+     * - key='forward' → 打开内置 ForwardPicker 选目标会话，选中后本组件直接调
+     *   `MessageListState.forwardMessages`
+     * - key='quote'   → 通过全局事件 `atomicx-quote` 通知 MessageInput，
+     *   由 MessageInput 自行渲染引用条并在发送时附带 quotedMessage
+     * - 其余（copy/delete/recall/voiceToText/translate…）已在 MessageActions 内部完成
+     */
+    handleAction: function(action) {
+      if (!action || !action.key) return
+      var self = this
+
+      if (action.key === 'forward') {
+        // MessageActions 在 iOS 上关闭有 300ms 动画，等其收起后再弹选择器，避免浮层叠在一起
+        setTimeout(function() { self.showForwardPicker = true }, 320)
+        return
+      }
+
+      if (action.key === 'quote') {
+        // 同理：等浮层收起后再通知 MessageInput，否则聚焦会被系统吞掉、键盘不弹
+        setTimeout(function() {
+          uni.$emit('atomicx-quote', {
+            conversationID: self.conversationID,
+            message: self.message
+          })
+        }, 320)
+        return
+      }
+    },
+    handleForwardPickerClose: function() {
+      this.showForwardPicker = false
+    },
+    /**
+     * 执行单条转发
+     *
+     * 用 `MessageForwardType.SEPARATE`（逐条转发）；单条场景无需 mergedForwardInfo。
+     * 注意 state 实例要绑「消息所在会话」（this.conversationID），目标会话通过第三参传入。
+     */
+    handleForwardSelect: function(targetConversationID) {
+      this.showForwardPicker = false
+      if (!targetConversationID) return
+
+      var self = this
+      var listState = useMessageListState({ conversationID: this.conversationID })
+      listState.forwardMessages(
+        [this.message],
+        { forwardType: MessageForwardType.SEPARATE },
+        targetConversationID
+      ).then(function() {
+        uni.showToast({ title: '已转发', icon: 'none' })
+      }).catch(function(error) {
+        console.error('[Message] forwardMessages failed:', error)
+        uni.showToast({ title: '转发失败', icon: 'none', duration: 2000 })
+      })
     }
   }
 }
@@ -428,10 +522,23 @@ export default {
 
 <style>
   .msg {
+    position: relative;
     flex-direction: row;
     padding: 20rpx 22rpx;
     align-items: flex-start;
     flex: 1;
+  }
+
+  /* 高亮闪烁层：盖在消息体（.msg__bubble 已 position:relative）之上，
+     背景色由 animation 模块驱动 */
+  .msg__highlight-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: transparent;
+    z-index: 10;
   }
 
   .msg--no-select {

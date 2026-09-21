@@ -55,7 +55,19 @@
       </view>
     </view>
 
-    <view id="message-input-toolbar" class="message-input__toolbar" :style="{ paddingBottom: safeAreaBottomRpx + 'rpx' }">
+    <view id="message-input-toolbar" class="message-input__toolbar-wrapper">
+      <view v-if="hasQuote" class="message-input__quote">
+        <text class="message-input__quote-text" :lines="1">{{ quoteSummary }}</text>
+        <view class="message-input__quote-close" @tap.stop="clearQuote">
+          <image
+            class="message-input__quote-close-icon"
+            src="/uni_modules/tuikit-atomic-x/static/icon/close.png"
+            mode="aspectFit"
+          />
+        </view>
+      </view>
+
+      <view class="message-input__toolbar" :style="{ paddingBottom: safeAreaBottomRpx + 'rpx' }">
       <view v-if="enableVoice" class="message-input__btn message-input__btn--first" @tap="handleMicTap">
         <image 
           v-if="inputState !== 'VOICE'" 
@@ -119,6 +131,7 @@
         </view>
         <image v-else class="message-input__icon" src="/uni_modules/tuikit-atomic-x/static/assets/message-input/nvue_more.png" mode="aspectFill" @tap.stop="onMoreTap" />
       </view>
+      </view>
     </view>
     <view class="message-input__mask">
       <view
@@ -177,10 +190,11 @@ import { UserPickerType } from '../../types/userpicker';
 import { toMap } from '../../utils/toMap.uts';
 import { useGroupState } from '../../state/GroupState';
 import { MessageType, MessageStatus } from '../../types/message';
-import type { MessageInfo, OfflinePushInfoResolver, OfflinePushContext, SendMessagePayload, SendMessageOption } from '../../types/message';
+import type { OfflinePushInfoResolver, OfflinePushContext, SendMessagePayload, SendMessageOption } from '../../types/message';
 import { buildOfflinePushInfo } from '../../utils/buildOfflinePushInfo';
 import permission from '../../utils/permission';
 import { requestCallPermissions } from '../../utils/callPermission';
+import { isCallMessage, parseCallMessageData, isVideoCall } from '../../utils/callMessageUtils';
 import { stopGlobalAudioPlayer, RECORDING_PSEUDO_ID } from '../../hooks/useAudioPlayer';
 import { useCallState } from '../../state/CallState';
 
@@ -711,6 +725,102 @@ const measureToolbar = (): void => {
     })
     .exec();
 }
+
+// ==================== 引用消息（内部自洽） ====================
+// 引用目标从事件负载里拿到的是原始 UTSJSONObject，messageType / status 为 Number，
+// 与 enum 实例比较恒不相等（Kotlin 下 Number != enum object），因此用数值字面量
+const QUOTE_TYPE_TEXT = 1
+const QUOTE_TYPE_IMAGE = 2
+const QUOTE_TYPE_VIDEO = 3
+const QUOTE_TYPE_AUDIO = 4
+const QUOTE_TYPE_FILE = 5
+const QUOTE_TYPE_FACE = 6
+const QUOTE_TYPE_TIPS = 7
+const QUOTE_TYPE_CUSTOM = 8
+const QUOTE_TYPE_MERGED = 9
+const QUOTE_STATUS_REVOKED = 4
+const QUOTE_STATUS_DELETED = 5
+
+/**
+ * 引用目标：由 Message.uvue 长按"引用"后通过 uni.$emit('atomicx-quote') 广播传入，
+ * 发送时作为 option.quotedMessage 附带，发送成功后清空
+ */
+const quoteTarget: Ref<any | null> = ref(null);
+
+const hasQuote: ComputedRef<boolean> = computed((): boolean => quoteTarget.value != null);
+
+/** 引用摘要里的发送者名：自己发的显示"我"，避免出现 "我：我：xxx" 的重复前缀 */
+function quoteSenderNameOf(msg: any | null): string {
+  if (msg == null) return '';
+  const m: UTSJSONObject = msg as UTSJSONObject;
+  if (m['isSentBySelf'] == true) return '我';
+  const fromRaw: any | null = m['from'];
+  if (fromRaw == null) return '';
+  const from: UTSJSONObject = fromRaw as UTSJSONObject;
+  const nameCard: any | null = from['nameCard'];
+  if (typeof nameCard == 'string' && (nameCard as string).length > 0) return nameCard as string;
+  const friendRemark: any | null = from['friendRemark'];
+  if (typeof friendRemark == 'string' && (friendRemark as string).length > 0) return friendRemark as string;
+  const nickname: any | null = from['nickname'];
+  if (typeof nickname == 'string' && (nickname as string).length > 0) return nickname as string;
+  const userID: any | null = from['userID'];
+  return typeof userID == 'string' ? (userID as string) : '';
+}
+
+/** 引用摘要正文：不带发送者前缀，由 quoteSummary 统一拼接 */
+function quoteAbstractOf(msg: any | null): string {
+  if (msg == null) return '';
+  const m: UTSJSONObject = msg as UTSJSONObject;
+  const st: any | null = m['status'];
+  if (st == QUOTE_STATUS_DELETED) return '[原消息已删除]';
+  if (st == QUOTE_STATUS_REVOKED) return '[原消息已撤回]';
+
+  const type: any | null = m['messageType'];
+  if (type == QUOTE_TYPE_TEXT) {
+    const payloadRaw: any | null = m['messagePayload'];
+    if (payloadRaw == null) return '[文本消息]';
+    const payload: UTSJSONObject = payloadRaw as UTSJSONObject;
+    const textRaw: any | null = payload['text'];
+    const text: string = typeof textRaw == 'string' ? (textRaw as string) : '';
+    return text.length > 0 ? transformEmojiKeyToName(text) : '[文本消息]';
+  }
+  if (type == QUOTE_TYPE_IMAGE) return '[图片]';
+  if (type == QUOTE_TYPE_VIDEO) return '[视频]';
+  if (type == QUOTE_TYPE_AUDIO) return '[语音]';
+  if (type == QUOTE_TYPE_FILE) return '[文件]';
+  if (type == QUOTE_TYPE_FACE) return '[表情]';
+  if (type == QUOTE_TYPE_CUSTOM) {
+    // 通话信令是自定义消息，摘要要还原成"[视频通话]/[语音通话]"，与气泡内引用块口径一致
+    if (isCallMessage(msg)) {
+      const callData = parseCallMessageData(msg)
+      return isVideoCall(callData) ? '[视频通话]' : '[语音通话]';
+    }
+    return '[自定义消息]';
+  }
+  if (type == QUOTE_TYPE_MERGED) return '[聊天记录]';
+  if (type == QUOTE_TYPE_TIPS) return '[系统消息]';
+  return '[消息]';
+}
+
+const quoteSummary: ComputedRef<string> = computed((): string => {
+  const msg: any | null = quoteTarget.value;
+  if (msg == null) return '';
+  const name: string = quoteSenderNameOf(msg);
+  const abstract: string = quoteAbstractOf(msg);
+  return name.length > 0 ? `${name}：${abstract}` : abstract;
+});
+
+const clearQuote = (): void => {
+  quoteTarget.value = null;
+};
+
+// 引用条出现/消失会改变工具栏高度，需重新测量同步 MessageList 的底部占位
+watch((): boolean => hasQuote.value, (): void => {
+  nextTick(() => {
+    measureToolbar();
+    setTimeout(() => { measureToolbar(); }, 150);
+  });
+});
 
 // ==================== 核心状态机 ====================
 /**
@@ -1251,7 +1361,18 @@ const handleSend = (): void => {
   const offlinePush = buildOfflinePushInfo(props.setOfflinePushInfo as OfflinePushInfoResolver | null, pushCtx);
   if (offlinePush != null) option.offlinePushInfo = offlinePush;
 
-  messageInputState?.sendMessage(payload, option).then(() => {
+  // 引用目标是原生下发的 UTSJSONObject，MessageInfo 是 type alias（construction type），
+  // `as MessageInfo` 运行期必抛 ClassCastException（规则同 Message.uvue 的 forwardOption）。
+  // sendMessage 的 option 是 any 且内部只做 JSON.stringify，因此改为拼 UTSJSONObject 绕开强转。
+  let sendOption: any = option;
+  const quoteMsg: any | null = quoteTarget.value;
+  if (quoteMsg != null) {
+    const merged: UTSJSONObject = JSON.parse<UTSJSONObject>(JSON.stringify(option)) ?? new UTSJSONObject();
+    merged['quotedMessage'] = quoteMsg;
+    sendOption = merged;
+  }
+
+  messageInputState?.sendMessage(payload, sendOption).then(() => {
     // success
   }).catch((error: any | null) => {
     const errObj: UTSJSONObject = toUTSJSONObject(error)
@@ -1269,6 +1390,7 @@ const handleSend = (): void => {
   mentionAnchor.value = -1;
   lastInputText.value = '';
   lastInputCursor.value = 0;
+  quoteTarget.value = null;
 };
 
 /**
@@ -1859,6 +1981,31 @@ function onReEdit(data: UTSJSONObject): void {
   mentionAnchor.value = -1
 }
 
+// ==================== 引用消息 - 接收广播（内部自洽） ====================
+/**
+ * 监听 Message.uvue 长按"引用"发出的全局事件 'atomicx-quote'
+ * 通过 conversationID 隔离作用域：引用条上屏 + 切到 TEXT 态唤起键盘
+ */
+function onQuote(data: UTSJSONObject): void {
+  if (data == null) return
+  const convIDRaw: any | null = data['conversationID']
+  const convID: string = typeof convIDRaw == 'string' ? (convIDRaw as string) : ''
+  if (convID.length == 0 || convID !== props.conversationID) return
+  const message: any | null = data['message']
+  if (message == null) return
+
+  quoteTarget.value = message
+  switchMode('TEXT')
+  // 已经是 TEXT 态时 switchMode 会直接 return，这里补一次聚焦保证键盘弹起
+  focusTrigger.value = false
+  nextTick(() => {
+    setTimeout(() => {
+      focusTrigger.value = true
+      textareaRef.value?.focus()
+    }, 50)
+  })
+}
+
 // ==================== 生命周期钩子（必须下移） ====================
 
 onBeforeMount(() => {
@@ -1885,6 +2032,9 @@ onMounted(() => {
   // 监听撤回消息的"重新编辑"事件（组件内部自洽，不依赖业务层）
   uni.$on('atomicx-reEdit', onReEdit);
 
+  // 监听消息长按"引用"事件（组件内部自洽，不依赖业务层）
+  uni.$on('atomicx-quote', onQuote);
+
 });
 
 onShow(() => {
@@ -1906,6 +2056,7 @@ watch((): boolean => props.requestCollapse ?? false, (shouldCollapse: boolean): 
 
 onUnmounted(() => {
   uni.$off('atomicx-reEdit', onReEdit);
+  uni.$off('atomicx-quote', onQuote);
   messageInputState?.destroyStore();
 });
 </script>
@@ -2071,13 +2222,47 @@ onUnmounted(() => {
   height: 80rpx;
 }
 
+/* 引用条 + 工具栏的外层容器（被 #message-input-toolbar 测量，高度计入消息列表 padding） */
+.message-input__toolbar-wrapper {
+  flex-direction: column;
+  background-color: #ffffff;
+  border-top-width: 1rpx;
+  border-top-style: solid;
+  border-top-color: #F0F2F7;
+}
+
+/* 引用条：单行"发送者：内容"，右侧关闭按钮 */
+.message-input__quote {
+  flex-direction: row;
+  align-items: center;
+  padding: 20rpx 32rpx 0;
+}
+
+.message-input__quote-text {
+  flex: 1;
+  font-size: 28rpx;
+  line-height: 40rpx;
+  color: rgba(0, 0, 0, 0.55);
+  text-overflow: ellipsis;
+}
+
+.message-input__quote-close {
+  width: 40rpx;
+  height: 40rpx;
+  align-items: center;
+  justify-content: center;
+  margin-left: 16rpx;
+}
+
+.message-input__quote-close-icon {
+  width: 40rpx;
+  height: 40rpx;
+}
+
 .message-input__toolbar {
   flex-direction: row;
   background-color: #ffffff;
   padding: 16rpx 32rpx;
-  border-top-width: 1rpx;
-  border-top-style: solid;
-  border-top-color: #F0F2F7;
   align-items: center;
 }
 

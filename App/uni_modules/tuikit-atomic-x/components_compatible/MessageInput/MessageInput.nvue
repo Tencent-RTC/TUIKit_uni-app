@@ -43,7 +43,19 @@
       </view>
     </view>
     
-    <view id="message-input-toolbar" class="message-input__toolbar" :style="{ paddingBottom: safeAreaBottomRpx + 'rpx' }">
+    <view id="message-input-toolbar" class="message-input__toolbar-wrapper">
+      <view v-if="hasQuote" class="message-input__quote">
+        <text class="message-input__quote-text">{{ quoteSummary }}</text>
+        <view class="message-input__quote-close" @tap.stop="clearQuote">
+          <image
+            class="message-input__quote-close-icon"
+            src="/uni_modules/tuikit-atomic-x/static/icon/close.png"
+            mode="aspectFit"
+          />
+        </view>
+      </view>
+
+    <view class="message-input__toolbar" :style="{ paddingBottom: safeAreaBottomRpx + 'rpx' }">
       <view v-if="enableVoice" class="message-input__btn message-input__btn--first" @tap="handleMicTap">
         <image
           v-if="inputState !== 'VOICE'"
@@ -109,6 +121,7 @@
         <image v-else class="message-input__icon" src="/uni_modules/tuikit-atomic-x/static/assets/message-input/nvue_more.png" mode="aspectFill" @tap.stop="handleMoreTap" />
       </view>
     </view>
+    </view>
     <view class="message-input__mask">
       <view class="message-input__panel" ref="messageInputPanelRef" :style="{ height: inputPanelDisplayHeightPx + 'px' }">
         <view class="message-input__panel-wrapper">
@@ -128,7 +141,8 @@ import { throttle } from '../../utils/lodash';
 import { useMessageInputState } from '../../state/MessageInputState';
 import { resolveSendError } from './utils/resolveSendError';
 import { transformEmojiNameToKey, transformEmojiKeyToName, hasEmoji } from '../../utils/emojiUtils';
-import { MessageType } from '../../types/message';
+import { MessageType, MessageStatus } from '../../types/message';
+import { getMessageAbstract, getSenderName } from '../ConversationList/utils';
 import { buildOfflinePushInfo } from '../../utils/buildOfflinePushInfo';
 import permission from '../../utils/permission';
 import { requestCallPermissions, showPermissionDialog } from '../../utils/callPermission';
@@ -240,11 +254,37 @@ export default {
       lastInputText: '',
       lastInputCursor: 0,
       // @ 整体删除后的"冷静期"截止时间戳；期间所有 input 事件按原生层视角被动接受
-      mentionDeleteCooldownUntil: 0
+      mentionDeleteCooldownUntil: 0,
+      // 引用目标消息（引用只对本次发送生效）
+      quoteTarget: null,
+      // 程序聚焦进行中：期间忽略迟到的键盘收起回调（非响应式，仅作时序闸门）
+      _focusingProgrammatically: false
     }
   },
   computed: {
     hasContent() { return this.inputText.trim().length > 0 },
+    hasQuote() { return this.quoteTarget !== null },
+    quoteSenderName() {
+      var msg = this.quoteTarget
+      if (!msg) return ''
+      var name = getSenderName(msg)
+      return name.length > 0 ? name : ((msg.from && msg.from.userID) || '')
+    },
+    quoteAbstract() {
+      var msg = this.quoteTarget
+      if (!msg) return ''
+      // 原消息被撤回 / 删除时给出明确提示，避免引用条显示成空内容
+      if (msg.status === MessageStatus.DELETED) return '[原消息已删除]'
+      if (msg.status === MessageStatus.REVOKED) return '[原消息已撤回]'
+      // 传 false：引用条自己渲染"发送者："，摘要不能再带一遍群聊前缀（否则出现"我：我：xxx"）
+      return transformEmojiKeyToName(getMessageAbstract(msg, false))
+    },
+    /** 引用条单行摘要："发送者：内容"，超长由样式截断 */
+    quoteSummary() {
+      if (!this.quoteTarget) return ''
+      var name = this.quoteSenderName
+      return name.length > 0 ? (name + '：' + this.quoteAbstract) : this.quoteAbstract
+    },
     isGroupConversation() { return (this.conversationID || '').startsWith('group_') },
     groupID() { return this.isGroupConversation ? this.conversationID.replace('group_', '') : '' },
     currentGroupType() {
@@ -296,6 +336,16 @@ export default {
       self._setTextFromReEdit(data.text || '')
     }
     uni.$on('atomicx-reEdit', this._onReEditHandler)
+    // 监听消息引用事件（由 Message.nvue 在 MessageActions 收起后广播）
+    this._onQuoteHandler = function(data) {
+      if (!data || data.conversationID !== self.conversationID) return
+      if (!data.message) return
+      self.quoteTarget = data.message
+      self.isFocused = false
+      self._switchMode('TEXT')
+      self._focusTextarea()
+    }
+    uni.$on('atomicx-quote', this._onQuoteHandler)
     // 预热文件选择器的 Android 桥接类（同步跨桥约 500-1000ms）
     // 延后 500ms 错开 MessageList 首屏关键路径，用户首次点"文件"时类已就绪
     setTimeout(function() { prewarmFilePicker() }, 500)
@@ -307,6 +357,7 @@ export default {
       if (this.isCleaned) return; this.isCleaned = true
       uni.offKeyboardHeightChange(this._onKeyboardChange)
       if (this._onReEditHandler) { uni.$off('atomicx-reEdit', this._onReEditHandler); this._onReEditHandler = null }
+      if (this._onQuoteHandler) { uni.$off('atomicx-quote', this._onQuoteHandler); this._onQuoteHandler = null }
       this._stopWaveAnimation()
       if (this.recordingTimer) { clearInterval(this.recordingTimer); this.recordingTimer = null }
       this.messageInputStateInst && this.messageInputStateInst.destroyStore()
@@ -342,6 +393,8 @@ export default {
       if (h > 0 && this.cachedKeyboardHeight === -1) { this.cachedKeyboardHeight = h; uni.setStorage({ key: 'cachedKeyboardHeight', data: h }) }
       if (h > 0) { this.lastInputPopupHeightPx = h; if (cs === 'TEXT' || cs === 'NONE') this._animateInputY(-h, dur) }
       else {
+        // 程序聚焦期间：忽略迟到的键盘收起回调，避免把刚切到 TEXT 的状态又切回 NONE
+        if (this._focusingProgrammatically) return
         if (_isJsCloseKeyboard) { _isJsCloseKeyboard = false; return }
         if (cs === 'TEXT') { this._animateInputY(0, dur); this._switchMode('NONE') }
         if (cs === 'EMOJI' || cs === 'TOOLS') this._switchMode('NONE')
@@ -435,8 +488,41 @@ export default {
     },
     onLinechange() { this._measureToolbar() },
     onTextareaTouchstart: throttle(function(e) { if (Date.now() - this.lastOpTime < this.OP_THRESHOLD) return; this.lastOpTime = Date.now(); this.isFocused = true; this._switchMode('TEXT') }, 250, { leading: true, trailing: false }),
-    handleFocus(e) { this.isFocused = true; if (this.inputState !== 'TEXT') this._switchMode('TEXT') },
-    handleBlur(event) { this.isFocused = false; this.focusTrigger = false; this.lastCursorPosition = event.detail.cursor },
+    handleFocus(e) {
+      this.isFocused = true
+      if (this.inputState !== 'TEXT') this._switchMode('TEXT')
+      // 真正聚焦成功后再留一点缓冲，然后才放开对键盘收起回调的屏蔽
+      if (this._focusingProgrammatically) {
+        var self = this
+        setTimeout(function() { self._focusingProgrammatically = false }, 300)
+      }
+    },
+    // 程序聚焦期间不复位 focusTrigger：那个 blur 是自己置 :focus=false 造成的，不能打断本次聚焦
+    handleBlur(event) { this.isFocused = false; if (!this._focusingProgrammatically) this.focusTrigger = false; this.lastCursorPosition = event.detail.cursor },
+    /**
+     * 聚焦 textarea
+     * 1. :focus 置 false → nextTick → 160ms → 置 true
+     *    iOS nvue 方法式 focus() 唤不起软键盘，必须靠 :focus 这次 false→true 变化；
+     *    160ms 是等上一次 :focus=false 产生的 @blur（约 70ms）先落，否则会把本次 focus 盖掉
+     *    （表现为键盘弹起但没有光标）。
+     * 2. 方法式 focus() 兜底（Android 可靠），并在其后补两次抢回第一响应者。
+     */
+    _focusTextarea() {
+      var self = this
+      this._focusingProgrammatically = true
+      this.focusTrigger = false
+      this.$nextTick(function() {
+        setTimeout(function() {
+          self.focusTrigger = true
+          self.$refs.textareaRef && self.$refs.textareaRef.focus()
+          setTimeout(function() { self.$refs.textareaRef && self.$refs.textareaRef.focus() }, 120)
+          setTimeout(function() { self.$refs.textareaRef && self.$refs.textareaRef.focus() }, 300)
+          // 兜底：@focus 一直没来也要放开，避免长期屏蔽键盘回调
+          setTimeout(function() { self._focusingProgrammatically = false }, 1000)
+        }, 160)
+      })
+    },
+    clearQuote() { this.quoteTarget = null },
     handleInput(e) {
       var newText = (e && e.detail && e.detail.value) || ''
       var newCursor = (e && e.detail && typeof e.detail.cursor === 'number') ? e.detail.cursor : newText.length
@@ -596,6 +682,7 @@ export default {
         })
         var sendOption = {}
         if (atUserList && atUserList.length > 0) sendOption.atUserList = atUserList
+        if (this.quoteTarget) sendOption.quotedMessage = this.quoteTarget
         if (offlinePushInfo) sendOption.offlinePushInfo = offlinePushInfo
         this.messageInputStateInst.sendMessage({
           type: 'text',
@@ -603,6 +690,8 @@ export default {
         }, sendOption).catch(function(err) { uni.showToast({ title: resolveSendError(err), icon: 'none' }) })
       }
       this.$emit('send', text); this.inputText = ''
+      // 清理引用态（引用只对本次发送生效）
+      this.quoteTarget = null
       // 清理 mention 上下文
       this.mentions = []
       this.selectedMembers = new Map()
@@ -899,7 +988,14 @@ export default {
 .message-input__recording-cancel-icon { width: 80rpx; height: 80rpx; }
 
 /* 工具栏 */
-.message-input__toolbar { flex-direction: row; background-color: #ffffff; padding: 16rpx 32rpx; border-top-width: 1rpx; border-top-style: solid; border-top-color: #F0F2F7; align-items: center; }
+.message-input__toolbar-wrapper { flex-direction: column; background-color: #ffffff; border-top-width: 1rpx; border-top-style: solid; border-top-color: #F0F2F7; }
+/* 引用条：单行"发送者：内容"，与输入区同底色，右侧圆形关闭按钮 */
+.message-input__quote { flex-direction: row; align-items: center; padding: 20rpx 32rpx 0; }
+.message-input__quote-text { flex: 1; font-size: 28rpx; line-height: 40rpx; color: rgba(0, 0, 0, 0.55); lines: 1; text-overflow: ellipsis; }
+.message-input__quote-close { width: 40rpx; height: 40rpx; align-items: center; justify-content: center; margin-left: 16rpx; }
+.message-input__quote-close-icon { width: 40rpx; height: 40rpx; }
+/* 边框已移到 wrapper 上，避免引用条与工具栏之间出现两条线 */
+.message-input__toolbar { flex-direction: row; background-color: #ffffff; padding: 16rpx 32rpx; align-items: center; }
 .message-input__mask { border-top-width: 1rpx; border-top-style: solid; border-top-color: #F0F2F7; background-color: #fff; height: 700rpx; position: relative; }
 .message-input__btn { margin-left: 20rpx; height: 56rpx; justify-content: center; align-items: center; border-radius: 50%; }
 .message-input__btn:active { background-color: #F0F2F7; }

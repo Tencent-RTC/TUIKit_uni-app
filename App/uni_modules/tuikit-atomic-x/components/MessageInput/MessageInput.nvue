@@ -50,7 +50,19 @@
       </view>
     </view>
 
-    <view id="message-input-toolbar" class="message-input__toolbar" :style="{ paddingBottom: safeAreaBottomRpx + 'rpx' }">
+    <view id="message-input-toolbar" class="message-input__toolbar-wrapper">
+      <view v-if="hasQuote" class="message-input__quote">
+        <text class="message-input__quote-text" :numberOfLines="1">{{ quoteSummary }}</text>
+        <view class="message-input__quote-close" @tap.stop="clearQuote">
+          <image
+            class="message-input__quote-close-icon"
+            src="/uni_modules/tuikit-atomic-x/static/icon/close.png"
+            mode="aspectFit"
+          />
+        </view>
+      </view>
+
+      <view class="message-input__toolbar" :style="{ paddingBottom: safeAreaBottomRpx + 'rpx' }">
       <view v-if="enableVoice" class="message-input__btn message-input__btn--first" @tap="handleMicTap">
         <image 
           v-if="inputState !== 'VOICE'" 
@@ -112,6 +124,7 @@
           <text class="message-input__send-btn-text">发送</text>  
         </view>
         <image v-else class="message-input__icon" src="/uni_modules/tuikit-atomic-x/static/assets/message-input/nvue_more.png" mode="aspectFill" @tap.stop="handleMoreTap" />
+      </view>
       </view>
     </view>
     <view class="message-input__mask">
@@ -183,6 +196,7 @@ import { requestCallPermissions, showPermissionDialog } from '../../utils/callPe
 import { stopGlobalAudioPlayer, RECORDING_PSEUDO_ID } from '../../hooks/useAudioPlayer';
 import { prewarmFilePicker } from '../../hooks/useFilePicker';
 import { useCallState } from '../../state/CallState';
+import { getMessageAbstract, getSenderName } from '../ConversationList/utils';
 
 const vueInstance = getCurrentInstance();
 
@@ -464,6 +478,70 @@ const animation: AnimationModule = uni.requireNativePlugin('animation');
 // ==================== 计算属性 ====================
 const hasContent: ComputedRef<boolean> = computed(() => inputText.value.trim().length > 0);
 
+const quoteTarget: Ref<MessageInfo | null> = ref(null);
+
+const hasQuote: ComputedRef<boolean> = computed(() => quoteTarget.value !== null);
+
+const quoteSenderName: ComputedRef<string> = computed(() => {
+  const msg = quoteTarget.value;
+  if (!msg) return '';
+  const name = getSenderName(msg);
+  return name.length > 0 ? name : (msg.from?.userID || '');
+});
+
+const quoteAbstract: ComputedRef<string> = computed(() => {
+  const msg = quoteTarget.value;
+  if (!msg) return '';
+  if (msg.status === MessageStatus.DELETED) return '[原消息已删除]';
+  if (msg.status === MessageStatus.REVOKED) return '[原消息已撤回]';
+  const abstract = getMessageAbstract(msg, false);
+  return transformEmojiKeyToName(abstract);
+});
+
+const quoteSummary: ComputedRef<string> = computed(() => {
+  if (!quoteTarget.value) return '';
+  const name = quoteSenderName.value;
+  return name.length > 0 ? `${name}：${quoteAbstract.value}` : quoteAbstract.value;
+});
+
+const clearQuote = (): void => {
+  quoteTarget.value = null;
+};
+
+
+watch(hasQuote, () => {
+  nextTick(() => {
+    measureToolbar();
+    setTimeout(() => measureToolbar(), 150);
+  });
+});
+
+let focusingProgrammatically = false;
+
+const focusTextarea = (): void => {
+  focusingProgrammatically = true;
+  focusTrigger.value = false;
+  nextTick(() => {
+    setTimeout(() => {
+      focusTrigger.value = true;
+      textareaRef.value?.focus();
+      setTimeout(() => { textareaRef.value?.focus(); }, 120);
+      setTimeout(() => { textareaRef.value?.focus(); }, 300);
+      setTimeout(() => { focusingProgrammatically = false; }, 1000);
+    }, 160);
+  });
+};
+
+
+const onQuote = (data: { conversationID: string; message: MessageInfo }): void => {
+  if (!data || data.conversationID !== props.conversationID) return;
+  if (!data.message) return;
+  quoteTarget.value = data.message;
+  isFocused.value = false;
+  switchMode('TEXT');
+  focusTextarea();
+};
+
 // 录音时长显示文本
 const recordingDurationText = computed(() => {
   const minutes = Math.floor(recordingDuration.value / 60);
@@ -546,15 +624,17 @@ onBeforeMount(() => {
 
 onMounted(() => {
 
+  if (cursorPosition.value > inputText.value.length) {
+    cursorPosition.value = inputText.value.length;
+  }
+
   // 监听键盘高度变化
   uni.onKeyboardHeightChange(onKeyboardChange);
 
-  // 监听撤回消息的"重新编辑"事件（组件内部自洽，不依赖业务层）
   uni.$on('atomicx-reEdit', onReEdit);
 
-  // 预热文件选择器的 Android 桥接类（同步跨桥约 500-1000ms）
-  // 延后到 MessageList 首屏完成后触发（首屏展示逻辑约 150ms 完成），
-  // 500ms 错开首屏关键路径，用户首次点"文件"时类已就绪
+  uni.$on('atomicx-quote', onQuote);
+
   setTimeout(() => {
     prewarmFilePicker();
   }, 500);
@@ -572,6 +652,7 @@ onShow(() => {
 onUnmounted(() => {
   uni.offKeyboardHeightChange(onKeyboardChange);
   uni.$off('atomicx-reEdit', onReEdit);
+  uni.$off('atomicx-quote', onQuote);
   messageInputState?.destroyStore();
 });
 
@@ -624,6 +705,9 @@ const onKeyboardChange = (res: KeyboardHeightChangeResult): void => {
       // 不执行动画，因为面板还在，等 switchMode 处理
     }
   } else {
+    // 程序聚焦期间：忽略迟到的键盘收起回调，避免把刚切到 TEXT 的状态又切回 NONE
+    if (focusingProgrammatically) return;
+
     if (isJsCloseKeyboard) {
       isJsCloseKeyboard = false;
       return;
@@ -966,20 +1050,7 @@ const switchMode = (targetState: InputState): void => {
         }, ANIMATION_DURATION);
       }
     } else if (currentState === 'VOICE') {
-      // VOICE → TEXT: textarea 由 v-if 重新挂载，需要触发 focus 弹起键盘
-      // iOS nvue 下方法式 focus() 不会唤起软键盘，必须让 :focus 属性发生 false → true 变化
-      // Android nvue 下原生节点挂载是异步的，nextTick 可能早于原生 DOM 就位
-      // 所以：先置 false → 等待原生节点挂载（nextTick + setTimeout 双层） → 置 true + 方法式 focus 双保险
-      focusTrigger.value = false;
-      nextTick(() => {
-        // setTimeout 让出一轮事件循环，确保 nvue 原生 textarea 节点已挂载完毕
-        // 否则 Android 上会间歇性 focus 失败：节点未挂载时设置 :focus=true，被当作初始 prop 忽略
-        setTimeout(() => {
-          focusTrigger.value = true;
-          // 兼容 Android：方法式 focus 在 Android nvue 上可靠
-          textareaRef.value?.focus();
-        }, 50);
-      });
+      focusTextarea();
     }
     return;
   }
@@ -1120,13 +1191,20 @@ const handleFocus = (e): void => {
   if (inputState.value !== 'TEXT') {
     switchMode('TEXT');
   }
+  // 真正聚焦成功后再留一点缓冲，然后才放开对键盘收起回调的屏蔽
+  if (focusingProgrammatically) {
+    setTimeout(() => { focusingProgrammatically = false; }, 300);
+  }
 };
 
 // 输入框失焦
 const handleBlur = (event: { detail: { value: string, cursor: number } }): void => {
   isFocused.value = false;
-  // 同步复位响应式 focus 开关，保证下一次 focusTrigger=false→true 的变化能被识别
-  focusTrigger.value = false;
+  // 同步复位响应式 focus 开关，保证下一次 focusTrigger=false→true 的变化能被识别。
+  // 程序聚焦期间不复位：那个 blur 是我们自己置 :focus=false 造成的，不能打断这次聚焦
+  if (!focusingProgrammatically) {
+    focusTrigger.value = false;
+  }
   lastCursorPosition.value = event.detail.cursor;
 };
 
@@ -1298,6 +1376,7 @@ const handleSend = (): void => {
   const payload: SendMessagePayload = { type: 'text', text };
   const option: SendMessageOption = {};
   if (atUserList && atUserList.length > 0) option.atUserList = atUserList;
+  if (quoteTarget.value) option.quotedMessage = quoteTarget.value;
   const offlinePush = buildOfflinePushInfo(props.setOfflinePushInfo, {
     messageType: MessageType.TEXT,
     messagePayload,
@@ -1316,12 +1395,14 @@ const handleSend = (): void => {
   });
   emit('send', text);
   inputText.value = '';
+  cursorPosition.value = 0;
   // 清理 mention 上下文
   mentions.value = [];
   selectedMembers.value = new Map();
   mentionAnchor.value = -1;
   lastInputText.value = '';
   lastInputCursor.value = 0;
+  quoteTarget.value = null;
 };
 
 /**
@@ -1430,20 +1511,27 @@ const handleMoreTap = throttle(() => {
 // nvue textarea 不支持内嵌图片，用中文名（如 [微笑]）作为输入框可视形态；
 // 发送时由 handleSend 用 transformEmojiNameToKey 反查回 [TUIEmoji_Xxx] key，再发出去
 const handleEmojiSelect = (emoji: EmojiItem | string): void => {
+  let insertText = '';
+  if (typeof emoji === 'string') {
+    insertText = emoji;
+  } else {
+    insertText = (emoji.name as string) || emoji.key || '';
+  }
+  if (!insertText) return;
+
+  if (!isFocused.value) {
+    inputText.value = inputText.value + insertText;
+    cursorPosition.value = inputText.value.length;
+    lastInputText.value = inputText.value;
+    lastInputCursor.value = cursorPosition.value;
+    return;
+  }
+
   textareaRef.value?.getSelectionRange((res: { selectionStart: number, selectionEnd: number }) => {
     const {
       selectionStart,
       selectionEnd,
     } = res;
-
-    let insertText = '';
-    if (typeof emoji === 'string') {
-      insertText = emoji;
-    } else {
-      // 优先用 name（如 [微笑]）；无 name 则降级用 key（如 [TUIEmoji_Smile]）
-      insertText = (emoji.name as string) || emoji.key || '';
-    }
-    if (!insertText) return;
 
     inputText.value = inputText.value.slice(0, selectionStart) + insertText + inputText.value.slice(selectionEnd);
     cursorPosition.value = selectionStart + insertText.length;
@@ -1824,6 +1912,7 @@ const onReEdit = (data: { conversationID: string; text: string }): void => {
   if (!data || data.conversationID !== props.conversationID) return;
   switchMode('NONE');
   inputText.value = data.text;
+  cursorPosition.value = data.text.length;
   mentions.value = [];
   selectedMembers.value = new Map();
   mentionAnchor.value = -1;
@@ -1989,13 +2078,48 @@ const onReEdit = (data: { conversationID: string; text: string }): void => {
   height: 80rpx;
 }
 
+/* 引用条 + 工具栏的外层容器（被 #message-input-toolbar 测量，高度计入消息列表 padding） */
+.message-input__toolbar-wrapper {
+  flex-direction: column;
+  background-color: #ffffff;
+  border-top-width: 1rpx;
+  border-top-style: solid;
+  border-top-color: #F0F2F7;
+}
+
+/* 引用条：单行"发送者：内容"，与输入区同底色，右侧圆形关闭按钮 */
+.message-input__quote {
+  flex-direction: row;
+  align-items: center;
+  padding: 20rpx 32rpx 0;
+}
+
+.message-input__quote-text {
+  flex: 1;
+  font-size: 28rpx;
+  line-height: 40rpx;
+  color: rgba(0, 0, 0, 0.55);
+  lines: 1;
+  text-overflow: ellipsis;
+}
+
+.message-input__quote-close {
+  width: 40rpx;
+  height: 40rpx;
+  align-items: center;
+  justify-content: center;
+  margin-left: 16rpx;
+}
+
+.message-input__quote-close-icon {
+  width: 40rpx;
+  height: 40rpx;
+}
+
 .message-input__toolbar {
   flex-direction: row;
   background-color: #ffffff;
   padding: 16rpx 32rpx;
-  border-top-width: 1rpx;
-  border-top-style: solid;
-  border-top-color: #F0F2F7;
   align-items: center;
 }
 

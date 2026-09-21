@@ -118,6 +118,8 @@ export default {
       lastScrollTop: 0,
       isFirstLoad: true,
       currentHighlightID: '',
+      // 组件内触发的定位目标（引用块点击），与外部 locateMessage 走同一条链路
+      internalLocateMessage: null,
       pendingScrollMessage: null,
       pendingTimers: [],
       isCleaned: false,
@@ -218,6 +220,16 @@ export default {
         this.$nextTick(function() { self.scrollToMessage(newMessage, true) })
       }
     },
+    // 组件内触发的定位（点引用块跳转等），与外部 locateMessage prop 走同一条链路
+    internalLocateMessage: function(newMessage) {
+      if (newMessage && newMessage.msgID && !this.isFirstLoad) {
+        var self = this
+        this.$nextTick(function() {
+          self.scrollToMessage(newMessage, true)
+          self.internalLocateMessage = null
+        })
+      }
+    },
     inputPanelHeight: function(newHeight, oldHeight) {
       if (newHeight > 0) {
         var self = this
@@ -314,6 +326,8 @@ export default {
       self.pendingTimers.push(t)
     }
     uni.$on('audioConvertStreamGrow', this._handleAudioConvertStreamGrow)
+    uni.$on('messageBoxGrow', this._handleAudioConvertStreamGrow)
+    uni.$on('scrollToMessage', this._handleScrollToMessageEvent)
   },
   beforeDestroy() { this._cleanup() },
   beforeUnmount() { this._cleanup() },
@@ -372,6 +386,8 @@ export default {
       this.convState.clearConversationUnreadCount(this.conversationID)
       if (this._handleAudioConvertStreamGrow) {
         uni.$off('audioConvertStreamGrow', this._handleAudioConvertStreamGrow)
+        uni.$off('messageBoxGrow', this._handleAudioConvertStreamGrow)
+        uni.$off('scrollToMessage', this._handleScrollToMessageEvent)
       }
       this.msgState.destroyStore()
     },
@@ -444,6 +460,18 @@ export default {
         }
       }
       this.isLocating = false
+    },
+    /**
+     * 引用块点击 → 定位到原消息：统一走 locateMessage 链路（与搜索结果定位同一套：
+     * 需要时先 locateToMessage 拉上下文，再滚动 + 高亮），不再单独分支处理
+     */
+    _handleScrollToMessageEvent(msgID, cursor) {
+      if (!msgID) return
+      // 每次包一个新对象：同一条引用被反复点击时也能触发 watch
+      var base = cursor || { msgID: msgID }
+      var copy = {}
+      for (var k in base) { if (Object.prototype.hasOwnProperty.call(base, k)) copy[k] = base[k] }
+      this.internalLocateMessage = copy
     },
     async scrollToMessage(message, animated) {
       if (animated === undefined) animated = true
