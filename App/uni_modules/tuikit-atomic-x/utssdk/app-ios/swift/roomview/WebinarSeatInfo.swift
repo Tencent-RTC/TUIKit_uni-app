@@ -36,8 +36,8 @@ func convertToWebinarSeatInfo(seatFullInfo: TUISeatFullInfo) -> WebinarSeatInfo 
     seatUserInfo.userID = seatFullInfo.userId ?? ""
     seatUserInfo.userName = seatFullInfo.userName ?? ""
     seatUserInfo.avatarURL = seatFullInfo.userAvatar ?? ""
-    seatUserInfo.microphoneStatus = seatFullInfo.userMicrophoneStatus == .opened ? .on : .off
-    seatUserInfo.cameraStatus = seatFullInfo.userCameraStatus == .opened ? .on : .off
+    seatUserInfo.microphoneStatus = seatFullInfo.userMicrophoneStatus.rawValue == TUIDeviceStatus.opened.rawValue ? .on : .off
+    seatUserInfo.cameraStatus = seatFullInfo.userCameraStatus.rawValue == TUIDeviceStatus.opened.rawValue ? .on : .off
 
     let regionInfo = WebinarRegionInfo(x: Int(seatFullInfo.x),
                                        y: Int(seatFullInfo.y),

@@ -1,0 +1,308 @@
+<template>
+  <view class="bottom-drawer-container" v-if="modelValue">
+    <view class="drawer-overlay" @tap="close"></view>
+    <view class="bottom-drawer" :class="{ 'drawer-open': modelValue }">
+      <text class="title">更多功能</text>
+
+      <view class="drawer-content">
+        <view class="drawer-actions">
+          <view class="action-btn" @tap="handleBeauty">
+            <view class="action-btn-image-container">
+              <image class="action-btn-image" src="/static/images/live-beauty.png" mode="aspectFit" />
+            </view>
+            <text class="action-btn-content">美颜</text>
+          </view>
+          <view class="action-btn" @tap="handleAudioEffect">
+            <view class="action-btn-image-container">
+              <image class="action-btn-image" src="/static/images/live-effects.png" mode="aspectFit" />
+            </view>
+            <text class="action-btn-content">音效</text>
+          </view>
+          <view class="action-btn" @tap="handleCamera">
+            <view class="action-btn-image-container">
+              <image class="action-btn-image" src="/static/images/live-flip.png" mode="aspectFit" />
+            </view>
+            <text class="action-btn-content">翻转</text>
+          </view>
+          <view class="action-btn" @tap="handleSwitchMirror">
+            <view class="action-btn-image-container">
+              <image class="action-btn-image" src="/static/images/mirror.png" mode="aspectFit" />
+            </view>
+            <text class="action-btn-content">镜像</text>
+          </view>
+
+          <view class="action-btn" @tap="openNetworkQualityPanel">
+            <view class="action-btn-image-container">
+              <image class="action-btn-image" src="/static/images/live-dashboard.png" mode="aspectFit" />
+            </view>
+            <text class="action-btn-content">仪表盘</text>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <NetworkQualityPanel v-model="isShowNetworkQualityPanel"></NetworkQualityPanel>
+    <BeautyPanel v-model="isShowBeautyPanel"></BeautyPanel>
+    <AudioEffectPanel v-model="isShowAudioEffect"></AudioEffectPanel>
+
+    <LiveToast
+      v-if="tipVisible"
+      :key="tipSeq"
+      v-model="tipVisible"
+      :title="tipTitle"
+      :duration="2000"
+    />
+  </view>
+</template>
+
+<script setup>
+  import {
+    ref,
+    nextTick,
+    onMounted
+  } from 'vue';
+  import NetworkQualityPanel from '@/uni_modules/tuikit-atomic-x/components/NetworkQualityPanel.nvue';
+  import BeautyPanel from '@/uni_modules/tuikit-atomic-x/components/BeautyPanel.nvue';
+  import AudioEffectPanel from '@/uni_modules/tuikit-atomic-x/components/AudioEffectPanel.nvue';
+  import LiveToast from '@/uni_modules/tuikit-atomic-x/components/LiveToast.nvue';
+
+  // 轻提示(LiveToast)状态:tipSeq 递增强制重建。
+  // 重复触发时,若 tipVisible 已是 true,仅改 key 在部分 iOS 机型上 diff 复用不稳定
+  // ——旧实例不被真正卸载、watch 因 modelValue 同值(true→true)不触发,导致动画与
+  // 倒计时都不重置,toast "始终存在"看不到消失重建。故先卸载(false)再于下一帧重建(true),
+  // 让 modelValue 产生真实的 false→true 跳变,进入动画与自动关闭倒计时必定重置。
+  const tipVisible = ref(false);
+  const tipSeq = ref(0);
+  const tipTitle = ref('');
+  const showTip = (title) => {
+    tipTitle.value = title;
+    tipVisible.value = false;
+    nextTick(() => {
+      tipSeq.value++;
+      tipVisible.value = true;
+    });
+  };
+  import {
+    MirrorType,
+    useDeviceState
+  } from "@/uni_modules/tuikit-atomic-x/state/DeviceState";
+
+  const {
+    isFrontCamera,
+    switchCamera,
+    switchMirror,
+    localMirrorType
+  } = useDeviceState();
+
+  const defaultavatarURL = 'https://web.sdk.qcloud.com/component/TUIKit/assets/avatar_01.png';
+
+  const props = defineProps({
+    modelValue: {
+      type: Boolean,
+      default: false
+    },
+    userInfo: {
+      type: Object,
+      default: () => ({
+        userName: '',
+        userID: '',
+        avatarURL: '',
+        isMessageDisabled: false,
+        userRole: 1
+      })
+    },
+  });
+
+  const isShowNetworkQualityPanel = ref(false);
+  const isShowBeautyPanel = ref(false);
+  const isShowAudioEffect = ref(false);
+
+  const handleBeauty = () => {
+    isShowBeautyPanel.value = true;
+  };
+  const openNetworkQualityPanel = () => {
+    isShowNetworkQualityPanel.value = true
+  }
+  const handleAudioEffect = () => {
+    isShowAudioEffect.value = true;
+  };
+  const handleCamera = () => {
+    switchCamera({
+      isFront: !isFrontCamera.value
+    })
+  };
+  const handleSwitchMirror = () => {
+    if (!isFrontCamera.value) {
+      showTip('仅前置摄像头支持该设置')
+      return
+    }
+
+    if (localMirrorType.value === MirrorType.AUTO) {
+      switchMirror({
+        mirrorType: MirrorType.DISABLE
+      })
+    } else if (localMirrorType.value === MirrorType.DISABLE) {
+      switchMirror({
+        mirrorType: MirrorType.ENABLE
+      })
+    } else if (localMirrorType.value === MirrorType.ENABLE) {
+      switchMirror({
+        mirrorType: MirrorType.DISABLE
+      })
+    }
+
+  }
+  const emit = defineEmits(['update:modelValue']);
+  const close = () => {
+    emit('update:modelValue', false);
+  };
+</script>
+
+<style>
+  .bottom-drawer-container {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    top: 0;
+    z-index: 1000;
+  }
+
+  .drawer-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.4);
+  }
+
+  .bottom-drawer {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: rgba(31, 32, 36, 1);
+    border-top-left-radius: 32rpx;
+    border-top-right-radius: 32rpx;
+    transform: translateY(100%);
+    transition-property: transform;
+    transition-duration: 0.3s;
+    transition-timing-function: ease;
+    flex-direction: column;
+  }
+
+  .drawer-open {
+    transform: translateY(0);
+  }
+
+  .drawer-header {
+    padding: 48rpx;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .drawer-header-left-container {
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .drawer-header-avatar-container {
+    width: 80rpx;
+    height: 80rpx;
+    border-radius: 40rpx;
+    margin-right: 24rpx;
+  }
+
+  .title {
+    color: #fff;
+    font-size: 32rpx;
+    font-weight: 500;
+    text-align: center;
+    padding-top: 20rpx
+  }
+
+  .drawer-header-avatar {
+    width: 80rpx;
+    height: 80rpx;
+    border-radius: 40rpx;
+  }
+
+  .drawer-header-content-container {
+    flex-direction: column;
+  }
+
+  .drawer-name {
+    font-size: 32rpx;
+    color: rgba(255, 255, 255, 0.9);
+    margin-bottom: 12rpx;
+  }
+
+  .drawer-id {
+    font-size: 24rpx;
+    color: rgba(255, 255, 255, 0.55);
+  }
+
+  .drawer-content {
+    flex: 1;
+    padding: 0 48rpx;
+    margin-bottom: 40rpx;
+  }
+
+  .drawer-actions {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    justify-content: space-between;
+    align-items: center;
+    padding: 24rpx 0;
+  }
+
+  .action-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    flex: 1;
+  }
+
+  .action-btn-image-container {
+    width: 100rpx;
+    height: 100rpx;
+    background-color: rgba(43, 44, 48, 1);
+    margin-bottom: 12rpx;
+    border-radius: 25rpx;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .action-btn-image {
+    width: 60rpx;
+    height: 60rpx;
+  }
+
+  .action-btn-content {
+    font-size: 24rpx;
+    color: rgba(255, 255, 255, 0.9);
+  }
+
+  .divider-line-container {
+    height: 68rpx;
+    justify-content: center;
+    position: relative;
+  }
+
+  .divider-line {
+    width: 268rpx;
+    height: 10rpx;
+    border-radius: 200rpx;
+    background-color: #ffffff;
+    position: absolute;
+    bottom: 16rpx;
+  }
+
+  .camera-mic-setting {
+    flex: 1;
+    background-color: #1f1024;
+  }
+</style>

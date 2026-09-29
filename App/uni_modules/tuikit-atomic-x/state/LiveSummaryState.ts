@@ -59,6 +59,9 @@ const summaryData = ref<LiveSummaryDataParam | null>(null);
 let boundLiveID: string | null = null;
 
 function bindEvent(liveID: string): void {
+  if (!liveID || currentLive.value?.liveID !== liveID) {
+    return;
+  }
   if (boundLiveID === liveID) {
     return;
   }
@@ -99,17 +102,28 @@ function unbindEvent(liveID: string): void {
 
 let stopWatchingCurrentLive: (() => void) | null = null;
 
+// 重置汇总数据为初值:退房/切换房间时清空,避免上个房间的 summaryData 残留到新房间。
+function resetSummaryState(): void {
+  summaryData.value = null;
+}
+
 function ensureWatchCurrentLive() {
   if (stopWatchingCurrentLive) return;
   stopWatchingCurrentLive = watch(
     () => currentLive.value,
-    (newVal, oldVal) => {
-      if (oldVal && oldVal.liveID !== '') {
-        if (newVal.liveID === '' && boundLiveID) {
+    (newVal: any) => {
+      const newLiveID = newVal?.liveID ?? '';
+      if (newLiveID === '') {
+        if (boundLiveID) {
           unbindEvent(boundLiveID);
         }
+        resetSummaryState();
+      } else if (newLiveID !== boundLiveID) {
+        resetSummaryState();
+        bindEvent(newLiveID);
       }
-    }
+    },
+    { flush: 'sync' }
   );
 }
 

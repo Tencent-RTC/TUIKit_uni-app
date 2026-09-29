@@ -1,13 +1,15 @@
-import { useRoomState, RoomEvent } from '../state';
+import { watch } from 'vue';
+import { useRoomState, RoomEvent, useDeviceState, DeviceStatus } from '../state';
+import { startForegroundService, stopForegroundService } from "@/uni_modules/tuikit-atomic-x";
 
 declare const uni: any;
 declare function getCurrentPages(): any[];
 
-export const ROOM_INVITE_PAGE = '/pages/scenes/room/roomInvite/index';
+export const INVITATION_PAGE = '/pages/scenes/room/join/invitation/index';
 
-export const ROOM_MAIN_PAGE = '/pages/scenes/room/main/index';
+export const ROOM_MAIN_PAGE = '/pages/scenes/room/meeting/index';
 
-export const ROOM_INVITE_CLOSE_EVENT = 'roomInviteClosed';
+export const INVITATION_CLOSE_EVENT = 'invitationClosed';
 
 
 function getInitialized(): boolean {
@@ -40,7 +42,7 @@ function notifyInviteClose(roomID: string): void {
   const pending = getPendingInviteRoomID();
   if (pending.length === 0 || pending !== roomID) return;
   setPendingInviteRoomID('');
-  uni.$emit(ROOM_INVITE_CLOSE_EVENT, { roomID });
+  uni.$emit(INVITATION_CLOSE_EVENT, { roomID });
 }
 
 export function initRoomCallService(): void {
@@ -48,11 +50,34 @@ export function initRoomCallService(): void {
   setInitialized();
 
   const roomState = useRoomState();
+  const { microphoneStatus } = useDeviceState();
 
-  /**
-   * 忙线自动拒绝：当前已在会议中 / 已有另一个邀请待处理时，直接替用户拒掉新邀请，
-   * 让主叫端立刻收到 onCallRejected，而不是让呼叫一直挂到超时。
-   */
+  const startForegroundServiceSafely = (): void => {
+    try {
+      startForegroundService();
+    } catch (e) {
+      console.warn('[RoomCallService] startForegroundService error:', e);
+    }
+  };
+
+  let _isForeground = true;
+  let _pendingStart = false;
+
+  uni.onAppHide?.(() => {
+    _isForeground = false;
+  });
+
+  uni.onAppShow?.(() => {
+    _isForeground = true;
+    if (!_pendingStart) return;
+    _pendingStart = false;
+    if (!roomState.currentRoom.value?.roomID) return;
+    if (microphoneStatus.value !== DeviceStatus.ON) return;
+    console.log('[RoomCallService] app foreground, start deferred foreground service');
+    stopForegroundService();
+    startForegroundServiceSafely();
+  });
+
   const autoReject = (roomID: string, reason: string): void => {
     console.warn(`[RoomCallService] auto reject invite (${reason}):`, roomID);
     roomState.rejectCall({ roomID }).catch((e: any) => {
@@ -66,7 +91,6 @@ export function initRoomCallService(): void {
     const roomID = roomInfo?.roomID;
     if (typeof roomID !== 'string' || roomID.length === 0) return;
 
-    // 已在会中 → 自动拒绝（不打断当前会议）
     if (currentRoute() === ROOM_MAIN_PAGE) {
       autoReject(roomID, 'already in room');
       return;
@@ -74,9 +98,7 @@ export function initRoomCallService(): void {
 
     const pending = getPendingInviteRoomID();
     if (pending.length > 0) {
-      // 同一房间的重复推送：邀请页已在展示，静默忽略，不能把自己的邀请拒掉
       if (pending === roomID) return;
-      // 另一个房间的新邀请 → 自动拒绝（当前只支持同时处理一个邀请）
       autoReject(roomID, `busy with pending invite ${pending}`);
       return;
     }
@@ -96,11 +118,10 @@ export function initRoomCallService(): void {
     ].join('&');
 
     uni.navigateTo({
-      url: `${ROOM_INVITE_PAGE}?${q}`,
+      url: `${INVITATION_PAGE}?${q}`,
       fail: (err: any) => {
         console.error('[RoomCallService] navigateTo invite page failed:', err);
         setPendingInviteRoomID('');
-        // 邀请页打不开，用户无从选择 → 拒掉，避免主叫端一直挂到超时
         autoReject(roomID, 'navigateTo invite page failed');
       },
     });
@@ -121,4 +142,33 @@ export function initRoomCallService(): void {
   roomState.subscribeEvent(RoomEvent.onCallHandledByOtherDevice, ((opt: any): void => {
     notifyInviteClose(opt?.roomInfo?.roomID);
   }) as any);
+
+  watch(
+    () => roomState.currentRoom.value?.roomID ?? '',
+    (newRoomID: string, oldRoomID: string) => {
+      if (!newRoomID && oldRoomID) {
+        console.log('[RoomCallService] leave room, stopForegroundService, prevRoomID:', oldRoomID);
+        stopForegroundService();
+      } else if (newRoomID && oldRoomID && newRoomID !== oldRoomID) {
+        console.log('[RoomCallService] switch room, stopForegroundService:', oldRoomID, '->', newRoomID);
+        stopForegroundService();
+      }
+    }
+  );
+
+  watch(
+    () => microphoneStatus.value,
+    (status: DeviceStatus) => {
+      if (status !== DeviceStatus.ON) return;
+      if (!roomState.currentRoom.value?.roomID) return;
+      if (!_isForeground) {
+        console.log('[RoomCallService] microphone ON but app in background, defer foreground service');
+        _pendingStart = true;
+        return;
+      }
+      console.log('[RoomCallService] microphone ON, restart foreground service');
+      stopForegroundService();
+      startForegroundServiceSafely();
+    }
+  );
 }

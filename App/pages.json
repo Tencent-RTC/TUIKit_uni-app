@@ -56,15 +56,16 @@
       }
     },
     {
-      "path": "pages/scenes/live/livelist/index",
+      "path": "pages/scenes/live/video/liveList/index",
       "style": {
         "disableSwipeBack": true,
         "navigationStyle": "custom"
       }
     },
     {
-      "path": "pages/scenes/live/audience/index",
+      "path": "pages/scenes/live/video/player/index",
       "style": {
+        "backgroundColor": "#000000",
         "navigationBarTextStyle": "white",
         "app-plus": {
           "disableSwipeBack": true,
@@ -73,7 +74,7 @@
       }
     },
     {
-      "path": "pages/scenes/live/anchor/index",
+      "path": "pages/scenes/live/video/pusher/index",
       "disableSwipeBack": true,
       "style": {
         "backgroundColor": "#000000",
@@ -85,7 +86,7 @@
       }
     },
     {
-      "path": "pages/scenes/live/liveend/index",
+      "path": "pages/scenes/live/video/pusher/liveEnd",
       "disableSwipeBack": true,
       "style": {
         "navigationBarTextStyle": "white",
@@ -256,7 +257,7 @@
       }
     },
     {
-      "path": "pages/scenes/live/index/index",
+      "path": "pages/scenes/live/index",
       "style": {
         "navigationBarTitleText": "直播"
       }
@@ -274,7 +275,7 @@
       }
     },
     {
-      "path": "pages/scenes/room/create/index",
+      "path": "pages/scenes/room/quickstart/index",
       "style": {
         "navigationStyle": "custom"
       }
@@ -286,13 +287,13 @@
       }
     },
     {
-      "path": "pages/scenes/room/scheduleDetail/index",
+      "path": "pages/scenes/room/schedule/detail/index",
       "style": {
         "navigationStyle": "custom"
       }
     },
     {
-      "path": "pages/scenes/room/main/index",
+      "path": "pages/scenes/room/meeting/index",
       "style": {
         "navigationStyle": "custom",
         "disableScroll": true,
@@ -300,7 +301,7 @@
       }
     },
     {
-      "path": "pages/scenes/room/roomInvite/index",
+      "path": "pages/scenes/room/join/invitation/index",
       "style": {
         "navigationStyle": "custom",
         "disableScroll": true,
@@ -313,7 +314,7 @@
       }
     },
     {
-      "path": "pages/scenes/live/VoiceAnchor/VoiceAnchor",
+      "path": "pages/scenes/live/voice/pusher/index",
       "disableSwipeBack": true,
       "style": {
         "backgroundColor": "#000000",
@@ -325,14 +326,15 @@
       }
     },
     {
-      "path": "pages/scenes/live/VoiceAudience/VoiceAudience",
+      "path": "pages/scenes/live/voice/player/index",
       "style": {
+        "backgroundColor": "#000000",
         "disableSwipeBack": true,
         "navigationStyle": "custom"
       }
     },
     {
-      "path": "pages/scenes/live/VoiceList/VoiceList",
+      "path": "pages/scenes/live/voice/liveList/index",
       "style": {
         "disableSwipeBack": true,
         "navigationStyle": "custom"

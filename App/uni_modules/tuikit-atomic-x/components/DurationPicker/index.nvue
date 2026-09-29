@@ -1,0 +1,311 @@
+<template>
+  <Drawer
+    :visible="visible"
+    @close="handleCancel"
+  >
+    <view class="picker-header">
+      <view class="header-btn header-btn-left" @tap="handleCancel">
+        <image class="header-icon" src="/uni_modules/tuikit-atomic-x/static/room/room_collapse.png" mode="aspectFit" />
+      </view>
+      <text class="picker-title">房间时长</text>
+      <view class="header-btn header-btn-right" @tap="handleConfirm">
+        <image class="header-icon" src="/uni_modules/tuikit-atomic-x/static/room/room_schedule_selected.png" mode="aspectFit" />
+      </view>
+    </view>
+
+    <view class="picker-area">
+      <view class="picker-highlight"></view>
+
+      <scroll-view
+        class="column"
+        scroll-y
+        :scroll-into-view="hourScrollId"
+        :show-scrollbar="false"
+        @scroll="onHourScroll"
+      >
+        <view
+          v-for="(h, idx) in hourLoopList"
+          :key="`h-${idx}`"
+          :id="`h-${idx}`"
+          class="cell"
+        >
+          <text
+            class="cell-num"
+            :class="idx === hourActiveIdx ? 'text-active' : (idx === hourActiveIdx - 1 || idx === hourActiveIdx + 1 ? 'text-near' : 'text-far')"
+          >{{ h }}</text>
+          <text
+            class="cell-unit"
+            :class="idx === hourActiveIdx ? 'text-active' : (idx === hourActiveIdx - 1 || idx === hourActiveIdx + 1 ? 'text-near' : 'text-far')"
+          >小时</text>
+        </view>
+      </scroll-view>
+
+      <scroll-view
+        class="column"
+        scroll-y
+        :scroll-into-view="minuteScrollId"
+        :show-scrollbar="false"
+        @scroll="onMinuteScroll"
+      >
+        <view
+          v-for="(m, idx) in minuteLoopList"
+          :key="`m-${idx}`"
+          :id="`m-${idx}`"
+          class="cell"
+        >
+          <text
+            class="cell-num"
+            :class="idx === minuteActiveIdx ? 'text-active' : (idx === minuteActiveIdx - 1 || idx === minuteActiveIdx + 1 ? 'text-near' : 'text-far')"
+          >{{ m }}</text>
+          <text
+            class="cell-unit"
+            :class="idx === minuteActiveIdx ? 'text-active' : (idx === minuteActiveIdx - 1 || idx === minuteActiveIdx + 1 ? 'text-near' : 'text-far')"
+          >分钟</text>
+        </view>
+      </scroll-view>
+    </view>
+
+    <view class="bottom-safe"></view>
+  </Drawer>
+</template>
+
+<script setup lang="ts">
+  import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue';
+  import Drawer from '@/uni_modules/tuikit-atomic-x/components/Drawer/index.nvue';
+
+  const CELL_HEIGHT_RPX = 88;
+  const CENTER_OFFSET = 2;
+  const HOURS = Array.from({ length: 24 }, (_, i) => i);
+  const MINUTES = Array.from({ length: 12 }, (_, i) => i * 5);
+  const HOUR_ROUNDS = 9;
+  const MINUTE_ROUNDS = 18;
+  const HOUR_MID_ROUND = 4;
+  const MINUTE_MID_ROUND = 8;
+  const SAFE_ROUNDS = 2;
+
+  const props = defineProps({
+    visible: { type: Boolean, default: false },
+    initialTotalMinutes: { type: Number, default: 30 },
+  });
+
+  const emit = defineEmits<{
+    (e: 'cancel'): void;
+    (e: 'confirm', totalMinutes: number): void;
+  }>();
+
+  const cellHeightPx = ref<number>(44);
+
+  onMounted(() => {
+    uni.getSystemInfo({
+      success: (res: any) => {
+        const w = (res?.screenWidth ?? 375) as number;
+        if (w > 0) cellHeightPx.value = (CELL_HEIGHT_RPX / 750) * w;
+      },
+    });
+  });
+
+  function buildLoopList(base: number[], rounds: number): number[] {
+    const list: number[] = [];
+    for (let r = 0; r < rounds; r++) {
+      for (let i = 0; i < base.length; i++) list.push(base[i]);
+    }
+    return list;
+  }
+  const hourLoopList: number[] = buildLoopList(HOURS, HOUR_ROUNDS);
+  const minuteLoopList: number[] = buildLoopList(MINUTES, MINUTE_ROUNDS);
+
+  const initialHour = computed(() => {
+    const h = Math.floor(props.initialTotalMinutes / 60);
+    return Math.max(0, Math.min(23, h));
+  });
+  const initialMinuteIdx = computed(() => {
+    const idx = Math.round((props.initialTotalMinutes % 60) / 5);
+    return Math.max(0, Math.min(11, idx));
+  });
+
+  const hourActiveIdx = ref<number>(HOUR_MID_ROUND * HOURS.length + initialHour.value);
+  const minuteActiveIdx = ref<number>(MINUTE_MID_ROUND * MINUTES.length + initialMinuteIdx.value);
+
+  const selectedHour = computed(() => hourLoopList[hourActiveIdx.value] ?? 0);
+  const selectedMinute = computed(() => minuteLoopList[minuteActiveIdx.value] ?? 0);
+
+  const hourScrollId = ref<string>('');
+  const minuteScrollId = ref<string>('');
+
+  let hourLocking = false;
+  let minuteLocking = false;
+  let hourResetTimer: any = null;
+  let minuteResetTimer: any = null;
+
+  function scrollHourToActive(): void {
+    hourLocking = true;
+    const target = Math.max(0, hourActiveIdx.value - CENTER_OFFSET);
+    hourScrollId.value = '';
+    nextTick().then(() => {
+      hourScrollId.value = `h-${target}`;
+      setTimeout(() => {
+        hourLocking = false;
+      }, 200);
+    });
+  }
+  function scrollMinuteToActive(): void {
+    minuteLocking = true;
+    const target = Math.max(0, minuteActiveIdx.value - CENTER_OFFSET);
+    minuteScrollId.value = '';
+    nextTick().then(() => {
+      minuteScrollId.value = `m-${target}`;
+      setTimeout(() => {
+        minuteLocking = false;
+      }, 200);
+    });
+  }
+
+  watch(
+    () => props.visible,
+    (v) => {
+      if (!v) {
+        if (hourResetTimer != null) clearTimeout(hourResetTimer);
+        if (minuteResetTimer != null) clearTimeout(minuteResetTimer);
+        return;
+      }
+      hourActiveIdx.value = HOUR_MID_ROUND * HOURS.length + initialHour.value;
+      minuteActiveIdx.value = MINUTE_MID_ROUND * MINUTES.length + initialMinuteIdx.value;
+      scrollHourToActive();
+      scrollMinuteToActive();
+    },
+    { immediate: true },
+  );
+
+  function scheduleHourReset(): void {
+    if (hourResetTimer != null) clearTimeout(hourResetTimer);
+    hourResetTimer = setTimeout(() => {
+      const len = HOURS.length;
+      const round = Math.floor(hourActiveIdx.value / len);
+      if (round >= SAFE_ROUNDS && round < HOUR_ROUNDS - SAFE_ROUNDS) return;
+      const real = hourActiveIdx.value % len;
+      hourActiveIdx.value = HOUR_MID_ROUND * len + real;
+      scrollHourToActive();
+    }, 150);
+  }
+  function scheduleMinuteReset(): void {
+    if (minuteResetTimer != null) clearTimeout(minuteResetTimer);
+    minuteResetTimer = setTimeout(() => {
+      const len = MINUTES.length;
+      const round = Math.floor(minuteActiveIdx.value / len);
+      if (round >= SAFE_ROUNDS && round < MINUTE_ROUNDS - SAFE_ROUNDS) return;
+      const real = minuteActiveIdx.value % len;
+      minuteActiveIdx.value = MINUTE_MID_ROUND * len + real;
+      scrollMinuteToActive();
+    }, 150);
+  }
+
+  function onHourScroll(e: any): void {
+    if (hourLocking) return;
+    const top = (e?.detail?.scrollTop ?? 0) as number;
+    const unit = cellHeightPx.value > 0 ? cellHeightPx.value : 44;
+    const idx = Math.round(top / unit) + CENTER_OFFSET;
+    hourActiveIdx.value = Math.max(0, Math.min(hourLoopList.length - 1, idx));
+    scheduleHourReset();
+  }
+  function onMinuteScroll(e: any): void {
+    if (minuteLocking) return;
+    const top = (e?.detail?.scrollTop ?? 0) as number;
+    const unit = cellHeightPx.value > 0 ? cellHeightPx.value : 44;
+    const idx = Math.round(top / unit) + CENTER_OFFSET;
+    minuteActiveIdx.value = Math.max(0, Math.min(minuteLoopList.length - 1, idx));
+    scheduleMinuteReset();
+  }
+
+  onUnmounted(() => {
+    if (hourResetTimer != null) clearTimeout(hourResetTimer);
+    if (minuteResetTimer != null) clearTimeout(minuteResetTimer);
+  });
+
+  function handleCancel(): void {
+    emit('cancel');
+  }
+  function handleConfirm(): void {
+    emit('confirm', selectedHour.value * 60 + selectedMinute.value);
+  }
+</script>
+
+<style>
+  .picker-header {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    height: 96rpx;
+    padding: 0 16rpx;
+  }
+  .header-btn {
+    width: 88rpx;
+    height: 88rpx;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+  }
+  .header-icon {
+    width: 48rpx;
+    height: 48rpx;
+  }
+  .picker-title {
+    font-size: 36rpx;
+    font-weight: 500;
+    color: #4F586B;
+  }
+
+  .picker-area {
+    flex-direction: row;
+    height: 440rpx;
+    background-color: #FFFFFF;
+    position: relative;
+  }
+
+  .picker-highlight {
+    position: absolute;
+    top: 176rpx;
+    left: 0;
+    right: 0;
+    height: 88rpx;
+    border-top-width: 1rpx;
+    border-bottom-width: 1rpx;
+    border-top-style: solid;
+    border-bottom-style: solid;
+    border-top-color: #E5E7EB;
+    border-bottom-color: #E5E7EB;
+  }
+
+  .column {
+    flex: 1;
+  }
+
+  .cell {
+    height: 88rpx;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .cell-num {
+    font-size: 34rpx;
+    margin-right: 4rpx;
+  }
+  .cell-unit {
+    font-size: 34rpx;
+  }
+
+  .text-active {
+    color: #22262E;
+    font-weight: 500;
+  }
+  .text-near {
+    color: #6B7385;
+  }
+  .text-far {
+    color: #C2C7D0;
+  }
+
+  .bottom-safe {
+    height: 40rpx;
+  }
+</style>

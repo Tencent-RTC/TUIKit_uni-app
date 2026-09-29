@@ -12,7 +12,7 @@
  * - `setUserRemark` → `setFriendRemark`
  * - **移除** `setReceiveMessageOpt`：已下沉到 `ConversationListStore.setReceiveMessageOpt`
  */
-import { ref, type Ref } from "vue";
+import { ref, watch, type Ref } from "vue";
 import type { HybridCallOptions } from "@/uni_modules/tuikit-atomic-x";
 import { callAPI, addListener, removeListener } from "@/uni_modules/tuikit-atomic-x";
 import { safeJsonParse } from "../utils/utsUtils";
@@ -21,6 +21,8 @@ import type {
   FriendApplicationInfo,
 } from "../types/contact";
 import type { HybridResponseData } from "../types/hybridService";
+import { useLoginState } from "./LoginState";
+import { LoginStatus } from "../types/login";
 
 /**
  * 获取全局 InstanceMap
@@ -42,6 +44,9 @@ function getGlobalInstanceMap(): Map<string, ContactState> {
 
 const InstanceMap = getGlobalInstanceMap();
 
+const INITIAL_LOAD_MAX_RETRY = 3;
+const INITIAL_LOAD_RETRY_BASE_MS = 1000;
+
 /**
  * 联系人状态管理类
  */
@@ -60,6 +65,14 @@ class ContactState {
 
   /** 好友申请未读数 */
   public readonly friendApplicationUnreadCount: Ref<number>;
+
+  private initialDataLoaded: boolean = false;
+
+  private initialLoadRetryCount: number = 0;
+
+  private initialLoadRetryTimer: any = null;
+
+  private stopLoginWatch: (() => void) | null = null;
 
   private constructor(instanceId: string) {
     this.instanceId = instanceId;
@@ -93,10 +106,7 @@ class ContactState {
         const result = safeJsonParse<any>(response, {});
         if (result.code === 0) {
           this.bindEvent();
-          // 初始化拉取数据
-          this.loadFriends();
-          this.loadBlackList();
-          this.loadFriendApplications();
+          this.loadInitialDataWhenLogined();
         } else {
           console.error(`[${this.instanceId}][createStore] Failed:`, result.message);
         }
@@ -104,6 +114,62 @@ class ContactState {
         console.error(`[${this.instanceId}][createStore] Parse error:`, error);
       }
     });
+  }
+
+  private loadInitialDataWhenLogined(): void {
+    const { loginStatus } = useLoginState();
+
+    if (Number(loginStatus.value) === LoginStatus.LOGINED) {
+      this.loadInitialData();
+    }
+
+    this.stopLoginWatch = watch(loginStatus, (status) => {
+      if (Number(status) === LoginStatus.LOGINED) {
+        this.loadInitialData();
+        return;
+      }
+      this.initialDataLoaded = false;
+      this.initialLoadRetryCount = 0;
+      this.clearInitialLoadRetry();
+      this.resetData();
+    });
+  }
+
+  private loadInitialData(): void {
+    if (this.initialDataLoaded) return;
+    this.initialDataLoaded = true;
+    this.clearInitialLoadRetry();
+
+    Promise.all([
+      this.loadFriends(),
+      this.loadBlackList(),
+      this.loadFriendApplications(),
+    ]).catch(() => {
+      this.initialDataLoaded = false;
+      this.scheduleInitialLoadRetry();
+    });
+  }
+
+  private scheduleInitialLoadRetry(): void {
+    if (this.initialLoadRetryCount >= INITIAL_LOAD_MAX_RETRY) return;
+
+    const { loginStatus } = useLoginState();
+    if (Number(loginStatus.value) !== LoginStatus.LOGINED) return;
+
+    this.initialLoadRetryCount += 1;
+    const delay = INITIAL_LOAD_RETRY_BASE_MS * this.initialLoadRetryCount;
+    this.initialLoadRetryTimer = setTimeout(() => {
+      this.initialLoadRetryTimer = null;
+      if (!InstanceMap.has(this.instanceId)) return;
+      this.loadInitialData();
+    }, delay);
+  }
+
+  private clearInitialLoadRetry(): void {
+    if (this.initialLoadRetryTimer != null) {
+      clearTimeout(this.initialLoadRetryTimer);
+      this.initialLoadRetryTimer = null;
+    }
   }
 
   private bindEvent(): void {
@@ -567,6 +633,12 @@ class ContactState {
   destroyStore = (): void => {
     // 幂等：实例已被销毁过，直接 return
     if (!InstanceMap.has(this.instanceId)) return;
+    // 若仍在等待登录，停止监听，避免实例销毁后仍被登录事件唤起
+    if (this.stopLoginWatch != null) {
+      this.stopLoginWatch();
+      this.stopLoginWatch = null;
+    }
+    this.clearInitialLoadRetry();
     this.unbindEvent();
     this.resetData();
     InstanceMap.delete(this.instanceId);

@@ -7,7 +7,7 @@ import { ExperimentalApiInvoker, FloatViewManager, Logger, VibratorFeature, Syst
 import { TUIRoomDefine, TUIRoomEngine } from 'com.tencent.cloud.tuikit.engine.room';
 import { TUICallDefine, TUICallEngine } from 'com. tencent.cloud.tuikit.engine.call';
 import { TUICommonDefine } from 'com.tencent.cloud.tuikit.engine.common';
-import { VideoForegroundService } from 'com.trtc.tuikit.common.foregroundservice';
+import { AudioForegroundService, VideoForegroundService } from 'com.trtc.tuikit.common.foregroundservice';
 
 // HybridBridge
 import { HybridBridge } from 'io.trtc.tuikit.atomicxcore.hybridapi.bridge';
@@ -37,6 +37,29 @@ export function hybirdCallExperimentalAPI(options: CallExperimentalAPIOptions) {
   }, null);
 }
 
+// ================= 多清晰度（拉流侧）实验性接口 =================
+// 开启多清晰度
+export function enableMultiPlaybackQuality(enable: boolean) {
+  hybirdCallExperimentalAPI({
+    jsonData: JSON.stringify({ api: "enableMultiPlaybackQuality", params: { enable: enable } }) ?? ""
+  } as CallExperimentalAPIOptions)
+}
+
+// 查询观众端可选清晰度列表（列表由主播开播档位决定，通过 onResponse 回传 JSON）
+export function queryPlaybackQualityList(roomId: string, onResponse: (jsonData: string) => void) {
+  hybirdCallExperimentalAPI({
+    jsonData: JSON.stringify({ api: "queryPlaybackQualityList", params: { roomId: roomId } }) ?? "",
+    onResponse: onResponse
+  } as CallExperimentalAPIOptions)
+}
+
+// 切换清晰度
+export function switchPlaybackQuality(quality: number, autoSwitch: boolean) {
+  hybirdCallExperimentalAPI({
+    jsonData: JSON.stringify({ api: "switchPlaybackQuality", params: { quality: quality, autoSwitch: autoSwitch } }) ?? ""
+  } as CallExperimentalAPIOptions)
+}
+
 export function startForegroundService() {
   UTSAndroid.getDispatcher("main").async(function (_) {
     console.log("UTS-Live: startForegroundService")
@@ -48,6 +71,20 @@ export function stopForegroundService() {
   UTSAndroid.getDispatcher("main").async(function (_) {
     console.log("UTS-Live: stopForegroundService")
     VideoForegroundService.stop(context)
+  }, null);
+}
+
+export function startAudioForegroundService() {
+  UTSAndroid.getDispatcher("main").async(function (_) {
+    console.log("UTS-Live: startAudioForegroundService")
+    AudioForegroundService.start(context, "", "", 0)
+  }, null);
+}
+
+export function stopAudioForegroundService() {
+  UTSAndroid.getDispatcher("main").async(function (_) {
+    console.log("UTS-Live: stopAudioForegroundService")
+    AudioForegroundService.stop(context)
   }, null);
 }
 
@@ -91,6 +128,13 @@ const hybridBridge = new HybridBridge(context, (eventName: string, eventData: st
   }
 })
 
+// 记录每个 listenerKey 【首次注册到原生】时的 listenerID。
+// 原生侧(Dispatcher.keys)按完整 key(含 listenerID)精确匹配删除;而 JS 桥是聚合语义:
+// 同 key 多 listener 只发首个 add 给原生、最后一个 remove 才发原生。若 remove 时带上的是
+// 「最后一个被删的 listenerID」而非「首个注册的」,原生 keys.remove 匹配失败 →
+// dispatcher 残留 → 退房再进房不重建订阅 → 礼物列表等数据永久推送不到 JS。
+const firstNativeListenerIDMap = new Map<string, string>();
+
 @UTSJS.keepAlive
 export function addListener(options: HybridListenerOptions, listener: (eventData: string) => void) {
   UTSAndroid.getDispatcher("main").async(function (_) {
@@ -106,6 +150,10 @@ export function addListener(options: HybridListenerOptions, listener: (eventData
     listeners.set(listenerID, listener);
     HybridListenerMap.set(listenerKey, listeners);
     if (isNewListener) {
+      // 记录【发给原生时】的原始 listenerID(未设置记空串):remove 回放时必须与 add
+      // 的序列化完全一致——未设置序列化为 null,若误设为 "default" 会与原生 key 的
+      // null 不匹配,导致原生 keys.remove 失败、dispatcher 残留、退房再进数据断流。
+      firstNativeListenerIDMap.set(listenerKey, options.listenerID ?? "");
       hybridBridge.addListener(JSON.stringify(options));
     }
   }, null)
@@ -121,7 +169,16 @@ export function removeListener(options: HybridListenerOptions) {
     const listeners = HybridListenerMap.get(listenerKey);
     if (listeners != null) {
       listeners.delete(listenerID);
-      if (listeners.size === 0) {
+      if (listeners.size == 0) {
+        // 修复:回放【首注册时发给原生的原始 listenerID】。原生 keys 里存的 key 是首注册
+        // add 的序列化结果;若 remove 带的是「最后一个被删的 listenerID」或误用归一化
+        // "default"(add 时实为 null),都会与原生 key 不匹配 → dispatcher 残留 →
+        // 退房再进不重建订阅 → 礼物列表等数据永久推送不到 JS。
+        const firstIDRaw = firstNativeListenerIDMap.get(listenerKey) ?? "";
+        firstNativeListenerIDMap.delete(listenerKey);
+        if (firstIDRaw != "") {
+          options.listenerID = firstIDRaw;
+        }
         hybridBridge.removeListener(JSON.stringify(options));
         HybridListenerMap.delete(listenerKey);
       }
@@ -133,13 +190,22 @@ export function callAPI(options: string, callback: (result: string) => void) {
   UTSAndroid.getDispatcher("main").async(function (_) {
 
     console.log('callAPI: options:', options)
+    // 屏幕共享前先开启系统音频共享
+    const data = JSON.parse<UTSJSONObject>(options);
+    const api = data?.getString("api") ?? "";
+    if (api == "startScreenShare") {
+      TUIRoomEngine.sharedInstance().enableSystemAudioSharing(true)
+    } else if (api == "stopScreenShare") {
+      TUIRoomEngine.sharedInstance().enableSystemAudioSharing(false)
+    }
     hybridBridge.callAPI(options, callback)
   }, null)
 }
 
 // 数据上报模块
 const SceneMap = {
-  CHAT_INVOKE_CALL: InteractionMetrics.CHAT_INVOKE_CALL
+  CHAT_INVOKE_CALL: InteractionMetrics.CHAT_INVOKE_CALL,
+  CHAT_INVOKE_ROOM: InteractionMetrics.CHAT_INVOKE_ROOM
 }
 
 

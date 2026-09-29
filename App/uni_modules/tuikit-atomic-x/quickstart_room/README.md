@@ -21,24 +21,19 @@ pages/
   index/index.vue                首页（进入房间 / 退出登录）
   login/login.vue                登录页（填 SDKAppID / SecretKey）
   scenes/room/
-    index.nvue                   房间入口（加入 / 创建 / 预定）
+    index.nvue                    房间入口（加入 / 创建 / 预定）
     join/index.nvue              加入房间
-    create/index.nvue            创建房间
+    quickStart/index.nvue          创建房间
     schedule/index.nvue          预定房间（时间/时长/时区/成员/密码）
-    scheduleDetail/index.nvue    预定详情（修改 / 取消 / 入会）
-    main/index.nvue              房间主页面
-    roomInvite/index.nvue        来电邀请页（铃声 + 震动 + 滑动接听）
-    components/                  房间内组件（麦克风/摄像头/屏幕共享/成员列表/聊天/录制/选人/时区…）
-    hooks/useRoomTips.ts         房间事件提示（被踢/邀请/录制通知…）
-    utils/errorHandler.ts        错误码 → 中文提示
-    utils/scheduleUtils.ts       预定房间的时间格式化 / 房间号生成
-    utils/timezones.ts           全球时区表（UTC-12 ~ +14）+ 墙上时间 ⇄ UTC 换算
+    schedule/detail/index.nvue    预定详情（修改 / 取消 / 入会）
+    meeting/index.nvue             房间主页面
+    join/invitation/index.nvue    来电邀请页（铃声 + 震动 + 滑动接听）
 static/
   images/
     back-black.png
     default-avatar.png
     room/                        房间场景图标（59 个）
-  phone_ringing.mp3              来电铃声（roomInvite 页循环播放）
+  phone_ringing.mp3              来电铃声（invitation 页循环播放）
 ```
 
 ## 二、填凭证
@@ -75,7 +70,7 @@ const secretKey = '';      // 控制台 → 应用管理 → 密钥
   "style": { "navigationStyle": "custom" }
 },
 {
-  "path": "pages/scenes/room/create/index",
+  "path": "pages/scenes/room/quickstart/index",
   "style": { "navigationStyle": "custom" }
 },
 {
@@ -83,11 +78,11 @@ const secretKey = '';      // 控制台 → 应用管理 → 密钥
   "style": { "navigationStyle": "custom" }
 },
 {
-  "path": "pages/scenes/room/scheduleDetail/index",
+  "path": "pages/scenes/room/schedule/detail/index",
   "style": { "navigationStyle": "custom" }
 },
 {
-  "path": "pages/scenes/room/main/index",
+  "path": "pages/scenes/room/meeting/index",
   "style": {
     "navigationStyle": "custom",
     "disableScroll": true,
@@ -95,7 +90,7 @@ const secretKey = '';      // 控制台 → 应用管理 → 密钥
   }
 },
 {
-  "path": "pages/scenes/room/roomInvite/index",
+  "path": "pages/scenes/room/join/invitation/index",
   "style": {
     "navigationStyle": "custom",
     "disableScroll": true,
@@ -111,7 +106,7 @@ const secretKey = '';      // 控制台 → 应用管理 → 密钥
 
 ## 四、初始化来电邀请服务（必做，否则收不到邀请）
 
-`roomCallService.ts` 负责监听会议邀请信令并全屏拉起 `roomInvite` 页。**必须在 `App.vue` 的 `onLaunch` 里调用一次**：
+`roomCallService.ts` 负责监听会议邀请信令并全屏拉起 `invitation` 页。**必须在 `App.vue` 的 `onLaunch` 里调用一次**：
 
 ```ts
 // App.vue
@@ -133,7 +128,7 @@ HBuilderX → 运行 → 运行到手机或模拟器（**需要自定义基座**
 
 流程：登录 → 首页「进入房间」→「创建房间」/「加入房间」/「预定房间」→ 房间主界面。
 
-被邀请方：收到邀请信令 → 自动拉起 `roomInvite` 来电页（铃声 + 震动）→ 滑动接听进房 / 点「暂不进入」拒绝。
+被邀请方：收到邀请信令 → 自动拉起 `invitation` 来电页（铃声 + 震动）→ 滑动接听进房 / 点「暂不进入」拒绝。
 
 ## 备注
 
@@ -183,5 +178,5 @@ HBuilderX → 运行 → 运行到手机或模拟器（**需要自定义基座**
 - **聊天面板**：房间内 IM 聊天走 `useMessageListState`，无需额外接入。
 - **预定房间**：`schedule/index.nvue` 的时区选择用 `utils/timezones.ts`（固定 UTC 偏移，**不处理夏令时**）。SDK 的 `scheduleStartTime` 是 UTC 秒级时间戳，页面内部按「UTC 为唯一真值 + 展示时换算到所选时区」处理。
 - **来电邀请**：初始化见上文「四、初始化来电邀请服务」。铃声用 `static/phone_ringing.mp3`（`obeyMuteSwitch: false` 使 iOS 静音模式下也响），震动每 2 秒一次。
-- **成员选择**：`components/SelectMemberPanel` 选中超过 10 人时 footer 从「头像横滑」切为「已选择：N人 ⌃ + 可展开列表」。
+- **成员选择**：`components/UserPicker/SelectMember` 选中超过 10 人时 footer 从「头像横滑」切为「已选择：N人 ⌃ + 可展开列表」。
 - 全部 import 走 `@/uni_modules/tuikit-atomic-x`，不依赖 chat quickstart。

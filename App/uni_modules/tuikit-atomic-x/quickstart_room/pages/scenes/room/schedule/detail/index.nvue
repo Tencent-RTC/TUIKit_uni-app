@@ -1,0 +1,585 @@
+<template>
+  <view class="page" :style="{ minHeight: safeArea.height + 'px' }">
+    <CustomNavbar
+      title="房间详情"
+      :showMenu="canEdit && !isRoomStarted"
+      :showShadow="false"
+      @back="handleBack"
+    >
+      <template #right>
+        <view v-if="canEdit && !isRoomStarted" class="edit-btn" @tap.stop="handleEdit">
+          <text class="edit-btn-text">编辑</text>
+        </view>
+      </template>
+    </CustomNavbar>
+
+    <view class="card card-info">
+      <view class="form-item">
+        <text class="form-label">房间名称</text>
+        <text class="form-value" :numberOfLines="1">{{ truncateRoomNameDisplay(roomName, 9) }}</text>
+      </view>
+      <view class="form-item" @tap="handleCopyRoomID">
+        <text class="form-label">房间号</text>
+        <view class="form-value-roomid">
+          <text class="form-value" :numberOfLines="1">{{ roomID }}</text>
+          <image class="copy-icon" src="/static/images/room/room_copy.png" mode="aspectFit" />
+        </view>
+      </view>
+      <view class="form-item">
+        <text class="form-label">开始时间</text>
+        <text class="form-value" :numberOfLines="1">{{ startTimeText }}</text>
+      </view>
+      <view class="form-item">
+        <text class="form-label">房间时长</text>
+        <text class="form-value" :numberOfLines="1">{{ durationText }}</text>
+      </view>
+      <view v-if="isRoomEncrypted" class="form-item" @tap="handleCopyPassword">
+        <text class="form-label">房间密码</text>
+        <view class="form-value-roomid">
+          <text class="form-value" :numberOfLines="1">{{ roomPassword }}</text>
+          <image class="copy-icon" src="/static/images/room/room_copy.png" mode="aspectFit" />
+        </view>
+      </view>
+      <view class="form-item">
+        <text class="form-label">发起人</text>
+        <view class="form-value-owner">
+          <view v-if="ownerAvatar.length > 0" class="owner-avatar-wrap">
+            <Avatar :src="ownerAvatar" :name="ownerText" :size="56" :shape="'circle'" defaultAvatarType="user" pureMode />
+          </view>
+          <text class="form-value-line" :numberOfLines="1">{{ ownerText }}</text>
+        </view>
+      </view>
+      <view class="form-item" @tap="handleShowMembers">
+        <text class="form-label">参与成员</text>
+        <view class="form-value-members">
+          <image
+            v-for="u in previewAvatars"
+            :key="u.userID"
+            class="members-avatar"
+            :src="u.avatarURL"
+            mode="aspectFill"
+          />
+          <text class="form-value-line" :numberOfLines="1">{{ attendeesList.length }}人</text>
+          <text class="members-arrow">›</text>
+        </view>
+      </view>
+    </view>
+
+    <view class="card-gap"></view>
+
+    <view class="card card-actions">
+      <view class="action-item" @tap="handleEnterRoom">
+        <text class="action-text-primary">进入房间</text>
+      </view>
+      <view class="action-item" @tap="handleShowInvite">
+        <text class="action-text-primary">邀请成员</text>
+      </view>
+      <template v-if="!isRoomStarted && canEdit">
+        <view class="action-item" @tap="handleCancelRoom">
+          <text class="action-text-danger">取消房间</text>
+        </view>
+      </template>
+    </view>
+
+    <ScheduleInviteSheet
+      :visible="isInviteSheetVisible"
+      :roomID="roomID"
+      title="邀请成员"
+      @close="isInviteSheetVisible = false"
+    />
+
+    <ConfirmDialog
+      v-model="dialogState.visible"
+      :title="dialogState.title"
+      :confirmText="dialogState.confirmText"
+      :cancelText="dialogState.cancelText"
+      :message="dialogState.message"
+      @confirm="handleDialogConfirm"
+      @cancel="dialogState.visible = false"
+    />
+
+    <Drawer
+      :visible="isMembersSheetVisible"
+      :title="`参与成员（${attendeesList.length}）`"
+      theme="light"
+      @close="handleCloseMembers"
+    >
+      <scroll-view class="members-sheet-list" scroll-y>
+        <view
+          v-for="u in attendeesList"
+          :key="u.userID"
+          class="sheet-member-item"
+        >
+          <view class="member-avatar-wrap">
+            <Avatar :src="u.avatarURL || ''" :name="u.displayName || ''" :size="56" :shape="'circle'" defaultAvatarType="user" pureMode />
+          </view>
+          <text class="member-name" :numberOfLines="1">{{ u.displayName }}</text>
+        </view>
+      </scroll-view>
+    </Drawer>
+  </view>
+</template>
+
+<script setup lang="ts">
+  import { ref, reactive, computed, onMounted } from 'vue';
+  import { onLoad, onShow } from '@dcloudio/uni-app';
+  import { useLoginState, useRoomState, RoomType } from '@/uni_modules/tuikit-atomic-x/state';
+  import type { RoomInfo, RoomUser } from '@/uni_modules/tuikit-atomic-x/types/room';
+  import ScheduleInviteSheet from '../components/ScheduleInviteSheet/index.nvue';
+  import ConfirmDialog from '@/uni_modules/tuikit-atomic-x/components/ConfirmDialog/ConfirmDialog.nvue';
+  import Avatar from '@/uni_modules/tuikit-atomic-x/components/Avatar/Avatar.nvue';
+  import Drawer from '@/uni_modules/tuikit-atomic-x/components/Drawer/index.nvue';
+  import CustomNavbar from '@/uni_modules/tuikit-atomic-x/components/CustomNavbar/CustomNavbar.nvue';
+  import { showErrorToast, parseErrorCode } from '@/uni_modules/tuikit-atomic-x/utils/roomErrorHandler';
+  import { formatDuration, formatFullDateTime, truncateRoomNameDisplay } from '@/uni_modules/tuikit-atomic-x/utils/roomScheduleUtils';
+  import { showToast } from '@/uni_modules/tuikit-atomic-x/utils/toast';
+
+  const ERR_ROOM_DISMISSED = 100004;
+
+  const DIALOG_PRESET = {
+    cancelRoom: {
+      title: '取消房间',
+      message: '取消后，其他成员将无法加入该房间，确定要取消吗？',
+      confirmText: '取消房间',
+      cancelText: '暂不取消',
+    },
+    roomDismissed: {
+      title: '房间已被销毁',
+      message: '该房间已被销毁，点击确定返回上一页。',
+      confirmText: '确定',
+      cancelText: '',
+    },
+  };
+
+  const dialogState = reactive({
+    visible: false,
+    action: 'cancelRoom' as keyof typeof DIALOG_PRESET,
+    title: DIALOG_PRESET.cancelRoom.title,
+    message: DIALOG_PRESET.cancelRoom.message,
+    confirmText: DIALOG_PRESET.cancelRoom.confirmText,
+    cancelText: DIALOG_PRESET.cancelRoom.cancelText,
+  });
+
+  function openDialog(action: keyof typeof DIALOG_PRESET): void {
+    const preset = DIALOG_PRESET[action];
+    dialogState.action = action;
+    dialogState.title = preset.title;
+    dialogState.message = preset.message;
+    dialogState.confirmText = preset.confirmText;
+    dialogState.cancelText = preset.cancelText;
+    dialogState.visible = true;
+  }
+
+  const { loginUserInfo } = useLoginState();
+  const roomState = useRoomState();
+
+  const roomID = ref('');
+  const roomInfo = ref<RoomInfo | null>(null);
+  const scheduledAttendees = ref<RoomUser[]>([]);
+
+  const isInviteSheetVisible = ref(false);
+
+  const safeArea = ref({
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    width: 375,
+    height: 750,
+  });
+
+  const canEdit = computed(() => {
+    const owner = roomInfo.value?.roomOwner?.userID ?? '';
+    const me = loginUserInfo.value?.userID ?? '';
+    return owner.length > 0 && me.length > 0 && owner === me;
+  });
+
+  const isRoomStarted = computed(() => {
+    const start = roomInfo.value?.scheduledStartTime ?? 0;
+    if (start <= 0) return false;
+    return Math.floor(Date.now() / 1000) >= start;
+  });
+
+  const roomName = computed(() => roomInfo.value?.roomName || roomID.value);
+  const roomPassword = computed(() => roomInfo.value?.password || '');
+  const isRoomEncrypted = computed(() => roomPassword.value.length > 0);
+  const startTimeText = computed(() => formatFullDateTime(roomInfo.value?.scheduledStartTime * 1000));
+  const ownerText = computed(() => {
+    const owner = roomInfo.value?.roomOwner;
+    if (!owner) return '';
+    const nick = (owner as any).userName || (owner as any).nickname || '';
+    return nick.length > 0 ? nick : owner.userID;
+  });
+  const ownerAvatar = computed(() => (roomInfo.value?.roomOwner as any)?.avatarURL || '');
+
+  const defaultAvatar = 'https://web.sdk.qcloud.com/im/assets/all-in-one/user.png';
+  const attendeesList = computed(() => {
+    const list: Array<{ userID: string; displayName: string; avatarURL: string }> = [];
+    const owner = roomInfo.value?.roomOwner;
+    if (owner) {
+      const ownerNick = (owner as any).userName || (owner as any).nickname || '';
+      list.push({
+        userID: owner.userID,
+        displayName: ownerNick.length > 0 ? ownerNick : owner.userID,
+        avatarURL: (owner as any).avatarURL || '',
+      });
+    }
+    const attendees: RoomUser[] = scheduledAttendees.value.length > 0
+      ? scheduledAttendees.value
+      : ((roomInfo.value?.scheduleAttendees || []) as RoomUser[]);
+    for (const u of attendees) {
+      if (owner && u.userID === owner.userID) continue;
+      const nick = (u as any).userName || (u as any).nickname || '';
+      list.push({
+        userID: u.userID,
+        displayName: nick.length > 0 ? nick : u.userID,
+        avatarURL: (u as any).avatarURL || '',
+      });
+    }
+    return list;
+  });
+
+  const MAX_PREVIEW_AVATARS = 4;
+  const previewAvatars = computed(() => {
+    const src = attendeesList.value.slice(0, MAX_PREVIEW_AVATARS);
+    return src.map((u) => ({ userID: u.userID, avatarURL: u.avatarURL || defaultAvatar }));
+  });
+  const durationText = computed(() => {
+    const start = roomInfo.value?.scheduledStartTime ?? 0;
+    const end = roomInfo.value?.scheduledEndTime ?? 0;
+    if (start <= 0 || end <= start) return '';
+    return formatDuration(Math.round((end - start) / 60));
+  });
+
+  onLoad((options: any) => {
+    roomID.value = options?.roomID ? decodeURIComponent(String(options.roomID)) : '';
+  });
+
+  onMounted(() => {
+    uni.getSystemInfo({
+      success: (res: any) => {
+        safeArea.value = res.safeArea;
+      },
+    });
+  });
+
+  onShow(() => {
+    fetchRoomInfo();
+  });
+
+  function fetchRoomInfo(): void {
+    if (roomID.value.length === 0) return;
+    roomState
+      .getRoomInfo({ roomID: roomID.value })
+      .then((info: RoomInfo) => {
+        roomInfo.value = info;
+        fetchScheduledAttendees();
+      })
+      .catch((e: any) => {
+        const code = parseErrorCode(e);
+        if (code === ERR_ROOM_DISMISSED) {
+          if (!dialogState.visible) openDialog('roomDismissed');
+          return;
+        }
+        console.warn('[scheduleDetail] fetchRoomInfo failed:', e);
+      });
+  }
+
+  function fetchScheduledAttendees(): void {
+    if (roomID.value.length === 0) return;
+    const collected: RoomUser[] = [];
+    const MAX_PAGES = 50;
+    let pageIndex = 0;
+    let cursor = '';
+    const loopFetch = (): Promise<void> => {
+      return roomState
+        .getScheduledAttendees({ roomID: roomID.value, cursor })
+        .then((res: { attendees: RoomUser[]; cursor: string; totalAttendeesCount: number }) => {
+          if (res?.attendees?.length > 0) collected.push(...res.attendees);
+          pageIndex += 1;
+          if (!res?.cursor || pageIndex >= MAX_PAGES) {
+            scheduledAttendees.value = collected;
+            return;
+          }
+          cursor = res.cursor;
+          return loopFetch();
+        });
+    };
+    loopFetch().catch((e: any) => {
+      console.warn('[scheduleDetail] getScheduledAttendees failed:', e);
+    });
+  }
+
+  function handleBack(): void {
+    uni.navigateBack();
+  }
+
+  function handleEdit(): void {
+    const info = roomInfo.value;
+    if (info == null) return;
+    const start = info.scheduledStartTime ?? 0;
+    const end = info.scheduledEndTime ?? 0;
+    const duration = end > start ? Math.round((end - start) / 60) : 30;
+    const query = [
+      `roomID=${encodeURIComponent(roomID.value)}`,
+      `roomName=${encodeURIComponent(info.roomName || '')}`,
+      `roomType=${info.roomType ?? RoomType.Standard}`,
+      `startTime=${start * 1000}`,
+      `duration=${duration}`,
+      `allMicDisabled=${info.isAllMicrophoneDisabled ? 1 : 0}`,
+      `allCameraDisabled=${info.isAllCameraDisabled ? 1 : 0}`,
+      `allMessageDisabled=${info.isAllMessageDisabled ? 1 : 0}`,
+      `allScreenShareDisabled=${info.isAllScreenShareDisabled ? 1 : 0}`,
+      `password=${encodeURIComponent(info.password || '')}`,
+    ].join('&');
+    uni.navigateTo({ url: `/pages/scenes/room/schedule/index?${query}` });
+  }
+
+  function handleEnterRoom(): void {
+    if (roomID.value.length === 0) return;
+    const query = [
+      'mode=join',
+      `roomID=${encodeURIComponent(roomID.value)}`,
+      'autoEnableCamera=0',
+      'autoEnableMicrophone=1',
+      'autoEnableSpeaker=1',
+      // 标记入口：房间解散后本页（预约详情）已失效，meeting 页需 delta=2 退回预约列表
+      'from=scheduleDetail',
+    ].join('&');
+    uni.navigateTo({ url: `/pages/scenes/room/meeting/index?${query}` });
+  }
+
+  function handleShowInvite(): void {
+    isInviteSheetVisible.value = true;
+  }
+
+  function handleCopyRoomID(): void {
+    if (roomID.value.length === 0) return;
+    uni.setClipboardData({
+      data: roomID.value,
+      success: () => {
+        showToast('房间号已复制');
+      },
+      fail: () => {
+        showToast('复制失败');
+      },
+    });
+  }
+
+  function handleCopyPassword(): void {
+    if (roomPassword.value.length === 0) return;
+    uni.setClipboardData({
+      data: roomPassword.value,
+      success: () => {
+        showToast('密码已复制');
+      },
+      fail: () => {
+        showToast('复制失败');
+      },
+    });
+  }
+
+  const isMembersSheetVisible = ref(false);
+  function handleShowMembers(): void {
+    isMembersSheetVisible.value = true;
+  }
+  function handleCloseMembers(): void {
+    isMembersSheetVisible.value = false;
+  }
+
+  function handleCancelRoom(): void {
+    openDialog('cancelRoom');
+  }
+
+  function handleDialogConfirm(): void {
+    dialogState.visible = false;
+    if (dialogState.action === 'roomDismissed') {
+      uni.navigateBack();
+      return;
+    }
+    doCancelRoom();
+  }
+
+  function doCancelRoom(): void {
+    roomState
+      .cancelScheduledRoom({ roomID: roomID.value })
+      .then(() => {
+        setTimeout(() => {
+          uni.navigateBack();
+        }, 600);
+      })
+      .catch((e: any) => {
+        showErrorToast(e, '取消房间失败');
+      });
+  }
+</script>
+
+<style>
+  .page {
+    flex: 1;
+    background-color: #F8F9FB;
+    flex-direction: column;
+  }
+
+  .edit-btn {
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-end;
+  }
+
+  .edit-btn-text {
+    font-size: 32rpx;
+    font-weight: 500;
+    color: #1C66E5;
+  }
+
+  .card {
+    margin: 0 32rpx;
+    background-color: #FFFFFF;
+    border-radius: 12rpx;
+    flex-direction: column;
+  }
+
+  .card-info {
+    padding: 20rpx 40rpx;
+  }
+
+  .card-actions {
+    background-color: transparent;
+  }
+
+  .card-gap {
+    height: 8rpx;
+  }
+
+  .form-value-roomid {
+    flex: 1;
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-end;
+  }
+  .form-value-roomid .form-value {
+    text-align: right;
+    margin-right: 12rpx;
+  }
+  .copy-icon {
+    width: 32rpx;
+    height: 32rpx;
+  }
+
+  .form-value-owner {
+    flex: 1;
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-end;
+  }
+  .owner-avatar-wrap {
+    margin-right: 12rpx;
+  }
+
+  .form-value-members {
+    flex: 1;
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-end;
+  }
+  .members-avatar {
+    width: 56rpx;
+    height: 56rpx;
+    border-radius: 28rpx;
+    margin-right: 12rpx;
+  }
+  .members-arrow {
+    font-size: 36rpx;
+    color: #6B7385;
+    margin-left: 12rpx;
+    line-height: 40rpx;
+  }
+
+  .members-sheet-list {
+    max-height: 600rpx;
+  }
+  .sheet-member-item {
+    flex-direction: row;
+    align-items: center;
+    margin: 0 32rpx;
+    padding: 20rpx 0;
+    border-bottom: 1rpx solid #EDEDED;
+  }
+  .sheet-member-item .member-avatar-wrap {
+    margin-right: 20rpx;
+  }
+
+  .member-name {
+    flex: 1;
+    font-size: 32rpx;
+    font-weight: 400;
+    color: #2B2E38;
+    lines: 1;
+    text-overflow: ellipsis;
+  }
+
+  .form-item {
+    flex-direction: row;
+    align-items: center;
+    padding: 20rpx 0;
+  }
+
+  .form-label {
+    width: 176rpx;
+    font-size: 32rpx;
+    font-weight: 400;
+    color: #2B2E38;
+  }
+
+  .form-value {
+    flex: 1;
+    font-size: 32rpx;
+    font-weight: 500;
+    color: #A2A4A8;
+    text-align: right;
+    lines: 1;
+    text-overflow: ellipsis;
+  }
+
+  .form-value-line {
+    max-width: 360rpx;
+    font-size: 32rpx;
+    font-weight: 500;
+    color: #A2A4A8;
+    text-align: right;
+    lines: 1;
+    text-overflow: ellipsis;
+  }
+
+  .action-item {
+    flex-direction: row;
+    justify-content: center;
+    align-items: center;
+    padding: 22rpx 0 30rpx;
+    background-color: #F0F3FA;
+    border-radius: 16rpx;
+    margin-top: 32rpx;
+  }
+
+  .action-text-primary {
+    font-size: 32rpx;
+    line-height: 36rpx;
+    font-weight: 500;
+    color: #0961F7;
+  }
+
+  .action-text-danger {
+    font-size: 32rpx;
+    line-height: 36rpx;
+    font-weight: 500;
+    color: #ED414D;
+  }
+
+  .dialog-message {
+    font-size: 28rpx;
+    line-height: 44rpx;
+    color: #4F586B;
+    text-align: center;
+  }
+</style>

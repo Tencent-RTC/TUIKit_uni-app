@@ -1,0 +1,1390 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <title>弹幕输入</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body {
+      width: 100%; height: 100%;
+      background: transparent;
+      font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif;
+      overflow: hidden;
+    }
+    /* 遮罩：完全透明，仅用于捕获"点击非键盘区域"关闭手势，不染色直播画面。
+       仅展开态(body.active)显示；收起态(仅底部入口条)隐藏，避免拦截。 */
+    #mask {
+      position: fixed; left: 0; right: 0; top: 0; bottom: 0;
+      background: transparent;
+      display: none;
+    }
+    body.active #mask { display: block; }
+    /* 收起态 body 背景强制透明；防止聚焦/扩全屏切换瞬间任何默认底色形成方块闪。 */
+    body:not(.active) { background: transparent !important; }
+    body:not(.active) #bar { background: transparent !important; }
+    /* 输入栏 #bar 与占位区 #slot 各自独立 fixed 定位（不再用 flex 容器 #dock 承载），
+       这样改变 #slot 高度时不会触发 #bar 的文档流重排——避免 editor 因重排失焦。
+       用 CSS 变量 --slot-h 统一驱动：
+       - #slot：贴底(bottom:0)，高度 = --slot-h（键盘态由系统键盘视觉占据；表情态放面板）
+       - #bar ：浮在 slot 之上(bottom = --slot-h)，即键盘/面板正上方，位置恒定 */
+    :root { --slot-h: 0px; }
+    html, body { background: transparent; }
+    #dock { display: contents; }
+    #bar {
+      position: fixed; left: 0; right: 0; bottom: var(--slot-h);
+      display: flex; flex-direction: row; align-items: center;
+      padding: 10px 12px;
+      background: transparent;
+      z-index: 2;
+    }
+    /* iOS 键盘态/表情态【统一】用 bottom:var(--slot-h) 定位(slot 高 = kbFull 稳定)：
+       - 键盘态：slot 空(高 kbFull，系统键盘视觉填充该区)，#bar 贴其上方。
+       - 表情态：slot 放面板(同高 kbFull)，#bar 贴其上方。
+       两态 #bar 位置完全相同 => 表情↔键盘切换零抖动(用户要点)。首次进键盘态由 visualViewport
+       测出真实 kbFull 后即固定，之后切换不再改变，也无需 top 绝对定位。 */
+    /* 展开态输入栏底色：仅覆盖 #bar 这一条。active 由原生在 webview 扩全屏后才加，
+       此时白色主题底覆盖整条输入栏，不会在窄块阶段形成左下角方块。 */
+    body.active #bar { background: #f7f8fa; }
+    /* 展开过渡期(expanding)：webview 正从底部窄块 setStyle 扩到全屏，其 top/height
+       剧烈变化，收起态 #bar(fixed bottom:0) 会被 webview 甩到屏幕顶部 => 顶部闪一下
+       输入框。过渡期间让 #bar 视觉透明(opacity:0)，扩全屏且 active 就位后(__enterActive)
+       再显示，从根本上让“被甩动的输入框”不可见。
+       关键：必须用 opacity:0 而非 visibility:hidden/display:none —— editor 在 #bar 内，
+       后两者会使 editor 不可聚焦，导致点击无法拉起系统键盘；opacity:0 仍可聚焦弹键盘。 */
+    body.expanding #bar { opacity: 0 !important; }
+    /* 【首次键盘高校准期】无缓存 kbFull 时,focus 后 #bar 保持不可见,等 iosReposition
+       在 ~98ms 拿到真实键盘高、锁定 kbFull 后移除本类,#bar 直接就位到键盘正上方——
+       避免"估算撑起→校准落位"的跳变(等真实值一步到位)。有缓存时不加本类,立即就位。 */
+    body.kb-calibrating #bar { opacity: 0 !important; }
+    /* 收起态：webview 已精确对齐原输入框位置。此时 bar 去掉内边距、editor 铺满
+       并复刻原 entry-input 圆角胶囊样式；隐藏切换/发送按钮，只显示输入框入口。 */
+    /* 收起态 #bar：贴 webview 底(bottom:0)，高度由 editor(固定一行高)撑起，
+       不再用 top:0 撑满 webview。原因：若 bar 撑满全高，展开扩全屏那一帧(active 未加)
+       bar 会撑满全屏、editor 居中 => 屏幕中间/顶部闪一个大输入框。
+       固定一行高后，即使短暂全屏，bar 也只在底部一行，视觉贴近收起态位置、几乎无闪。
+       左右留 2px：避免 editor 胶囊右圆角贴 webview 边界被裁成半圆。 */
+    body:not(.active) #bar { padding: 0 2px; top: auto; bottom: 0; }
+    body:not(.active) #toggle,
+    body:not(.active) #send { display: none !important; }
+    /* 收起态单行胶囊：用 line-height == 容器高度 让文本/光标纵向居中。
+       不能用 flex+align-items:center —— contenteditable 为空时光标依附行盒顶部，
+       flex 只居中子节点、不居中空行盒，导致聚焦瞬间光标偏上不居中。 */
+    body:not(.active) #editor {
+      width: 100%;
+      min-height: 0;
+      /* 用 line-height(=收起态窄块高) 作为高度，并用 max-height 锁死。关键：不要用
+         height:100% —— 展开扩全屏(top:0/height全屏)那一帧 active 尚未加上时，
+         height:100% 会让收起态 editor 撑满整个全屏 => 屏幕顶部闪一个全屏大输入框。
+         固定为一行高后，即使 webview 短暂全屏，editor 仍只有一行、贴在 #bar 内。 */
+      height: var(--collapsed-lh, 34px);
+      max-height: var(--collapsed-lh, 34px);
+      box-sizing: border-box;
+      display: block;
+      white-space: nowrap;
+      padding: 0 18px;               /* 左内边距与 nvue 胶囊一致，光标位置对齐 */
+      border-radius: 999px;          /* 胶囊圆角（透明，仅保持形状语义） */
+      border: none;
+      /* 收起态视觉完全交给下层 nvue 胶囊；此 webview 层【透明】，只接管点击命中
+         (真实手势落在 editor 上才能弹键盘)。故背景透明。 */
+      background: transparent;
+      /* 收起态隐藏草稿文本:关闭输入框后 editor 仍保留草稿(不再清空),但收起态视觉应与
+         原来一致(仅下层 nvue 胶囊占位)。文本透明化即可隐藏草稿,重新展开(active)自动恢复。 */
+      color: transparent;
+      font-size: 14px;               /* ≈ 26rpx，与 nvue 占位一致，保证光标大小一致 */
+      /* line-height 由 JS 动态设为收起态 webview 实际像素高（见 setCollapsedLineHeight），
+         使空 contenteditable 的光标与占位文字纵向精确居中，跨机型自适应。 */
+      line-height: var(--collapsed-lh, 34px);
+      overflow: hidden;
+    }
+    /* 收起态占位文字隐藏：视觉占位由下层 nvue 胶囊提供，若 H5 也显示会重叠成两份。
+       这里透明化 H5 占位（保留元素但不可见），editor 仍可点击聚焦。 */
+    body:not(.active) #editor:empty::before {
+      content: '' !important;
+      color: transparent !important;
+      line-height: var(--collapsed-lh, 34px);
+    }
+    #slot {
+      position: fixed; left: 0; right: 0; bottom: 0;
+      height: var(--slot-h);
+      overflow: hidden;
+      background: #f7f8fa;
+      z-index: 2;
+    }
+    /* 收起态强制 slot 透明且零高：否则点击瞬间键盘弹起会把 --slot-h 撑到键盘高，
+       而此时 webview 仍是左下角窄块，slot 的面板底(#f7f8fa) 铺满该窄块 =>
+       左下角方块一闪。面板底只在展开态(active，webview 已全屏)才允许出现。 */
+    body:not(.active) #slot {
+      height: 0 !important;
+      background: transparent !important;
+    }
+    /* 收起过渡态(closing):布局仍按 active(收起两步设计的中间态:slot 已归零、
+       bar 贴底一行),但【视觉立即透明化】——webview 缩窄成窄条的瞬间到
+       __exitActive 生效之间,active 态的白底 #bar(#f7f8fa)+按钮会在窄视口里
+       渲染成一个白色框,盖住下层 nvue 胶囊("键盘收起时左下角闪白色框"的根因,
+       白底为近期白色主题改动后显现——旧深色底盖深色胶囊视觉无感)。closing 类
+       在 collapseUI 同步加上,窄条期间完全透明,视觉直接交给 nvue 胶囊;
+       __exitActive / __enterActive 移除。 */
+    body.closing #bar { background: transparent !important; }
+    body.closing #toggle,
+    body.closing #send { display: none !important; }
+    body.closing #editor { background: transparent; color: transparent; }
+    body.closing #editor:empty::before { content: '' !important; color: transparent !important; }
+    /* 富文本输入框：contenteditable，图文混排 */
+    #editor {
+      flex: 1;
+      min-height: 40px; max-height: 48px;
+      overflow-y: auto;
+      padding: 9px 14px;
+      border-radius: 20px;
+      background: rgba(0, 0, 0, 0.05);
+      color: #111;
+      font-size: 15px;
+      line-height: 22px;
+      outline: none;
+      word-break: break-all;
+    }
+    #editor:empty::before {
+      content: attr(data-ph);
+      color: rgba(0, 0, 0, 0.35);
+    }
+    #editor img.emoji {
+      width: 20px; height: 20px;
+      /* 用 middle 对齐 + 高度(20px) < 行高(22px)，让表情不撑高行盒，
+         避免键盘态插入表情后 editor 增高、把输入栏顶高“一点点”。 */
+      vertical-align: middle;
+      margin: 0 1px;
+    }
+    /* 表情/键盘切换按钮：用 CSS 绘制的图标，避免系统 emoji 字符渲染异常 */
+    #toggle {
+      flex-shrink: 0;
+      width: 34px; height: 34px;
+      margin-left: 8px;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      background: rgba(0, 0, 0, 0.05);
+    }
+    #toggle .ico {
+      width: 22px; height: 22px;
+      display: block;
+      background-repeat: no-repeat;
+      background-position: center;
+      background-size: contain;
+    }
+    /* 笑脸图标（表情态） */
+    #toggle .ico.face {
+      background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23333' stroke-width='2' stroke-linecap='round'><circle cx='12' cy='12' r='9'/><path d='M8 14s1.5 2 4 2 4-2 4-2'/><line x1='9' y1='9' x2='9.01' y2='9'/><line x1='15' y1='9' x2='15.01' y2='9'/></svg>");
+    }
+    /* 键盘图标（键盘态） */
+    #toggle .ico.kb {
+      background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23333' stroke-width='2' stroke-linecap='round'><rect x='2' y='6' width='20' height='12' rx='2'/><line x1='6' y1='10' x2='6' y2='10'/><line x1='10' y1='10' x2='10' y2='10'/><line x1='14' y1='10' x2='14' y2='10'/><line x1='18' y1='10' x2='18' y2='10'/><line x1='8' y1='14' x2='16' y2='14'/></svg>");
+    }
+    #send {
+      flex-shrink: 0;
+      height: 34px; margin-left: 8px;
+      padding: 0 16px; border-radius: 17px;
+      display: flex; align-items: center; justify-content: center;
+      background: rgba(0,0,0,0.06); color: #333; font-size: 14px; font-weight: 600;
+    }
+    #send.active { background: #0468FC; color: #fff; }
+    /* 表情面板：放在 #slot 内，铺满 slot(高度=H)。键盘态隐藏(slot空,系统键盘占位)，
+       表情态显示。切换只改 display，slot 高度不变 => 输入栏不动。 */
+    #panel {
+      display: none;
+      flex-direction: column;
+      height: 100%;
+      overflow: hidden;
+      background: #f7f8fa;
+    }
+    #panel.show { display: flex; }
+    #grid {
+      flex: 1;
+      overflow-y: auto;
+      display: flex; flex-wrap: wrap;
+      padding: 10px 8px;
+      align-content: flex-start;
+    }
+    .cell {
+      width: 12.5%;
+      height: 46px;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .cell img { width: 30px; height: 30px; }
+  </style>
+</head>
+<body>
+  <div id="mask"></div>
+  <!-- 底部输入区：贴屏幕底。#bar 输入栏在上，#slot 占位区在下(高度锁定=键盘高H)。
+       键盘态 slot 为空(系统键盘视觉占据该区)；表情态 slot 内 #panel 显示。
+       slot 高度不变 => 输入栏顶边恒定不动。 -->
+  <div id="dock">
+    <div id="bar">
+      <!-- 关闭浏览器对输入的各类"语法校验/智能纠正":
+           spellcheck=false 关拼写检查(红色波浪线);autocorrect=off 关 iOS 自动纠错;
+           autocapitalize=off 关自动首字母大写;autocomplete=off 关自动补全;
+           translate=no 禁止翻译改写。避免弹幕输入被系统改写/标红。 -->
+      <div id="editor" contenteditable="true" data-ph="说点什么...."
+        spellcheck="false" autocorrect="off" autocapitalize="off" autocomplete="off" translate="no"></div>
+      <div id="toggle"><span class="ico face"></span></div>
+      <div id="send">发送</div>
+    </div>
+    <div id="slot">
+      <div id="panel">
+        <div id="grid"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      // 最近一次发送 barrage: 信号的时间戳与保护窗口（ms）。用于 postToNative 记录时间戳。
+      var __lastSignalAt = 0;
+      var SIGNAL_GUARD_MS = 350;
+
+      var EMOJI_BASE = 'https://web.sdk.qcloud.com/im/assets/emoji-plugin/';
+      // key -> 图片文件名（与项目 emoji.ts emojiUrlMap 完全一致，按面板展示顺序）
+      var EMOJI_URL = {
+        '[TUIEmoji_Expect]':'emoji_0@2x.png','[TUIEmoji_Blink]':'emoji_1@2x.png','[TUIEmoji_Guffaw]':'emoji_2@2x.png','[TUIEmoji_KindSmile]':'emoji_3@2x.png','[TUIEmoji_Haha]':'emoji_4@2x.png','[TUIEmoji_Cheerful]':'emoji_5@2x.png','[TUIEmoji_Smile]':'emoji_6@2x.png','[TUIEmoji_Sorrow]':'emoji_7@2x.png','[TUIEmoji_Speechless]':'emoji_8@2x.png','[TUIEmoji_Amazed]':'emoji_9@2x.png','[TUIEmoji_Complacent]':'emoji_10@2x.png','[TUIEmoji_Lustful]':'emoji_11@2x.png','[TUIEmoji_Stareyes]':'emoji_12@2x.png','[TUIEmoji_Giggle]':'emoji_13@2x.png','[TUIEmoji_Daemon]':'emoji_14@2x.png','[TUIEmoji_Rage]':'emoji_15@2x.png','[TUIEmoji_Yawn]':'emoji_16@2x.png','[TUIEmoji_TearsLaugh]':'emoji_17@2x.png','[TUIEmoji_Silly]':'emoji_18@2x.png','[TUIEmoji_Wail]':'emoji_19@2x.png','[TUIEmoji_Kiss]':'emoji_20@2x.png','[TUIEmoji_Trapped]':'emoji_21@2x.png','[TUIEmoji_Fear]':'emoji_22@2x.png','[TUIEmoji_BareTeeth]':'emoji_23@2x.png','[TUIEmoji_FlareUp]':'emoji_24@2x.png','[TUIEmoji_Tact]':'emoji_25@2x.png','[TUIEmoji_Shit]':'emoji_26@2x.png','[TUIEmoji_ShutUp]':'emoji_27@2x.png','[TUIEmoji_Sigh]':'emoji_28@2x.png','[TUIEmoji_Hehe]':'emoji_29@2x.png','[TUIEmoji_Silent]':'emoji_30@2x.png','[TUIEmoji_Skull]':'emoji_31@2x.png','[TUIEmoji_Mask]':'emoji_32@2x.png','[TUIEmoji_Beer]':'emoji_33@2x.png','[TUIEmoji_Cake]':'emoji_34@2x.png','[TUIEmoji_RedPacket]':'emoji_35@2x.png','[TUIEmoji_Bombs]':'emoji_36@2x.png','[TUIEmoji_Ai]':'emoji_37@2x.png','[TUIEmoji_Celebrate]':'emoji_38@2x.png','[TUIEmoji_Bless]':'emoji_39@2x.png','[TUIEmoji_Flower]':'emoji_40@2x.png','[TUIEmoji_Watermelon]':'emoji_41@2x.png','[TUIEmoji_Cow]':'emoji_42@2x.png','[TUIEmoji_Fool]':'emoji_43@2x.png','[TUIEmoji_Surprised]':'emoji_44@2x.png','[TUIEmoji_Askance]':'emoji_45@2x.png','[TUIEmoji_Monster]':'emoji_46@2x.png','[TUIEmoji_Pig]':'emoji_47@2x.png','[TUIEmoji_Coffee]':'emoji_48@2x.png','[TUIEmoji_Ok]':'emoji_49@2x.png','[TUIEmoji_Heart]':'emoji_50@2x.png','[TUIEmoji_Sun]':'emoji_51@2x.png','[TUIEmoji_Moon]':'emoji_52@2x.png','[TUIEmoji_Star]':'emoji_53@2x.png','[TUIEmoji_Rich]':'emoji_54@2x.png','[TUIEmoji_Fortune]':'emoji_55@2x.png','[TUIEmoji_857]':'emoji_56@2x.png','[TUIEmoji_666]':'emoji_57@2x.png','[TUIEmoji_Prohibit]':'emoji_58@2x.png','[TUIEmoji_Convinced]':'emoji_59@2x.png','[TUIEmoji_Knife]':'emoji_60@2x.png','[TUIEmoji_Like]':'emoji_61@2x.png'
+      };
+      var editor = document.getElementById('editor');
+      var panel = document.getElementById('panel');
+      var grid = document.getElementById('grid');
+      var toggle = document.getElementById('toggle');
+      var sendBtn = document.getElementById('send');
+      var mask = document.getElementById('mask');
+      var dock = document.getElementById('dock');
+      var slot = document.getElementById('slot');
+
+      var savedRange = null;
+      // 收起态草稿缓存:收起(collapseUI)时把 editor 内容存这里并清空 DOM(收起态不渲染缓存),
+      // 展开(focus needExpand 分支)时恢复回 editor。实现"收起不渲染、展开才渲染"。
+      var draftHTML = '';
+
+      // 收起态胶囊单行居中：把 --collapsed-lh 设为收起态 webview 的实际像素高，
+      // 使空 contenteditable 的光标与占位文字纵向精确居中（跨机型自适应，
+      // 不写死 34px）。收起态 webview 高度即视口高度。
+      function setCollapsedLineHeight() {
+        try {
+          var h = document.documentElement.clientHeight || window.innerHeight || 0;
+          if (h > 0 && h < 200) { // 仅收起态窄条高度（展开态为全屏，跳过）
+            document.documentElement.style.setProperty('--collapsed-lh', h + 'px');
+          }
+        } catch (e) {}
+      }
+      setCollapsedLineHeight();
+      window.addEventListener('resize', setCollapsedLineHeight);
+
+      // 切换按钮图标：'face' 表情态 / 'kb' 键盘态
+      function setToggleIcon(mode) {
+        var ico = toggle.querySelector('.ico');
+        if (!ico) return;
+        ico.className = 'ico ' + (mode === 'kb' ? 'kb' : 'face');
+      }
+
+      // 构建表情面板。【必须在 load 之后】构建,不能在初始脚本里同步插入 <img>:
+      // 62 张表情图是 CDN 网络资源(https://web.sdk.qcloud.com/...),若进初始 DOM,
+      // 弱网/CDN 不可达时 WebView 的 onLoad 会被资源加载拖住 ~15s——而安卓上
+      // 原生 evalJS 走 loadUrl("javascript:"),onLoad 完成前【全部排队】:
+      // __enterActive(解除 expanding 透明态)与 __setKbHeight(顶起输入栏)
+      // 长时间不执行 => 键盘弹着、输入栏透明贴底完全隐形("键盘出来没输入框"
+      // 的根因;iOS 走 evaluateJavaScript 不依赖 onLoad,故无此问题)。
+      // 推迟到 load 后:初始 DOM 零网络请求,onLoad 秒完成,evalJS 即时到达;
+      // 表情图在 load 后渐进加载,面板本就延迟可见,用户无感。
+      function buildEmojiGrid() {
+        Object.keys(EMOJI_URL).forEach(function (key) {
+          var cell = document.createElement('div');
+          cell.className = 'cell';
+          var img = document.createElement('img');
+          img.src = EMOJI_BASE + EMOJI_URL[key];
+          img.setAttribute('data-key', key);
+          cell.appendChild(img);
+          (function (k) {
+            cell.addEventListener('click', function (e) { e.preventDefault(); insertEmoji(k); });
+          })(key);
+          grid.appendChild(cell);
+        });
+      }
+      if (document.readyState === 'complete') buildEmojiGrid();
+      else window.addEventListener('load', buildEmojiGrid);
+
+      // 保存/恢复光标
+      function saveRange() {
+        var sel = window.getSelection();
+        if (sel && sel.rangeCount > 0) savedRange = sel.getRangeAt(0);
+      }
+      function restoreRange() {
+        // 还原光标前必须先聚焦 editor(失焦态下设置 selection 无效、也拉不起键盘)。
+        editor.focus();
+        // savedRange 可能因内容变动失效(其引用的节点已被移除):校验仍在 editor 内再还原,
+        // 否则落到末尾兜底,避免 addRange 抛错或光标定位到已失效节点。
+        if (!savedRange || !editor.contains(savedRange.startContainer)) { focusEnd(); return; }
+        var sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(savedRange);
+      }
+      function focusEnd() {
+        editor.focus();
+        var range = document.createRange();
+        range.selectNodeContents(editor);
+        range.collapse(false);
+        var sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+        savedRange = range;
+      }
+
+      editor.addEventListener('keyup', saveRange);
+      editor.addEventListener('mouseup', saveRange);
+      // 【方案A】表情态 editor 保持聚焦(inputmode=none,不弹键盘),点它不会再触发 focus 事件,
+      // 故用 touchend 显式接管:表情态点输入框 => 切回键盘态弹键盘。键盘态(showEmoji=false)
+      // 时为 no-op,不影响正常的光标点选。
+      editor.addEventListener('touchend', function () {
+        if (showEmoji) switchTo('kb');
+      });
+      editor.addEventListener('input', updateSendState);
+
+      // 超限拦截:已达上限时,阻止会「新增内容」的输入(插入文本/粘贴/回车),并提示。
+      // 删除类操作(deleteContent*)不拦截。表情插入在 insertEmoji 内单独校验。
+      editor.addEventListener('beforeinput', function (e) {
+        var t = e.inputType || '';
+        var isDelete = t.indexOf('delete') === 0;
+        if (isDelete) return;
+        // 预估本次将新增的长度:插入文本按其长度,其余(回车/粘贴等)按至少 1 估。
+        var addLen = (e.data ? e.data.length : 1);
+        if (visibleLength() + addLen > MAX_INPUT_LEN) {
+          e.preventDefault();
+          showToast('输入内容超出长度限制');
+        }
+      });
+      // 粘贴超限:beforeinput 兜底外,paste 再精确校验一次(按剩余可容纳长度截断)。
+      editor.addEventListener('paste', function (e) {
+        var remain = MAX_INPUT_LEN - visibleLength();
+        var pasteText = (e.clipboardData && e.clipboardData.getData('text')) || '';
+        if (pasteText.length > remain) {
+          e.preventDefault();
+          if (remain > 0) {
+            document.execCommand('insertText', false, pasteText.substring(0, remain));
+          }
+          showToast('输入内容超出长度限制');
+          updateSendState();
+        }
+      });
+
+      // 用户真实点击输入框聚焦 => 通知原生把常驻 webview 扩为全屏（容纳遮罩+表情面板）。
+      // 关键：此刻 webview 仍是左下角窄块，若立即加 active，展开态 #bar 的面板底
+      // (#f7f8fa) 会铺满这个窄块 => 左下角方块一闪。因此这里【不】加 active，
+      // 只发 expand 信号；等原生把 webview 扩到全屏后，再由原生调 window.__enterActive()
+      // 加 active（此时全屏，面板底覆盖整条输入栏，不会有窄块方块）。
+      var expanded = false;
+      // 【方案A】表情态用 inputmode=none 保持 editor 聚焦(保留原生光标)而不弹系统键盘。
+      // 切换过程中的程序化 editor.focus() 不应触发 focus 监听里的展开/切键盘/键盘预撑逻辑
+      // (尤其表情态下会误触发 switchTo('kb') 把自己切回键盘态)。用本标志在程序化聚焦期间
+      // 让 focus 监听直接跳过,由 switchTo 自行完成状态维护。
+      var programmaticFocus = false;
+      editor.addEventListener('focus', function () {
+        iqooLog('editor/focus', { needExpand: !expanded });
+        // 程序化聚焦(方案A 切换用):跳过监听逻辑,避免自触发 switchTo/重复预撑。
+        if (programmaticFocus) { iqooLog('editor/focus-skip-progFocus', {}); return; }
+        var needExpand = false;
+        if (!expanded) {
+          expanded = true;
+          needExpand = true;
+          // 恢复上次收起时缓存的草稿(收起态 editor 被清空、不渲染缓存;展开这一刻才恢复渲染),
+          // 并把光标置于末尾。实现"收起不渲染、点击展开才渲染"。draftHTML 为空则不动(全新输入)。
+          if (draftHTML) {
+            editor.innerHTML = draftHTML;
+            draftHTML = '';
+            updateSendState();
+            // 仅把光标移到末尾,【不再调 editor.focus()】。editor 在 focus 处理运行时本就聚焦
+            // (正因聚焦才触发本处理),innerHTML 重赋值不会使其失焦。若此处多调一次 focus(),
+            // 会在下方 slot 预撑(injectedKbH=kbFull)之前再次聚焦,系统判定 editor 贴底被键盘遮挡
+            // → adjustPan 平移一个键盘高,随后预撑又撑起 slot => 双重抬高(#bar 高出键盘一截)。
+            // 故只用 Range 置光标,绝不重新 focus。
+            try {
+              var draftRange = document.createRange();
+              draftRange.selectNodeContents(editor);
+              draftRange.collapse(false);
+              var draftSel = window.getSelection();
+              draftSel.removeAllRanges();
+              draftSel.addRange(draftRange);
+              savedRange = draftRange;
+            } catch (e) { /* ignore */ }
+          }
+          // 进入展开过渡态：隐藏 #bar，避免 webview 扩全屏时输入框被甩到顶部一闪。
+          document.body.classList.add('expanding');
+          // 兜底：若原生 __enterActive 异常未回调，自动结束过渡态，避免输入框一直隐藏。
+          // 【首次打开左下白方块修复·尺寸门控】原兜底 300ms 到点【无条件】加 active。
+          // 但首次打开(冷启动)时原生主线程/桥接繁忙,expand 的 setStyle 扩全屏会被延迟到
+          // >300ms,而本地 300ms 兜底先触发 → 在 webview 仍是【左下窄块】时就加了 active →
+          // active 白底 #bar(#f7f8fa) 铺满窄块 = 左下角白方块一闪(随后原生才扩全屏+起键盘,
+          // 与文件顶部 body.active #bar 注释描述的失败模式一致)。
+          // 修复:兜底进入 active 前先确认 webview【已全屏】(clientHeight>200,与 setCollapsedLineHeight
+          // 的收起判据一致);仍是窄块则保持 expanding(#bar 透明)并轮询重试,直到全屏才加 active,
+          // 使白底 #bar 永远不在窄块阶段渲染。加 ~3s 硬上限兜底,避免极端情况下输入框永久隐藏。
+          var expandFallbackTries = 0;
+          var runExpandFallback = function () {
+            // 原生 __enterActive 已接管(移除了 expanding):无需兜底。
+            if (!document.body.classList.contains('expanding')) return;
+            var isFullscreen = (document.documentElement.clientHeight || 0) > 200;
+            if (isFullscreen || expandFallbackTries >= 30) {
+              // 已全屏(安全,白底覆盖整条输入栏),或达到 ~3s 上限(可用性优先):进入 active。
+              document.body.classList.remove('expanding');
+              document.body.classList.add('active');
+              applyLayout();
+            } else {
+              // 仍是收起态窄块:原生扩全屏尚未到位。保持 expanding(#bar 透明)不加 active,
+              // 避免白底 #bar 在左下窄块渲染成白方块;稍后重试。
+              expandFallbackTries++;
+              setTimeout(runExpandFallback, 100);
+            }
+          };
+          setTimeout(runExpandFallback, 300);
+        }
+        // 修复：从表情态点 H5 输入框直接聚焦弹键盘时，editor.focus 事件【不走 switchTo('kb')】，
+        //   表情面板残留、键盘浮在表情区之上。统一调 switchTo 走完整状态切换(收面板/换图标/
+        //   postToNative('kb'))，与点键盘 icon 的路径行为完全一致。
+        // 守卫：节流窗口内的点键盘 icon 会走 switchTo，再触发 focus 会形成“刚切完又切一次”；
+        //   此时 showEmoji 已被切到 false，幂等检查直接 return，不会重复 postToNative。
+        if (showEmoji) switchTo('kb');
+        // 【双端预撑】键盘弹起的瞬间,系统会检查焦点 editor 的可见性:若此刻 slot
+        // 尚未撑起(原生注入晚于键盘动画 ~16ms)、editor 仍贴在屏幕底部,会被判定
+        // 被键盘遮挡 → adjustPan 平移 webview 一个键盘高;随后注入到达 slot 再
+        // 撑起 → 双重抬高(小米 17 Pro 偶现"输入栏高出一个键盘高"的根因,时序
+        // 竞态决定偶现)。focus 时【立即】用历史 kbFull(上次实测)预撑,无历史值
+        // 用【物理屏高】×40% 估算粗撑(宁可略偏高——估算值高于实际键盘高,editor
+        // 更靠上,系统判定可见更稳),注入到达后校准落位。此时 webview 多为窄条,
+        // 撑起的 slot/bar 在窄条外不可见,无视觉影响;expand 全屏后即就位。
+        // 估算基准必须用 screen.height【不能用 clientHeight/innerHeight】——
+        // focus 时 webview 还是收起态窄条(高仅 ~66px),clientHeight 是窄条高,
+        // 估算出 ~26px 的 slot 几乎等于没撑(首次点击极易复现 pan 双重的根因);
+        // screen.height 恒为物理屏高。
+        // 估算系数 0.5:仅【全新安装后第一次弹键盘】(无 kbFull 缓存)时用到——之后
+        // kbFull 被持久化(KB_CACHE_KEY),focus 时 kbFull>0 直接跳过本估算分支、用缓存
+        // 真实值精准定位,无跳变。故估算只是"首次的首次"兜底,取偏大(0.5)保证不被
+        // 键盘覆盖(896→448 > 真实 395);校准后落位并写缓存,以后都走缓存。
+        // 【首次校准:等真实值,不估算预撑】(你的方案:等 ~98ms vv 真实值 + 安全余量,
+        //  一步到位,无"估算撑→落位"的跳变)。
+        //  - 有缓存 kbFull(>0):同一设备键盘高固定,直接用缓存精准预撑、立即就位。
+        //  - 无缓存(首次):【不】用估算撑 #bar,而是给 body 加 kb-calibrating 让 #bar
+        //    保持不可见(延续 expanding 的 opacity:0),等 iosReposition 在 ~98ms 拿到
+        //    真实键盘高、锁定 kbFull 后移除该类并就位。首次那 ~100ms #bar 不可见,
+        //    用户视觉上就是"键盘弹起 → 输入栏出现在键盘正上方",无任何跳变。
+        if (kbFull > 0) {
+          injectedKbH = kbFull; // 有缓存:精准预撑
+          document.body.classList.remove('kb-calibrating');
+        } else {
+          injectedKbH = 0;      // 无缓存:不撑,等真实值
+          if (isIOS) {
+            document.body.classList.add('kb-calibrating');
+            // 兜底:极端情况下 vv 一直不触发(键盘未弹/基座异常),800ms 后仍未锁定则
+            // 用估算撑起并显示,保证 #bar 不会永久隐藏(可用性优先)。正常 ~98ms 就锁定,
+            // 此兜底不会触发。
+            setTimeout(function () {
+              if (!kbFullLocked && document.body.classList.contains('kb-calibrating')) {
+                var sh = (window.screen && window.screen.height) || window.innerHeight || 0;
+                kbEstimate = sh > 0 ? Math.round(sh * 0.44) : 0; // 0.44≈iOS键盘/屏高比,误差最小
+                injectedKbH = kbEstimate;
+                document.body.classList.remove('kb-calibrating');
+                appliedSlotH = -1;
+                applyLayout();
+              }
+            }, 800);
+          }
+        }
+        if (isIOS) {
+          pendingKb = false;
+          // 标记 iOS 键盘态。#bar 用 --slot-h 定位(与表情态统一)，slot 高=kbFull。首次若无缓存,
+          // kb-calibrating 保持 #bar 不可见，iosReposition 拿到真实值锁定后就位。
+          document.body.classList.add('ios-kb');
+          document.body.classList.remove('emoji');
+          applyLayout();
+          // 键盘态：通知主页上移消息列表。注意本次同步流稍后还要发 expand 信号，二者
+          // 共用 document.title 单通道、只上报最后一个，故 shift 不能在此同步发送(会被
+          // expand 覆盖)。延迟到下一轮发送，避开 expand；后续 onVV 用真实键盘高再修正。
+          setTimeout(function () {
+            if (document.body.classList.contains('active') && !showEmoji) {
+              // 仅在已有准确值(已校准)时发送;未校准时【不发】——估算值(≈屏高40%)
+              // 与实测键盘高(如 390)差几十 px,先发估算再被实测覆盖,消息列表会
+              // "先升满又回落"一次(首次进房的跳变根因)。注入/vv 路径自会发准确值。
+              if (kbShiftVal() > 0) postToNative('shift', String(kbShiftVal()));
+            }
+          }, 350);
+        }
+        applyLayout();
+        // 关键：expand 信号必须【最后】发出。expand 与 dbg/applyLayout 共用 document.title
+        // 通道，WKWebView 只把本轮同步流最后一次 title 交给原生 titleUpdate。若 expand 发
+        // 在中间，随后的 dbg/applyLayout 会把 title 覆盖成 barragelog，导致原生收不到
+        // expand、webview 永不扩全屏(一直 36px)、键盘弹起可视区变负、2s 后失焦 close 循环。
+        // 放到最后 + postToNative 内部标记 __lastSignalAt(dbg 在保护窗口内不再抢 title)双保险。
+        if (needExpand) postToNative('expand', '');
+      });
+      // iOS：editor 失焦即键盘收起（表情态的主动 blur 用 intentionalBlur 放行，不落下）。
+      editor.addEventListener('blur', function () {
+        iqooLog('editor/blur', { isIOS: isIOS });
+        if (!isIOS) return;
+        if (intentionalBlur || showEmoji) { iqooLog('editor/blur-skip', { reason: intentionalBlur ? 'intBlur' : 'emoji' }); return; } // 切表情主动收键盘，不落下、不关闭
+        // webview 从窄块扩全屏的 resize 会导致 editor 短暂失焦（并非用户收键盘）。
+        // 展开过渡期(expanding)或刚展开的一小段时间内的 blur 视为“扩全屏抖动”，
+        // 尝试重新聚焦拉回键盘，不触发关闭。
+        if (document.body.classList.contains('expanding')) {
+          setTimeout(function () { try { editor.focus(); } catch (e) {} }, 0);
+          return;
+        }
+        // 【切换过渡期意外 blur】表情→键盘切换中途,键盘尚未弹起时底部 slot 空白区
+        // 还没被系统键盘盖住,用户快速点击该处(以为键盘已就位)——WKWebView 把"点击
+        // 非聚焦元素"解析为 editor 失焦,若走 doClose 会把正在弹起的键盘连同输入 UI
+        // 一起收起("切换中途点键盘区域被收起"的根因)。判定为切换抖动:重新聚焦拉回
+        // 键盘,不关闭。窗口:键盘弹起过渡(pendingKb)或切换保护期(switchGuardUntil,
+        // 与 __setKbHeight 的 v=0 守卫同源)。
+        if (pendingKb || Date.now() < switchGuardUntil) {
+          iqooLog('editor/blur-switchGuard-refocus', {});
+          setTimeout(function () { try { editor.focus(); } catch (e) {} }, 0);
+          return;
+        }
+        injectedKbH = 0;
+        var active = document.body.classList.contains('active');
+        if (active) { doClose(); }
+        else { applyLayout(); }
+      });
+
+      // 由原生在 webview 扩全屏后调用：进入展开态（加深色底等展开样式），
+      // 并结束过渡态（恢复 #bar 显示）。此时 webview 已全屏、位置稳定，输入框不再被甩动。
+      window.__enterActive = function () {
+        document.body.classList.remove('expanding');
+        document.body.classList.add('active');
+        document.body.classList.remove('closing'); // 防御:清残留的收起过渡态(如收起后立即重开)
+        // iOS：webview 此刻才真正全屏。有缓存 kbFull 则精准预撑立即就位;
+        // 无缓存(首次)【不估算】,保持 kb-calibrating(#bar 不可见),等 iosReposition
+        // 拿真实值锁定后就位——一步到位无跳变(你的方案)。
+        if (isIOS && document.activeElement === editor) {
+          if (kbFull > 0) {
+            injectedKbH = kbFull;
+            document.body.classList.remove('kb-calibrating');
+          } else {
+            injectedKbH = 0;
+            document.body.classList.add('kb-calibrating');
+          }
+        }
+        applyLayout();
+        // 首次进键盘态：webview 刚全屏、键盘弹起有动画，visualViewport 渐变到最终值。
+        // 多次触发 iosReposition 用真实 vv 校准 kbFull(首次拿到真实键盘高)并刷新 slot，
+        // 确保 #bar 贴键盘顶(修复首次被遮挡)。校准后 kbFull 稳定，后续切换 slot 不变、零抖动。
+        if (isIOS) {
+          setTimeout(iosReposition, 50);
+          setTimeout(iosReposition, 200);
+          setTimeout(iosReposition, 400);
+        }
+      };
+
+      // 在光标处插入表情图片。
+      // 新模型下表情态 editor 仍保持 focus（键盘不收），savedRange 通常有效；
+      // 仍不调用 editor.focus() 抢焦点，直接基于 savedRange 或追加到末尾插入。
+      function insertEmoji(key) {
+        // 表情算 1 个可见字符,超限则拦截并提示,不插入。
+        if (visibleLength() + 1 > MAX_INPUT_LEN) {
+          showToast('输入内容超出长度限制');
+          return;
+        }
+        var img = document.createElement('img');
+        img.src = EMOJI_BASE + EMOJI_URL[key];
+        img.className = 'emoji';
+        img.setAttribute('data-key', key);
+
+        // 优先用保存的光标位置；若光标不在 editor 内（表情态常见），追加到末尾。
+        var range = null;
+        if (savedRange && editor.contains(savedRange.startContainer)) {
+          range = savedRange.cloneRange();
+        }
+
+        if (!range) {
+          // 无有效光标：追加到末尾
+          editor.appendChild(img);
+        } else {
+          range.deleteContents();
+          range.insertNode(img);
+          // 光标移到 img 之后并记住（不改动系统 selection，避免拉起键盘）
+          range.setStartAfter(img);
+          range.setEndAfter(img);
+          savedRange = range.cloneRange();
+        }
+        updateSendState();
+      }
+
+      // 把 contenteditable 内容转成 [TUIEmoji_Xxx] key 文本
+      // 用索引循环遍历 childNodes，兼容不支持 NodeList.forEach 的老 WebView 内核。
+      function serialize() {
+        var out = '';
+        var nodes = editor.childNodes;
+        for (var i = 0; i < nodes.length; i++) {
+          var node = nodes[i];
+          if (node.nodeType === 3) {
+            out += node.nodeValue;
+          } else if (node.nodeName === 'IMG') {
+            out += (node.getAttribute('data-key') || '');
+          } else if (node.nodeName === 'BR') {
+            out += '\n';
+          } else if (node.textContent) {
+            out += node.textContent;
+          }
+        }
+        return out;
+      }
+
+      function updateSendState() {
+        var has = serialize().trim().length > 0;
+        if (has) sendBtn.classList.add('active');
+        else sendBtn.classList.remove('active');
+      }
+
+      // 输入内容可见长度上限(与消息列表渲染一致):文本按字符数、每个表情算 1、换行算 1。
+      var MAX_INPUT_LEN = 100;
+
+      // 计算 editor 内容的可见长度(表情 img 计 1,而非 [TUIEmoji_Xxx] 的长字符串)。
+      function visibleLength() {
+        var len = 0;
+        var nodes = editor.childNodes;
+        for (var i = 0; i < nodes.length; i++) {
+          var node = nodes[i];
+          if (node.nodeType === 3) {
+            len += (node.nodeValue || '').length;
+          } else if (node.nodeName === 'IMG') {
+            len += 1;
+          } else if (node.nodeName === 'BR') {
+            len += 1;
+          } else if (node.textContent) {
+            len += node.textContent.length;
+          }
+        }
+        return len;
+      }
+
+      // 超限提示:发原生 toast 信号,由原生 LiveToast 统一展示(与 App 内其他提示风格一致)。
+      function showToast(msg) {
+        postToNative('toast', msg);
+      }
+
+      // Bridge H5 -> native without relying on the CDN uni.webview.js.
+      // Native (plus.webview) listens to this webview's `titleUpdate` event.
+      // We encode action + full payload into the title in one shot:
+      //   barrage:<type>:<nonce>:<encodeURIComponent(text)>
+      // The nonce guarantees titleUpdate fires even for identical payloads.
+      function postToNative(type, text) {
+        var nonce = Date.now();
+        var encoded = encodeURIComponent(text || '');
+        __lastSignalAt = Date.now();
+        document.title = 'barrage:' + type + ':' + nonce + ':' + encoded;
+      }
+
+      // 【iQOO 排障诊断日志·可移除】统一走 console.log(WebView 内核输出到 logcat/Safari 控制台),
+      // 不占用 document.title 通道(避免打断 postToNative 的 barrage 信号)。
+      // 每条日志前缀 [iqoo-kb] 便于 grep;打点覆盖:__setKbHeight/iosSetKb/switchTo/focus/blur/doClose,
+      // 目的:排查 iQOO 上键盘唤起过程/交互中偶发收起、以及快速切换键盘态↔表情态输入框定位异常。
+      // 排障完成后可整体删除本函数及其调用(搜索 iqooLog)。
+      function iqooLog(tag, extra) {
+        try {
+          var pad2 = function (n) { return n < 10 ? '0' + n : '' + n; };
+          var d = new Date();
+          var ts = pad2(d.getHours()) + ':' + pad2(d.getMinutes()) + ':' + pad2(d.getSeconds()) + '.' +
+            (d.getMilliseconds() < 10 ? '00' + d.getMilliseconds() : d.getMilliseconds() < 100 ? '0' + d.getMilliseconds() : d.getMilliseconds());
+          var snap = {
+            showEmoji: showEmoji,
+            pendingKb: pendingKb,
+            intBlur: intentionalBlur,
+            progFocus: programmaticFocus,
+            injKbH: injectedKbH,
+            kbFull: kbFull,
+            kbFullLocked: kbFullLocked,
+            slotH: appliedSlotH,
+            active: document.body.classList.contains('active'),
+            emojiCls: document.body.classList.contains('emoji'),
+            expanding: document.body.classList.contains('expanding'),
+            guardMs: Math.max(0, switchGuardUntil - Date.now()),
+            marks: selfBlurZeroMarks.length,
+            focused: document.activeElement === editor,
+          };
+          if (extra) { for (var k in extra) { if (Object.prototype.hasOwnProperty.call(extra, k)) snap[k] = extra[k]; } }
+          console.log('[iqoo-kb] ' + ts + ' ' + tag + ' ' + JSON.stringify(snap));
+        } catch (e) { /* ignore */ }
+      }
+
+      function doSend() {
+        var text = serialize().replace(/\n+$/,'');
+        if (!text.trim()) return;
+        // 兜底校验(防 beforeinput 在部分 WebView 内核不生效):超限则不发送、提示。
+        if (visibleLength() > MAX_INPUT_LEN) {
+          showToast('输入内容超出长度限制');
+          return;
+        }
+        postToNative('send', text);
+        editor.innerHTML = '';
+        updateSendState();
+        collapseUI();
+      }
+
+      function doClose() {
+        iqooLog('doClose/enter', {});
+        postToNative('close', '');
+        collapseUI();
+      }
+
+      // 关闭/发送后复位到收起态。分两步，避免收起过程闪现输入框：
+      // 【第一步 collapseUI】收面板/收键盘/清内容 + 立即把 --slot-h 归零，
+      //   让展开态输入栏(#bar bottom:var(--slot-h)) 在【缩块前】就贴到 webview 底部。
+      //   仍保留 active 展开态样式。关键：若不先归零 slot，缩块时 #bar 仍在
+      //   bottom:kbFull，而窄块高仅 72rpx => 输入栏被定位到窄块顶部 => “屏幕顶上闪输入框”。
+      // 【第二步 __exitActive】原生把 webview 缩回窄块【之后】再 remove('active')
+      //   切收起态胶囊。此时 webview 已窄块，不会出现全屏大胶囊或顶部错位。
+      function collapseUI() {
+        showEmoji = false;
+        panel.classList.remove('show');
+        setToggleIcon('face');
+        // 关键：collapseUI 是【主动收起】(发送/关闭后复位)。editor.blur() 会触发 blur 监听，
+        // 而此时 active=true、showEmoji=false，会误判为“用户收键盘”→ doClose → postToNative('close')，
+        // 把刚发出的 send 信号覆盖掉(共用 title 通道)，导致消息发不出去。
+        // 故 blur 前置 intentionalBlur=true 放行 blur 守卫，避免二次发 close。
+        intentionalBlur = true;
+        editor.blur();
+        setTimeout(function () { intentionalBlur = false; }, 300);
+        // 【方案A 回归修复】复位 inputmode 回 text。表情态曾把 editor 设为 inputmode=none
+        // (保持聚焦不弹键盘)。若从表情态直接关闭(点 mask/收起),inputmode 会残留 none,
+        // 下次点输入框即使聚焦、展开也【不弹键盘】。收起时统一复位,保证下次点开能正常弹键盘。
+        editor.setAttribute('inputmode', 'text');
+        // 草稿"存变量 + 清 DOM":收起(关闭/收键盘)时把当前内容存到 draftHTML 再清空 editor,
+        // 使【收起态左下角胶囊不渲染任何缓存内容】(DOM 为空,文字/表情图都不显示,只留下层
+        // nvue 胶囊占位)。草稿并未丢失——下次点开展开(focus 的 needExpand 分支)从 draftHTML
+        // 恢复到 editor 并把光标置于末尾,实现"收起不渲染、展开才渲染"。
+        // 发送场景:doSend 在调用本函数【之前】已 innerHTML='' 清空,故此处存到的 draftHTML 为空,
+        // 天然实现"发送清空、关闭保留"。
+        draftHTML = editor.innerHTML;
+        editor.innerHTML = '';
+        updateSendState();
+        pendingKb = false; // 清理键盘态过渡意图
+        injectedKbH = 0;   // 清预撑/注入残留:focus 预撑后若键盘未弹即收起,injectedKbH
+                           // 会残留非零,收起态任何 applyLayout 触发都会重新撑起 slot,
+                           // editor 被顶出胶囊区导致收起态点击失效。
+        document.body.classList.remove('expanding'); // 清理过渡态，避免残留
+        document.body.classList.remove('emoji');     // 清理表情态标记
+        document.body.classList.remove('ios-kb');    // 清理 iOS 键盘态标记
+        // 收起过渡态:视觉立即透明化(bar 白底/按钮清掉),防 webview 缩窄后的
+        // 窄视口里闪白色框(见 CSS body.closing 注释)。布局仍保持 active。
+        document.body.classList.add('closing');
+        // 先把输入栏贴到底部（slot 归零），保持 active，等原生缩块后再切收起态。
+        appliedSlotH = 0;
+        document.documentElement.style.setProperty('--slot-h', '0px');
+      }
+
+      // 由原生在 webview 缩回窄块【之后】调用：切回收起态胶囊样式。
+      window.__exitActive = function () {
+        expanded = false;
+        document.body.classList.remove('active');
+        document.body.classList.remove('closing'); // 过渡完成:收起态样式接管透明化
+        document.body.classList.remove('kb-calibrating'); // 清校准态,防残留致下次 #bar 隐藏
+        appliedSlotH = -1;
+        document.documentElement.style.setProperty('--slot-h', '0px');
+      };
+
+      // 【中止展开·由原生在拦截展开时调用】禁言等场景原生 expandWebview 会提前 return
+      // 不把 webview 扩全屏,但 H5 的 focus 兜底定时器仍会强行加 active(白底 #bar),而 webview
+      // 停在收起态小尺寸 => 白底渲染成"白框"(禁言用户再进房点输入框变白的根因)。本函数把
+      // H5 强制拉回收起态:清掉 expanding/active/closing/kb-calibrating、复位 expanded、收面板、
+      // slot 归零,并 blur 收键盘。原生拦截展开的同一时机调用,从根上消除状态错位白框。
+      window.__abortExpand = function () {
+        expanded = false;
+        showEmoji = false;
+        pendingKb = false;
+        if (panel) panel.classList.remove('show');
+        setToggleIcon('face');
+        document.body.classList.remove('expanding');
+        document.body.classList.remove('active');
+        document.body.classList.remove('closing');
+        document.body.classList.remove('kb-calibrating');
+        document.body.classList.remove('emoji');
+        document.body.classList.remove('ios-kb');
+        try { editor.blur(); } catch (e) {}
+        editor.setAttribute('inputmode', 'text'); // 兜底复位,防中止后残留 none 致下次不弹键盘
+        injectedKbH = 0;
+        appliedSlotH = -1;
+        document.documentElement.style.setProperty('--slot-h', '0px');
+      };
+
+      // 禁言状态：由原生注入
+      window.__setBanned = function (banned) {
+        if (banned) {
+          editor.setAttribute('contenteditable', 'false');
+          editor.setAttribute('data-ph', '您已被禁言');
+          var activeNow = document.body.classList.contains('active');
+          var expandingNow = document.body.classList.contains('expanding');
+          // active(已展开)或 expanding(展开过渡中,禁言在展开途中到达)都要收起,
+          // 否则 expanding 的 focus 兜底会加 active 变白框。统一走 __abortExpand 强制复位。
+          if (activeNow || expandingNow) {
+            window.__abortExpand();
+          }
+        } else {
+          editor.setAttribute('contenteditable', 'true');
+          editor.setAttribute('data-ph', '说点什么....');
+        }
+      };
+
+      // Exposed to native: reset to the ready state when the fullscreen overlay
+      // opens. H5 全屏展开态(active)：显示输入栏+按钮。不主动聚焦——由用户真实
+      // 点击 H5 输入框来弹起并绑定系统键盘（程序 focus 在本 ROM 无法弹键盘）。
+      window.__barrageReset = function () {
+        iqooLog('__barrageReset/enter', {});
+        editor.innerHTML = '';
+        editor.setAttribute('inputmode', 'text'); // 兜底复位:防表情态残留 inputmode=none 致点开不弹键盘
+        showEmoji = false;
+        panel.classList.remove('show');
+        setToggleIcon('face');
+        updateSendState();
+        document.body.classList.add('active');
+        appliedSlotH = -1;
+        applyLayout();
+      };
+
+      // 按钮点击绑定。iOS 有两个坑要同时规避：
+      //  1) 点 toggle/send 时，浏览器在 click 前先让 editor 失焦(mousedown/touchstart 转移
+      //     焦点)，blur 监听在 showEmoji 未置位时会误判为“收键盘”→ doClose，导致点表情变关闭。
+      //  2) 一次物理点击在 WKWebView 上会派发 touchstart→touchend→(合成)mousedown→click 多个
+      //     事件；若 handler 绑在多个事件上，会被触发多次：先 switchTo('panel') 再 switchTo('kb')，
+      //     表情面板刚出现又被切回键盘 => 表现为“表情态很难点出来、偶尔才行”。
+      // 解决：touchstart 只做 preventDefault(挡失焦，不触发 handler)；handler 统一由 touchend
+      // 触发，并 preventDefault 吃掉后续合成的 mousedown/click；无 touch 的环境(桌面)才用 click。
+      // 再加一个短时锁 __tapLock，确保同一次点击 handler 只执行一次。
+      var __tapLock = 0;
+      function bindTap(el, handler) {
+        if (!el) return;
+        var run = function (e) {
+          e.preventDefault();
+          var now = Date.now();
+          if (now - __tapLock < 400) return; // 同一次点击的多个事件只放行一次
+          __tapLock = now;
+          handler(e);
+        };
+        // 按下阶段仅阻止焦点转移，不触发 handler。
+        el.addEventListener('touchstart', function (e) { e.preventDefault(); }, { passive: false });
+        el.addEventListener('mousedown', function (e) { e.preventDefault(); });
+        // 移动端主触发：touchend。preventDefault 会阻止随后合成的 click。
+        el.addEventListener('touchend', run, { passive: false });
+        // 桌面/无 touch 兜底：click（若已由 touchend 处理，__tapLock 会拦掉）。
+        el.addEventListener('click', run);
+      }
+
+      bindTap(sendBtn, function () { doSend(); });
+      bindTap(toggle, function () { iqooLog('toggle/tap', {}); switchTo(showEmoji ? 'kb' : 'panel'); });
+      // 点遮罩(非键盘区域)关闭:
+      //  - 表情态:无系统键盘,直接 doClose 收起(原行为,丝滑)。
+      //  - 键盘态:【不要】立即 doClose——collapseUI 会立刻把 webview 缩回底部窄块,
+      //    而系统键盘还在做收起动画(键盘占据的区域正在空出),webview 已缩走、
+      //    键盘未消失 => 那片区域露出 webview 透明、穿透到 nvue 黑底 = "黑色区域
+      //    停滞一下"(安卓反馈)。改为只 blur 收键盘,等原生把键盘高度注入为 0
+      //    (__setKbHeight(0),即键盘已收完)时由该路径的 doClose 完成收起,
+      //    此时无键盘动画重叠 => 与表情态一样丝滑。
+      mask.addEventListener('click', function () {
+        if (!showEmoji) {
+          // 【mask 收起同步·修复输入框滞后键盘落下】mask 是用户【明确】的关闭意图,
+          // 清空 selfBlurZeroMarks 残留(切换 blur→focus 太快时系统没发对应 v=0,mark
+          // 会累积在队列直到 1500ms TTL),否则本次键盘收起触发的 v=0 会被残留 mark
+          // 消费掉 → wantClose=false → 走 keepSlot 兜底 → 输入框比键盘落下延迟 ~150ms
+          // 才归位。清空后 v=0 到达时 consumeSelfBlurZero 返回 false → 正常 doClose,
+          // slot 与键盘落下同步。pendingKb/switchGuard 两层守卫不受影响。
+          selfBlurZeroMarks = [];
+          try { editor.blur(); } catch (e) {}
+          // 兜底:极端情况原生未注入 __setKbHeight(0)(键盘收起事件丢失),延时后
+          // 若仍停在展开态则强制收起,避免输入框卡住无法关闭。
+          setTimeout(function () {
+            if (document.body.classList.contains('active') && !showEmoji) doClose();
+          }, 400);
+          return;
+        }
+        doClose();
+      });
+
+      // iOS 橡皮筋修复:键盘态下拖动输入框上方(遮罩/空白)区域时,WKWebView 会触发
+      // 页面级弹性滚动(overscroll),把 position:fixed 的 #bar 一起带动 => "输入框跟着滚动"。
+      // 解决:全局拦截 touchmove 的默认滚动;仅当手势发生在【可滚动内容】(表情面板 #grid、
+      // 多行 editor)且其确有溢出内容时放行,让面板/输入框内部能正常滚动。
+      function isInScrollable(node) {
+        while (node && node !== document.body) {
+          if (node === grid || node === editor) {
+            // 仅当该元素内容溢出(可滚)时才允许其原生滚动。
+            if (node.scrollHeight > node.clientHeight + 1) return true;
+          }
+          node = node.parentNode;
+        }
+        return false;
+      }
+      document.addEventListener('touchmove', function (e) {
+        if (!isInScrollable(e.target)) {
+          // 非可滚动区域的拖动:阻止默认,消除橡皮筋位移(修复 fixed 输入栏被带动)。
+          e.preventDefault();
+        }
+      }, { passive: false });
+
+      // 【键盘态空 slot 的 tap 拦截】键盘态下 slot 是空占位(系统键盘视觉填充)。
+      // 键盘弹起动画期间(或切换中途)键盘还没盖住 slot 区域时,用户快速点击该处——
+      // WKWebView 会把"点击非聚焦元素"解析为 editor 失焦 → blur → 键盘被收起。
+      // 在此吃掉 tap 的默认行为(touchstart preventDefault 阻止后续 mousedown/click
+      // 合成,焦点保持),点击空 slot 变为无操作。表情态(panel.show)不拦:面板内
+      // 表情选择依赖 tap 合成的 click。
+      slot.addEventListener('touchstart', function (e) {
+        if (!panel.classList.contains('show')) {
+          e.preventDefault();
+        }
+      }, { passive: false });
+
+      // ============ 固定高度占位容器模型（防跳动核心）============
+      // #slot 高度锁定为键盘高度 kbFull：
+      //  - 键盘态：slot 为空，系统键盘在原生层视觉占据该区；editor 聚焦。
+      //  - 表情态：slot 内 #panel 显示（H5 盖不住原生键盘，故必须收键盘）；editor 失焦。
+      // 两态 slot 高度都 = kbFull、dock 贴底(bottom:0) => 输入栏顶边位置恒定、零跳动。
+      var showEmoji = false;
+      // 满键盘高度：从 localStorage 读取上次记录的历史值，使【下次打开聚焦前】即可
+      // 预定位 bar，避免键盘弹起时 bar 位置突变导致失焦。首次无记录时为 0。
+      // 【缓存 key 带版本号 _v3】:同一台机型键盘高固定,首次校准出真实 kbFull 后
+      // 持久化(localStorage),之后 focus(含【下次启动 App】)同步读出直接锁定——
+      // 首次点输入框即用真实键盘高精准定位 #bar,无"估算预撑→校准落位"的跳变
+      // (这是"键盘覆盖输入框一下再上移"瑕疵的根治:根源是没缓存、每次启动都要
+      // 重新估算+校准)。key 带版本号:算法升级时旧缓存自动废弃,不被污染。
+      var KB_CACHE_KEY = 'ek_kbFull_v3';
+      var kbFull = 0;
+      try {
+        var _cached = parseInt(localStorage.getItem(KB_CACHE_KEY) || '0', 10);
+        if (_cached > 40) kbFull = _cached; // 有历史缓存:直接作为初始 kbFull
+      } catch (e) { /* localStorage 不可用则忽略,走首次校准 */ }
+      // 【一次性校准模型】一台机型上键盘唤起的高度固定:应用生命周期内【首次】
+      // 弹键盘时实测一次(vv 稳定后),之后锁定不再变。表情态/键盘态/切换过渡
+      // 的 slot 统一用 kbFull(= 实测键盘高 + SAFE_EXTRA_PX),输入栏始终比键盘
+      // 顶【高一点】——不追求逐像素贴顶:亚像素间隙、中英文键盘高度差异、各机型
+      // vv 精度差异全部被固定余量吸收,稳定优先。不落 localStorage:生命周期语义,
+      // 每次启动重测一次即可(首次 focus 用估算临时顶起,校准后落位,一次性跳变)。
+      var kbFullLocked = (kbFull > 40); // 有缓存即视为已校准:首次 focus 直接用缓存值精准定位
+      // 持久化已锁定的 kbFull:下次 focus / 下次启动 App 直接读用,免估算预撑跳变。
+      function persistKbFull() {
+        try { if (kbFull > 40) localStorage.setItem(KB_CACHE_KEY, String(kbFull)); } catch (e) {}
+        // kbFull 已锁定=已有真实键盘高:清校准态,让 #bar 就位显示(覆盖 vv/原生注入
+        // 任一路径先锁定的情况;vv 路径的锁定回调另有 applyLayout 就位)。
+        try { document.body.classList.remove('kb-calibrating'); } catch (e) {}
+      }
+      // focus 兜底估算(视口高×40%):仅【未校准】时的临时预定位,绝不写入 kbFull
+      // (写入会被锁定,估值偏大将使 bar 永久高出键盘一截)。
+      var kbEstimate = 0;
+      // 校准采样:固定观察窗口 + max 采样。不用「vv 静默 N ms」判定稳定——
+      // WKWebView 的 vv resize 在键盘动画期间只触发 1~2 次(非每帧),两次间隔
+      // 可能超过 debounce 窗口(慢机型),动画【中间值】会被误锁(偏小 → bar 被
+      // 键盘盖住);中文键盘候选条还可能后出(291→336,二次变化)。改为自首个
+      // 有效实测起固定观察 600ms(键盘动画 ~250ms + 输入法二次变化余量),
+      // 窗口内持续取【最大】实测值——键盘高度只渐进变大,max 天然淘汰一切
+      // 中间值;窗口结束锁定 max + 余量。
+      var kbCalibTimer = null;    // 到截止时间的锁定定时器(重复挂会顺延到固定截止点)
+      var kbCalibMax = 0;         // 观察窗口内的最大实测键盘高
+      var kbCalibDeadline = 0;    // 观察窗口截止时间戳(0 = 窗口未开启)
+      // 输入栏底边与键盘顶的固定小间隙(px):"高一点"的视觉余量。
+      var SAFE_EXTRA_PX = 5;
+      // 消息列表【让位量】= 键盘实际高(slot 基准 kbFull 扣除固定余量)。必须与
+      // 原生 injectKbHeight 驱动的让位(注入的实测键盘高,不含余量)严格同源
+      // 同值——否则键盘态(注入路径,如 390)与表情态/切换(panel/kb/shift 信号,
+      // 若误传 kbFull=395)让位量差 SAFE_EXTRA_PX,切换时消息列表跳变。
+      var kbShiftVal = function () {
+        return kbFull > 0 ? (kbFull - SAFE_EXTRA_PX) : 0;
+      };
+
+      var injectedKbH = 0;     // 原生注入的"当前系统键盘高度"(px)
+      // 运行平台：优先由 H5 自身 UA 判断 iOS（不依赖原生 evalJS 注入时机，更可靠）；
+      // 原生也会通过 __setPlatform 兜底覆盖。
+      // iOS WKWebView 键盘弹起时 fixed 元素不会被系统可靠顶起，改用 visualViewport 自感知
+      // 键盘高度并用 slot 主动把 #bar 顶到键盘上方；Android 则靠原生注入的 injectedKbH。
+      var platform = '';
+      var isIOS = false;
+      var iosVVBound = false;
+      var iosVVBase = 0; // iOS：无键盘时 visualViewport.height 的基准（取历史最大值）
+      function detectIOSByUA() {
+        try {
+          var ua = navigator.userAgent || '';
+          return /iPad|iPhone|iPod/.test(ua) || (/Macintosh/.test(ua) && 'ontouchend' in document);
+        } catch (e) { return false; }
+      }
+      // iOS：用 visualViewport 测出【真实键盘高 kbFull】。#bar 的定位交给 --slot-h(键盘态/
+      // 表情态统一)，这里不再操作 #bar 位置，只负责：①校准 kbFull(首次弹键盘拿到真实值)；
+      // ②kbFull 变化时 applyLayout 让 slot 用新值；③通知主页消息列表让位。kbFull 一旦稳定，
+      // 表情↔键盘切换 slot 高不变 => #bar 零抖动。
+      var iosReposition = function () {
+        if (!isIOS || !window.visualViewport) return;
+        var vv = window.visualViewport;
+        var vh = vv.height;
+        var innerH = window.innerHeight || 0;
+        var clientH = document.documentElement.clientHeight || 0;
+        if (clientH > 200 && vh > 0) {
+          var offTop = vv.offsetTop || 0;
+          // 键盘高算法修复(iPhone XR 等刘海屏间距过大):
+          //   旧 clientH - vh - offTop 在 iOS 上算出 0/负数(因为 iOS 的 window.innerHeight
+          //   在键盘弹起时【不】缩小,而 clientHeight 缩小了),取 max(0,..)→ 0;
+          //   后续 Math.round(ch*0.4) 兜底估一个远大于真实键盘高的值,#bar 贴在这个
+          //   估值的顶 → 离真实键盘顶老远(就是图里看到的大段空白)。
+          //   正确锚点:用真实屏高 window.screen.height(不受键盘影响)减去 visualViewport
+          //   底部绝对位置 (offTop + vh) = 真实键盘高。
+          var screenH = (window.screen && window.screen.height) || window.outerHeight || innerH;
+          var kbReal = Math.ceil(screenH - offTop - vh); // 实测键盘高
+          if (kbReal > 40) {
+            // 【一次性校准:固定观察窗口 + max 采样】仅首次(未锁定)时执行。
+            // 窗口内每次 vv 变化都刷新 max;锁定定时器统一挂到【固定截止点】
+            // (重复触发时 clearTimeout 重挂,截止点不变)——不依赖"vv 何时停止
+            // 变化"的信号,动画中间值/候选条延迟二次变化都被 max 淘汰或捕获。
+            if (!kbFullLocked) {
+              var now = Date.now();
+              if (kbCalibDeadline === 0) {
+                // 窗口开启:自首个有效实测起固定观察 250ms(原 600ms)。实测(iPhone XR)
+                // vv 首个有效值 +98ms 即到且稳定,600ms 窗口导致 #bar 悬在估算值等 600ms
+                // 才落位("先高、停顿 600ms、再下移"的难看根因)。缩到 250ms:仍覆盖键盘
+                // 动画(~250ms)+ 中文候选条二次变化(通常 <200ms),取 max 淘汰中间值的能力
+                // 不变;落位从 +698ms 提前到 ~+250ms、落在键盘弹起动画期内,视觉与键盘
+                // 上升融合,基本无感。首次校准后写缓存,以后走缓存直接精准、无窗口等待。
+                kbCalibDeadline = now + 250;
+                kbCalibMax = 0;
+              }
+              if (kbReal > kbCalibMax) kbCalibMax = kbReal;
+              clearTimeout(kbCalibTimer);
+              kbCalibTimer = setTimeout(function () {
+                if (kbFullLocked || kbCalibMax <= 40) return;
+                kbFull = kbCalibMax + SAFE_EXTRA_PX;
+                kbFullLocked = true;
+                persistKbFull();
+                kbCalibDeadline = 0;
+                // 校准完成:首次校准时 injectedKbH 可能仍为 0(未估算预撑),此处用校准出的
+                // 真实键盘高(kbFull - 余量)回填,使 applyLayout 的 active 成立、slot 就位;
+                // 并移除 kb-calibrating 让 #bar 淡入到键盘正上方(一步到位,无跳变)。
+                if (!showEmoji) {
+                  if (injectedKbH <= 0) injectedKbH = Math.max(0, kbFull - SAFE_EXTRA_PX);
+                  document.body.classList.remove('kb-calibrating');
+                  appliedSlotH = -1;
+                  applyLayout();
+                  // 与注入路径严格同值(kbShiftVal,不含余量)——若误传 kbFull(含
+                  // 余量)会让消息列表与注入路径的让位差 SAFE_EXTRA_PX。
+                  if (kbShiftVal() > 0) postToNative('shift', String(kbShiftVal()));
+                }
+              }, Math.max(1, kbCalibDeadline - now));
+            }
+            if (document.body.classList.contains('active') && !showEmoji) {
+              // 让位量 = 键盘实际高(kbShiftVal):与原生注入路径的 emitKbShiftWithLift
+              // 严格同值,保证表情态/键盘态切换时消息列表位置一致。
+              // 仅在已有准确值时发送——未校准时发 0 会把列表让位打回底(回落跳变)。
+              var shiftVal = kbShiftVal();
+              if (shiftVal > 0) postToNative('shift', String(shiftVal));
+            }
+          }
+          // 键盘态：每次 visualViewport 变化都重算 slot。applyLayout 内会按 innerHeight 扣除
+          // webview 已缩短的量，使 #bar 始终贴键盘顶(pan/resize 都对，且随键盘动画平滑)。
+          if (injectedKbH > 0 && !showEmoji) {
+            appliedSlotH = -1; // 强制重算
+            applyLayout();
+          }
+        }
+      };
+      function bindIOSViewport() {
+        if (!isIOS || iosVVBound || !window.visualViewport) return;
+        iosVVBound = true;
+        window.visualViewport.addEventListener('resize', iosReposition);
+        window.visualViewport.addEventListener('scroll', iosReposition);
+        // 立即取一次基准。
+        try { if (window.visualViewport.height > iosVVBase) iosVVBase = window.visualViewport.height; } catch (e) {}
+      }
+      // H5 自检：立即判定 iOS 并绑定 visualViewport（不等原生注入）。
+      isIOS = detectIOSByUA();
+      platform = isIOS ? 'ios' : 'android';
+      bindIOSViewport();
+      window.__setPlatform = function (p) {
+        platform = (p || '').toLowerCase();
+        // 原生注入为准（但 UA 已判 iOS 时保持 iOS）。
+        if (platform.indexOf('ios') >= 0) isIOS = true;
+        bindIOSViewport();
+        applyLayout();
+      };
+      // iOS：由 visualViewport 感知到的键盘高度驱动布局（等价于 Android 的 __setKbHeight，
+      // 但数据源是 H5 自身而非原生注入）。
+      function iosSetKb(kb) {
+        // 与 __setKbHeight 一致:Math.ceil 向上取整,避免 slot 少 1px 造成 #bar 与键盘顶间隙。
+        var v = Math.max(0, Math.ceil(kb || 0));
+        var prev = injectedKbH;
+        iqooLog('iosSetKb/in', { rawKb: kb, v: v, prev: prev });
+        // v>0:取消 kb-gone 兜底 timer,详见 __setKbHeight 同款注释
+        if (v > 0 && kbGoneRestoreTimer) {
+          clearTimeout(kbGoneRestoreTimer);
+          kbGoneRestoreTimer = 0;
+        }
+        var active = document.body.classList.contains('active');
+        var isKbGone = (active && prev > 0 && v === 0);
+        var wantClose = isKbGone && !showEmoji && !intentionalBlur && !shouldIgnoreKbGoneForClose();
+        // 【定位抖动抑制·双端一致】被守卫拦下的 v=0:保持 slot 不变,150ms 兜底后清零。
+        if (isKbGone && !wantClose) {
+          iqooLog('iosSetKb/ignoreClose-keepSlot', { prev: prev, v: v });
+          if (kbGoneRestoreTimer) clearTimeout(kbGoneRestoreTimer);
+          kbGoneRestoreTimer = setTimeout(function () {
+            kbGoneRestoreTimer = 0;
+            if (injectedKbH > 0) return;
+            iqooLog('iosSetKb/keepSlot-fallback-reset', {});
+            appliedSlotH = -1;
+            applyLayout();
+          }, KB_GONE_RESTORE_MS);
+          return;
+        }
+        injectedKbH = v;
+        // 一次性校准(与 iosReposition 同款模型):未锁定时,首个有效实测值
+        // + 固定余量 即锁定,应用生命周期内不再变。
+        if (v > 40 && !kbFullLocked) {
+          kbFull = v + SAFE_EXTRA_PX;
+          kbFullLocked = true;
+          persistKbFull();
+        }
+        if (v > 0) pendingKb = false;
+        if (wantClose) {
+          iqooLog('iosSetKb/->doClose', { prev: prev, v: v });
+          doClose();
+          return;
+        }
+        applyLayout();
+      }
+      var lastSwitchAt = 0;    // 上次切换时间（节流）
+      var SWITCH_THROTTLE_MS = 300;
+      // 【切换保护窗口】频繁切换键盘↔表情时,主动 blur/focus 触发的安卓 onKeyboardHeightChange
+      // 回调是异步且延迟的:一个由"切表情态 blur 收键盘"引起的 v=0,可能在【已切回键盘态、
+      // intentionalBlur 的 300ms 窗口已过】时才姗姗到达,被 doClose 误判为"用户手动收键盘"→
+      // 整体收起,表现为"键盘突然闪烁关闭"(iQOO Neo9 Pro 等机型频繁切换偶现)。用本窗口抑制:
+      // 每次 switchTo 后 SWITCH_GUARD_MS 内的 v=0 视为切换引起的键盘抖动,不关闭。
+      var switchGuardUntil = 0;
+      var SWITCH_GUARD_MS = 600;
+      var intentionalBlur = false; // 切表情等主动 blur 收键盘时置 true，放行键盘收起守卫
+      // 表情态->键盘态过渡标志：点键盘 icon 后键盘尚未弹起(injectedKbH 仍为 0)的窗口期，
+      // 用它让 applyLayout 保持 slot=kbFull，避免输入栏先掉到底部、键盘弹起后再升回来的“从下往上”闪动。
+      var pendingKb = false;
+      // 【iQOO 定位抖动抑制】__setKbHeight/iosSetKb 里 v=0 被守卫吞除时的兜底 timer:
+      // iQOO 每次切键盘态都会瞬发一次 v=283→0→283 的抖动闭环(60~100ms 内自愈)。
+      // 之前直接把 injectedKbH 覆盖为 0 并 applyLayout 会让 slot 归零 → 输入框视觉抖动/掉底。
+      // 修复:v=0 被吞时【不改 injectedKbH、不 applyLayout】,slot 保持不变;150ms 内若真实值
+      // 到达则取消本 timer;若期间没有 v>0 到达(键盘真收了,非抖动),兜底把 slot 归零,
+      // 避免"键盘真收了输入框还悬着"的极端情况(见 43.813 editor 意外失焦日志)。
+      var kbGoneRestoreTimer = 0;
+      var KB_GONE_RESTORE_MS = 150;
+      // 【因果配对吞除·根治延迟陈旧 v=0】
+  // 纯时间窗口(switchGuardUntil)的死穴:由"切换主动 blur"引发的安卓 onKeyboardHeightChange
+      // 回调延迟【不可控】,iQOO Neo9 Pro 等机型可拖到 600ms 窗口过期后才到,此刻已回键盘态
+  // (showEmoji=false、intentionalBlur/pendingKb 均已复位),陈旧 v=0 落进 doClose => 键盘
+      // 突然闪烁关闭。根因是"用时长猜因果",窗口调大调小都堵不全。
+      // 改为【因果配对】:每次主动切换 blur 前 push 一个待消费标记(markSelfBlurZero);其引发的
+      // v=0 无论早到晚到,只要在 TTL 内到达,即与标记配对、判为切换抖动而吞除,不关闭 ——
+      // 与到达时机彻底解耦。用户真实收键盘(系统返回/手势)前没有主动 blur、队列为空 => 正常关闭。
+      var selfBlurZeroMarks = [];            // 待配对的"主动切换 blur 预期收起(v=0)"标记(存各自兜底过期时刻)
+ var SELF_BLUR_TTL_MS = 1500;    // 兜底防泄漏:标记超过此时长仍没等到配对 v=0,视为该 blur 未产生收起而丢弃
+   function pruneSelfBlurMarks() {
+        var now = Date.now();
+ selfBlurZeroMarks = selfBlurZeroMarks.filter(function (t) { return t > now; });
+      }
+      function markSelfBlurZero() {          // 主动切换 blur 前调用:登记一个待配对标记
+        pruneSelfBlurMarks();
+        selfBlurZeroMarks.push(Date.now() + SELF_BLUR_TTL_MS);
+      }
+      function consumeSelfBlurZero() {       // v=0 到达时调用:能配对则消费一个并返回 true(判为切换抖动)
+        pruneSelfBlurMarks();
+        if (selfBlurZeroMarks.length > 0) { selfBlurZeroMarks.shift(); return true; }
+  return false;
+      }
+
+      // 键盘高回调 v=0 时是否应【忽略】关闭意图(仅用于切换抖动抑制,不影响真实收起):
+      //  1) pendingKb:正处于"切键盘态、等键盘弹起"过渡,v=0 必是抖动,绝不关闭。
+      //2) 切换保护窗口内(switchGuardUntil):最近一次 switchTo 后 SWITCH_GUARD_MS 内的 v=0 视为
+      //  切换抖动,不关闭 —— 覆盖【及时到达】的绝大多数抖动(快速路径)。
+      //  3) 因果配对(consumeSelfBlurZero):覆盖【超窗延迟到达】的陈旧 v=0 —— 与主动 blur 标记配对
+   //     即吞除,不依赖时长,根治 iQOO 等机型的偶现闪烁关闭。
+    // 三者叠加:真实收键盘时 pendingKb=false、不在窗口内、且无待配对标记 => 放行 doClose,不误伤。
+      function shouldIgnoreKbGoneForClose() {
+        // consumeSelfBlurZero 有副作用(消费标记),故总是求值:让"窗口内被时间放行"的 v=0 也顺带
+        // 消费掉对应标记,避免标记残留到下次真实关闭被误吞。
+        var paired = consumeSelfBlurZero();
+        return pendingKb || (Date.now() < switchGuardUntil) || paired;
+ }
+
+      // 原生注入键盘高度(iOS/Android 统一主数据源):原生 uni.onKeyboardHeightChange
+      // 在键盘弹起【瞬间】回调最终高度(focus 同帧即到,实测 iOS 真机 390px 即时
+      // 准确)——比 visualViewport 的渐进采样可靠得多。旧注释「iOS 只回调 0」是
+      // 旧基座时代的历史观察,已被真机日志推翻,故删除 iOS 拦截。vv 采样
+      // (iosReposition)仅作注入失效场景的兜底。
+      window.__setKbHeight = function (px) {
+        // 键盘高向上取整:某些机型上原生注入的 px 可能是浮点值(比如 DPR 转换后),
+        // Math.round 向下舍入 1px 会让 slot 少 1px、#bar 与键盘顶部出现 1px 间隙。
+        // 向上取整宁可与键盘顶亚像素重叠(不可察觉)也不留缝。
+        var v = Math.max(0, Math.ceil(px || 0));
+        var prev = injectedKbH;
+        iqooLog('__setKbHeight/in', { rawPx: px, v: v, prev: prev });
+        // v>0 到达:取消可能存在的 kb-gone 兜底 timer(说明上一次 v=0 只是抖动,不是真收)
+        if (v > 0 && kbGoneRestoreTimer) {
+          clearTimeout(kbGoneRestoreTimer);
+          kbGoneRestoreTimer = 0;
+        }
+        var active = document.body.classList.contains('active');
+        var isKbGone = (active && prev > 0 && v === 0);
+        var wantClose = isKbGone && !showEmoji && !intentionalBlur && !shouldIgnoreKbGoneForClose();
+        // 【iQOO 定位抖动抑制】被守卫拦下的 v=0:不改 injectedKbH、不 applyLayout,
+        // 保持 slot=kbFull;150ms 内若无 v>0 到达(真收键盘,非抖动)兜底清零 slot,
+        // 避免输入框在抖动 v=0 时刻掉底再撑起的视觉抖动(每次切键盘态都会遇到)。
+        if (isKbGone && !wantClose) {
+          iqooLog('__setKbHeight/ignoreClose-keepSlot', { prev: prev, v: v });
+          if (kbGoneRestoreTimer) clearTimeout(kbGoneRestoreTimer);
+          kbGoneRestoreTimer = setTimeout(function () {
+            kbGoneRestoreTimer = 0;
+            // 已被其他 __setKbHeight(v>0) 更新过 => 无需兜底
+            if (injectedKbH > 0) return;
+            // 真收键盘兜底:清零 injectedKbH 并 applyLayout,slot 归位,输入框贴底与键盘同步
+            iqooLog('__setKbHeight/keepSlot-fallback-reset', {});
+            appliedSlotH = -1;
+            applyLayout();
+          }, KB_GONE_RESTORE_MS);
+          return;
+        }
+        injectedKbH = v;
+        if (v > 40 && !kbFullLocked) {
+          // 一次性校准:首个有效注入值即【即时准确的最终键盘高】+ 固定余量,锁定。
+          // 应用生命周期内不再变——双端统一,中英文切换 slot 恒定、双态同高。
+          kbFull = v + SAFE_EXTRA_PX;
+          kbFullLocked = true;
+          persistKbFull();
+        }
+        if (v > 0) pendingKb = false; // 键盘已弹起，过渡结束（slot 由 injectedKbH 维持 kbFull）
+        if (wantClose) {
+          iqooLog('__setKbHeight/->doClose', { prev: prev, v: v });
+          doClose();
+          return;
+        }
+        applyLayout();
+      };
+
+      // 应用布局：slot 高度锁定为 kbFull（表情态/键盘态都不变），dock 贴底。
+      // 键盘态 slot 为空但仍占 kbFull 高（系统键盘视觉填充）；表情态 slot 内放面板。
+      // 关键：一旦测得过 kbFull，slot 高度就锁定，切换时不再变化 => 输入栏不动。
+      var appliedSlotH = -1; // 上次已应用的 slot 高度（幂等，避免无谓重排干扰输入焦点）
+      function applyLayout() {
+        // 键盘弹起(injectedKbH>0)、表情态、或切键盘态过渡(pendingKb)时，slot 锁定 kbFull
+        // 把输入栏顶到其上方；否则贴底 slot=0。
+        //  - Android：injectedKbH 由原生 onKeyboardHeightChange 注入。
+        //  - iOS：injectedKbH 由 H5 visualViewport 自感知（iosSetKb）注入。
+        // 两端数据源不同但驱动逻辑一致：H5 始终自己用 slot 把 #bar 顶到键盘/面板上方
+        // （iOS WKWebView 不会可靠地自动顶起 fixed 元素，故必须 H5 主动顶）。
+        var active = (injectedKbH > 0 || showEmoji || pendingKb);
+        // slot 基准高:统一锁定 kbFull(一次性校准的实测键盘高 + 固定余量)——
+        // 表情态/键盘态/切键盘过渡同高,输入栏顶边恒定、零跳动,且始终比键盘顶
+        // 【高一点】(SAFE_EXTRA_PX);未校准时临时用估算 kbEstimate 顶起。
+        var baseH = (kbFull > 0) ? kbFull : kbEstimate;
+        var targetH = (active && baseH > 0) ? baseH : 0;
+        // resize 模式修正(双端):webview 的 softinputMode 为 adjustResize 时,
+        // 键盘弹起会让系统【同步压缩】webview 高度(innerHeight < clientHeight)
+        // 给键盘让位。压缩发生在渲染管线内(无跨帧错位),此处扣除压缩量使
+        // #bar 落在键盘上方的正确屏幕位置:slot = kbFull - (clientH - innerH)。
+        //  - 表情态/pan 模式:innerH≈clientH,扣除量≈0,slot=kbFull(不变)。
+        //  - 键盘 resize 态:innerH<clientH,扣除压缩量。
+        // 全部用实测 innerHeight/clientHeight,无固定像素。
+        if (active && !showEmoji && baseH > 0) {
+          var ih = window.innerHeight || 0;
+          var ch = document.documentElement.clientHeight || 0;
+          if (ih > 200 && ch > 200 && ih < ch) {
+            // 扣除量用 Math.floor 向下取整:innerHeight/clientHeight 亦是浮点像素来源,
+            // 直接相减在某些机型上会多扣 1px,导致 slot 变矮、#bar 与键盘顶留 1px 间隙。
+            // 向下取整让扣除量宁可【少 1px】,slot 略高、#bar 顶得更贴键盘(可能与键盘
+            // 顶部亚像素重叠,视觉不可察觉,但绝不留缝)。
+            targetH = Math.max(0, baseH - Math.floor(ch - ih));
+          }
+        }
+        if (targetH === appliedSlotH) return;
+        appliedSlotH = targetH;
+        document.documentElement.style.setProperty('--slot-h', targetH + 'px');
+        iqooLog('applyLayout/slot-changed', { newSlotH: targetH, baseH: baseH });
+      }
+
+      // 统一切换入口（幂等 + 节流）。target: 'panel'（表情态） | 'kb'（键盘态）
+      // slot 高度全程锁定 kbFull，仅切换 slot 内容（空↔面板）+ 键盘显隐。
+      function switchTo(target) {
+        var wantPanel = (target === 'panel');
+        iqooLog('switchTo/enter', { target: target, wantPanel: wantPanel, sinceLastMs: Date.now() - lastSwitchAt });
+        if (wantPanel === showEmoji) { iqooLog('switchTo/skip-idempotent', { target: target }); return; } // 幂等
+        var now = Date.now();
+        if (now - lastSwitchAt < SWITCH_THROTTLE_MS) { iqooLog('switchTo/skip-throttle', { target: target, dtMs: now - lastSwitchAt }); return; } // 节流
+        lastSwitchAt = now;
+        // 开启/顺延切换保护窗口:本次切换引发的键盘 blur/focus 抖动 v=0 在此窗口内一律
+        // 不触发 doClose(见 shouldIgnoreKbGoneForClose),根治频繁切换偶现的键盘闪烁关闭。
+        switchGuardUntil = now + SWITCH_GUARD_MS;
+
+        showEmoji = wantPanel;
+        if (wantPanel) {
+          // -> 表情态：显示面板 + 收键盘。slot 高度不变(=kbFull)，键盘收起后面板正好填满该区。
+          pendingKb = false; // 取消可能残留的键盘态过渡意图
+          // 表情态：#bar 改回用 --slot-h(面板高) 定位（此时是 body.emoji，不走 ios-kb 的 transform）。
+          document.body.classList.add('emoji');
+          saveRange();
+          setToggleIcon('kb');
+          panel.classList.add('show');
+          applyLayout();
+          // 通知原生进入【表情态】并带上键盘实际高(kbShiftVal,与注入路径同值):
+          // 主页据此让消息列表保持上移(键盘收起后系统不再顶起页面,需主页主动
+          // 补偿,使表情态与键盘态消息列表位置一致、零跳变)。
+          postToNative('panel', String(kbShiftVal() || injectedKbH || 0));
+          // 【方案A】表情态不再彻底丢焦点。设 inputmode=none 后 blur+程序化 refocus:
+          //  - blur 收起当前已弹出的系统键盘;
+          //  - refocus 时 inputmode=none,系统【不再】弹键盘,但 editor 保持聚焦 => 保留原生光标,
+          //    用户在表情态能看到真实光标(插入点),且切回键盘态无焦点丢失。
+          // refocus 期间置 programmaticFocus,让 focus 监听跳过(避免自触发 switchTo('kb'))。
+          // intentionalBlur 放行 blur 引起的键盘高=0 关闭守卫(showEmoji=true 本也会放行,双保险)。
+          intentionalBlur = true;
+  programmaticFocus = true;
+          editor.setAttribute('inputmode', 'none');
+     markSelfBlurZero(); // 登记:此 blur 会引发一个"预期收起 v=0",延迟到达时按因果配对吞除
+    editor.blur();
+          editor.focus();
+          restoreRange(); // 还原到切表情前的光标位置(内部会再 focus,同样被 programmaticFocus 跳过)
+          setTimeout(function () { intentionalBlur = false; programmaticFocus = false; }, 300);
+          iqooLog('switchTo/panel-done', {});
+        } else {
+          // -> 键盘态：隐藏面板 + 弹键盘。#bar 一直用 --slot-h 定位，slot 保持 kbFull(由 pendingKb
+          //    维持)，与表情态高度相同 => #bar 位置【完全不变】，切换零抖动(用户要点)。
+          //    仅把 slot 内容从面板换成空(系统键盘视觉填充)，不动 #bar。
+          pendingKb = true;
+          document.body.classList.remove('emoji');
+          setToggleIcon('face');
+          panel.classList.remove('show');
+          applyLayout();
+          // 通知原生回到【键盘态】:让位量与表情态同值(kbShiftVal),键盘弹起后由
+          // 注入路径(emitKbShiftWithLift)接管并平滑跟踪动画。
+          postToNative('kb', String(kbShiftVal() || injectedKbH || 0));
+          // 【方案A】表情态 editor 一直保持聚焦(inputmode=none)。切回键盘态需:
+          //  1) 恢复 inputmode(移除 none),否则系统仍不弹键盘;
+          //  2) 因 editor 已聚焦,动态改 inputmode 不会自动弹键盘,须 blur+focus 强制系统按新
+          //     inputmode 重新评估并弹起键盘。此 focus 走正常监听(showEmoji 已 false,不会再
+          //     switchTo;并跑键盘预撑逻辑),故【不】设 programmaticFocus。
+          //  3) restoreRange 还原光标位置。
+          // 本次 focus 处于 toggle 点击(touchend)用户手势栈内,可正常弹起键盘。
+      editor.setAttribute('inputmode', 'text');
+          intentionalBlur = true; // 放行 blur 瞬间键盘高=0 的关闭守卫
+          markSelfBlurZero(); // 登记:切键盘前的 blur 也会引发预期收起 v=0,延迟到达同样按因果配对吞除
+   editor.blur();
+          restoreRange(); // 内部 editor.focus() + 还原光标 => 弹键盘并定位光标
+          setTimeout(function () { intentionalBlur = false; }, 300);
+          // 键盘弹起后 webview 可能被 resize 缩短，visualViewport 的 resize 事件会驱动
+          // iosReposition -> applyLayout，按 innerHeight 扣除缩短量，使 #bar 平滑贴到键盘顶。
+          // 兜底：若键盘因故未弹起，1s 后清除 pendingKb，避免 slot 永久锁 kbFull。
+          setTimeout(function () { pendingKb = false; applyLayout(); }, 1000);
+          iqooLog('switchTo/kb-done', {});
+        }
+      }
+
+      // 就绪后仅预布局（预定位 bar）。聚焦交给原生 show 回调里的 __barrageReset()，
+      // 那才是贴近用户手势、webview 已可见的正确聚焦时机；此处再聚焦会形成多余入口。
+      function ready() {
+        applyLayout();
+      }
+      // DOM 就绪即聚焦（不依赖任何外部 CDN 脚本）
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', function () {
+          setTimeout(ready, 50);
+        });
+      } else {
+        setTimeout(ready, 50);
+      }
+    })();
+  </script>
+</body>
+</html>

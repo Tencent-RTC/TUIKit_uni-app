@@ -1,0 +1,265 @@
+<template>
+  <!-- 轻提示 toast:屏幕正中小胶囊(宽度随内容),
+       品牌渐变深底+细描边+左侧发光圆点,淡入→停留→淡出,不拦截任何触摸。
+       阻断式确认窗口请用 LiveDialog(本组件不做按钮/交互)。
+
+       层级约定:本组件不含跨组件可靠 z-index——nvue 跨组件 fixed 层级由 DOM
+       书写顺序决定,调用方把它放在自己模板的【末尾】即可(不拦截触摸,
+       即使层级不高也不影响下层内容交互)。 -->
+  <view v-if="innerVisible" class="lt-toast-layer" :class="position === 'top' ? 'lt-layer-top' : 'lt-layer-center'" :userInteractionEnabled="false">
+    <view class="lt-chip" ref="chipRef">
+      <view class="lt-chip-dot-wrap">
+        <view class="lt-chip-dot-halo-1"></view>
+        <view class="lt-chip-dot-halo-2"></view>
+        <view class="lt-chip-dot-halo-3"></view>
+        <view class="lt-chip-dot-halo-4"></view>
+        <view class="lt-chip-dot-halo-5"></view>
+        <view class="lt-chip-dot"></view>
+      </view>
+      <text class="lt-chip-text">{{ title || message }}</text>
+    </view>
+  </view>
+</template>
+
+<script setup lang="ts">
+  import { computed, watch, onUnmounted, nextTick, ref } from 'vue';
+
+  const props = defineProps({
+    // v-model 显隐。显示期间需要"重新弹出"(如连续点击触发)时,调用方可用递增
+    // :key 强制重建实例——v-model 相同值(true→true)不会触发 watch。
+    modelValue: {
+      type: Boolean,
+      default: false
+    },
+    // 文案(优先)
+    title: {
+      type: String,
+      default: ''
+    },
+    // 文案(title 为空时使用)
+    message: {
+      type: String,
+      default: ''
+    },
+    // 自动关闭时长(ms),默认 2400。
+    duration: {
+      type: Number,
+      default: 2400
+    },
+    // 垂直位置:'center' 屏幕正中(默认);'top' 偏上
+    // 用于键盘/H5 输入框弹起时,避开输入栏遮挡(nvue toast 可透过 WebView 透明区显示)。
+    position: {
+      type: String,
+      default: 'center'
+    }
+  });
+
+  const emit = defineEmits(['update:modelValue']);
+
+  const innerVisible = computed({
+    get: () => props.modelValue,
+    set: (val: boolean) => emit('update:modelValue', val)
+  });
+
+  // nvue 原生 animation 模块:驱动 chip 的进入/退出过渡
+  // (nvue 无 CSS keyframes,动效统一走 animation.transition)。
+  const animation = uni.requireNativePlugin('animation');
+  const chipRef = ref<any>(null);
+
+  // ============ 关闭:先淡出再卸载 ============
+  const close = () => {
+    if (chipRef.value) {
+      // 先 200ms 淡出+微缩,动画结束再卸载节点。
+      try {
+        animation.transition(chipRef.value, {
+          styles: { opacity: 0, transform: 'scale(0.96)' },
+          duration: 200,
+          timingFunction: 'ease-in'
+        }, () => {
+          innerVisible.value = false;
+        });
+        return;
+      } catch (e) { /* animation 异常时直接卸载兜底 */ }
+    }
+    innerVisible.value = false;
+  };
+
+  // ============ 显隐驱动:进入动画 + 定时自动关闭 ============
+  // immediate: 支持「挂载即显示」——调用方用递增 :key 重复触发时强制重建实例,
+  // 重建后初始即 true,靠本 immediate 分支启动动画与倒计时,实现"重新弹出"。
+  let timer: any = null;
+  watch(() => props.modelValue, (val) => {
+    if (timer) { clearTimeout(timer); timer = null; }
+    if (val) {
+      const autoCloseMs = props.duration > 0 ? props.duration : 2400;
+      if (autoCloseMs > 0) {
+        timer = setTimeout(() => {
+          timer = null;
+          close();
+        }, autoCloseMs);
+      }
+      // 进入动画:初态(CSS)为 opacity 0 + scale 0.9,挂载后过渡到就位态。
+      nextTick(() => {
+        try {
+          animation.transition(chipRef.value, {
+            styles: { opacity: 1, transform: 'scale(1)' },
+            duration: 220,
+            timingFunction: 'ease-out'
+          });
+        } catch (e) { /* ignore */ }
+      });
+    }
+  }, {
+    immediate: true
+  });
+  onUnmounted(() => {
+    if (timer) { clearTimeout(timer); timer = null; }
+  });
+</script>
+
+<style scoped>
+  /* 全屏居中层:不拦截触摸(userInteractionEnabled=false 由模板透传),
+       纯视觉浮层——任何点击都穿透到下层内容。 */
+  .lt-toast-layer {
+    position: fixed;
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    align-items: center;
+  }
+
+  /* 正中(默认) */
+  .lt-layer-center {
+    justify-content: center;
+  }
+
+  .lt-layer-top {
+    justify-content: flex-start;
+    padding-top: 300rpx;
+  }
+
+  /* 小胶囊:宽度随文字自适应(text 撑开,无固定宽)。
+     背景:品牌色 color-mix 计算值——
+       55% #0052D9 + 深黑 ≈ rgba(5,50,127) / 50% 处 #4A9EFF 混 ≈ rgba(39,77,124)
+       / 40% #7EE8FF 混 ≈ rgba(56,99,112),整体是内敛的深蓝→蓝灰渐变。
+     nvue 渐变仅支持 2 色(to right 近似 135deg),取首尾两端;无 backdrop-filter
+     磨砂,用略高的不透明度(~0.92)保文字可读,以"厚玻璃"质感近似。
+     品牌色投影(nvue box-shadow 为尽力渲染,不渲染时无副作用)。
+     初态 opacity 0 + scale 0.9,由 animation 模块过渡到就位(见 script)。 */
+  .lt-chip {
+    flex-direction: row;
+    align-items: center;
+    padding: 18rpx 32rpx 18rpx 28rpx;
+    border-top-left-radius: 999rpx;
+    border-top-right-radius: 999rpx;
+    border-bottom-left-radius: 999rpx;
+    border-bottom-right-radius: 999rpx;
+    background-image: linear-gradient(to right, rgba(5, 50, 127, 0.92), rgba(56, 99, 112, 0.88));
+    border-width: 2rpx;
+    border-color: rgba(255, 255, 255, 0.10);
+    box-shadow: 0 8rpx 24rpx rgba(0, 82, 217, 0.35);
+    opacity: 0;
+    transform: scale(0.9);
+  }
+
+  /* 左侧光点:nvue 的 box-shadow 不跟随 border-radius(发光轮廓会呈方形),
+     故用同心圆叠层模拟发光衰减。六层(核 + 五层光晕),透明度按距离近似高斯
+     衰减:0.55 → 0.34 → 0.20 → 0.11 → 0.05,半径 12 → 16 → 20 → 24 → 28 → 32rpx。
+     nvue 无 CSS keyframes 做脉冲循环,以静态光晕近似。 */
+  .lt-chip-dot-wrap {
+    position: relative;
+    width: 32rpx;
+    height: 32rpx;
+    margin-right: 14rpx;
+  }
+
+  .lt-chip-dot-halo-1 {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 32rpx;
+    height: 32rpx;
+    border-top-left-radius: 16rpx;
+    border-top-right-radius: 16rpx;
+    border-bottom-left-radius: 16rpx;
+    border-bottom-right-radius: 16rpx;
+    background-color: rgba(126, 232, 255, 0.05);
+  }
+
+  .lt-chip-dot-halo-2 {
+    position: absolute;
+    top: 2rpx;
+    left: 2rpx;
+    width: 28rpx;
+    height: 28rpx;
+    border-top-left-radius: 14rpx;
+    border-top-right-radius: 14rpx;
+    border-bottom-left-radius: 14rpx;
+    border-bottom-right-radius: 14rpx;
+    background-color: rgba(126, 232, 255, 0.11);
+  }
+
+  .lt-chip-dot-halo-3 {
+    position: absolute;
+    top: 4rpx;
+    left: 4rpx;
+    width: 24rpx;
+    height: 24rpx;
+    border-top-left-radius: 12rpx;
+    border-top-right-radius: 12rpx;
+    border-bottom-left-radius: 12rpx;
+    border-bottom-right-radius: 12rpx;
+    background-color: rgba(126, 232, 255, 0.20);
+  }
+
+  .lt-chip-dot-halo-4 {
+    position: absolute;
+    top: 6rpx;
+    left: 6rpx;
+    width: 20rpx;
+    height: 20rpx;
+    border-top-left-radius: 10rpx;
+    border-top-right-radius: 10rpx;
+    border-bottom-left-radius: 10rpx;
+    border-bottom-right-radius: 10rpx;
+    background-color: rgba(126, 232, 255, 0.34);
+  }
+
+  .lt-chip-dot-halo-5 {
+    position: absolute;
+    top: 8rpx;
+    left: 8rpx;
+    width: 16rpx;
+    height: 16rpx;
+    border-top-left-radius: 8rpx;
+    border-top-right-radius: 8rpx;
+    border-bottom-left-radius: 8rpx;
+    border-bottom-right-radius: 8rpx;
+    background-color: rgba(126, 232, 255, 0.55);
+  }
+
+  .lt-chip-dot {
+    position: absolute;
+    top: 10rpx;
+    left: 10rpx;
+    width: 12rpx;
+    height: 12rpx;
+    border-top-left-radius: 6rpx;
+    border-top-right-radius: 6rpx;
+    border-bottom-left-radius: 6rpx;
+    border-bottom-right-radius: 6rpx;
+    background-image: linear-gradient(to right, #4A9EFF, #7EE8FF);
+  }
+
+  /* chip 文案:24rpx/600 白,单行不换行(胶囊随内容伸缩)。 */
+  .lt-chip-text {
+    color: #ffffff;
+    font-size: 24rpx;
+    font-weight: 600;
+    lines: 1;
+    text-overflow: ellipsis;
+    overflow: hidden;
+    max-width: 520rpx;
+  }
+</style>

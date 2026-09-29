@@ -1,0 +1,182 @@
+<template>
+  <view class="seat-grid" :class="gridClass">
+    <view class="seat-row" v-for="(row, rowIdx) in seatRows" :key="rowIdx">
+      <view class="seat-item" v-for="(seat, colIdx) in row" :key="`${rowIdx}-${colIdx}`" @tap="onSeatTap(seat)">
+        <view v-if="seat.userInfo && seat.userInfo.userID" class="seat-wrapper">
+          <view class="sound-wave-outer" :class="{ 'sound-wave-active': isSpeaking(seat.userInfo.userID) }">
+            <view class="seat-circle seat-occupied">
+              <image class="seat-avatar" :src="seat.userInfo.avatarURL || defaultAvatarURL" mode="aspectFill" />
+            </view>
+          </view>
+          <view v-if="isMicOff(seat)" class="seat-mic-off">
+            <image class="seat-mic-off-icon" src="/static/images/unmute-mic.png" mode="aspectFit" />
+          </view>
+        </view>
+        <view v-else class="seat-circle">
+          <image class="seat-icon" src="/static/images/seat-sofa.png" mode="aspectFit"></image>
+        </view>
+        <text class="seat-label" v-if="seat.userInfo && seat.userInfo.userID" :lines="1">
+          {{ seat.userInfo.userName || seat.userInfo.userID }}
+        </text>
+        <text class="seat-label" v-else>{{ rowIdx * 5 + colIdx + 1 }}</text>
+      </view>
+    </view>
+  </view>
+</template>
+
+<script setup lang="ts">
+  import { computed } from 'vue';
+
+  const props = defineProps<{
+    seatRows: any[];
+    speakingUserIDs: Set<string>;
+    currentUserID: string;
+    isMicOn: boolean;
+    role: 'anchor' | 'audience';
+    live?: boolean;
+  }>();
+
+  const emit = defineEmits<{
+    (e: 'seatTap', seat: any): void;
+  }>();
+
+  const defaultAvatarURL = 'https://web.sdk.qcloud.com/component/TUIKit/assets/avatar_01.png';
+
+  const gridClass = computed(() => {
+    if (props.role === 'audience') return 'seat-grid-audience';
+    return props.live ? 'seat-grid-live' : '';
+  });
+
+  const isSpeaking = (userID: string) => props.speakingUserIDs.has(userID);
+
+  const isMicOff = (seat: any) => {
+    const self = seat.userInfo.userID === props.currentUserID;
+    if (self) return !props.isMicOn;
+    return props.role === 'audience' && seat.userInfo.microphoneStatus === 0;
+  };
+
+  const onSeatTap = (seat: any) => emit('seatTap', seat);
+</script>
+
+<style>
+  .seat-grid {
+    position: relative;
+    z-index: 5;
+    margin-top: 60rpx;
+    padding-left: 32rpx;
+    padding-right: 32rpx;
+  }
+
+  .seat-grid-live {
+    margin-top: 30rpx;
+  }
+
+  .seat-grid-audience {
+    margin-top: 40rpx;
+  }
+
+  .seat-row {
+    flex-direction: row;
+    justify-content: space-around;
+    margin-bottom: 30rpx;
+  }
+
+  .seat-item {
+    flex-direction: column;
+    align-items: center;
+    width: 120rpx;
+  }
+
+  .seat-circle {
+    width: 100rpx;
+    height: 100rpx;
+    border-radius: 50rpx;
+    background-color: rgba(255, 255, 255, 0.15);
+    justify-content: center;
+    align-items: center;
+  }
+
+  .seat-occupied {
+    background-color: transparent;
+  }
+
+  .seat-wrapper {
+    position: relative;
+    width: 120rpx;
+    height: 120rpx;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .sound-wave-outer {
+    width: 100rpx;
+    height: 100rpx;
+    border-radius: 50rpx;
+    align-items: center;
+    justify-content: center;
+    background-color: transparent;
+  }
+
+  .sound-wave-active {
+    width: 116rpx;
+    height: 116rpx;
+    border-radius: 58rpx;
+    background-color: rgba(30, 203, 119, 0.7);
+  }
+
+  .seat-icon {
+    width: 48rpx;
+    height: 48rpx;
+  }
+
+  .seat-avatar {
+    width: 100rpx;
+    height: 100rpx;
+    border-radius: 50rpx;
+  }
+
+  .seat-label {
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 22rpx;
+    margin-top: 8rpx;
+    width: 120rpx;
+    text-align: center;
+    lines: 1;
+  }
+
+  .seat-mic-badge {
+    position: absolute;
+    right: -4rpx;
+    bottom: -4rpx;
+    width: 36rpx;
+    height: 36rpx;
+    border-radius: 18rpx;
+    background-color: #338aff;
+    justify-content: center;
+    align-items: center;
+    z-index: 2;
+  }
+
+  .seat-mic-badge-icon {
+    width: 22rpx;
+    height: 22rpx;
+  }
+
+  .seat-mic-off {
+    position: absolute;
+    right: 10rpx;
+    bottom: 10rpx;
+    width: 32rpx;
+    height: 32rpx;
+    border-radius: 16rpx;
+    background-color: rgba(0, 0, 0, 0.6);
+    justify-content: center;
+    align-items: center;
+    z-index: 2;
+  }
+
+  .seat-mic-off-icon {
+    width: 22rpx;
+    height: 22rpx;
+  }
+</style>

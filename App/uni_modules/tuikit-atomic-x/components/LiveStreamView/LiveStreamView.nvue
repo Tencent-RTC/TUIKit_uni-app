@@ -1,10 +1,12 @@
 <template>
   <view class="live-stream-view-container">
+    <!-- systemInfo 异步填充,首帧 safeArea/windowHeight 为 undefined,
+         裸访问会抛全局报错;全部字段加 || 兜底,首帧以 0 渲染、回调后校正。 -->
     <view class="live-stream-view-content" :class="{ 'audience-mode': !isAnchor }" @touchend.stop="" :style="{
-                top: isAnchor ? systemInfo.safeArea.top + 'px' : '0px',
-                left: isAnchor ? '0px' : systemInfo.safeArea.left + 'px',
-                width: isAnchor ? safeArea.width + 'px' : systemInfo.safeArea.width + 'px',
-                height: isAnchor ? systemInfo.safeArea?.height + 'px' : systemInfo.windowHeight + 'px',
+                top: isAnchor ? (((systemInfo.safeArea || {}).top || 0) + 'px') : '0px',
+                left: isAnchor ? '0px' : '0px',
+                width: isAnchor ? (safeArea.width + 'px') : (viewWidthPx + 'px'),
+                height: isAnchor ? (((systemInfo.safeArea || {}).height || 0) + 'px') : (((systemInfo.windowHeight || 0) + 'px')),
               }">
       <!-- 主播模式：显示默认头像 -->
       <view v-if="isAnchor && cameraStatus === DeviceStatus.OFF && seatList.length === 1 && isLiving" class="default-avatar"
@@ -13,26 +15,38 @@
           :src="loginUserInfo.avatarURL || defaultAvatarURL" />
       </view>
 
-      <!-- 主视频流 -->
+      <!-- 主视频流:容器恒满屏(top=0、height=streamViewHeight),不随 Fit/Fill 改变尺寸。
+           SDK(FeedbackView)在满屏容器内自行按 canvas 顶对齐缩放(aspectFit)或 cover 铺满,
+           容器尺寸稳定可避免 height 变化触发 SDK 重新 measure/layout 导致的画面缩放异常。
+           挂件 cell 用 renderScale + videoLeft/TopOffset 对齐 SDK 画面里 region 的实际位置。 -->
       <live-core-view class="live-stream-view-background" :liveID="liveID"
         :viewType=" isAnchor ? 'PUSH_VIEW' : 'PLAY_VIEW'" @tap="streamViewClick(loginUserInfo)" :style="{
                   top: '0px',
-                  width: safeArea.width + 'px',
+                  width: dispWidth + 'px',
                   height: streamViewHeight + 'px',
                 }">
       </live-core-view>
 
+      <!-- 进房加载遮罩:遮住进房期布局稳定前的全过程。关键:进房时 seatList 先到中间态
+           (length≤1 → isFillMode=true/cover/scale大),再变最终态(length=N → Fit/scale小),
+           画面会经历 cover→fit 的 scale 突变(跳边)。遮罩【不】按当前 seatList 长度门控,
+           从进房即显示,盖住整个过渡,等 canvas + seatList 彻底稳定后才揭开,揭开瞬间画面
+           与挂件一步到位、无跳变。仅观众端(主播不涉及混流→分流的模板布局跳变)。 -->
+      <view v-if="!isAnchor && showLoadingMask" class="live-loading-mask"
+        :style="{ width: dispWidth + 'px', height: streamViewHeight + 'px' }"></view>
+
       <!-- 单人模式（观众视角特有） -->
-      <view v-if="!isAnchor && seatList?.length === 1" @touchend.stop="" class="grid-content-cell"
+      <!-- effCanvas 门控:同网格,canvas 未就绪前不渲染,避免以默认 scale 错误定位后跳变。 -->
+      <view v-if="!isAnchor && effCanvas && seatList?.length === 1" @touchend.stop="" class="grid-content-cell"
         v-for="(participant, colIndex) in seatList" :key="`${colIndex}`" @tap="streamViewClick(participant)" :style="{
-                  left: participant?.region?.x * scale.scaleX + 'px',
-                  top: (calculateTopValue(participant) - 2) + 'px',
+                  left: calculateLeftValue(participant) + 'px',
+                  top: calculateTopValue(participant) + 'px',
                   'background-color': participant?.userInfo?.cameraStatus === DeviceStatus.OFF ? '#000' : 'transparent',
                 }">
         <view style="display: flex; flex-direction: row; width: 120rpx; justify-content: center; align-items: center;"
           :style="{
-                    width: participant?.region?.w * scale.scaleX + 'px',
-                    height: (streamViewHeight + 10) + 'px',
+                    width: calcWidthValue(participant) + 'px',
+                    height: calcHeightValue(participant) + 'px',
                   }">
           <view v-if="participant?.userInfo?.cameraStatus === DeviceStatus.OFF" class="video-container">
             <image class="participant-video" :src="participant?.userInfo?.avatarURL || defaultAvatarURL"
@@ -42,72 +56,76 @@
       </view>
 
       <!-- 多人模式：非网格布局 -->
-      <view v-if="seatList?.length > 1 && (templateLayout !== 801 && templateLayout !== 800)" @touchend.stop=""
+      <!-- cell 自带 absolute+left/top/width/height,挂件作为 cell 直接子元素相对 cell 定位
+           (避免 nvue 下跨层 absolute 定位祖先不可靠导致挂件跑到屏幕左侧)。 -->
+      <view v-if="effCanvas && seatList?.length > 1 && (templateLayout !== 801 && templateLayout !== 800)" @touchend.stop=""
         class="grid-content-cell" v-for="(participant, colIndex) in seatList" :key="`${colIndex}`"
         @tap="streamViewClick(participant)" style="border-radius: 0rpx;" :style="{
-                  left: participant?.region?.x * scale.scaleX + 'px',
-                  top: calculateTopValue(participant) + (isAnchor ? 0 : -2) + 'px',
-                  'background-color': !isAnchor && participant?.userInfo?.cameraStatus === DeviceStatus.OFF ? '#000' : 'transparent',
+                  left: calculateLeftValue(participant) + 'px',
+                  top: calculateTopValue(participant) + 'px',
+                  width: calcWidthValue(participant) + 'px',
+                  height: calcHeightValue(participant) + 'px',
+                  'background-color': !isAnchor && participant?.userInfo?.cameraStatus === DeviceStatus.OFF ? '#1f2024' : 'transparent',
                 }">
-        <view style="display: flex; flex-direction: row; width: 120rpx; justify-content: center; align-items: center;"
-          :style="{
-                    width: participant?.region?.w * scale.scaleX + 'px',
-                    height: isAnchor ? (participant?.region?.h * scale.scaleY + 'px') : (participant?.region?.h * scale.scaleY + 2) + 'px',
-                  }">
-          <view v-if="participant?.userInfo?.cameraStatus === DeviceStatus.OFF" class="video-container">
-            <image class="participant-video" :src="participant?.userInfo?.avatarURL || defaultAvatarURL"
-              mode="aspectFill" />
-          </view>
+        <view v-if="participant?.userInfo?.cameraStatus === DeviceStatus.OFF" class="video-container"
+          style="position: absolute; left: 0; top: 0; right: 0; bottom: 0; display: flex; flex-direction: row; justify-content: center; align-items: center;">
+          <image class="participant-video" :src="participant?.userInfo?.avatarURL || defaultAvatarURL"
+            mode="aspectFill" />
+        </view>
 
-          <view class="participant-info-container">
-            <image v-if="participant?.userInfo?.microphoneStatus === DeviceStatus.OFF" class="mic-icon"
-              src="/static/images/unmute-mic.png" mode="aspectFit" />
-            <text class="participant-name" :style="{ 'max-width': participant?.region.w * scale.scaleX * 0.85 + 'px' }">
-              {{ participant?.userInfo?.userName || participant?.userInfo?.userID }}
-            </text>
-          </view>
+        <view v-if="!isMainHostSeat(participant)" class="participant-info-container">
+          <image v-if="participant?.userInfo?.microphoneStatus === DeviceStatus.OFF" class="mic-icon"
+            src="/static/images/unmute-mic.png" mode="aspectFit" />
+          <text class="participant-name" :style="{ 'max-width': participant?.region.w * scale.scaleX * 0.85 + 'px' }">
+            {{ participant?.userInfo?.userName || participant?.userInfo?.userID }}
+          </text>
         </view>
       </view>
 
       <!-- 多人模式：网格布局 -->
-      <view v-if="seatList?.length > 1 && (templateLayout === 801 || templateLayout === 800)" @touchend.stop=""
+      <!-- effCanvas 门控:canvas 未就绪前 scale/offset 尚未算出(默认 scale=1),若此时渲染
+           cell 会以错误位置出现、canvas 到达后再跳到正确位置(进房"跳边")。加 effCanvas
+           门控后,cell 只在最终 scale 就绪后渲染,揭开遮罩瞬间与画面一起就位,无跳变。 -->
+      <view v-if="effCanvas && seatList?.length > 1 && (templateLayout === 801 || templateLayout === 800)" @touchend.stop=""
         class="grid-content-cell" v-for="(participant, colIndex) in seatList"
         :key="`${isAnchor ? colIndex : participant.index}`" @tap="streamViewClick(participant)"
         style="border-radius: 0rpx;" :style="{
-                  left: participant?.region?.x * scale.scaleX + 'px',
-                  top: calculateTopValue(participant) + (isAnchor ? 0 : -2) + 'px',
-                  'background-color': !isAnchor && participant?.userInfo?.cameraStatus === DeviceStatus.OFF ? '#000' : 'transparent',
+                  left: calculateLeftValue(participant) + 'px',
+                  top: calculateTopValue(participant) + 'px',
+                  width: calcWidthValue(participant) + 'px',
+                  height: calcHeightValue(participant) + 'px',
+                  'background-color': !isAnchor && participant?.userInfo?.cameraStatus === DeviceStatus.OFF ? '#1f2024' : 'transparent',
+                  'border-bottom': !isAnchor && participant?.userInfo?.cameraStatus === DeviceStatus.OFF ? '1rpx solid #000' : '',
+                  'border-left': isAnchor && templateLayout === 800 && participant?.userInfo?.cameraStatus === DeviceStatus.OFF ? '1rpx solid #000' : '',
+                  'border-right': !isAnchor && templateLayout === 800 && participant?.userInfo?.cameraStatus === DeviceStatus.OFF ? '1rpx solid #000' : '',
                 }">
         <view v-if="participant?.userInfo.userID"
-          style="display: flex; flex-direction: row; width: 120rpx; justify-content: center; align-items: center;"
-          :style="{
-                    width: participant?.region?.w * scale.scaleX + 'px',
-                    height: isAnchor ? (participant?.region?.h * scale.scaleY + 'px') : (participant?.region?.h * scale.scaleY + 2) + 'px',
-                  }">
-          <view v-if="participant?.userInfo?.cameraStatus === DeviceStatus.OFF" class="video-container">
-            <image class="participant-video" :src="participant?.userInfo?.avatarURL || defaultAvatarURL"
-              mode="aspectFill" />
-          </view>
-
-          <view class="participant-info-container" :class="{ 'audience-mode': !isAnchor }">
-            <image v-if="participant?.userInfo?.microphoneStatus === DeviceStatus.OFF" class="mic-icon"
-              src="/static/images/unmute-mic.png" mode="aspectFit" />
-            <text class="participant-name" :style="{ 'max-width': participant?.region.w * scale.scaleX * 0.85 + 'px' }">
-              {{ participant?.userInfo?.userName || participant?.userInfo?.userID }}
-            </text>
-          </view>
+          class="video-container"
+          style="position: absolute; left: 0; top: 0; right: 0; bottom: 0; display: flex; flex-direction: row; justify-content: center; align-items: center;">
+          <image v-if="participant?.userInfo?.cameraStatus === DeviceStatus.OFF"
+            class="participant-video" :src="participant?.userInfo?.avatarURL || defaultAvatarURL"
+            mode="aspectFill" />
         </view>
 
-        <view class="participant-wait-container" v-else :style="{
-                    width: participant?.region?.w * scale.scaleX + 'px',
-                    height: participant?.region?.h * scale.scaleY + 'px',
+        <view v-if="participant?.userInfo.userID" class="participant-info-container"
+          :class="{ 'audience-mode': !isAnchor }">
+          <image v-if="participant?.userInfo?.microphoneStatus === DeviceStatus.OFF" class="mic-icon"
+            src="/static/images/unmute-mic.png" mode="aspectFit" />
+          <text class="participant-name" :style="{ 'max-width': participant?.region.w * scale.scaleX * 0.85 + 'px' }">
+            {{ participant?.userInfo?.userName || participant?.userInfo?.userID }}
+          </text>
+        </view>
+
+        <view class="participant-wait-container" v-if="!participant?.userInfo.userID" :style="{
+                    width: calcWidthValue(participant) + 'px',
+                    height: calcHeightValue(participant) + 'px',
                     'border-bottom': '1rpx solid #000',
                     'background-color': '#1f2024',
                     'border-left': isAnchor && templateLayout === 800 ? '1rpx solid #000' : '',
                     'border-right': !isAnchor && templateLayout === 800 ? '1rpx solid #000' : '',
                   }">
-          <text class="participant-wait-content">{{ isAnchor ? colIndex : participant?.index }}</text>
-          <text class="participant-wait-content">等待连麦</text>
+          <text class="participant-join-content">{{ isAnchor ? colIndex : participant?.index }}</text>
+          <text class="participant-join-content">加入连麦</text>
         </view>
       </view>
       <LiveStreamActionPanel v-if="enableClickPanel" v-model="isShowClickPanel" :liveID="liveID || ''"
@@ -171,9 +189,8 @@
     }
   });
 
-  const emit = defineEmits(['streamViewClick']);
+  const emit = defineEmits(['streamViewClick', 'actionPanelVisibleChange']);
 
-  // 状态管理
   const {
     loginUserInfo
   } = useLoginState();
@@ -187,7 +204,6 @@
   const {
     connected: audienceConnected
   } = useCoGuestState(uni?.$liveID)
-  // 使用 rpx
   const standardWidth = 750;
   let standardHeight = standardWidth * 16 / 9;
   const safeArea = ref({
@@ -198,6 +214,10 @@
     width: standardWidth,
     height: standardHeight,
   });
+  // 观众端显示宽(px)取 max(windowWidth, screenWidth) 满屏铺满,而非 safeArea.width:
+  // 挖孔/曲面屏 safeArea 左右 inset 非零会露竖条白边。校正值再 +2px 超宽,抵消部分
+  // ROM 原生层取整后比物理屏窄 1px 的右缘亮缝(方向性防御,宁超勿缺,被屏幕裁掉无感)。
+  const viewWidthPx = ref(750);
   const systemInfo = ref({});
 
   const deviceWidthRatio = ref(1);
@@ -217,25 +237,172 @@
     scaleX: 1,
     scaleY: 1
   });
+  // streamViewHeight = 外层全屏容器高度(windowHeight / safeArea 可用高)。
   const streamViewHeight = ref(1);
   const isShowClickPanel = ref(false);
   const clickUserInfo = ref<any>({});
 
-  function calculateScale(originalWidth : number, originalHeight : number, displayWidth : number, displayHeight : number) {
-    // 等比缩放（以宽度或高度中较小的比例为准）
-    const scaleX = displayWidth / originalWidth;
-    const scaleY = displayHeight / originalHeight;
+  // 点击视频区域弹出的 LiveStreamActionPanel 是组件内部自持弹层,宿主页面无法感知其显隐。
+  // 上抛该状态,让宿主纳入 anyOverlayVisible,以便驱动 barrageInput:setHidden 移出弹幕输入
+  // webview(透明原生层,层级高于一切 nvue view,不移出则点击穿透到 H5 editor 错误弹起键盘)。
+  watch(isShowClickPanel, (val) => {
+    emit('actionPanelVisibleChange', !!val);
+  });
 
-    return { scaleX, scaleY }; // 确保不变形
-  }
+  // 坐标系:SDK 内部按 FillMode.Fill(cover)把画面居中等比铺满 live-core-view 容器。
+  // 挂件/座位用「renderScale(cover 缩放系数)+ videoLeftOffset + videoTopOffset」把
+  // canvas 坐标(region)映射到画面在屏幕上的实际显示位置,与视频画面精确对齐。
 
-  // 初始化加载
+  // 有效 canvas(数字化缓存):canvas 事件无效/短暂清空(如上麦重推 seatList 时)则沿用
+  // 上次有效值,保证几何链(isFillMode/renderScale/offset)不跳变 —— SDK 画面渲染不依赖
+  // JS 侧 canvas,若挂件几何在空窗口期回退默认值会与画面错位(挂件超出小窗)。
+  const effCanvas = ref<{ w: number; h: number } | null>(null);
+  // 进房加载遮罩:遮住 SDK 首帧默认布局到 canvas 稳定布局的跳变(先居中→顶对齐)。
+  // effCanvas 就绪后仍延时移除,盖住 SDK 内部重布局过程,画面稳定后再露出。
+  const showLoadingMask = ref(true);
+  let maskHideTimer: any = null;
+  // 揭开遮罩(防抖):进房期(showLoadingMask 未揭开)每次 canvas / seatList / streamViewHeight
+  // 变化都重置计时,等布局彻底稳定(canvas 就绪 + seatList 从中间态 1→N 稳定、
+  // isFillMode/scale 不再翻转)后 400ms 再揭开——把 cover(scale 大)→ fit(scale 小)的过渡
+  // 全程盖在遮罩下,揭开瞬间画面与挂件一步到位、无跳变。effCanvas 未就绪不揭(等最终 scale)。
+  // showLoadingMask 一旦揭开即永久 false,故进房后正常的 seatList 变化不会再触发本逻辑。
+  const scheduleMaskHide = () => {
+    if (!showLoadingMask.value || !effCanvas.value) return;
+    clearTimeout(maskHideTimer);
+    maskHideTimer = setTimeout(() => { showLoadingMask.value = false; }, 400);
+  };
+  // 进房期重置揭开计时(实现上方注释声明的意图,曾漏掉 seatList 触发源):
+  // seatList 中间态(单人 → isFillMode=Fill/cover、scale 大)翻转到最终态(N 人宫格 → Fit)
+  // 若发生在遮罩揭开后,画面会从 Fill/SDK 默认居中布局跳到顶对齐宫格——表现为
+  // 【画面先靠下再往上挪】(canvas 已到但 seatList 推送晚于 canvas+400ms 时偶现)。
+  const resetMaskTimerIfLoading = () => {
+    if (!showLoadingMask.value) return;
+    clearTimeout(maskHideTimer);
+    scheduleMaskHide();
+  };
+  watch(
+    canvas,
+    (c) => {
+      const w = Number(c?.w);
+      const h = Number(c?.h);
+      if (w && h) {
+        effCanvas.value = { w, h };
+        // canvas 就绪,开始/重置揭开计时(等 seatList 也稳定)。
+        scheduleMaskHide();
+      }
+    },
+    { immediate: true }
+  );
+  // seatList 数量变化(中间态 1 ↔ 最终态 N)同样重置揭开计时。
+  watch(
+    () => (seatList as any)?.value?.length,
+    () => { resetMaskTimerIfLoading(); }
+  );
+
+  // 自己是否在麦上:seatList 里存在自身 userID 的座位。用于区分混流(麦下)/分流(麦上)布局。
+  const isSelfOnSeat = computed(() => {
+    const uid = props.currentLoginUserId;
+    if (!uid) return false;
+    return (seatList.value || []).some((s: any) => s?.userInfo?.userID === uid);
+  });
+
+  // 填充模式(对齐 SDK calculateCanvasMultiplied / calculateVideoTransform):
+  // - 横屏 canvas(w>h):Fit,留上下黑边。
+  // - 浮窗模板(601/605):Fill(cover)—— 主画面铺满全屏、连麦者小窗浮于其上。
+  // - 单人 / region 占满 canvas:Fill 铺满。
+  // - 宫格类模板(600/800/801)多人:Fit(aspectFit)—— canvas 等比缩放到容器、顶对齐,
+  //   各座位按 region 平铺(混流/分流一致)。
+  const isFillMode = computed(() => {
+    const c = effCanvas.value;
+    if (!c) return false;
+    if (c.w > c.h) return false; // 横屏一律 Fit
+    const list = seatList.value || [];
+    if (list.length <= 1) return true; // 单人铺满
+    const tpl = Number(props.templateLayout);
+    const isFloat = tpl === 601 || tpl === 605; // 浮窗模板
+    if (isFloat) return true; // 浮窗:主画面 Fill 铺满
+    // 有座位占满 canvas → Fill;否则宫格 Fit 平铺。
+    return list.some((s) => Number(s?.region?.w) === c.w && Number(s?.region?.h) === c.h);
+  });
+
+  const dispWidth = computed(() => (props.isAnchor ? safeArea.value.width : viewWidthPx.value));
+
+  // 统一缩放系数(canvas 像素 → 屏幕像素),复刻 SDK:
+  // Fill(cover)取宽/高较大系数保证填满;Fit(aspectFit)取宽/高较小系数保证完整可见
+  // (对齐 SDK:canvas 更宽用宽基准、canvas 更高用高基准,即 min)。
+  const renderScale = computed(() => {
+    const c = effCanvas.value;
+    if (!c) return 1;
+    const sW = dispWidth.value / c.w;
+    const sH = streamViewHeight.value / c.h;
+    if (isFillMode.value) return Math.max(sW, sH);
+    return Math.min(sW, sH);
+  });
+
+  const videoRenderWidth = computed(() => {
+    const c = effCanvas.value;
+    if (!c) return dispWidth.value;
+    return c.w * renderScale.value;
+  });
+
+  const videoRenderHeight = computed(() => {
+    const c = effCanvas.value;
+    if (!c) return streamViewHeight.value;
+    return c.h * renderScale.value;
+  });
+
+  // 水平偏移(px):Fill 放大后画面比屏幕宽时居中裁切(可为负);Fit 恒为 0。
+  const videoLeftOffset = computed(() => {
+    if (!isFillMode.value) return 0;
+    return (dispWidth.value - videoRenderWidth.value) / 2;
+  });
+
+  // 垂直偏移(px):
+  // - Fill:居中裁切(高 > 屏幕高时为负,溢出被裁)。
+  // - Fit:恒为 0 —— 对齐 SDK(非浮窗模板 offset=0),座位位置完全由 region×scale 决定,
+  //   canvas 顶对齐容器(region.y 已含 canvas 内的垂直布局)。
+  const videoTopOffset = computed(() => {
+    if (!isFillMode.value) return 0;
+    return (streamViewHeight.value - videoRenderHeight.value) / 2;
+  });
+
   onMounted(() => {
+    // 预加载 drawer 背景图,避免首次打开礼物/观众等 drawer 时 nvue 首帧闪一下(图未解码)。
+    // 放在插件内(而非 demo 的 App.vue):① 随插件发布,集成方无需自己加预加载;
+    // ② 进直播间即挂载 LiveStreamView,远早于任何 drawer 打开,预热时间充足。
+    // 图片已迁入插件 static(/uni_modules/tuikit-atomic-x/static/assets/live/drawer-bg.png 由 uni 合并的插件 static 提供),
+    // 集成到任意宿主都能找到。
+    uni.getImageInfo({
+      src: '/uni_modules/tuikit-atomic-x/static/assets/live/drawer-bg.png',
+      success: () => {},
+      fail: () => {},
+    });
+    // 安全兜底(分级等待):遮罩正常在 canvas 就绪 400ms 后揭开。canvas 迟迟不到时
+    // 不能直接裸揭——canvas 未就绪揭开必见 SDK 默认布局(画面缩在左上角、无挂件),
+    // 之后 canvas/seatList 到达再跳变("先左上角后挪位"的偶现根因之一是进房推送
+    // 落在监听异步注册窗口内被永久错过)。数据链自愈由 LiveSeatState 内部的
+    // 数据看门狗负责(每 3s 自查未到达即重绑,见其注释,节点与本检查同频),
+    // 此处只分级等待:每 3s 检查一次,canvas 就绪立即揭开;两轮(共 ~9s)后仍无
+    // 数据则强制揭开——可用性优先,极端情况下宁可跳变不可永久黑屏。
+    const forceReveal = (attempt: number) => {
+      if (!showLoadingMask.value) return;
+      if (effCanvas.value) {
+        showLoadingMask.value = false;
+        return;
+      }
+      if (attempt < 2) {
+        setTimeout(() => forceReveal(attempt + 1), 3000);
+      } else {
+        showLoadingMask.value = false;
+      }
+    };
+    setTimeout(() => forceReveal(0), 3000);
     uni.getSystemInfo({
       success: (res) => {
         systemInfo.value = res;
 
         safeArea.value = res.safeArea;
+        viewWidthPx.value = Math.max(res.windowWidth || 0, res.screenWidth || 0) || 750;
         deviceWidthRatio.value = standardWidth / res.windowWidth;
         platform.value = res.platform;
 
@@ -248,6 +415,12 @@
         } else {
           streamViewHeight.value = systemInfo.value.windowHeight;
         }
+        // 容器高度(初始 1px→满屏)变化会触发 SDK re-measure 重布局,进房期同样
+        // 重置揭开计时,避免遮罩揭开后容器才落位导致画面二次挪动。
+        resetMaskTimerIfLoading();
+
+        // systemInfo 就绪后重算 scale,修正首帧回退基准。
+        recomputeScale();
 
         console.warn(`LiveStreamView: isAnchor=${props.isAnchor}, safeArea: ${JSON.stringify(res.safeArea)},
                     deviceWidthRatio: ${deviceWidthRatio.value}, deviceHeightRatio: ${deviceHeightRatio.value}, 
@@ -257,25 +430,32 @@
     });
   });
 
-  // 下发的视频像素值
+  // 统一 scale:挂件/座位与视频共用 renderScale(Fit 等比 / Fill cover 放大),
+  // scaleX===scaleY 保证不变形,x/y 用同一系数换算,再叠加 videoLeft/TopOffset。
+  const recomputeScale = () => {
+    const c = canvas.value;
+    if (!c?.w || !c?.h) return;
+    const s = renderScale.value;
+    scale.value = { scaleX: s, scaleY: s };
+    console.warn(
+      `LiveStreamView: scale value: ${JSON.stringify(scale.value)}, streamViewHeight: ${streamViewHeight.value}`
+    );
+  };
+
+  // Fill 模式下 renderScale 依赖 streamViewHeight/seatList,变化时需同步刷新 scale。
+  watch([renderScale, videoTopOffset, videoLeftOffset], () => {
+    recomputeScale();
+  });
+
   watch(canvas, (newValue) => {
+    // 主播沿用 safeArea.width,观众端用满屏宽 viewWidthPx(与容器宽一致,否则座位网格右侧留空)。
+    const dispW = props.isAnchor ? safeArea.value.width : viewWidthPx.value;
     if (newValue?.w) {
-      pixelWidthRatio.value = (safeArea.value.width / newValue?.w) * deviceWidthRatio.value;
+      pixelWidthRatio.value = (dispW / newValue?.w) * deviceWidthRatio.value;
       console.warn(`LiveStreamView: canvas 变动: ${pixelWidthRatio.value}`)
     }
 
-    if (newValue?.w && newValue?.h) {
-      scale.value = calculateScale(
-        newValue.w,
-        newValue.h,
-        systemInfo.value.safeArea.width,
-        systemInfo.value.safeArea.width * newValue.h / newValue.w,
-      );
-
-      console.warn(
-        `LiveStreamView: scale value: ${JSON.stringify(scale.value)}, streamViewHeight: ${streamViewHeight.value}`
-      );
-    }
+    recomputeScale();
   });
 
   const streamViewClick = (options) => {
@@ -323,37 +503,141 @@
       const isCoGuesting = uni.$localGuestStatus !== 'DISCONNECTED';
       const payload = { ...options.userInfo, seatIndex: options.index };
 
-      if (props.enableClickPanel && isClickSelf) {
-        clickUserInfo.value = payload as any;
-        isShowClickPanel.value = true;
-        return
+      // 点击自己的画面(上麦后自己的视频区域)不弹用户信息面板——该交互已不需要。
+      // 直接 return:既不弹内部 LiveStreamActionPanel,也不向父页面下发点击事件。
+      if (isClickSelf) {
+        return;
       }
       props.onStreamViewClick?.(payload);
       emit('streamViewClick', payload);
     }
   };
 
-  // 返回 px 对应的计算值
+  // 座位在全屏容器里的 top(px):region.y 等比映射后叠加视频画面垂直偏移。
+  // 【边界对齐取整】对映射后的边界坐标 Math.round,配合 calcHeightValue 用"下边界round-上边界round"
+  // 计算高度,消除相邻座位因各自独立四舍五入(round(top)+round(h) ≠ round(top+h))产生的 1px 缝隙。
   const calculateTopValue = (participant) => {
-    let topValue = 1;
-    console.log(
-      `LiveStreamView: templateLayout: ${props.templateLayout}, platform: ${platform.value}, isAnchor: ${props.isAnchor}`
-    );
-    if (!participant) return topValue;
+    if (!participant?.region) return 1;
+    return Math.round(participant.region.y * scale.value.scaleX + videoTopOffset.value);
+  };
 
-    if (props.templateLayout !== 800 && props.templateLayout !== 801) {
-      topValue = participant.region.y * scale.value.scaleY;
-    }
-    if (props.templateLayout === 800) {
-      topValue = participant.region.y * scale.value.scaleY;
-    }
-    if (props.templateLayout === 801) {
-      topValue = participant.region.y * scale.value.scaleY;
-    }
+  // 自己是否在麦上:seatList 里存在自身 userID 的座位。
+  // 对齐 SDK(TemplateView/TemplateCalculator)601 浮窗模板的两种布局分支:
+  // - 自己没在麦上(!isOnSeat):小窗 left = region.x×scale - compensateX(水平居中裁切偏移)。
+  // - 自己在麦上(isOnSeat):小窗改为右对齐贴边 left = dispWidth - width - 12,且不做水平居中偏移。
+  // 浮窗模板(601/605)判定:与 SDK isFullscreenFloatTemplate 对齐。
+  const isFullscreenFloatTemplate = computed(() => {
+    const tpl = Number(props.templateLayout);
+    return tpl === 601 || tpl === 605;
+  });
 
-    console.log(`LiveStreamView: topValue: ${topValue}`);
+  // 座位在全屏容器里的 left(px):
+  // 浮窗模板 + 自己在麦上 + 该座位是小窗(非占满主画面)→ 右对齐贴边(复刻 SDK);
+  // 其余 → region.x 映射后叠加视频画面水平偏移(videoLeftOffset = -compensateX)。
+  const calculateLeftValue = (participant) => {
+    if (!participant?.region) return 0;
+    if (isFullscreenFloatTemplate.value && isSelfOnSeat.value && !isMainHostSeat(participant)) {
+      const width = Math.round(participant.region.w * scale.value.scaleX);
+      return Math.round(dispWidth.value - width - 12);
+    }
+    return Math.round(participant.region.x * scale.value.scaleX + videoLeftOffset.value);
+  };
 
-    return topValue;
+  // 是否【均匀宫格】模板:仅 800(videoFixedGrid9Seats,每格恰好占一行一列)。
+  // ⚠️ 801(videoFixedFloat7Seats,静态小窗)不能算:其主播格纵跨右侧全部小窗行,
+  // "下一行上缘"平铺会把主播格下缘截断到第一个小窗的 top(≈156px),挂件胶囊
+  // (bottom 锚定 cell)悬到主播视频中部 —— 801 及其余模板走边界对齐分支即可正确。
+  const isGridTemplate = computed(() => {
+    const tpl = Number(props.templateLayout);
+    return tpl === 800;
+  });
+
+  // 网格所有座位的【列左缘集合】与【整网格右缘】(px,取整后)。
+  // 用途见 calcWidthValue:每格右缘取"下一列左缘",保证相邻格严格平铺——
+  // 因为 SDK 下发的 region.x/w 相邻格存在 ±1px 源重叠/间隙(如 col1 源右缘 481 越过 col2 源左缘 480),
+  // 若各格用自己的 round((x+w)*s) 当右缘,col1 会越过 col2 1px,后绘制的 col2 盖掉 col1 的分隔边框 → 断线。
+  const gridColEdges = computed(() => {
+    const s = scale.value.scaleX, off = videoLeftOffset.value;
+    const lefts = [];
+    let maxRight = 0;
+    (seatList.value || []).forEach((p) => {
+      const r = p?.region;
+      if (!r) return;
+      const x = Number(r.x), w = Number(r.w);
+      const l = Math.round(x * s + off);
+      if (lefts.indexOf(l) === -1) lefts.push(l);
+      maxRight = Math.max(maxRight, Math.round((x + w) * s + off));
+    });
+    lefts.sort((a, b) => a - b);
+    return { lefts, maxRight };
+  });
+
+  // 网格所有座位的【行上缘集合】与【整网格下缘】,同理用于 calcHeightValue 的行平铺。
+  const gridRowEdges = computed(() => {
+    const s = scale.value.scaleX, off = videoTopOffset.value;
+    const tops = [];
+    let maxBottom = 0;
+    (seatList.value || []).forEach((p) => {
+      const r = p?.region;
+      if (!r) return;
+      const y = Number(r.y), h = Number(r.h);
+      const t = Math.round(y * s + off);
+      if (tops.indexOf(t) === -1) tops.push(t);
+      maxBottom = Math.max(maxBottom, Math.round((y + h) * s + off));
+    });
+    tops.sort((a, b) => a - b);
+    return { tops, maxBottom };
+  });
+
+  // 座位宽(px):
+  // - 网格模板:右缘取"下一列左缘"(无下一列则取整网格右缘)→ 每格右缘 == 邻格左缘,严格平铺,
+  //   既不漏缝也不重叠,1rpx 分隔边框不会被邻格背景盖住 → 所有格间分隔线均匀显示。
+  // - 非网格(浮窗 601 等):用"自身右边界 round − 左边界 round"(边界对齐);浮窗右对齐小窗直接 round(w*s)。
+  // 注意:region.x/y/w/h 是【字符串】,必须先 Number() 转数字——否则 x+w 会变成字符串拼接(→NaN)导致塌成 0。
+  const calcWidthValue = (participant) => {
+    if (!participant?.region) return 0;
+    const r = participant.region;
+    const rx = Number(r.x), rw = Number(r.w);
+    const s = scale.value.scaleX, off = videoLeftOffset.value;
+    const left = Math.round(rx * s + off);
+    if (isGridTemplate.value) {
+      const { lefts, maxRight } = gridColEdges.value;
+      let right = maxRight;
+      for (let i = 0; i < lefts.length; i++) {
+        if (lefts[i] > left) { right = lefts[i]; break; }
+      }
+      return right - left;
+    }
+    // 浮窗右对齐小窗:独立浮窗、无相邻座位,直接 round 宽即可(与 calculateLeftValue 分支保持一致)。
+    if (isFullscreenFloatTemplate.value && isSelfOnSeat.value && !isMainHostSeat(participant)) {
+      return Math.round(rw * s);
+    }
+    return Math.round((rx + rw) * s + off) - left;
+  };
+
+  const calcHeightValue = (participant) => {
+    if (!participant?.region) return 0;
+    const r = participant.region;
+    const ry = Number(r.y), rh = Number(r.h);
+    const s = scale.value.scaleX, off = videoTopOffset.value;
+    const top = Math.round(ry * s + off);
+    if (isGridTemplate.value) {
+      const { tops, maxBottom } = gridRowEdges.value;
+      let bottom = maxBottom;
+      for (let i = 0; i < tops.length; i++) {
+        if (tops[i] > top) { bottom = tops[i]; break; }
+      }
+      return bottom - top;
+    }
+    return Math.round((ry + rh) * s + off) - top;
+  };
+
+  // 浮窗布局(601 等非网格模板)下,region 占满整个 canvas 的座位即主播大画面,
+  // 其左下角不显示用户名胶囊。
+  const isMainHostSeat = (participant) => {
+    const c = effCanvas.value;
+    if (!c) return false;
+    return Number(participant?.region?.w) === c.w && Number(participant?.region?.h) === c.h;
   };
 
   watch(seatList, (newValue) => {
@@ -369,6 +653,11 @@
       streamViewHeight.value = systemInfo.value.windowHeight;
     }
 
+    recomputeScale();
+    // 进房期 seatList 从中间态(1)变到最终态(N)会翻转 isFillMode/scale,重置揭开计时,
+    // 保证这次翻转也盖在遮罩下(揭开后不再跳)。
+    scheduleMaskHide();
+
     console.log(`LiveStreamView: seatList change streamViewHeight: ${streamViewHeight.value}`);
   });
 
@@ -376,14 +665,22 @@
 
   // 观众模式特有的状态监听
   if (!props.isAnchor) {
-    watch(audienceConnected.value, (newVal, oldVal) => {
+    // 必须监听 ref 本身而非 .value 快照:watch(audienceConnected.value) 追踪的是
+    // 建立时的数组对象,后续 listener 整体替换 connected.value 后不再触发(失去响应),
+    // 且触发时回调参数不可靠(newVal 可能为 undefined),曾引发
+    // "Cannot read property 'length' of undefined" 全局报错。
+    watch(audienceConnected, (newVal, oldVal) => {
+      const list = Array.isArray(newVal) ? newVal : [];
       console.log(
-        `LiveStreamView: audience localStatus change, newVal: ${newVal}, oldVal: ${oldVal}, templateLayout: ${props.templateLayout}`
+        `LiveStreamView: audience connected change, len: ${list.length}, templateLayout: ${props.templateLayout}`
       );
 
-      if (newVal.length === 1) {
+      if (list.length === 1) {
         streamViewHeight.value = systemInfo.value.windowHeight;
-        console.log(`LiveStreamView: audience localStatus change streamViewHeight: ${streamViewHeight.value}`);
+        // 容器高度变化触发 SDK re-measure,进房期(遮罩未揭)重置揭开计时。
+        resetMaskTimerIfLoading();
+        recomputeScale();
+        console.log(`LiveStreamView: audience connected change streamViewHeight: ${streamViewHeight.value}`);
       }
     });
   }
@@ -391,6 +688,9 @@
   defineExpose({
     streamViewClick,
     calculateTopValue,
+    calculateLeftValue,
+    calcWidthValue,
+    calcHeightValue,
     scale,
     streamViewHeight
   });
@@ -415,10 +715,18 @@
   }
 
   .live-stream-view-background {
-    position: relative;
-    right: 0;
-    bottom: 0;
+    position: absolute;
+    left: 0;
+    top: 0;
     z-index: -1;
+  }
+
+  .live-loading-mask {
+    position: absolute;
+    left: 0;
+    top: 0;
+    background-color: #000;
+    z-index: 1;
   }
 
   .grid-image-cell {
@@ -435,7 +743,6 @@
   }
 
   .grid-content-cell {
-    flex: 1;
     position: absolute;
     border-radius: 24rpx;
     overflow: hidden;
@@ -447,23 +754,18 @@
     flex-direction: row;
     align-items: center;
     background: rgba(34, 38, 46, 0.4);
-    border-radius: 38rpx;
-    height: 36rpx;
-    padding-left: 6rpx;
-    padding-right: 12rpx;
+    border-radius: 100rpx;
+    padding-top: 4rpx;
+    padding-bottom: 4rpx;
+    padding-left: 16rpx;
+    padding-right: 16rpx;
     left: 6rpx;
     bottom: 6rpx;
-    flex: 1;
-  }
-
-  .participant-info-container.audience-mode {
-    /* 观众模式下的特殊样式 */
   }
 
   .mic-icon {
     width: 24rpx;
     height: 24rpx;
-    margin-left: 4rpx;
     background-color: rgba(34, 38, 46, 0);
   }
 
@@ -471,9 +773,7 @@
     font-size: 24rpx;
     font-weight: 500;
     color: #ffffff;
-    margin-left: 2rpx;
-    text-align: center;
-    min-width: 80rpx;
+    margin-left: 4rpx;
     lines: 1;
     text-overflow: ellipsis;
     overflow: hidden;
@@ -487,7 +787,7 @@
     justify-content: center;
   }
 
-  .participant-wait-content {
+  .participant-join-content {
     font-size: 28rpx;
     font-weight: 500;
     text-align: center;

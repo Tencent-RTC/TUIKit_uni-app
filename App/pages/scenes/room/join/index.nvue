@@ -122,7 +122,7 @@
       `autoEnableSpeaker=${isSpeakerEnabled.value ? 1 : 0}`,
     ].join('&');
     uni.navigateTo({
-      url: `/pages/scenes/room/main/index?${query}`,
+      url: `/pages/scenes/room/meeting/index?${query}`,
     });
   }
 </script>
@@ -215,6 +215,8 @@
     font-size: 32rpx;
     font-weight: 500;
     color: #1F2229;
+    lines: 1;
+    text-overflow: ellipsis;
   }
 
   .form-divider {

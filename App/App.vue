@@ -2,10 +2,12 @@
   import { loginFromStorage } from './server/loginService';
   import { initCallService } from '@/uni_modules/tuikit-atomic-x/server/callService';
   import { initRoomCallService } from '@/uni_modules/tuikit-atomic-x/server/roomCallService';
+  import { pushService } from './server/pushService';
   let firstBackTime = 0
   export default {
     onLaunch: function () {
       console.log('App Launch')
+      pushService.init();
       loginFromStorage();
       initCallService();
       initRoomCallService();
@@ -20,7 +22,7 @@
       const pages = getCurrentPages();
       if (pages.length > 0) {
         const page = pages[pages.length - 1];
-        console.error('[错误] 当前页面:', page.route, '页面实例:', page, error.name, error.message);
+        console.error('[错误] 当前页面:', page.route, '页面实例:', page, error.name, error.message, '\nstack:', error.stack);
       }
     },
     onHide: function () {
@@ -51,9 +53,6 @@
 </script>
 
 <style>
-  uni-page-body,
-  html,
-  body,
   page {
     width: 100% !important;
     height: 100% !important;

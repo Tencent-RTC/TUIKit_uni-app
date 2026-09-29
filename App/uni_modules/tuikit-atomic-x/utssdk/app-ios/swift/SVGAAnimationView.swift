@@ -16,6 +16,39 @@ public class SVGAAnimationView: UIView {
         self.svgaDelegate = delegate
     }
 
+    // 保持内部 SVGAPlayer 始终与本视图同尺寸(约束已保证,这里再兜底一次)。
+    public override func layoutSubviews() {
+        super.layoutSubviews()
+        playerView?.frame = bounds
+    }
+
+    // 确保容器已完成布局(bounds 非零)后再 setVideoItem + startAnimation。
+    // 根因:SVGAPlayer 2.5.7 在 startAnimation 时按【当时的 self.bounds】计算 aspectFit 缩放,
+    // 若此刻 bounds 为 0(nvue 尺寸 0→750rpx 的原生 relayout 尚未落地),缩放系数为 0 → 画面
+    // 不可见,且之后 bounds 变大也不会自动重算 → 表现为"部分 iPhone 机型无动画"(布局时序
+    // 竞态,与机型渲染/布局节奏相关)。此处轮询等待 bounds 非零再起播,从根上消除零尺寸起播。
+    private func startWhenSized(_ videoItem: SVGAVideoEntity?, retries: Int) {
+        guard let player = self.playerView, let videoItem = videoItem else { return }
+        if bounds.width > 0, bounds.height > 0 {
+            player.videoItem = videoItem
+            player.startAnimation()
+            return
+        }
+        if retries <= 0 {
+            // 兜底:强制布局一次后仍以当前尺寸起播,避免极端情况下永不播放。
+            setNeedsLayout()
+            layoutIfNeeded()
+            player.frame = bounds
+            player.videoItem = videoItem
+            player.startAnimation()
+            return
+        }
+        // 下一 runloop 再试(等原生 relayout 把尺寸落到 750rpx)。
+        DispatchQueue.main.async { [weak self] in
+            self?.startWhenSized(videoItem, retries: retries - 1)
+        }
+    }
+
     public func startAnimation(_ playUrl: String) {
         console.log("======startAnimation, playUrl: ", playUrl)
         guard isSVGAFile(url: playUrl) else {
@@ -67,8 +100,8 @@ public class SVGAAnimationView: UIView {
                 DispatchQueue.main.async {
                     console.error("======startAnimation begin")
                     guard let self = self else { return }
-                    self.playerView?.videoItem = videoItem
-                    self.playerView?.startAnimation()
+                    // 等容器 bounds 非零再起播(最多重试 ~20 帧),避免零尺寸起播导致无动画。
+                    self.startWhenSized(videoItem, retries: 20)
                 }
             } failureBlock: { [weak self] error in
                 DispatchQueue.main.async {

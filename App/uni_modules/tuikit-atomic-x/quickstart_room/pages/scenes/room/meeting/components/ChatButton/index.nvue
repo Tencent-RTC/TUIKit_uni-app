@@ -1,0 +1,137 @@
+<template>
+  <view class="bottom-btn" @tap="handleTap">
+    <view class="bottom-icon-box">
+      <image
+        class="bottom-icon"
+        :src="iconSrc"
+        mode="aspectFit"
+      />
+      <text class="bottom-text">聊天</text>
+    </view>
+    <view v-if="displayUnreadCount.length > 0" class="unread-badge">
+      <text class="unread-badge-text">{{ displayUnreadCount }}</text>
+    </view>
+  </view>
+</template>
+
+<script setup lang="ts">
+  import { computed, watch, nextTick } from 'vue';
+  import {
+    getUnreadCount,
+    ensureChatUnreadSubscription,
+    setChatPanelOpen,
+    disposeChatUnread,
+  } from './chatUnreadStore';
+
+  const props = withDefaults(defineProps<{
+    roomID?: string;
+    isChatPanelOpen?: boolean;
+  }>(), {
+    roomID: '',
+    isChatPanelOpen: false,
+  });
+
+  const emit = defineEmits<{
+    (e: 'click', payload: { roomID: string }): void;
+  }>();
+
+  const iconSrc = '/static/images/room/room_chat.png';
+
+  const conversationID = computed<string>(() =>
+    props.roomID.length > 0 ? `group_${props.roomID}` : ''
+  );
+
+  watch(
+    conversationID,
+    (newID: string, oldID: string | undefined) => {
+      if (oldID != null && oldID.length > 0 && oldID !== newID) {
+        disposeChatUnread(oldID);
+      }
+      ensureChatUnreadSubscription(newID);
+    },
+    { immediate: true }
+  );
+
+  watch(
+    () => props.isChatPanelOpen,
+    (isOpen: boolean) => {
+      const id = conversationID.value;
+      if (id.length === 0) return;
+
+      const open = isOpen ?? false;
+      setChatPanelOpen(id, open);
+      if (open) return;
+
+      nextTick(() => {
+        ensureChatUnreadSubscription(id);
+      });
+    }
+  );
+
+  const displayUnreadCount = computed<string>(() => {
+    const count = getUnreadCount(conversationID.value);
+    if (count <= 0) return '';
+    if (count > 99) return '99+';
+    return String(count);
+  });
+
+  function handleTap(): void {
+    if (props.roomID.length === 0) return;
+    emit('click', { roomID: props.roomID });
+  }
+</script>
+
+<style>
+  .bottom-btn {
+    position: relative;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    overflow: visible;
+  }
+
+  .bottom-icon-box {
+    position: relative;
+    width: 104rpx;
+    height: 104rpx;
+    border-radius: 20rpx;
+    background-color: #2A2D38;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    overflow: visible;
+  }
+
+  .bottom-icon {
+    width: 48rpx;
+    height: 48rpx;
+  }
+
+  .bottom-text {
+    color: #FFFFFF;
+    font-size: 20rpx;
+    margin-top: 6rpx;
+    lines: 1;
+    text-overflow: ellipsis;
+  }
+
+  .unread-badge {
+    position: absolute;
+    top: 8rpx;
+    right: 10rpx;
+    min-width: 32rpx;
+    height: 32rpx;
+    padding: 0 4rpx;
+    border-radius: 16rpx;
+    background-color: #FF3B30;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .unread-badge-text {
+    color: #FFFFFF;
+    font-size: 20rpx;
+    line-height: 32rpx;
+    text-align: center;
+  }
+</style>

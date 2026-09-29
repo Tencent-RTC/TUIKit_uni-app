@@ -1,0 +1,601 @@
+<template>
+  <view v-if="everMounted">
+    <!-- 单一全屏容器：mask（底层子）+ drawer 主体（上层子）都放进这一个 container。
+         这样每个 BaseDrawer 实例的 mask 与其 drawer 主体【层级绑定在同一容器内】，
+         多个 drawer 实例平级共存时不会出现“A 的 mask 被 B 的 container 盖住”导致的
+         mask 消失/闪动。打开时整体抬高 z-index(zIndexStyle)，保证当前 drawer 在最上。
+         层级关系：mask 盖住送礼入场条，drawer 主体在 mask 之上。 -->
+    <view class="bottom-drawer-container" :userInteractionEnabled="visible" :style="[containerStyle, zIndexStyle]">
+      <!-- 遮罩：本容器内最底层，点击关闭。占满容器（全屏）。 -->
+      <view class="drawer-mask" ref="overlayRef" @tap="onOverlayTap"></view>
+      <!-- wrapper 承担滑入(translateY)动画，由 nvue 原生 animation 模块驱动。
+           translateX 左移拆到内层 shift-wrapper，避免组合 transform。
+           @tap.stop：点面板主体不冒泡到 mask，避免误关。
+           下拖关闭手势不绑在这里(整个面板都响应会与内容区滚动/按钮冲突),
+           只绑在下方 .drawer-handle(顶部短横线)上——只有按住短横线下拖才触发。 -->
+      <view class="drawer-wrapper" ref="wrapperRef" @tap.stop
+        :style="wrapperStyle">
+        <view class="drawer-shift-wrapper" ref="shiftWrapperRef" :style="wrapperStyle">
+        <!-- 顶部外发光（drawer 周围的蓝色柔光）。
+             在 bottom-drawer 之外，不被其 overflow:hidden 裁剪，随 wrapper 一起动画。
+             nvue 纯 CSS 无法做自然柔光，故用带高斯模糊、无边界的 PNG 光晕图（drawer-glow.png）。
+             图片"中间"（最亮处）对齐 drawer 顶部：图片向下移半张高度。放在 drawer 之前渲染，
+             使光晕层级在面板下方——面板盖住光晕下半，只露出顶边往上的柔光，更自然。 -->
+        <image
+          v-if="showGlow"
+          class="drawer-glow"
+          src="/uni_modules/tuikit-atomic-x/static/assets/live/drawer-glow.png"
+          mode="scaleToFill"
+          :style="glowStyle"
+        />
+        <view class="bottom-drawer" :style="drawerStyle">
+          <!-- 背景图（可选，bgImage 为空时不渲染） -->
+          <image
+            v-if="bgImage"
+            class="drawer-bg-image"
+            :src="bgImage"
+            mode="scaleToFill"
+            :style="bgImageStyle"
+          />
+          <!-- 内容层（覆盖在背景之上） -->
+          <view class="drawer-content" :style="contentStyle">
+            <!-- 拖拽 handle（可通过 showHandle 关闭）:下拖关闭手势的【唯一】触发区,
+                 手势回调绑在此处(见 onHandleTouch* 注释)——内容区拖动不再误触发。
+                 外层为满宽×56rpx 的触摸热区(纯视觉短横线太小不好按),内层为视觉小横条。 -->
+            <view v-if="showHandle" class="drawer-handle"
+              @touchstart="onHandleTouchStart"
+              @touchmove="onHandleTouchMove"
+              @touchend="onHandleTouchEnd"
+              @touchcancel="onHandleTouchEnd"
+            >
+              <view class="drawer-handle-bar"></view>
+            </view>
+            <!-- 默认 slot：接收各面板的内容 -->
+            <slot></slot>
+          </view>
+        </view>
+        </view>
+      </view>
+    </view>
+  </view>
+</template>
+
+<script setup lang="ts">
+  import { ref, watch, nextTick, computed, onMounted, onUnmounted } from 'vue';
+
+  // nvue 原生 animation 模块：直接对元素 ref 执行 transform 动画，
+  // 不依赖 CSS transition，避免 nvue class/内联 style 切换时的动画停顿问题。
+  const animation = (uni as any).requireNativePlugin('animation');
+
+  const props = defineProps({
+    // v-model 控制显隐
+    modelValue: {
+      type: Boolean,
+      default: false
+    },
+    // 抽屉高度（rpx）
+    height: {
+      type: Number,
+      default: 500
+    },
+    // 圆角（rpx）。顶部两角 52rpx（border-radius: 52rpx 52rpx 0 0）。
+    borderRadius: {
+      type: Number,
+      default: 52
+    },
+    // 遮罩透明度（0-1）
+    overlayOpacity: {
+      type: Number,
+      default: 0.4
+    },
+    // 背景图路径（可选，为空时不渲染背景图）
+    bgImage: {
+      type: String,
+      default: ''
+    },
+    // 是否显示拖拽 handle
+    showHandle: {
+      type: Boolean,
+      default: true
+    },
+    // 背景图原始高度（rpx）。图片顶部对齐 drawer 顶部，按图片原始高度渲染，
+    // 超出 drawer 高度的部分由 overflow:hidden 从底部裁掉。这样不同高度的 drawer
+    // 共用同一张背景图，各自只显示图片顶部对应高度的部分。
+    bgImageHeight: {
+      type: Number,
+      default: 0
+    },
+    // 内容区内边距（rpx，格式 "top right bottom left"）
+    padding: {
+      type: String,
+      default: '0 32rpx 44rpx 32rpx'
+    },
+    // 是否横向左移隐藏（用于二级面板横向滑页时，让本 drawer 向左滑出）。
+    // 效果为 transform: translateX(-100%)。
+    shiftLeft: {
+      type: Boolean,
+      default: false
+    },
+    // 是否显示顶部外发光光晕（drawer 周围的蓝色柔光）。
+    showGlow: {
+      type: Boolean,
+      default: true
+    },
+    // 光晕图高度（rpx）。对应 drawer-glow.png 画布高度（750×160），
+    // 是一团经高斯模糊、无边界的柔和雾状蓝光；中间(最亮线)对齐 drawer 顶部,向上柔和淡出。
+    glowHeight: {
+      type: Number,
+      default: 160
+    },
+    // 是否启用「空闲预挂载」：组件挂载后延迟 preloadDelay 悄悄把 DOM 挂载好（不可见、不拦截），
+    // 使【首次】点击也无挂载渲染阻塞、动画秒开（内容重的面板如礼物面板尤其受益）。默认开启。
+    preload: {
+      type: Boolean,
+      default: true
+    },
+    // 是否启用底部安全区自适应:开启后 drawer 实际高度 = height + 底部安全区高
+    // (safeAreaInsets.bottom,换算 rpx)。drawer 背景延伸进手势条/虚拟导航键
+    // 区域(视觉仍贴屏底),内容与屏幕底部的间距自动多出安全区高度——修复
+    // "矮面板(如更多面板)底部文案在部分机型上太贴近屏幕底部"的问题。
+    // height prop 语义保持"内容区高度"不变,调用方无需感知安全区。
+    useSafeBottom: {
+      type: Boolean,
+      default: false
+    },
+    // 预挂载延迟（ms）。等进房/首屏渲染完的空闲期再挂载，避免与首屏渲染争抢、拖慢进房。
+    preloadDelay: {
+      type: Number,
+      default: 800
+    }
+  });
+
+  const emit = defineEmits(['update:modelValue', 'overlayTap']);
+
+  // 挂载模型（预挂载优化）：
+  //  - everMounted：是否曾经打开过。首次打开置 true 后永久保持，配合 v-if 让 DOM 首次挂载后【常驻】，
+  //    后续打开不再重新挂载渲染重内容（如礼物网格全部图片），消除「点击后等内容渲染完动画才启动」的卡顿。
+  //  - visible：当前是否可见。控制隐藏态时容器不可见且不拦截触摸，避免常驻的满屏 overlay 关闭后遮挡下方交互。
+  const everMounted = ref(false);
+  const visible = ref(false);
+  const wrapperRef = ref<any>(null);
+  const overlayRef = ref<any>(null);
+  const shiftWrapperRef = ref<any>(null);
+  let closeTimer: any = null;
+  // 打开时间戳与保护窗口：防止“打开那次点击穿透到全屏 container 的 @tap 导致立即关闭”。
+  let openedAt = 0;
+  const OPEN_GUARD_MS = 400;
+
+  const ANIM_DURATION = 320;
+  const ANIM_TIMING = 'cubic-bezier(0.32, 0.72, 0, 1)';
+
+  // 底部安全区高(rpx):useSafeBottom 时叠加到 drawer 实际高度。
+  // safeAreaInsets.bottom 为 px(手势条/虚拟导航键高度,无则 0),按 750 基准换算 rpx。
+  // 【保底 60rpx】:安卓上 safeAreaInsets 普遍不可靠——手势导航机型常返回 0,
+  // 但底部系统手势条实际存在并压在 app 内容上(iOS 沉浸式则稳定返回真实值)。
+  // 取「实测 inset 与保底值」较大者,保证无安全区数据时仍有最小呼吸间距,
+  // 双端视觉一致(实测 61rpx 的 iOS 与保底 60rpx 的安卓最终高度几乎相同)。
+  const SAFE_BOTTOM_MIN_RPX = 60;
+  const safeBottomRpx = ref(0);
+  const totalHeightRpx = computed(() => props.height + safeBottomRpx.value);
+
+  // 容器样式：隐藏态（visible=false）用 visibility:hidden——nvue 里 visibility:hidden 的元素
+  // 既不可见也不接收触摸事件（nvue 不支持 CSS pointer-events，用 visibility + overlay 的
+  // userInteractionEnabled 组合来保证隐藏后不遮挡下方交互）。
+  const containerStyle = computed(() => {
+    return visible.value
+      ? { visibility: 'visible' }
+      : { visibility: 'hidden' };
+  });
+
+  // 当前打开的 drawer 整体抬高 z-index，确保其 mask+主体盖在其他已挂载(常驻)但未显示的
+  // drawer 之上，避免旧 drawer 的容器盖住新 drawer 的 mask。关闭后恢复基础层级。
+  const zIndexStyle = computed(() => {
+    return visible.value ? { zIndex: 2680 } : { zIndex: 2600 };
+  });
+
+  // wrapper 动态样式：只含高度，transform 由 animation 模块驱动（非 CSS）。
+  const wrapperStyle = computed(() => {
+    const glow = props.showGlow ? props.glowHeight / 2 : 0;
+    return {
+      height: (totalHeightRpx.value + glow) + 'rpx'
+    };
+  });
+
+  // shift-wrapper 的 translateX 由 nvue 原生 animation 模块驱动（非 CSS class 切换）。
+  // 左移隐藏时 transform: translateX(-100%)。
+  // 不用 watch 自动触发，而是暴露 animateShift 方法让外部控制时机，
+  // 确保与 detail 层的滑入/滑出动画同步执行。
+  const SHIFT_DURATION = 340;
+  const SHIFT_TIMING = 'cubic-bezier(0.32, 0.72, 0, 1)';
+
+  function animateShift(shifted: boolean) {
+    const el = shiftWrapperRef.value;
+    if (!el) return;
+    animation.transition(el, {
+      styles: { transform: shifted ? 'translateX(-100%)' : 'translateX(0)' },
+      duration: SHIFT_DURATION,
+      timingFunction: SHIFT_TIMING
+    });
+  }
+
+  // 抽屉主体动态样式（高度 + 圆角）。transform 由 wrapper 统一控制。
+  const drawerStyle = computed(() => {
+    return {
+      height: totalHeightRpx.value + 'rpx',
+      borderTopLeftRadius: props.borderRadius + 'rpx',
+      borderTopRightRadius: props.borderRadius + 'rpx'
+    };
+  });
+
+  // 内容层动态样式（padding）
+  const contentStyle = computed(() => ({
+    padding: props.padding
+  }));
+
+  // 顶部外发光图样式：满宽，图片"中间"（最亮处）对齐 drawer 顶部。
+  // 即图片向下移半张高度：bottom = drawer 高度 - glowHeight/2，
+  // 下半叠在 drawer 顶部、上半露在 drawer 上方，光从顶部边缘向上下自然发散。
+  const glowStyle = computed(() => {
+    return {
+      left: '0',
+      width: '750rpx',
+      bottom: (props.height - props.glowHeight / 2) + 'rpx',
+      height: props.glowHeight + 'rpx'
+    };
+  });
+
+  // 背景图动态样式：
+  // - 图片顶部对齐 drawer 顶部（top:0），高度用图片原始高度 bgImageHeight，
+  //   超出 drawer 高度的部分由 overflow:hidden 裁掉（从顶部往下按drawer 高度裁切）。
+  // - bgImageHeight 未指定（0）时，退化为填满 drawer。
+  // - 圆角：nvue 中 overflow:hidden 不会裁剪绝对定位子 image 的圆角，
+  //   因此背景图顶部两角需自身带圆角，与 drawer 顶部圆角对齐。
+  const bgImageStyle = computed(() => {
+    const imgHeight = props.bgImageHeight > 0 ? props.bgImageHeight : props.height;
+    return {
+      top: '0',
+      height: imgHeight + 'rpx',
+      borderTopLeftRadius: props.borderRadius + 'rpx',
+      borderTopRightRadius: props.borderRadius + 'rpx'
+    };
+  });
+
+  // 监听 modelValue 变化，驱动打开/关闭动画。
+  // 双端统一使用 nvue 原生 animation 模块驱动 transform。
+  //
+  // 【预挂载优化】DOM 首次打开挂载后常驻（everMounted），后续打开只置 visible=true 并直接播滑入动画，
+  // 不再重新挂载渲染重内容，消除「点击后等内容渲染完动画才启动」的卡顿（礼物面板尤其明显）。
+  //
+  // wrapper 初始隐藏位由 CSS 提供（transform: translateY(100%)）；打开动画在 runOpenAnimation 里
+  // 先 duration:0 把起点交给 animation 模块（Android 需要，否则从 CSS transform 起插值会异常），
+  // 再同步发滑入动画。
+  watch(() => props.modelValue, (val) => {
+    if (val) {
+      // 打开
+      clearTimeout(closeTimer);
+      openedAt = Date.now(); // 记录打开时刻，用于 onOverlayTap 的打开保护窗口
+      visible.value = true;
+      if (!everMounted.value) {
+        // 首次打开：挂载 DOM，等挂载完成再播滑入动画。
+        everMounted.value = true;
+        nextTick(() => {
+          tryOpenAnimation();
+        });
+      } else {
+        // 已挂载：DOM 常驻，直接播滑入动画，无挂载阻塞。
+        // 仍用 nextTick 确保 visible 引起的 containerStyle（pointerEvents/opacity）已应用。
+        nextTick(() => {
+          tryOpenAnimation();
+        });
+      }
+    } else {
+      // 关闭：播滑出动画，动画结束后置 visible=false（容器变透明 + 不拦截触摸），但【不卸载 DOM】。
+      clearTimeout(closeTimer);
+      const wrapper = wrapperRef.value;
+      const overlay = overlayRef.value;
+      if (wrapper) {
+        animation.transition(wrapper, {
+          styles: { transform: 'translateY(100%)' },
+          duration: ANIM_DURATION,
+          timingFunction: ANIM_TIMING
+        });
+      }
+      if (overlay) {
+        animation.transition(overlay, {
+          styles: { backgroundColor: 'rgba(0, 0, 0, 0)' },
+          duration: ANIM_DURATION,
+          timingFunction: 'ease'
+        });
+      }
+      closeTimer = setTimeout(() => {
+        visible.value = false;
+      }, ANIM_DURATION);
+    }
+  });
+
+  // 确认 wrapper ref 拿到后执行滑入动画。
+  function tryOpenAnimation(retries = 0) {
+    const wrapper = wrapperRef.value;
+    if (!wrapper) {
+      if (retries < 10) setTimeout(() => tryOpenAnimation(retries + 1), 16);
+      return;
+    }
+    runOpenAnimation(wrapper);
+  }
+
+  // 执行滑入动画。
+  //
+  // 【性能优化】关键是不再「先 duration:0 设隐藏位、等其 callback 再发滑入」——
+  // animation 模块的 callback 是 JS↔原生桥接的异步回调，一来一回常有几十~上百 ms 延迟，
+  // 表现为「点击后顿一下 drawer 才开始滑」。
+  //
+  // 改为同步连发两个 transition：先 duration:0 把起点交给 animation 模块（Android 需要，
+  // 否则从 CSS 的 translateY(100%) 起插值会异常、wrapper 停在屏幕外），紧接着同步发滑入动画。
+  // 两个调用都同步排队进原生动画队列，不依赖桥接 callback，既保留 Android 正确性又消除等待延迟。
+  function runOpenAnimation(wrapper: any) {
+    animation.transition(wrapper, {
+      styles: { transform: 'translateY(100%)' },
+      duration: 0,
+      timingFunction: 'linear'
+    });
+    animation.transition(wrapper, {
+      styles: { transform: 'translateY(0)' },
+      duration: ANIM_DURATION,
+      timingFunction: ANIM_TIMING
+    });
+    const overlay = overlayRef.value;
+    if (overlay) {
+      animation.transition(overlay, {
+        styles: { backgroundColor: `rgba(0, 0, 0, ${props.overlayOpacity})` },
+        duration: ANIM_DURATION,
+        timingFunction: 'ease'
+      });
+    }
+  }
+
+  // 遮罩层点击：触发关闭
+  function onOverlayTap() {
+    // 打开保护窗口：打开 drawer 的那次点击(点 icon/列表项)在 iOS 上可能穿透到刚渲染出来的
+    // 全屏 container 的 @tap 上，导致 drawer 一出现就被立即关闭(表现为“mask 闪一下就消失”)。
+    // 故打开后极短时间内忽略 overlay/container 的 tap。
+    if (Date.now() - openedAt < OPEN_GUARD_MS) {
+      return;
+    }
+    emit('overlayTap');
+    emit('update:modelValue', false);
+  }
+
+  // ── 下拖关闭手势(仅限顶部 handle 触发) ─────────────────────────────────────
+  // 行为:按住【顶部短横线 handle】向下拖,面板实时跟手(translateY 跟随,只响应向下位移);
+  // 松手时累计位移 ≥ 阈值触发关闭(关闭动画从当前拖拽位平滑滑出),否则弹回原位。
+  // 手势只绑在 .drawer-handle 上——内容区拖动/滚动不再误触发 drawer 拖拽
+  // (此前绑在整个 wrapper 上,面板任意位置下拖都会拖动 drawer,与内容交互冲突)。
+  // 【坐标必须用 screenY,不能用 pageY】:weex 的 pageY 坐标系会跟随 view 的
+  // transform——iOS 上只跟随【绑定元素自身】(handle 自身无 transform,祖先
+  // wrapper 的位移不影响),但安卓上连【祖先】wrapper 的 translateY 也计入:
+  // 拖动激活 → wrapper 下移 applyY → pageY 坐标系跟着下移 → fingerDelta 变负 →
+  // clamp 到 0 → wrapper 弹回 → 坐标系恢复 → 又拖下去 → 又弹回……形成无限振荡,
+  // 即安卓上「往下拖动后频繁抖动」的根因。screenY 是物理屏幕坐标,不受任何
+  // view transform 影响,双端语义一致(作差时状态栏偏移自动抵消)。
+  const DISMISS_THRESHOLD_PX = 88;
+  const DRAG_ACTIVATE_PX = 16;
+  // 阈值随面板高度自适应:矮面板(如更多面板仅 ~111pt)若仍要求拖 88px(近 80% 面板高),
+  // 手指还没拖够就已触到屏幕底边缘、手势中断,导致永远无法拖够阈值收起。
+  // 故取「88px 与面板高 1/3」中的较小者:矮面板拖 1/3 高即可关,高面板保持 88px。
+  const dismissThresholdPx = () =>
+    Math.min(DISMISS_THRESHOLD_PX, Math.round(uni.upx2px(totalHeightRpx.value) / 3));
+  let dragStartY = 0;
+  let dragOffsetY = 0;
+  let dragActive = false;
+  let dragAppliedY = 0;
+  // touch 坐标统一取 screenY(物理屏幕坐标,见上方手势注释);旧字段兜底。
+  const touchScreenY = (t: any): number => t?.screenY ?? t?.pageY ?? 0;
+
+  const onHandleTouchStart = (e: any) => {
+    if (!visible.value) return;
+    const t = e?.touches?.[0];
+    if (t == null) return;
+    dragStartY = touchScreenY(t);
+    dragOffsetY = 0;
+    dragActive = false;
+    dragAppliedY = 0;
+  };
+
+  const onHandleTouchMove = (e: any) => {
+    if (!visible.value) return;
+    const t = e?.touches?.[0];
+    if (t == null) return;
+    // screenY 直接作差,【不要】加 dragAppliedY 补偿(坐标系不随 wrapper 移动,
+    // 再加补偿会每帧叠加形成指数放大——实测过的 bug,见上方注释)。
+    const fingerDelta = touchScreenY(t) - dragStartY;
+    if (!dragActive) {
+      // 向下未超激活阈值不接管(向上 fingerDelta<0 永不激活)。
+      if (fingerDelta < DRAG_ACTIVATE_PX) return;
+      dragActive = true;
+    }
+    dragOffsetY = Math.max(0, fingerDelta);
+    // 跟手位移(瞬时)。位移变化 < 2px 跳过,降低 animation 桥接调用频率。
+    const applyY = Math.round(dragOffsetY);
+    if (Math.abs(applyY - dragAppliedY) < 2) return;
+    dragAppliedY = applyY;
+    animation.transition(wrapperRef.value, {
+      styles: { transform: `translateY(${applyY}px)` },
+      duration: 0,
+      timingFunction: 'linear'
+    });
+  };
+
+  const onHandleTouchEnd = () => {
+    if (!dragActive) {
+      dragActive = false;
+      return;
+    }
+    dragActive = false;
+    const dismiss = dragOffsetY >= dismissThresholdPx();
+    dragOffsetY = 0;
+    dragAppliedY = -1;
+    if (dismiss) {
+      // 超阈值:走标准关闭流程;关闭动画(translateY(100%))从当前拖拽位起插值,平滑滑出。
+      emit('update:modelValue', false);
+    } else {
+      // 未超阈值:弹回原位。
+      animation.transition(wrapperRef.value, {
+        styles: { transform: 'translateY(0)' },
+        duration: 200,
+        timingFunction: 'ease-out'
+      });
+    }
+  };
+
+  // 空闲预挂载：把 DOM 静默挂载好（everMounted=true），但 visible 保持 false
+  // → containerStyle 为 visibility:hidden、overlay userInteractionEnabled=false，
+  // 不可见、不拦截、不播动画。首次真正点击时 DOM 已就绪，只走滑入动画，秒开。
+  // 已经挂载过（曾打开或已预挂载）则无需重复。
+  function preloadNow() {
+    if (everMounted.value) return;
+    everMounted.value = true;
+    // 挂载后确保 wrapper 停在隐藏位（CSS 已给 translateY(100%)，此处不额外播动画）。
+  }
+
+  let preloadTimer: any = null;
+  onMounted(() => {
+    // 底部安全区高(px→rpx):仅 useSafeBottom 时计算。getSystemInfoSync 的
+    // safeAreaInsets.bottom 在有手势条(iPhone X+)或虚拟导航键(部分安卓)的
+    // 机型上 >0,其余机型为 0(高度不变,零影响)。
+    if (props.useSafeBottom) {
+      try {
+        const sys: any = uni.getSystemInfoSync();
+        const insetBottom = sys?.safeAreaInsets?.bottom || 0;
+        const insetRpx = (insetBottom > 0 && sys?.windowWidth > 0)
+          ? Math.round(insetBottom * 750 / sys.windowWidth)
+          : 0;
+        // 实测安全区与保底值取大(见 SAFE_BOTTOM_MIN_RPX 注释)。
+        safeBottomRpx.value = Math.max(insetRpx, SAFE_BOTTOM_MIN_RPX);
+      } catch (e) { /* ignore */ }
+    }
+    if (!props.preload) return;
+    // 延迟到进房/首屏渲染完的空闲期再挂载，避免与首屏争抢渲染、拖慢进房。
+    preloadTimer = setTimeout(() => {
+      preloadTimer = null;
+      preloadNow();
+    }, props.preloadDelay);
+  });
+
+  onUnmounted(() => {
+    if (closeTimer != null) { clearTimeout(closeTimer); closeTimer = null; }
+    if (preloadTimer != null) { clearTimeout(preloadTimer); preloadTimer = null; }
+  });
+
+  defineExpose({
+    animateShift,
+    preloadNow,
+  });
+</script>
+
+<style>
+  /* 全屏容器：基础 z-index 2600（CSS 固定值，nvue 对内联 z-index 支持不稳，必须在 CSS 里给
+     可靠的基础层级），> 送礼入场条常态(2400)，保证 drawer 打开时盖住入场条。
+     内联 zIndexStyle 在此基础上对“当前打开的 drawer”再抬高，盖过其他常驻 drawer。 */
+  .bottom-drawer-container {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 2600;
+  }
+
+  /* 遮罩层：容器内 absolute 铺满，是容器内最底层子（在 drawer 主体之下）。
+     背景色由 animation 模块经 overlayRef 驱动（渐显/渐隐）。
+     现在 mask 与 drawer 主体同属一个 container，层级绑定，不会被其他 drawer 的容器拆散/遮挡。 */
+  .drawer-mask {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0);
+  }
+
+  /* wrapper：贴底、满宽。transform 主要由 animation 模块驱动（双端一致）。
+     CSS 里设初始 transform: translateY(100%) 作为「首帧隐藏位」——
+     否则挂载首帧会以 translateY(0)（完全展开）渲染一帧，再被 animation 设回隐藏位，
+     造成打开时「闪到终点再回到起点向上滑」的瑕疵。 */
+  .drawer-wrapper {
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    width: 750rpx;
+    transform: translateY(100%);
+  }
+
+  /* 内层 shift-wrapper：承担 translateX 左移动画，由 animation 模块驱动（非 CSS）。
+     必须显式设 height（由内联 wrapperStyle 提供）——nvue(weex) 在 Android 上，
+     absolute 定位元素不会像 Web 那样靠 bottom:0 撑开高度，缺省时高度塌陷为 0，
+     导致其内部 absolute 子节点(.bottom-drawer)定位父级高度为 0 而整体不可见。
+     transform 不写在 CSS，交给 animation 模块掌管（同 wrapper），避免 Android 插值异常。 */
+  .drawer-shift-wrapper {
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    width: 750rpx;
+  }
+
+  /* 抽屉主体：在 wrapper 内贴底，自身不做位移动画（由 wrapper 统一控制）。 */
+  .bottom-drawer {
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    width: 750rpx;
+    /* 兜底实色，避免 PNG 加载延迟时透出 */
+    background-color: #0a090e;
+    overflow: hidden;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  /* 背景图：绝对定位，top/height 由内联 style（bgImageStyle）控制 */
+  .drawer-bg-image {
+    position: absolute;
+    left: 0;
+    width: 750rpx;
+  }
+
+  /* 内容层：覆盖在背景图之上，透明背景。flex:1 撑满 drawer 主体高度，让内部子组件能通过
+     自身 flex 属性分配空间（比如 GiftPicker 里的滚动区通过 flex:1 占满剩余高度）。 */
+  .drawer-content {
+    position: relative;
+    flex: 1;
+    width: 750rpx;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  /* 顶部外发光图：绝对定位，满宽，底部对齐 drawer 顶部。left/width/bottom/height 由内联 style 控制。
+     图片自带径向渐变+柔和边缘，向上、向两端自然淡出，无可见边界。 */
+  .drawer-glow {
+    position: absolute;
+  }
+
+  /* 拖拽 handle 触摸热区：满宽 × 56rpx(手势唯一触发区,放大热区保证好按;
+     透明无视觉)。内部 .drawer-handle-bar 是视觉短横线(72×8rpx)。 */
+  .drawer-handle {
+    width: 750rpx;
+    height: 56rpx;
+    justify-content: center;
+    align-items: center;
+    margin-top: 4rpx;
+    margin-bottom: 16rpx;
+  }
+
+  /* 视觉短横线：72×8rpx，rgba(255,255,255,0.2)。 */
+  .drawer-handle-bar {
+    width: 72rpx;
+    height: 8rpx;
+    border-top-left-radius: 4rpx;
+    border-top-right-radius: 4rpx;
+    border-bottom-left-radius: 4rpx;
+    border-bottom-right-radius: 4rpx;
+    background-color: rgba(255, 255, 255, 0.2);
+  }
+</style>

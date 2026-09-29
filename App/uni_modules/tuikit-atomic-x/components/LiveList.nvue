@@ -103,7 +103,7 @@
             if (isVoiceRoom) {
               openLocalMicrophone();
               uni.redirectTo({
-                url: '/pages/scenes/live/VoiceAnchor/VoiceAnchor?isLiving=true'
+                url: '/pages/scenes/live/voice/pusher/index?isLiving=true'
               });
             } else {
               openLocalCamera({
@@ -111,7 +111,7 @@
               });
               openLocalMicrophone();
               uni.redirectTo({
-                url: '/pages/scenes/live/anchor/index?isLiving=true'
+                url: '/pages/scenes/live/video/pusher/index?isLiving=true'
               });
             }
           }
@@ -121,11 +121,11 @@
 
       if (isVoiceRoom) {
         uni.redirectTo({
-          url: `/pages/scenes/live/VoiceAudience/VoiceAudience?liveID=${live.liveID}`
+          url: `/pages/scenes/live/voice/player/index?liveID=${live.liveID}`
         });
       } else {
         uni.redirectTo({
-          url: `/pages/scenes/live/audience/index?liveID=${live.liveID}`
+          url: `/pages/scenes/live/video/player/index?liveID=${live.liveID}`
         });
       }
     } catch (error) {

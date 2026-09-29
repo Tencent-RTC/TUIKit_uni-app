@@ -1,0 +1,383 @@
+<template>
+  <Drawer
+    :visible="visible"
+    @close="handleCancel"
+  >
+    <view class="picker-header">
+      <view class="header-btn header-btn-left" @tap="handleCancel">
+        <image class="header-icon" src="/uni_modules/tuikit-atomic-x/static/room/room_collapse.png" mode="aspectFit" />
+      </view>
+      <text class="picker-title">{{ title }}</text>
+      <view class="header-btn header-btn-right" @tap="handleConfirm">
+        <image class="header-icon" src="/uni_modules/tuikit-atomic-x/static/room/room_schedule_selected.png" mode="aspectFit" />
+      </view>
+    </view>
+
+    <view class="picker-area">
+      <view class="picker-highlight"></view>
+
+      <scroll-view
+        class="column"
+        scroll-y
+        :scroll-into-view="dateScrollId"
+        :show-scrollbar="false"
+        @scroll="onDateScroll"
+      >
+        <view
+          v-for="(d, idx) in dateLoopList"
+          :key="`d-${idx}`"
+          :id="`d-${idx}`"
+          class="cell"
+        >
+          <text
+            class="cell-text"
+            :class="idx === dateActiveIdx ? 'text-active' : (idx === dateActiveIdx - 1 || idx === dateActiveIdx + 1 ? 'text-near' : 'text-far')"
+          >{{ d }}</text>
+        </view>
+      </scroll-view>
+
+      <scroll-view
+        class="column"
+        scroll-y
+        :scroll-into-view="hourScrollId"
+        :show-scrollbar="false"
+        @scroll="onHourScroll"
+      >
+        <view
+          v-for="(h, idx) in hourLoopList"
+          :key="`h-${idx}`"
+          :id="`h-${idx}`"
+          class="cell"
+        >
+          <text
+            class="cell-num"
+            :class="idx === hourActiveIdx ? 'text-active' : (idx === hourActiveIdx - 1 || idx === hourActiveIdx + 1 ? 'text-near' : 'text-far')"
+          >{{ h }}</text>
+        </view>
+      </scroll-view>
+
+      <scroll-view
+        class="column"
+        scroll-y
+        :scroll-into-view="minuteScrollId"
+        :show-scrollbar="false"
+        @scroll="onMinuteScroll"
+      >
+        <view
+          v-for="(m, idx) in minuteLoopList"
+          :key="`m-${idx}`"
+          :id="`m-${idx}`"
+          class="cell"
+        >
+          <text
+            class="cell-num"
+            :class="idx === minuteActiveIdx ? 'text-active' : (idx === minuteActiveIdx - 1 || idx === minuteActiveIdx + 1 ? 'text-near' : 'text-far')"
+          >{{ m }}</text>
+        </view>
+      </scroll-view>
+    </view>
+
+    <view class="bottom-safe"></view>
+  </Drawer>
+</template>
+
+<script setup lang="ts">
+  import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue';
+  import Drawer from '@/uni_modules/tuikit-atomic-x/components/Drawer/index.nvue';
+
+  const title = '选择开始时间';
+
+  const CELL_HEIGHT_RPX = 88;
+  const CENTER_OFFSET = 2;
+
+  const DATE_RANGE_DAYS = 365;
+  const HOUR_ROUNDS = 9;
+  const HOUR_MID_ROUND = 4; 
+  const MINUTE_ROUNDS = 18;
+  const MINUTE_MID_ROUND = 8;
+  const SAFE_ROUNDS = 2;
+
+  const MINUTE_STEP = 5;
+  const weekNames = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+
+  const props = defineProps({
+    visible: { type: Boolean, default: false },
+    timestamp: { type: Number, default: 0 },
+  });
+
+  const emit = defineEmits<{
+    (e: 'cancel'): void;
+    (e: 'confirm', timestamp: number): void;
+  }>();
+
+  function pad2(n: number): string {
+    return n < 10 ? `0${n}` : String(n);
+  }
+
+  function getTodayStart(): number {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d.getTime();
+  }
+
+  const cellHeightPx = ref<number>(44);
+  onMounted(() => {
+    uni.getSystemInfo({
+      success: (res: any) => {
+        const w = (res?.screenWidth ?? 375) as number;
+        if (w > 0) cellHeightPx.value = (CELL_HEIGHT_RPX / 750) * w;
+      },
+    });
+  });
+
+  function buildDayList(days: number): string[] {
+    const base = getTodayStart();
+    const out: string[] = [];
+    for (let i = 0; i < days; i++) {
+      const d = new Date(base + i * 24 * 60 * 60 * 1000);
+      const dateText = `${pad2(d.getMonth() + 1)}月${pad2(d.getDate())}日`;
+      if (i === 0) out.push(`今天 ${dateText}`);
+      else if (i === 1) out.push(`明天 ${dateText}`);
+      else out.push(`${dateText} ${weekNames[d.getDay()]}`);
+    }
+    return out;
+  }
+  function buildLoopList(base: number[], rounds: number): number[] {
+    const list: number[] = [];
+    for (let r = 0; r < rounds; r++) for (let i = 0; i < base.length; i++) list.push(base[i]);
+    return list;
+  }
+  function buildHourList(): number[] {
+    const list: number[] = [];
+    for (let h = 0; h < 24; h++) list.push(h);
+    return list;
+  }
+  function buildMinuteList(): number[] {
+    const list: number[] = [];
+    for (let m = 0; m < 60; m += MINUTE_STEP) list.push(m);
+    return list;
+  }
+
+  const dateLoopList: string[] = ['', '', ...buildDayList(DATE_RANGE_DAYS)];
+  const hourLoopList: number[] = buildLoopList(buildHourList(), HOUR_ROUNDS);
+  const minuteLoopList: number[] = buildLoopList(buildMinuteList(), MINUTE_ROUNDS);
+
+  function calcInitialIdxs(ts: number): { d: number; h: number; m: number } {
+    const target = ts > 0 ? ts : Date.now();
+    const d = new Date(target);
+    const todayStart = getTodayStart();
+    const dayStart = new Date(target);
+    dayStart.setHours(0, 0, 0, 0);
+    const rawDay = Math.round((dayStart.getTime() - todayStart) / (24 * 60 * 60 * 1000));
+    const dIdx = Math.max(0, Math.min(DATE_RANGE_DAYS - 1, rawDay));
+    const hIdx = d.getHours();
+    const totalMinuteCells = Math.ceil(60 / MINUTE_STEP);
+    const rawMin = Math.round(d.getMinutes() / MINUTE_STEP);
+    const mIdx = rawMin >= totalMinuteCells ? totalMinuteCells - 1 : rawMin;
+    return { d: dIdx, h: hIdx, m: mIdx };
+  }
+
+  const dateActiveIdx = ref<number>(0);
+  const hourActiveIdx = ref<number>(0);
+  const minuteActiveIdx = ref<number>(0);
+  const dateScrollId = ref<string>('');
+  const hourScrollId = ref<string>('');
+  const minuteScrollId = ref<string>('');
+
+  let dateLocking = false;
+  let hourLocking = false;
+  let minuteLocking = false;
+  let hourResetTimer: any = null;
+  let minuteResetTimer: any = null;
+
+  function scrollDateToActive(): void {
+    dateLocking = true;
+    const target = Math.max(0, dateActiveIdx.value - CENTER_OFFSET);
+    dateScrollId.value = '';
+    nextTick().then(() => {
+      dateScrollId.value = `d-${target}`;
+      setTimeout(() => { dateLocking = false; }, 200);
+    });
+  }
+  function scrollHourToActive(): void {
+    hourLocking = true;
+    const target = Math.max(0, hourActiveIdx.value - CENTER_OFFSET);
+    hourScrollId.value = '';
+    nextTick().then(() => {
+      hourScrollId.value = `h-${target}`;
+      setTimeout(() => { hourLocking = false; }, 200);
+    });
+  }
+  function scrollMinuteToActive(): void {
+    minuteLocking = true;
+    const target = Math.max(0, minuteActiveIdx.value - CENTER_OFFSET);
+    minuteScrollId.value = '';
+    nextTick().then(() => {
+      minuteScrollId.value = `m-${target}`;
+      setTimeout(() => { minuteLocking = false; }, 200);
+    });
+  }
+
+  watch(
+    () => props.visible,
+    (v) => {
+      if (!v) {
+        if (hourResetTimer != null) clearTimeout(hourResetTimer);
+        if (minuteResetTimer != null) clearTimeout(minuteResetTimer);
+        return;
+      }
+      const init = calcInitialIdxs(props.timestamp);
+      dateActiveIdx.value = init.d + 2;
+      hourActiveIdx.value = HOUR_MID_ROUND * 24 + init.h;
+      minuteActiveIdx.value = MINUTE_MID_ROUND * 12 + init.m;
+      scrollDateToActive();
+      scrollHourToActive();
+      scrollMinuteToActive();
+    },
+    { immediate: true },
+  );
+
+  function scheduleHourReset(): void {
+    if (hourResetTimer != null) clearTimeout(hourResetTimer);
+    hourResetTimer = setTimeout(() => {
+      const len = 24;
+      const round = Math.floor(hourActiveIdx.value / len);
+      if (round >= SAFE_ROUNDS && round < HOUR_ROUNDS - SAFE_ROUNDS) return;
+      const real = hourActiveIdx.value % len;
+      hourActiveIdx.value = HOUR_MID_ROUND * len + real;
+      scrollHourToActive();
+    }, 150);
+  }
+  function scheduleMinuteReset(): void {
+    if (minuteResetTimer != null) clearTimeout(minuteResetTimer);
+    minuteResetTimer = setTimeout(() => {
+      const len = 12;
+      const round = Math.floor(minuteActiveIdx.value / len);
+      if (round >= SAFE_ROUNDS && round < MINUTE_ROUNDS - SAFE_ROUNDS) return;
+      const real = minuteActiveIdx.value % len;
+      minuteActiveIdx.value = MINUTE_MID_ROUND * len + real;
+      scrollMinuteToActive();
+    }, 150);
+  }
+
+  function calcIdx(e: any): number {
+    const top = (e?.detail?.scrollTop ?? 0) as number;
+    const unit = cellHeightPx.value > 0 ? cellHeightPx.value : 44;
+    return Math.round(top / unit) + CENTER_OFFSET;
+  }
+
+  function onDateScroll(e: any): void {
+    if (dateLocking) return;
+    const idx = calcIdx(e);
+    dateActiveIdx.value = Math.max(0, Math.min(dateLoopList.length - 1, idx));
+  }
+  function onHourScroll(e: any): void {
+    if (hourLocking) return;
+    const idx = calcIdx(e);
+    hourActiveIdx.value = Math.max(0, Math.min(hourLoopList.length - 1, idx));
+    scheduleHourReset();
+  }
+  function onMinuteScroll(e: any): void {
+    if (minuteLocking) return;
+    const idx = calcIdx(e);
+    minuteActiveIdx.value = Math.max(0, Math.min(minuteLoopList.length - 1, idx));
+    scheduleMinuteReset();
+  }
+
+  onUnmounted(() => {
+    if (hourResetTimer != null) clearTimeout(hourResetTimer);
+    if (minuteResetTimer != null) clearTimeout(minuteResetTimer);
+  });
+
+  const pickedDay = computed(() => Math.max(0, dateActiveIdx.value - CENTER_OFFSET));
+  const pickedHour = computed(() => hourLoopList[hourActiveIdx.value] ?? 0);
+  const pickedMinute = computed(() => minuteLoopList[minuteActiveIdx.value] ?? 0);
+
+  function handleCancel(): void {
+    emit('cancel');
+  }
+  function handleConfirm(): void {
+    const base = new Date(getTodayStart() + pickedDay.value * 24 * 60 * 60 * 1000);
+    base.setHours(pickedHour.value, pickedMinute.value, 0, 0);
+    emit('confirm', base.getTime());
+  }
+</script>
+
+<style>
+  .picker-header {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    height: 96rpx;
+    padding: 0 16rpx;
+  }
+  .header-btn {
+    width: 88rpx;
+    height: 88rpx;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+  }
+  .header-icon {
+    width: 48rpx;
+    height: 48rpx;
+  }
+  .picker-title {
+    font-size: 36rpx;
+    font-weight: 500;
+    color: #4F586B;
+  }
+
+  .picker-area {
+    flex-direction: row;
+    height: 440rpx;
+    background-color: #FFFFFF;
+    position: relative;
+  }
+  .picker-highlight {
+    position: absolute;
+    top: 176rpx;
+    left: 0;
+    right: 0;
+    height: 88rpx;
+    border-top-width: 1rpx;
+    border-bottom-width: 1rpx;
+    border-top-style: solid;
+    border-bottom-style: solid;
+    border-top-color: #E5E7EB;
+    border-bottom-color: #E5E7EB;
+  }
+
+  .column {
+    flex: 1;
+  }
+
+  .cell {
+    height: 88rpx;
+    flex-direction: row;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .cell-num {
+    font-size: 34rpx;
+  }
+  .cell-text {
+    font-size: 30rpx;
+  }
+
+  .text-active {
+    color: #22262E;
+    font-weight: 500;
+  }
+  .text-near {
+    color: #6B7385;
+  }
+  .text-far {
+    color: #C2C7D0;
+  }
+
+  .bottom-safe {
+    height: 40rpx;
+  }
+</style>

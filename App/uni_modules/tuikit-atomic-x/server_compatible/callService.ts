@@ -50,7 +50,7 @@ var DEFAULT_PAGE = '/pages/index/index';
 var CALL_PAGE = '/uni_modules/tuikit-atomic-x/pages/call';
 
 // 需要特殊处理回退的直播页面路由，这些页面包含原生组件，通话结束后需要通知页面恢复状态
-var REENTER_PAGES = ['/pages/scenes/live/anchor/index', '/pages/scenes/live/audience/index'];
+var REENTER_PAGES = ['/pages/scenes/live/video/pusher/index', '/pages/scenes/live/video/player/index'];
 
 /**
  * 判断通话结束后是否会返回到需要特殊处理的直播页面（如主播直播间、观众直播间）

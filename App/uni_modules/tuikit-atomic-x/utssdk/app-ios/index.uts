@@ -20,13 +20,42 @@ export function hybirdCallExperimentalAPI(options: CallExperimentalAPIOptions) {
       options.jsonData,
       callback = (jsonData: string): void => {
         console.log(`callExperimentalAPI, jsonData: ${jsonData}`)
+        options.onResponse?.(jsonData)
       }
     )
   });
 }
 
+// ================= 多清晰度（拉流侧）实验性接口 =================
+// 开启多清晰度
+export function enableMultiPlaybackQuality(enable: boolean) {
+  hybirdCallExperimentalAPI({
+    jsonData: JSON.stringify({ api: "enableMultiPlaybackQuality", params: { enable: enable } }) ?? ""
+  } as CallExperimentalAPIOptions)
+}
+
+// 查询观众端可选清晰度列表（列表由主播开播档位决定，通过 onResponse 回传 JSON）
+export function queryPlaybackQualityList(roomId: string, onResponse: (jsonData: string) => void) {
+  hybirdCallExperimentalAPI({
+    jsonData: JSON.stringify({ api: "queryPlaybackQualityList", params: { roomId: roomId } }) ?? "",
+    onResponse: onResponse
+  } as CallExperimentalAPIOptions)
+}
+
+// 切换清晰度
+export function switchPlaybackQuality(quality: number, autoSwitch: boolean) {
+  hybirdCallExperimentalAPI({
+    jsonData: JSON.stringify({ api: "switchPlaybackQuality", params: { quality: quality, autoSwitch: autoSwitch } }) ?? ""
+  } as CallExperimentalAPIOptions)
+}
+
 type ListenerCallback = (eventData: string) => void;
-type ListenerMap = Map<string, ListenerCallback>;
+// ListenerMap 的 value 用 Array 包裹:DCloudUTSFoundation 的 Map 对 V 泛型有 class
+// 约束,裸函数类型(ListenerCallback)/String(struct)作为 V 会让云打包 Swift 编译
+// 失败("argument type 'String' expected to be an instance of a class or
+// class-constrained type")。Array 是引用类型满足约束;对齐 TencentCloud-Push 插件
+// Map<string, Array<callback>> 的既有可编译先例。
+type ListenerMap = Map<string, Array<ListenerCallback>>;
 
 const HybridListenerMap = new Map<string, ListenerMap>();
 
@@ -53,12 +82,16 @@ const hybridBridge = new HybridBridge(eventEmitter = (eventName: string, eventDa
       const listenerKey = genListenerKey(storeName, dataName, instanceId);
       const listeners = HybridListenerMap.get(listenerKey);
       if (listeners != null) {
-        listeners.forEach((listener: ListenerCallback, listenerID: string) => {
-          try {
-            listener(eventData);
-          } catch (e) {
-            console.error(`Error executing listener ${listenerID}:`, e);
-          }
+        // value 是 Array<ListenerCallback>(V 泛型 class 约束,见类型定义处注释),
+        // 遍历执行数组内的全部回调。
+        listeners.forEach((listenerList: Array<ListenerCallback>, listenerID: string) => {
+          listenerList.forEach((listener: ListenerCallback) => {
+            try {
+              listener(eventData);
+            } catch (e) {
+              console.error(`Error executing listener ${listenerID}:`, e);
+            }
+          });
         });
       }
     }
@@ -69,6 +102,15 @@ const hybridBridge = new HybridBridge(eventEmitter = (eventName: string, eventDa
 
 let hasReportedUIPlatform = false
 
+// 记录每个 listenerKey 【首次注册到原生】时的 listenerID。
+// 原生侧(Dispatcher.keys)按完整 key(含 listenerID)精确匹配删除;而 JS 桥是聚合语义:
+// 同 key 多 listener 只发首个 add 给原生、最后一个 remove 才发原生。若 remove 时带上的是
+// 「最后一个被删的 listenerID」而非「首个注册的」,原生 keys.remove 匹配失败 →
+// dispatcher 残留 → 退房再进房不重建订阅 → 礼物列表等数据永久推送不到 JS。
+// value 用 Array<string> 包装:Map 的 V 泛型有 class 约束,裸 String 会编译失败
+// (见 ListenerMap 类型定义处注释)。
+const firstNativeListenerIDMap = new Map<string, Array<string>>();
+
 @UTSJS.keepAlive
 export function addListener(options: HybridListenerOptions, listener: (eventData: string) => void) {
   DispatchQueue.main.async(execute = (): void => {
@@ -77,18 +119,33 @@ export function addListener(options: HybridListenerOptions, listener: (eventData
       DataReport.reportUIPlatform(platform = 52)
       DataReport.setFramework(11)
     }
-    const paramsStr = (options.params != null ? JSON.stringify(options.params) : "{}") as string;
-    const params = JSON.parse<UTSJSONObject>(paramsStr ?? "");
+    // 三元 + as string 内联同样触发云端编译器类型推断异常,拆为显式赋值。
+    let paramsStr: string = "{}";
+    if (options.params != null) {
+      paramsStr = JSON.stringify(options.params) ?? "{}";
+    }
+    const params = JSON.parse<UTSJSONObject>(paramsStr);
     const listenerKey = genListenerKey(options.store, options.name, params?.getString("createStoreParams") ?? "");
 
     const listenerID = options.listenerID ?? "default";
     let existingListeners = HybridListenerMap.get(listenerKey);
-    let listeners: Map<string, ListenerCallback> = existingListeners ?? new Map<string, ListenerCallback>();
+    let listeners: ListenerMap = existingListeners ?? new Map<string, Array<ListenerCallback>>();
     const isNew: boolean = (existingListeners == null);
-    listeners.set(listenerID, listener);
+    // 同一 listenerID 的回调追加进数组(value 为 Array 包装,见类型定义注释)。
+    let listenerList: Array<ListenerCallback> = listeners.get(listenerID) ?? [];
+    listenerList.push(listener);
+    listeners.set(listenerID, listenerList);
     HybridListenerMap.set(listenerKey, listeners);
     if (isNew) {
-      hybridBridge.addListener(JSON.stringify(options) ?? "");
+      // 记录【发给原生时】的原始 listenerID(未设置记空串):remove 回放时必须与 add
+      // 的序列化完全一致——未设置序列化为 null,若误设为 "default" 会与原生 key 的
+      // null 不匹配,导致原生 keys.remove 失败、dispatcher 残留、退房再进数据断流。
+      firstNativeListenerIDMap.set(listenerKey, [options.listenerID ?? ""]);
+      // payload 拆为显式 string 中间变量:内联 JSON.stringify(...) ?? "" 传参时,
+      // 云打包 Swift 编译器(新版 Xcode 类型检查)对泛型实参推断异常,报
+      // "argument type 'String' expected to be an instance of a class or class-constrained type"。
+      let addPayload: string = JSON.stringify(options) ?? "";
+      hybridBridge.addListener(addPayload);
     }
   });
 }
@@ -97,8 +154,12 @@ export function addListener(options: HybridListenerOptions, listener: (eventData
 export function removeListener(options: HybridListenerOptions) {
   DispatchQueue.main.async(execute = (): void => {
     // 1. 生成 Key
-    const paramsStr = (options.params != null ? JSON.stringify(options.params) : "{}") as string;
-    const params = JSON.parse<UTSJSONObject>(paramsStr ?? "");
+    // 三元 + as string 内联同样触发云端编译器类型推断异常,拆为显式赋值。
+    let paramsStr: string = "{}";
+    if (options.params != null) {
+      paramsStr = JSON.stringify(options.params) ?? "{}";
+    }
+    const params = JSON.parse<UTSJSONObject>(paramsStr);
     const listenerKey = genListenerKey(options.store, options.name, params?.getString("createStoreParams") ?? "");
 
     const listenerID = options.listenerID ?? "default";
@@ -109,7 +170,7 @@ export function removeListener(options: HybridListenerOptions) {
     if (existingListeners != null) {
       // 【关键修改】不使用 new Map(oldMap) 构造，避免 UTS 编译为 Swift let 常量
       // 而是创建一个全新的空 Map，UTS 会将其编译为可变的 var Dictionary
-      let newListeners = new Map<string, ListenerCallback>();
+      let newListeners = new Map<string, Array<ListenerCallback>>();
 
       // 3. 手动把不需要删除的数据复制到新 Map 中
       // 这种写法最稳妥，彻底切断了与旧内存的联系 (Deep Copy 效果)
@@ -121,9 +182,24 @@ export function removeListener(options: HybridListenerOptions) {
       });
 
       // 4. 判断新 Map 的状态
-      if (newListeners.size === 0) {
-        // 如果空了，清理 Native 监听和全局引用
-        hybridBridge.removeListener(JSON.stringify(options) ?? "");
+      if (newListeners.size == 0) {
+        // 修复:回放【首注册时发给原生的原始 listenerID】。原生 keys 里存的 key 是首注册
+        // add 的序列化结果;若 remove 带的是「最后一个被删的 listenerID」或误用归一化
+        // "default"(add 时实为 null),都会与原生 key 不匹配 → dispatcher 残留 →
+        // 退房再进不重建订阅 → 礼物列表等数据永久推送不到 JS。
+        // 取数组首元素(原始 listenerID);数组为空时兜底空串。
+        const firstIDList = firstNativeListenerIDMap.get(listenerKey);
+        let firstIDRaw = "";
+        if (firstIDList != null && firstIDList.length > 0) {
+          firstIDRaw = firstIDList[0];
+        }
+        firstNativeListenerIDMap.delete(listenerKey);
+        if (firstIDRaw != "") {
+          options.listenerID = firstIDRaw;
+        }
+        // 同 addListener:payload 拆显式 string 中间变量,规避云端编译器泛型推断异常。
+        let removePayload: string = JSON.stringify(options) ?? "";
+        hybridBridge.removeListener(removePayload);
         HybridListenerMap.delete(listenerKey);
       } else {
         // 5. 【原子替换】将全新的 Map 放回去
@@ -158,7 +234,8 @@ export function callAPI(options: string, callback: (result: string) => void) {
 // 数据上报模块
 
 const SceneMap: Map<string, InteractionMetrics> = new Map([
-  ["CHAT_INVOKE_CALL", InteractionMetrics.chatInvokeCall]
+  ["CHAT_INVOKE_CALL", InteractionMetrics.chatInvokeCall],
+  ["CHAT_INVOKE_ROOM", InteractionMetrics.chatInvokeRoom],
 ])
 
 export function reportScene(scene: string) {
@@ -300,6 +377,14 @@ export function startForegroundService() {
 // iOS 不需要，防止编译报错的空实现
 export function stopForegroundService() {
 }
+
+// iOS 不需要，防止编译报错的空实现
+export function startAudioForegroundService() {
+}
+// iOS 不需要，防止编译报错的空实现
+export function stopAudioForegroundService() {
+}
+
 
 /**
  * 开始震动

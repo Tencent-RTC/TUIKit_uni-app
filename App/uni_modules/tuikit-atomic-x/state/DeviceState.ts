@@ -160,6 +160,19 @@ export type SwitchCameraOptions = {
 }
 
 /**
+ * 开始摄像头测试参数
+ * @interface StartCameraTestOptions
+ * @description 摄像头测试预览配置结构。
+ * @param {string} cameraView - 摄像头预览视图标识（原生 UIView/CameraView 在 uni 侧以 string 标识传递，
+ *                              由承载预览的原生视图组件注册后按此标识取用）。
+ */
+export type StartCameraTestOptions = {
+  cameraView: string;
+  success?: () => void;
+  fail?: (errCode: number, errMsg: string) => void;
+}
+
+/**
  * 更新视频质量参数
  * @interface UpdateVideoQualityOptions
  */
@@ -610,6 +623,61 @@ function switchCamera(params: SwitchCameraOptions): void {
 }
 
 /**
+ * 开始摄像头测试（预览本地摄像头画面，用于设备检测）
+ * @param {StartCameraTestOptions} params - 摄像头测试参数
+ * @returns {Promise<void>}
+ * @memberof module:DeviceState
+ * @example
+ * import { useDeviceState } from '@/uni_modules/tuikit-atomic-x/state/DeviceState';
+ * const { startCameraTest } = useDeviceState();
+ * startCameraTest({ cameraView: 'camera-test-view' })
+ */
+async function startCameraTest(params: StartCameraTestOptions): Promise<void> {
+  // @ts-ignore
+  if (uni.getSystemInfoSync().platform === "android") {
+    await permission.requestAndroidPermission("android.permission.CAMERA");
+  }
+  return new Promise((resolve, reject) => {
+    callAPI(JSON.stringify({
+      api: "startCameraTest",
+      params: params,
+    }), (res: string) => {
+      try {
+        const data = safeJsonParse(res, {}) as any;
+        if (data?.code === 0) {
+          params?.success?.();
+          resolve();
+        } else {
+          params?.fail?.(data.code, data.message);
+          const err: any = new Error(data.message || 'startCameraTest failed');
+          err.code = data.code;
+          reject(err);
+        }
+      } catch (error) {
+        params?.fail?.(-1, error.message);
+        reject(error);
+      }
+    });
+  });
+}
+
+/**
+ * 停止摄像头测试
+ * @returns {void}
+ * @memberof module:DeviceState
+ * @example
+ * import { useDeviceState } from '@/uni_modules/tuikit-atomic-x/state/DeviceState';
+ * const { stopCameraTest } = useDeviceState();
+ * stopCameraTest()
+ */
+function stopCameraTest(): void {
+  callAPI(JSON.stringify({
+    api: "stopCameraTest",
+    params: {},
+  }), () => { });
+}
+
+/**
  * 切换镜像
  * @param {SwitchMirrorOptions} params - 镜像参数
  * @returns {void}
@@ -855,6 +923,8 @@ export function useDeviceState() {
     openLocalCamera,          // 打开本地摄像头
     closeLocalCamera,         // 关闭本地摄像头
     switchCamera,             // 切换摄像头
+    startCameraTest,          // 开始摄像头测试
+    stopCameraTest,           // 停止摄像头测试
     switchMirror,             // 切换镜像
     updateVideoQuality,       // 更新视频质量
 

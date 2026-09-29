@@ -1,0 +1,245 @@
+<template>
+  <view
+    v-if="currentEntry"
+    ref="entryElRef"
+    class="audience-entry"
+    :class="levelClass"
+    :style="{ top: props.topPx + 'px', transform: 'translateX(-400px)', opacity: 0 }"
+  >
+    <image v-if="entryBgSrc" class="entry-bg" :src="entryBgSrc" mode="scaleToFill" />
+    <view class="live-level-badge" :class="levelBadgeClass" v-if="currentEntry.level > 0">
+      <image class="badge-bg" :src="badgeGradientSrc" mode="scaleToFill" />
+      <image class="badge-icon" :src="badgeIconSrc" mode="aspectFit" />
+      <text class="live-level-num" :class="levelNumClass">{{ currentEntry.level }}</text>
+    </view>
+    <text class="audience-entry-name" numberOfLines="1">{{ currentEntry.userName }}</text>
+    <text
+      class="audience-entry-action"
+      :class="{ 'audience-entry-action-premium': levelClass === 'audience-entry-premium', 'audience-entry-action-elite': levelClass === 'audience-entry-elite' }"
+    >进入了直播间</text>
+  </view>
+</template>
+
+<script setup lang="ts">
+  import { ref, computed, nextTick, onUnmounted } from 'vue';
+
+  type AudienceEntryUser = { userID: string; userName: string; level: number };
+
+  const props = defineProps<{
+    topPx: number;
+  }>();
+
+  const currentEntry = ref<AudienceEntryUser | null>(null);
+  const entryElRef = ref(null);
+  let entryQueue: AudienceEntryUser[] = [];
+  let isProcessingQueue = false;
+  let entryTimer: any = null;
+  const recentEntryAt = new Map<string, number>();
+  const animation = uni.requireNativePlugin('animation');
+  const HOLD_MS = 1500;
+  const EXIT_MS = 240;
+  const ENTER_MS = 400;
+
+  const sleep = (ms: number) => new Promise(resolve => { entryTimer = setTimeout(resolve, ms); });
+
+  const playEnter = () => {
+    const el = entryElRef.value;
+    if (!el) return;
+    animation.transition(el, {
+      styles: { transform: 'translateX(12px)', opacity: 1 },
+      duration: ENTER_MS,
+      timingFunction: 'ease-out',
+    });
+  };
+  const playExit = () => {
+    const el = entryElRef.value;
+    if (!el) return;
+    animation.transition(el, {
+      styles: { transform: 'translateX(-18px)', opacity: 0 },
+      duration: EXIT_MS,
+      timingFunction: 'ease-in',
+    });
+  };
+
+  const processQueue = async () => {
+    if (isProcessingQueue || entryQueue.length === 0) return;
+    isProcessingQueue = true;
+    try {
+      while (entryQueue.length > 0) {
+        const entry = entryQueue.splice(0, 1)[0];
+        currentEntry.value = entry;
+        await nextTick();
+        playEnter();
+        await sleep(HOLD_MS);
+        playExit();
+        await sleep(EXIT_MS);
+        currentEntry.value = null;
+      }
+    } finally {
+      isProcessingQueue = false;
+    }
+  };
+
+  const push = (user: AudienceEntryUser) => {
+    if (!user?.userName) return;
+    const now = Date.now();
+    if (now - (recentEntryAt.get(user.userID) || 0) < 5000) return;
+    recentEntryAt.set(user.userID, now);
+    if (recentEntryAt.size > 1000) {
+      recentEntryAt.clear();
+    }
+    entryQueue.push(user);
+    if (entryQueue.length > 10) {
+      entryQueue = entryQueue.slice(-2);
+    }
+    processQueue();
+  };
+
+  const levelTier = (level: number): string => {
+    if (level >= 40) return 'elite';
+    if (level >= 25) return 'premium';
+    if (level >= 10) return 'advanced';
+    return 'basic';
+  };
+  const levelClass = computed(() => {
+    const tier = levelTier(currentEntry.value?.level || 0);
+    if (tier === 'elite') return 'audience-entry-elite';
+    if (tier === 'premium') return 'audience-entry-premium';
+    return '';
+  });
+
+  const badgeTier = computed(() => levelTier(currentEntry.value?.level || 0));
+  const levelBadgeClass = computed(() => 'live-level-badge-' + badgeTier.value);
+  const levelNumClass = computed(() => 'level-num-' + badgeTier.value);
+  const badgeGradientSrc = computed(() => `/static/images/live/badge/badge-gradient-${badgeTier.value}.png`);
+  const badgeIconSrc = computed(() => `/static/images/live/badge/badge-icon-${badgeTier.value}.png`);
+  const entryBgSrc = computed(() => {
+    if (levelClass.value === 'audience-entry-premium') return '/static/images/live/badge/tip-bg-premium.png';
+    if (levelClass.value === 'audience-entry-elite') return '/static/images/live/badge/tip-bg-elite.png';
+    return '';
+  });
+
+  defineExpose({ push });
+
+  onUnmounted(() => {
+    if (entryTimer) { clearTimeout(entryTimer); entryTimer = null; }
+  });
+</script>
+
+<style>
+  .audience-entry {
+    position: absolute;
+    left: 24rpx;
+    max-width: 560rpx;
+    height: 56rpx;
+    padding-left: 18rpx;
+    padding-right: 18rpx;
+    border-radius: 24rpx;
+    background-color: rgba(10, 10, 15, 0.34);
+    flex-direction: row;
+    align-items: center;
+    z-index: 1000;
+  }
+
+  .entry-bg {
+    position: absolute;
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    border-radius: 22rpx;
+  }
+
+  .live-level-badge {
+    position: relative;
+    width: 68rpx;
+    height: 30rpx;
+    padding-left: 6rpx;
+    padding-right: 6rpx;
+    margin-right: 8rpx;
+    border-radius: 15rpx;
+    overflow: hidden;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .badge-bg {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 68rpx;
+    height: 30rpx;
+  }
+
+  .badge-icon {
+    width: 20rpx;
+    height: 20rpx;
+    margin-right: 2rpx;
+    flex-shrink: 0;
+  }
+
+  .live-level-num {
+    position: relative;
+    font-size: 17rpx;
+    font-weight: 800;
+    line-height: 30rpx;
+    text-align: center;
+  }
+
+  .level-num-basic {
+    color: #dbe7ff;
+  }
+
+  .level-num-advanced {
+    color: #e9fbff;
+  }
+
+  .live-level-badge-premium {
+    border-color: rgba(255, 255, 255, 0.42);
+  }
+
+  .level-num-premium {
+    color: #fff3ff;
+  }
+
+  .level-num-elite {
+    color: #fff9dd;
+  }
+
+  .audience-entry-name {
+    color: #78d8ff;
+    font-size: 26rpx;
+    font-weight: 600;
+    lines: 1;
+    max-width: 240rpx;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .audience-entry-action {
+    color: rgba(255, 255, 255, 0.9);
+    font-size: 26rpx;
+    font-weight: 600;
+    margin-left: 12rpx;
+  }
+
+  .audience-entry-action-premium {
+    color: rgba(255, 255, 255, 0.94);
+  }
+
+  .audience-entry-action-elite {
+    color: #fff8dd;
+  }
+
+  .audience-entry-premium {
+    border-width: 2rpx;
+    border-color: rgba(211, 174, 255, 0.2);
+  }
+
+  .audience-entry-elite {
+    border-width: 2rpx;
+    border-color: rgba(255, 230, 157, 0.3);
+  }
+</style>

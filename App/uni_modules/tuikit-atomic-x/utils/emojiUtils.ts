@@ -50,6 +50,14 @@ export interface RichTextNode {
  */
 export const parseEmojiToNodes = (text: string, emojiSize: string = '36rpx'): RichTextNode[] => {
   const nodes: RichTextNode[] = [];
+  // 防御同 parseTextToSegments：丢弃末尾未闭合的残缺 [TUIEmoji_...
+  // 否则残段会被下方 substring 落入 text 节点,渲染出 '[TUIEmoji_Sm' 之类的"非 emoji 字符"。
+  const truncatedAt = text ? text.search(/\[TUIEmoji_[^\]]*$/) : -1;
+  if (truncatedAt >= 0) {
+    text = text.substring(0, truncatedAt);
+  }
+  if (!text) return nodes;
+
   const emojiRegex = /\[TUIEmoji_[^\]]+\]/g;
   let lastIndex = 0;
   let match: RegExpExecArray | null;
@@ -148,6 +156,17 @@ export type TextOrEmojiSegment = TextSegment | EmojiSegment;
 export const parseTextToSegments = (text: string): TextOrEmojiSegment[] => {
   const segments: TextOrEmojiSegment[] = [];
   if (!text) return segments;
+
+  // 防御：文本被某处截断在 [TUIEmoji_Xxx] key 中间时（如 '你好[TUIEmoji_Sm'），
+  // 残缺片段无法匹配下方 emojiRegex，会被 pushChars 逐字符渲染，视觉上表现为
+  // 表情后突然出现一串 '[TUIEmoji_Sm' 之类的"非 emoji 字符"。
+  // 这里在解析前先把「以 [TUIEmoji_ 开头但缺 ] 的尾部残段」整体丢弃，从根上避免。
+  // 只处理【末尾】残段：中间残段若真存在（应极少），仍按原逻辑当普通文本渲染。
+  const truncatedAt = text.search(/\[TUIEmoji_[^\]]*$/);
+  if (truncatedAt >= 0) {
+    text = text.substring(0, truncatedAt);
+    if (!text) return segments;
+  }
 
   const emojiRegex = /\[TUIEmoji_[^\]]+\]/g;
   let lastIndex = 0;

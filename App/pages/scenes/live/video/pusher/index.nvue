@@ -1,0 +1,1153 @@
+<template>
+  <view class="live-container" @click="handleHideInput" :style="{
+                                          height: systemInfo?.windowHeight + 'px',
+                                          width: systemInfo?.safeArea?.width + 'px',
+                                       }">
+    <LiveStreamView v-if="liveID && liveID.length > 0" :liveID="liveID || ''" :isAnchor="true" :templateLayout="templateLayout" :isLiving="isStartLive" :enableClickPanel="true" :onStreamViewClick="ShowAnchorViewClickPanel" @actionPanelVisibleChange="onStreamActionPanelVisibleChange"></LiveStreamView>
+
+    <view class="navigate-back-arrow" @tap="goBackToTabBar" v-if="!isStartLive">
+      <image class="navigate-back-arrow-image" src="/static/images/left-arrow.png"></image>
+    </view>
+
+    <view class="header" v-if="isStartLive">
+      <view class="header-left">
+        <view class="stream-info" @tap="showAnchorInfoDrawer">
+          <image class="avatar" :src="loginUserInfo?.avatarURL || defaultAvatarURL" mode="aspectFill" />
+          <view class="stream-details">
+            <text class="stream-title" :numberOfLines="1">{{ loginUserInfo?.nickname || loginUserInfo?.userID || '' }}</text>
+          </view>
+        </view>
+      </view>
+      <view class="header-right">
+        <view class="participants" @tap="showAudienceList">
+          <view v-for="(user, index) in audienceList.slice(0, 2)">
+            <image class="participant-avatar" :src="user?.avatarURL || defaultAvatarURL" mode="aspectFill" />
+          </view>
+          <view class="participant-count">
+            <text class="count-text">{{ currentAudienceCount }}</text>
+          </view>
+        </view>
+        <view class="control-icons">
+          <image class="control-icon" @tap="navigateBack()" src="/static/images/live-end.png" />
+        </view>
+      </view>
+    </view>
+
+    <BeforeLivePanel v-if="!isStartLive" :coverURL="coverURL" :liveCategory="liveCategory" :liveMode="liveMode" :templateLayout="templateLayout" :liveTitle="liveTitle" @editCover="editCover" @editTitle="editTitle" @chooseCategory="chooseCategory" @chooseMode="chooseMode" @chooseTemplate="chooseTemplate" @startLive="startLive" @camera="handleCamera" @settings="handleSettings" ref="beforeLivePanelRef" />
+
+    <view class="live-content" v-if="isStartLive">
+      <view class="live-network-container">
+        <image class="live-network" src="/static/images/network-good.png" alt="" />
+        <text class="live-timer">{{ liveDurationText }}</text>
+      </view>
+
+      <view class="go-guest-request-container" v-if="(applicants || []).length > 0 && isShowCoGuestPanelAvatar" @tap="showCoGuestPanel('requests')">
+        <view class="avatar-overlay-container" :style="getAvatarContainerStyle()">
+          <image v-for="(applicant, index) in applicants.slice(0, 2)" :key="index" class="go-guest-request-img" :style="getAvatarStyle(index, Math.min(applicants.length, 3))" :src="applicant?.avatarURL || defaultAvatarURL" />
+          <image v-if="applicants.length >= 3" class="go-guest-request-img" :style="getAvatarStyle(2, 3)" src="/static/images/live-more.png" />
+        </view>
+        <text class="go-guest-request-text">申请连麦({{ (applicants || []).length }})</text>
+      </view>
+      <BarrageList mode="anchor" :topPx="barrageTopPx" @itemTap="audienceOperator" @receiveGift="onBarrageReceiveGift" ref="barrageListRef" />
+      <view class="live-bottom-Panel" :style="{ width: safeArea.width + 'px' }">
+        <BarrageInput></BarrageInput>
+        <!-- 弹幕输入激活期间隐藏(避开键盘 resize 把底栏顶到画面中间);
+             用 opacity + userInteractionEnabled,与拉流端同一套做法。 -->
+        <view
+          class="action-buttons"
+          :style="{ opacity: isBarrageInputActive ? 0 : 1 }"
+          :userInteractionEnabled="!isBarrageInputActive"
+        >
+          <view class="action-button-item" :class="{ 'disabled': shouldDisableCoHostButton }" @tap="showCoHostPanel">
+            <image class="action-button-icon action-btn-bg" src="/static/images/link-host.png" mode="aspectFit" />
+            <text class="action-button-text">连主播</text>
+          </view>
+
+          <view class="action-button-item" @tap="showCoGuestPanel('requests')">
+            <image class="action-button-icon co-mic-btn" src="/static/images/live/live-co-guest.png" mode="aspectFit" />
+            <text class="action-button-text">连观众</text>
+          </view>
+          <view class="action-button-item" @tap="handleSettings">
+            <image class="action-button-icon action-btn-bg" src="/static/images/live-more.png" mode="aspectFit" />
+            <text class="action-button-text">更多</text>
+          </view>
+          <Like role="anchor" />
+        </view>
+      </view>
+
+      <LiveAudienceList v-model="isShowAudienceList" @overlayActiveChange="onAudienceInnerPanelChange"></LiveAudienceList>
+      <AudienceActionPanel v-if="liveID" v-model="isShowAudienceActionPanel" :userInfo="selectedAudience" :liveID="liveID"></AudienceActionPanel>
+
+      <CoGuestPanel v-if="liveID" v-model="isShowCoGuestPanel" :activeTab="activeTab"></CoGuestPanel>
+      <CoHostPanel v-if="liveID" v-model="isShowCoHostPanel"></CoHostPanel>
+      <LiveMoreActionsPanel v-if="liveID" v-model="isShowLiveMoreActionsPanel" />
+      <UserInfoPanel v-if="liveID" v-model="isShowUserInfoPanel" :userInfo="clickUserInfo" :isShowAnchor="isShowAnchorInfo"></UserInfoPanel>
+    </view>
+
+    <GiftPlayer ref="giftPlayerRef" v-model="isLargeSizeGiftPlayer" :url="giftInfo?.resourceURL" :safeArea="safeArea" @finished="svgaPlayerFinished" />
+
+    <ActionSheet v-model="isShowEndSheet" :title="endSheetTitle" :itemList="endSheetItems" @select="onEndSheetSelect" />
+    <view class="custom-modal-overlay" v-if="showCustomModal">
+      <view class="custom-modal" @click.stop>
+        <view class="modal-content">
+          <text class="modal-text"> {{ modalContent }}</text>
+        </view>
+        <view class="modal-actions">
+          <view class="modal-btn modal-btn-cancel" @tap="handleModalCancel">
+            <text class="modal-btn-reject">拒绝</text>
+          </view>
+          <view class="modal-btn modal-btn-confirm" @tap="handleModalConfirm">
+            <text class="modal-btn-accept">接受</text>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <LiveToast
+      v-if="tipVisible"
+      :key="tipSeq"
+      v-model="tipVisible"
+      :title="tipTitle"
+      :duration="2000"
+    />
+  </view>
+</template>
+
+<script setup lang="ts">
+  import { onLoad, onBackPress } from '@dcloudio/uni-app';
+  import { ref, onMounted, onUnmounted, computed, watch, nextTick } from 'vue';
+
+  import UserInfoPanel from '@/uni_modules/tuikit-atomic-x/components/LiveStreamView/UserInfoPanel.nvue';
+  import LiveToast from '@/uni_modules/tuikit-atomic-x/components/LiveToast.nvue';
+
+  const tipVisible = ref(false);
+  const tipSeq = ref(0);
+  const tipTitle = ref('');
+  const showTip = (title: string) => {
+    tipTitle.value = title;
+    tipVisible.value = false;
+    nextTick(() => {
+      tipSeq.value++;
+      tipVisible.value = true;
+    });
+  };
+  import BeforeLivePanel from '@/components/BeforeLivePanel.nvue';
+  import LiveStreamView from '@/uni_modules/tuikit-atomic-x/components/LiveStreamView/LiveStreamView.nvue';
+  import LiveAudienceList from '@/uni_modules/tuikit-atomic-x/components/LiveAudienceList/LiveAudienceList.nvue';
+  import CoGuestPanel from '@/uni_modules/tuikit-atomic-x/components/CoGuestPanel/CoGuestPanel.nvue';
+  import CoHostPanel from '@/uni_modules/tuikit-atomic-x/components/CoHostPanel.nvue';
+  import AudienceActionPanel from '@/uni_modules/tuikit-atomic-x/components/LiveAudienceList/AudienceActionPanel.nvue';
+  import LiveMoreActionsPanel from './components/LiveMoreActionsPanel.nvue';
+  import GiftPlayer from '@/uni_modules/tuikit-atomic-x/components/Gift/GiftPlayer.nvue';
+  import { giftService } from '@/uni_modules/tuikit-atomic-x/components/Gift/giftService'
+  import Like from '@/uni_modules/tuikit-atomic-x/components/Like.nvue';
+  import BarrageInput from '@/uni_modules/tuikit-atomic-x/components/BarrageInput/BarrageInput.vue';
+  import BarrageList from '@/uni_modules/tuikit-atomic-x/components/BarrageList/BarrageList.nvue';
+  import { TakeSeatMode, LiveModifyFlag, useLiveListState } from "@/uni_modules/tuikit-atomic-x/state/LiveListState";
+  import { useCoGuestState } from "@/uni_modules/tuikit-atomic-x/state/CoGuestState";
+  import { useDeviceState } from "@/uni_modules/tuikit-atomic-x/state/DeviceState";
+  import { useLiveAudienceState } from "@/uni_modules/tuikit-atomic-x/state/LiveAudienceState";
+  import { CoHostStatusType, useCoHostState } from "@/uni_modules/tuikit-atomic-x/state/CoHostState";
+  import { useLiveSeatState } from "@/uni_modules/tuikit-atomic-x/state/LiveSeatState";
+  import { useLoginState } from "@/uni_modules/tuikit-atomic-x/state/LoginState";
+  import { AudioChangerType, AudioReverbType, useAudioEffectState } from '@/uni_modules/tuikit-atomic-x/state/AudioEffectState'
+  import { useBaseBeautyState } from '@/uni_modules/tuikit-atomic-x/state/BaseBeautyState'
+  import ActionSheet from '@/components/ActionSheet.nvue';
+  import { livePusher, LivePusherStatus } from './state/livePusher';
+  import { setSdkLanguageFromSystem } from '@/uni_modules/tuikit-atomic-x/utils/setSdkLanguageFromSystem'
+
+  onBackPress((option) => {
+    if (option.from === 'backbutton')
+      return true; // 拦截系统侧滑和物理返回键
+  });
+
+  const dom = uni.requireNativePlugin('dom')
+  const { loginUserInfo } = useLoginState();
+  uni.$liveID = `live_${uni.$userID}`
+  uni.$localGuestStatus = 'IDLE'
+  const { setVoiceEarMonitorEnable,
+    setVoiceEarMonitorVolume,
+    setAudioChangerType,
+    setAudioReverbType,
+    isEarMonitorOpened,
+    earMonitorVolume,
+  } = useAudioEffectState()
+  const { setSmoothLevel, setWhitenessLevel, setRuddyLevel, whitenessLevel, ruddyLevel, smoothLevel } = useBaseBeautyState()
+  const { addCoHostListener, removeCoHostListener, acceptHostConnection, rejectHostConnection, exitHostConnection, coHostStatus, invitees } = useCoHostState(uni?.$liveID)
+  const { joinLive, createLive, fetchLiveList, liveList, endLive, currentLive, liveListCursor, callExperimentalAPI, updateLiveInfo, updateLiveMetaData } = useLiveListState();
+  const { applicants, rejectApplication, connected } = useCoGuestState(uni?.$liveID);
+  const { openLocalCamera, openLocalMicrophone, isFrontCamera, switchCamera, closeLocalMicrophone, closeLocalCamera } = useDeviceState();
+  const { audienceList, audienceCount, messageBannedUserList } = useLiveAudienceState(uni?.$liveID);
+
+  watch(messageBannedUserList, (newValue, oldValue) => {
+    const isBanned = (newValue || []).some((obj: any) => obj?.userID === uni.$userID);
+    const wasBanned = (oldValue || []).some((obj: any) => obj?.userID === uni.$userID);
+    if (isBanned && !wasBanned) showTip('您已被禁言');
+    if (!isBanned && wasBanned) showTip('您已被解除禁言');
+  });
+  const { seatList, canvas, lockSeat, } = useLiveSeatState(uni?.$liveID);
+
+  const defaultCoverURL = 'https://liteav-test-1252463788.cos.ap-guangzhou.myqcloud.com/voice_room/voice_room_cover1.png';
+  const defaultAvatarURL = 'https://web.sdk.qcloud.com/component/TUIKit/assets/avatar_01.png';
+  const currentAudienceCount = computed(() => audienceList.value.length > 100 ? audienceCount : audienceList.value.length);
+  const isShowEndSheet = ref(false)
+  const endSheetTitle = ref('')
+  const endSheetItems = ref(['关闭直播间'])
+  const systemInfo = ref({});
+  const safeArea = ref({
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    width: 375,
+    height: 750,
+  });
+  // 消息列表【顶部相对屏幕顶】的绝对位置(px)。BarrageList 已由 bottom 定位改为
+  // top 定位(相对屏幕顶,不受键盘顶起视口影响——观众端切换不闪的关键),开播端需同步
+  const BARRAGE_LIST_H_PX = uni.upx2px(380);
+  const SYNC_WIN_H = (() => {
+    try { return uni.getSystemInfoSync().windowHeight || 0; } catch (e) { return 0; }
+  })();
+  const barrageInputShift = ref(0);
+  const onBarrageInputShift = (px: number) => {
+    barrageInputShift.value = Math.max(0, Math.round(Number(px) || 0));
+  };
+  const isBarrageInputActive = ref(false);
+  const handleBarrageInputShow = () => {
+    isBarrageInputActive.value = true;
+  };
+  const handleBarrageInputHide = () => {
+    isBarrageInputActive.value = false;
+  };
+  const barrageTopPx = computed(() => {
+    const winH = (systemInfo.value && systemInfo.value.windowHeight) || SYNC_WIN_H;
+    if (winH <= 0) return -9999; // 屏高完全拿不到(极端):暂置屏外,避免贴顶
+    // 列表底距屏幕底 = 原 bottomPx(safeArea.height × 1/8) + 输入激活让位高度
+    const bottomGap = (Number(safeArea.value && safeArea.value.height) || 0) * 1 / 8
+      + barrageInputShift.value;
+    return Math.max(0, Math.round(winH - bottomGap - BARRAGE_LIST_H_PX));
+  });
+  const beforeLivePanelRef = ref();
+
+  const isShowUserInfoPanel = ref(false);
+  const isShowAudienceList = ref(false);
+  const isShowCoHostPanel = ref(false);
+  const isShowCoGuestPanel = ref(false);
+  const isShowAudienceActionPanel = ref(false);
+  const isShowLiveMoreActionsPanel = ref(false);
+  const isStartLive = computed(() => livePusher.liveStatus === LivePusherStatus.PUSHER);
+  const selectedAudience = ref({});
+  const liveID = ref(uni?.$liveID);
+  const isLargeSizeGiftPlayer = ref(false);
+  const giftInfo = ref({});
+
+  const activeTab = ref('requests');
+
+  const showCustomModal = ref(false);
+  const modalContent = ref('');
+  const currentModalUserInfo = ref(null);
+
+  const coverURL = ref(defaultCoverURL);
+  const liveCategory = ref('日常聊天');
+  const liveMode = ref('公开');
+  const templateLayout = ref(600);
+  const liveTitle = ref(loginUserInfo.value?.nickname);
+  const currentUserID = ref(loginUserInfo.value?.userID);
+  const clickUserInfo = ref({});
+  const isShowCoGuestPanelAvatar = ref(true);
+  const barrageListRef = ref();
+  const giftPlayerRef = ref();
+  const { showGift, onGiftFinished } = giftService({
+    roomId: uni?.$liveID,
+    giftPlayerRef,
+  })
+  const isShowAnchorInfo = ref(true)
+
+  const audienceInnerPanelVisible = ref(false);
+  const onAudienceInnerPanelChange = (visible: boolean) => {
+    audienceInnerPanelVisible.value = !!visible;
+  };
+  // LiveStreamView 点击视频弹出的操作面板(组件内部自持),由其 actionPanelVisibleChange 上抛。
+  const streamActionPanelVisible = ref(false);
+  const onStreamActionPanelVisibleChange = (visible: boolean) => {
+    streamActionPanelVisible.value = !!visible;
+  };
+  const anyOverlayVisible = computed(() =>
+    isShowAudienceList.value ||
+    isShowAudienceActionPanel.value ||
+    isShowCoGuestPanel.value ||
+    isShowCoHostPanel.value ||
+    isShowLiveMoreActionsPanel.value ||
+    isShowUserInfoPanel.value ||
+    isShowEndSheet.value ||
+    showCustomModal.value ||
+    audienceInnerPanelVisible.value ||
+    streamActionPanelVisible.value
+  );
+  watch(anyOverlayVisible, (visible) => {
+    uni.$emit('barrageInput:setHidden', !!visible);
+  });
+
+  watch(() => loginUserInfo.value?.nickname, (newUserName, oldUserName) => {
+    if (newUserName) {
+      if (!liveTitle.value || liveTitle.value === oldUserName) {
+        liveTitle.value = newUserName;
+      }
+    }
+  }, { immediate: true, deep: true });
+
+  watch(() => loginUserInfo.value?.userID, (newUserId, oldUserId) => {
+    if (newUserId) {
+      currentUserID.value = newUserId;
+      uni.$liveID = `live_${currentUserID.value}`;
+      liveID.value = uni.$liveID;
+    }
+  }, { immediate: true, deep: true });
+
+  const editCover = (data: string) => {
+    coverURL.value = data
+  };
+  const editTitle = (data: string) => {
+    liveTitle.value = data
+  };
+  const chooseCategory = (data: string) => {
+    liveCategory.value = data
+  };
+  const chooseMode = (data: string) => {
+    liveMode.value = data
+  };
+
+  const chooseTemplate = (data: number) => {
+    templateLayout.value = data;
+  }
+
+  const showCustomModalDialog = (userInfo) => {
+    currentModalUserInfo.value = userInfo;
+    modalContent.value = `${userInfo.userName || userInfo.userID}向你发来连线邀请`;
+    showCustomModal.value = true;
+  };
+
+  const closeCustomModal = () => {
+    showCustomModal.value = false;
+    currentModalUserInfo.value = null;
+  };
+
+  const handleModalConfirm = () => {
+    if (currentModalUserInfo.value) {
+      acceptHostConnection({
+        liveID: uni?.$liveID,
+        fromHostLiveID: currentModalUserInfo.value.liveID
+      });
+    }
+    closeCustomModal();
+  };
+
+  const handleModalCancel = () => {
+    if (currentModalUserInfo.value) {
+      rejectHostConnection({
+        liveID: uni?.$liveID,
+        fromHostLiveID: currentModalUserInfo.value.liveID
+      });
+    }
+    isShowCoGuestPanelAvatar.value = true
+    closeCustomModal();
+  };
+
+  const shouldDisableCoHostButton = computed(() => {
+    return connected.value.length > 1
+  });
+
+  watch(applicants, (newVal, oldVal) => {
+    if (!isShowCoGuestPanelAvatar.value) {
+      applicants.value.forEach(applicant => {
+        rejectApplication({
+          liveID: uni?.$liveID,
+          userID: applicant.userID,
+        });
+      });
+    }
+  }, {
+    deep: true,
+    immediate: true,
+  })
+
+  watch(coHostStatus, (newVal) => {
+    if (newVal === CoHostStatusType.DISCONNECTED) {
+      isShowCoGuestPanelAvatar.value = true
+    }
+  }, {
+    deep: true,
+    immediate: true,
+  })
+
+  watch(invitees, (newVal) => {
+    if (!newVal && !isShowCoGuestPanelAvatar.value) {
+      isShowCoGuestPanelAvatar.value = true
+    } else {
+      applicants.value.forEach(applicant => {
+        rejectApplication({
+          liveID: uni?.$liveID,
+          userID: applicant.userID,
+        });
+      });
+    }
+  })
+
+  const onBarrageReceiveGift = (giftData: any) => {
+    if (!giftData) return;
+    giftInfo.value = giftData;
+    showGift(giftData, { onlyDisplay: true });
+  };
+
+  onLoad((options) => {
+    livePusher.liveStatus = LivePusherStatus.PREPARE;
+    if (options && options.isLiving === 'true') {
+      livePusher.liveStatus = LivePusherStatus.PUSHER;
+    }
+    // 禁用右滑返回（仅 iOS 有效）
+    if (uni.getSystemInfoSync().platform === 'ios') {
+      const pages = getCurrentPages();
+      if (pages.length > 0) {
+        const currentPage = pages[pages.length - 1];
+        currentPage.$page.style.disableSwipeBack = true;
+      }
+    }
+  });
+
+  // 通话结束后回到主播页，恢复摄像头和麦克风（开播前需要预览，开播后需要推流）
+  const handleCallEndedBackToLive = () => {
+    console.warn('[Anchor] callEndedBackToLive: restoring camera and microphone, isStartLive:', isStartLive.value);
+    openLocalCamera({ isFront: isFrontCamera.value });
+    openLocalMicrophone();
+  };
+
+  onMounted(() => {
+    setSdkLanguageFromSystem()
+    uni.setKeepScreenOn({
+      keepScreenOn: true,
+    });
+    openLocalCamera({
+      isFront: true,
+    });
+    openLocalMicrophone();
+    uni.getSystemInfo({
+      success: (res) => {
+        systemInfo.value = res;
+        safeArea.value = res.safeArea;
+
+        console.warn(`systemInfo: ${systemInfo.value.windowHeight}`)
+      }
+    });
+    addCoHostListener(uni.$liveID,
+      'onCoHostRequestAccepted',
+      handleCoHostRequestAccepted
+    )
+    addCoHostListener(uni.$liveID,
+      'onCoHostRequestRejected',
+      handleCoHostRequestRejected
+    )
+    addCoHostListener(uni.$liveID,
+      'onCoHostRequestTimeout',
+      handleCoHostRequestTimeout
+    )
+    addCoHostListener(uni.$liveID,
+      'onCoHostRequestReceived',
+      handleCoHostRequestReceived
+    )
+    uni.$on('callEndedBackToLive', handleCallEndedBackToLive);
+    uni.$on('barrageInput:show', handleBarrageInputShow);
+    uni.$on('barrageInput:hide', handleBarrageInputHide);
+    uni.$on('barrageInput:shift', onBarrageInputShift);
+  });
+  onUnmounted(() => {
+    removeCoHostListener(uni.$liveID,
+      'onCoHostRequestAccepted',
+      handleCoHostRequestAccepted
+    )
+    removeCoHostListener(uni.$liveID,
+      'onCoHostRequestRejected',
+      handleCoHostRequestRejected
+    )
+    removeCoHostListener(uni.$liveID,
+      'onCoHostRequestTimeout',
+      handleCoHostRequestTimeout
+    )
+    removeCoHostListener(uni.$liveID,
+      'onCoHostRequestReceived',
+      handleCoHostRequestReceived
+    )
+    uni.$off('callEndedBackToLive', handleCallEndedBackToLive);
+    uni.$off('barrageInput:show', handleBarrageInputShow);
+    uni.$off('barrageInput:hide', handleBarrageInputHide);
+    uni.$off('barrageInput:shift', onBarrageInputShift);
+  })
+
+  const handleCoHostRequestAccepted =
+    (event) => {
+      showTip('连线被同意')
+    }
+
+  const handleCoHostRequestRejected = (event) => {
+    showTip('连线被拒绝')
+  }
+
+  const handleCoHostRequestTimeout = (event) => {
+    showTip('连线请求超时')
+    isShowCoGuestPanelAvatar.value = true
+    closeCustomModal();
+  }
+
+  const handleCoHostRequestReceived =
+    (event) => {
+      if (isShowCoGuestPanelAvatar.value && applicants.value.length === 0) {
+        isShowCoGuestPanelAvatar.value = false
+      }
+      const res = JSON.parse(event);
+      const inviter = JSON.parse(res.inviter);
+      if (connected.value.length > 1 || applicants.value.length > 0) {
+        rejectHostConnection({
+          liveID: uni?.$liveID,
+          fromHostLiveID: inviter.liveID
+        })
+        return
+      }
+      // 使用自定义Modal替代uni.showModal
+      showCustomModalDialog(inviter);
+    }
+
+  const clearAudioEffectSet = () => {
+    setVoiceEarMonitorEnable({
+      enable: false
+    })
+    setVoiceEarMonitorVolume({
+      volume: 100
+    })
+    setAudioChangerType({
+      changerType: AudioChangerType.NONE
+    })
+    setAudioReverbType({
+      reverbType: AudioReverbType.NONE
+    })
+  }
+
+  const handleHideInput = () => {
+    uni.hideKeyboard()
+  }
+
+  const clearBeautyPanelSet = () => {
+    setSmoothLevel({ smoothLevel: 0 })
+    setWhitenessLevel({ whitenessLevel: 0 })
+    setRuddyLevel({ ruddyLevel: 0 })
+  }
+
+  const goBackToTabBar = () => {
+    clearAudioEffectSet();
+    clearBeautyPanelSet();
+    closeLocalMicrophone();
+    closeLocalCamera();
+
+    console.warn(` 后退 `);
+    uni.redirectTo({
+      url: '/pages/scenes/live/video/liveList/index',
+      success: () => {
+        console.log(`redirect success`);
+      },
+      fail: (error) => {
+        console.error(`redirect, error: ${JSON.stringify(error)}`);
+      },
+    });
+  };
+  const navigateBack = () => {
+    if (coHostStatus.value === CoHostStatusType.CONNECTED) {
+      endSheetItems.value = ['断开连线', '关闭直播间']
+      endSheetTitle.value = '当前处于连线状态，是否需要「断开连线」或「关闭直播间」'
+    } else {
+      endSheetItems.value = ['关闭直播间']
+      endSheetTitle.value = ''
+    }
+    isShowEndSheet.value = true
+  };
+
+  const onEndSheetSelect = (res: { tapIndex: number }) => {
+    const index = res.tapIndex
+    if (coHostStatus.value === CoHostStatusType.CONNECTED && index === 0) {
+      exitHostConnection({
+        liveID: uni?.$liveID,
+      })
+      return
+    }
+    if (coHostStatus.value === CoHostStatusType.CONNECTED && index === 1 || coHostStatus.value !== CoHostStatusType.CONNECTED && index === 0) {
+      clearAudioEffectSet()
+      clearBeautyPanelSet()
+      endLive({
+        success: () => {
+          uni.redirectTo({ url: '/pages/scenes/live/video/pusher/liveEnd' });
+        },
+      });
+    }
+  }
+
+  const handleCamera = () => {
+    switchCamera({ isFront: !isFrontCamera.value })
+  };
+
+  const handleSettings = () => {
+    isShowLiveMoreActionsPanel.value = true;
+  };
+
+  const startLive = () => {
+
+    createLive({
+      liveInfo: {
+        liveID: uni?.$liveID,
+        liveName: liveTitle.value,
+        totalViewerCount: 4,
+        coverURL: coverURL.value,
+        isSeatEnabled: true,
+        seatMode: TakeSeatMode.APPLY,
+        maxSeatCount: 0,
+        isPublicVisible: liveMode.value === '公开',
+        keepOwnerOnSeat: true,
+        seatLayoutTemplateID: templateLayout.value,
+      },
+      success: () => {
+        const params = {
+          cursor: "", // 首次拉起传空（不能是 null),然后根据回调数据的 cursor 确认是否拉完
+          count: 20,
+        };
+        fetchLiveList(params);
+
+        openLocalCamera({ isFront: isFrontCamera.value });
+        openLocalMicrophone();
+        setLocalVideoMuteImage();
+      },
+      fail: (errCode, errMsg) => {
+        showTip('创建直播间失败');
+      },
+    });
+    livePusher.liveStatus = LivePusherStatus.PUSHER;
+  };
+
+  watch(currentLive, (newVal, oldVal) => {
+    if (newVal) {
+      console.log(`currentLive change: ${JSON.stringify(newVal)}`);
+    }
+  });
+  const testUpdateLiveInfo = () => {
+    updateLiveInfo({
+      liveInfo: {
+        liveID: uni.$liveID,
+        liveName: liveTitle.value + "-changed",
+        coverURL: coverURL.value,
+      },
+      modifyFlagList: [LiveModifyFlag.LIVE_NAME, LiveModifyFlag.COVER_URL],
+      success: () => {
+        console.log('updateLiveInfo success');
+      },
+      fail: (errCode, errMsg) => {
+        console.error('updateLiveInfo fail:', errCode, errMsg);
+      },
+    });
+  };
+
+  const testUpdateLiveMetaData = () => {
+    updateLiveMetaData({
+      metaData: JSON.stringify({ key: "test", data: "testData" }),
+      success: () => {
+        console.log('updateLiveMetaData success');
+      },
+      fail: (errCode, errMsg) => {
+        console.error('updateLiveMetaData fail:', errCode, errMsg);
+      },
+    });
+  };
+  const ShowAnchorViewClickPanel = (userInfo) => {
+    clickUserInfo.value = userInfo,
+      showUserInfoPanel()
+    isShowAnchorInfo.value = false
+  }
+
+  const showUserInfoPanel = () => {
+    isShowUserInfoPanel.value = true;
+  };
+
+  const setLocalVideoMuteImage = () => {
+    const tempFilePath = '/static/images/live-mute-local-video.png';
+    let imageFilePath = '';
+    uni.saveFile({
+      tempFilePath: tempFilePath,
+      success: (res) => {
+        console.warn('保存文件成功 = ', JSON.stringify(res));
+        imageFilePath = res.savedFilePath;
+        imageFilePath = plus.io.convertLocalFileSystemURL(imageFilePath);
+        const data = { "api": "setLocalVideoMuteImage", "params": { "image": imageFilePath } }
+        callExperimentalAPI(
+          {
+            jsonData: JSON.stringify(data)
+          })
+      },
+      fail: (err) => {
+        console.error('保存文件失败');
+      },
+    });
+  }
+
+  const showAudienceList = () => {
+    isShowAudienceList.value = true;
+  };
+
+
+  const showAnchorInfoDrawer = () => {
+    isShowAnchorInfo.value = true
+    clickUserInfo.value = { ...(currentLive?.value.liveOwner || {}), liveID: currentLive?.value.liveID || '' }
+    showUserInfoPanel()
+  }
+
+  const audienceOperator = (message: any) => {
+    console.warn(`click message: ${JSON.stringify(message)}`);
+    if (message?.sender?.userID === currentLive?.value.liveOwner.userID) return;
+
+    if (message?.sender?.userID === currentUserID.value) {
+      showTip('无法关注自己');
+      return;
+    }
+    const targetAudience = audienceList.value.find(audience =>
+      audience.userID === message?.sender?.userID
+    );
+    if (!targetAudience) {
+      isShowAnchorInfo.value = false;
+      clickUserInfo.value = message?.sender;
+      showUserInfoPanel()
+    } else {
+      selectedAudience.value = targetAudience;
+      console.warn(`click message selectedAudience: ${JSON.stringify(selectedAudience.value)}`);
+      isShowAudienceActionPanel.value = true;
+    }
+  };
+
+  const showCoHostPanel = () => {
+    if (connected.value.length > 1) {
+      return
+    }
+    const params = {
+      cursor: '', // 首次拉起传空（不能是 null),然后根据回调数据的 cursor 确认是否拉完
+      count: 20,
+    };
+    fetchLiveList(params);
+    isShowCoHostPanel.value = true;
+  };
+  const showCoGuestPanel = (activeTabValue: string = 'requests') => {
+    console.warn(`go guest Panel activeTab = ${activeTabValue}`);
+    activeTab.value = activeTabValue;
+    isShowCoGuestPanel.value = true;
+  };
+
+
+
+  import { ref as vueRef, onMounted as vueOnMounted, onUnmounted as vueOnUnmounted } from 'vue';
+  const liveDuration = vueRef(0); // 秒
+  const liveDurationText = vueRef('00:00:00');
+  let timer: any = null;
+
+  watch(isStartLive, (val) => {
+    if (val) {
+      liveDuration.value = 0;
+      updateLiveDurationText();
+      timer = setInterval(() => {
+        liveDuration.value++;
+        updateLiveDurationText();
+      }, 1000);
+    } else {
+      clearInterval(timer);
+      timer = null;
+      liveDuration.value = 0;
+      updateLiveDurationText();
+    }
+  });
+
+  function updateLiveDurationText() {
+    const h = String(Math.floor(liveDuration.value / 3600)).padStart(2, '0');
+    const m = String(Math.floor((liveDuration.value % 3600) / 60)).padStart(2, '0');
+    const s = String(liveDuration.value % 60).padStart(2, '0');
+    liveDurationText.value = `${h}:${m}:${s}`;
+  }
+
+  vueOnUnmounted(() => {
+    if (timer) clearInterval(timer);
+  });
+
+
+
+  const svgaPlayerFinished = () => {
+    isLargeSizeGiftPlayer.value = false;
+    onGiftFinished();
+  }
+
+  const avatarOverlayConfig = {
+    size: 80,
+    overlapRatio: 0.6, // 0.6 = 60% 覆盖
+    enableScale: false,
+    enableOpacity: false,
+  };
+
+  const getAvatarContainerStyle = () => {
+    const count = applicants.value?.length || 0;
+    if (count === 0) return {};
+
+    const overlapOffset = avatarOverlayConfig.size * (1 - avatarOverlayConfig.overlapRatio);
+    // 容器总宽度 = 头像大小 + (头像数量 - 1) * 偏移量
+    const containerWidth = avatarOverlayConfig.size + (count - 1) * overlapOffset;
+
+    return {
+      position: 'relative',
+      width: `${containerWidth}rpx`,
+      height: `${avatarOverlayConfig.size}rpx`,
+      margin: '0 auto'
+    };
+  };
+
+  const getAvatarStyle = (index: number, totalCount: number) => {
+    const overlapOffset = avatarOverlayConfig.size * (1 - avatarOverlayConfig.overlapRatio);
+
+    const left = index * overlapOffset;
+
+    const baseStyle = {
+      position: 'absolute',
+      left: `${left}rpx`,
+      top: '0',
+      width: `${avatarOverlayConfig.size}rpx`,
+      height: `${avatarOverlayConfig.size}rpx`,
+      borderRadius: `${avatarOverlayConfig.size / 2}rpx`,
+    };
+
+    if (avatarOverlayConfig.enableScale) {
+      baseStyle.transform = `scale(${1 - index * 0.05})`;
+    }
+
+    if (avatarOverlayConfig.enableOpacity) {
+      baseStyle.opacity = 1 - index * 0.1;
+    }
+
+    return baseStyle;
+  };
+</script>
+
+<style>
+  .live-container {
+    flex: 1;
+    position: relative;
+    background: rgba(15, 16, 20, 0.5);
+    overflow: hidden;
+  }
+
+  .navigate-back-arrow {
+    position: absolute;
+    top: 130rpx;
+    left: 60rpx;
+    z-index: 1000;
+    width: 60rpx;
+    height: 60rpx;
+  }
+
+  .navigate-back-arrow-image {
+    width: 20rpx;
+    height: 35rpx;
+  }
+
+  .header {
+    display: flex;
+    position: absolute;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20rpx 32rpx;
+    margin-top: 80rpx;
+    width: 750rpx;
+    top: 40rpx;
+  }
+
+  .header-left {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    flex: 1;
+  }
+
+  .stream-info {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    background-color: rgba(0, 0, 0, 0.3);
+    padding: 6rpx 10rpx;
+    border-radius: 40rpx;
+  }
+
+  .avatar {
+    width: 56rpx;
+    height: 56rpx;
+    border-radius: 30rpx;
+    border-width: 2rpx;
+    border-color: #ffffff;
+    margin-right: 16rpx;
+  }
+
+  .stream-details {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .stream-title {
+    color: #ffffff;
+    font-size: 28rpx;
+    font-weight: 500;
+    margin-bottom: 4rpx;
+    width: 120rpx;
+    height: 40rpx;
+    lines: 1;
+  }
+
+  .header-right {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-end;
+    width: 300rpx;
+  }
+
+  .participants {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .participant-avatar {
+    width: 36rpx;
+    height: 36rpx;
+    border-radius: 24rpx;
+    border-width: 2rpx;
+    border-color: #ffffff;
+    margin-right: 8rpx;
+  }
+
+  .participant-count {
+    width: 48rpx;
+    height: 48rpx;
+    border-radius: 24rpx;
+    background-color: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .count-text {
+    color: #ffffff;
+    font-size: 24rpx;
+    font-weight: 500;
+  }
+
+  .control-icons {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .control-icon {
+    width: 36rpx;
+    height: 36rpx;
+    margin-left: 16rpx;
+  }
+
+  .live-content {
+    flex: 1;
+    position: absolute;
+
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .go-guest-request-container {
+    position: fixed;
+    top: 280rpx;
+    right: 30rpx;
+    width: 200rpx;
+    height: 200rpx;
+    border-radius: 40rpx;
+    background: #4F586B;
+
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .avatar-overlay-container {
+    position: relative;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .go-guest-request-img {
+    width: 60rpx;
+    height: 60rpx;
+    border-radius: 30rpx;
+    transition-property: transform, opacity;
+    transition-duration: 0.3s;
+    transition-timing-function: ease;
+    object-fit: cover;
+  }
+
+  .go-guest-request-text {
+    margin-top: 30rpx;
+    font-size: 24rpx;
+    color: #fff;
+  }
+
+  .live-bottom-Panel {
+    flex: 1;
+    position: fixed;
+    bottom: 40rpx;
+    left: 20rpx;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .action-buttons {
+    flex-direction: row;
+    align-items: center;
+    padding-right: 70rpx;
+  }
+
+  .action-button-item {
+    width: 64rpx;
+    height: 92rpx;
+    margin-left: 24rpx;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .action-button-item.disabled {
+    opacity: 0.5;
+    filter: grayscale(100%);
+    pointer-events: none;
+  }
+
+  .action-button-icon {
+    width: 56rpx;
+    height: 56rpx;
+    margin-bottom: 4rpx;
+  }
+
+  .co-mic-btn,
+  .action-btn-bg {
+    background-color: rgba(20, 20, 22, 0.54);
+    border-radius: 50%;
+    border: 2rpx solid rgba(255, 255, 255, 0.055);
+  }
+
+  .action-button-text {
+    color: #fff;
+    font-size: 20rpx;
+  }
+
+  .live-network {
+    width: 36rpx;
+    height: 36rpx;
+  }
+
+  .live-network-container {
+    position: fixed;
+    top: 220rpx;
+    right: 10rpx;
+    width: 180rpx;
+    height: 40rpx;
+    background-color: rgba(0, 0, 0, 0.3);
+    border-radius: 45rpx;
+    flex-direction: row;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .live-timer {
+    color: #fff;
+    font-size: 24rpx;
+    margin-left: 12rpx;
+  }
+
+  .custom-modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.4);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+  }
+
+  .custom-modal {
+    width: 500rpx;
+    background-color: #FFFFFF;
+    border-radius: 20rpx;
+    box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.3);
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .modal-content {
+    flex: 1;
+    flex-direction: column;
+    align-items: center;
+    margin-top: 40rpx;
+  }
+
+  .modal-text {
+    color: #000000;
+    font-size: 32rpx;
+    font-weight: 600;
+    text-align: center;
+    line-height: 40rpx;
+    margin-bottom: 30rpx;
+    max-width: 400rpx;
+    word-wrap: break-word;
+    word-break: break-all;
+    white-space: normal;
+  }
+
+  .modal-actions {
+    flex-direction: row;
+    justify-content: space-around;
+    align-items: center;
+    border-top: 2rpx solid rgba(213, 224, 242, 1);
+    width: 500rpx;
+  }
+
+  .modal-btn {
+    width: 250rpx;
+    padding: 28rpx;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .modal-btn-confirm {
+    border-left: 2rpx solid rgba(213, 224, 242, 1);
+  }
+
+  .modal-btn-reject {
+    font-size: 32rpx;
+    font-weight: bold;
+    color: rgba(79, 88, 107, 1);
+  }
+
+  .modal-btn-accept {
+    font-size: 32rpx;
+    font-weight: bold;
+    color: rgba(28, 102, 229, 1);
+  }
+</style>

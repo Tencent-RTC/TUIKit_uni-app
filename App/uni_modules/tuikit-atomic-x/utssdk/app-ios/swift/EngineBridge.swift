@@ -157,8 +157,9 @@ import ReplayKit
     fileprivate let deviceRequestHandler = DeviceRequestHandler()
     private var observerWrapper: ObserverWrapper?
 
-    /// 屏幕 captured 变化通知观察者对象，进房时注册，退房时移除。
     private var screenCapturedObserver: NSObjectProtocol?
+    private var isScreenSharing = false
+    private var stopScreenShareDebounceWorkItem: DispatchWorkItem?
 
     /// 当前已在主线程则直接同步执行，避免不必要的 hop。
     private static func runOnMain(_ block: @escaping () -> Void) {
@@ -244,6 +245,9 @@ import ReplayKit
             BroadcastLauncher.launch()
             cb.onResult(0, "", "")
         case Self.STOP_SCREEN_SHARE:
+            isScreenSharing = false
+            stopScreenShareDebounceWorkItem?.cancel()
+            stopScreenShareDebounceWorkItem = nil
             engine.stopScreenCapture()
             cb.onResult(0, "", "")
         default:
@@ -276,8 +280,6 @@ import ReplayKit
     }
 
     /// 屏幕分享使用的 App Group：从 App Info.plist 的 `TUIRoomAppGroup` 读取
-    /// （由工程根目录 `Info.plist` 配置，云打包时合并进 App 的 Info.plist），未配置时返回空字符串，调用方需判空。与
-    /// `nativeResources/ios/ios-extension.json` 中 extension 的 application-groups 保持一致。
     private static var screenShareAppGroup: String {
         guard let value = Bundle.main.object(forInfoDictionaryKey: "TUIRoomAppGroup") as? String else {
             return ""
@@ -285,9 +287,22 @@ import ReplayKit
         return value
     }
 
-    /// 注册 `UIScreenCapturedDidChange` 通知：当系统屏幕捕获状态变化时，
-    /// 调用 `TUIRoomEngine.startScreenCapture(appGroup:)` 恢复/开启屏幕分享推流。
-    /// （对齐 conference 模块的可用实现：进房内引擎实例才是真正推流的对象。）
+    // MARK: - 广播扩展握手（与 ScreenShareExtension 的 SampleHandler 约定）
+    //
+    // `UIScreen.isCaptured` 无法区分捕获来源（本 App 广播扩展 / 系统录屏 /
+    // AirPlay / 其他 App 的扩展），用户在房间内开系统录屏或 AirPlay 时同样
+    // 置位。扩展在 broadcastStarted 时向 App Group 共享容器写
+    // broadcast_active.plist（startedAt = Unix 时间戳），broadcastFinished 时删除；
+    private static let broadcastMarkerFileName = "broadcast_active.plist"
+    private static let broadcastMarkerStartedAtKey = "startedAt"
+    /// 标记时间戳距今超过该值视为残留（扩展崩溃未清理）
+    private static let broadcastMarkerFreshness: TimeInterval = 10
+    /// isCaptured 置位可能早于扩展完成 broadcastStarted 写入（进程冷启动），
+    /// 未读到标记时按此参数在后台线程重试。
+    private static let broadcastMarkerRetryCount = 5
+    private static let broadcastMarkerRetryInterval: TimeInterval = 0.5
+
+    /// 注册 `UIScreenCapturedDidChange`
     private func registerScreenCapturedNotification() {
         removeScreenCapturedNotification()
         screenCapturedObserver = NotificationCenter.default.addObserver(
@@ -296,17 +311,80 @@ import ReplayKit
             queue: .main
         ) { [weak self] _ in
             let isCaptured = UIScreen.main.isCaptured
-            guard let self = self, isCaptured, !Self.screenShareAppGroup.isEmpty else { return }
-            self.engine.startScreenCapture(appGroup: Self.screenShareAppGroup)
+            guard let self = self, !Self.screenShareAppGroup.isEmpty else { return }
+            if isCaptured {
+                self.stopScreenShareDebounceWorkItem?.cancel()
+                self.stopScreenShareDebounceWorkItem = nil
+                if !self.isScreenSharing {
+                    self.confirmOwnBroadcastThenStart()
+                }
+            } else {
+                self.stopScreenShareDebounceWorkItem?.cancel()
+                let workItem = DispatchWorkItem { [weak self] in
+                    guard let self = self else { return }
+                    if !UIScreen.main.isCaptured && self.isScreenSharing {
+                        self.isScreenSharing = false
+                        self.engine.stopScreenCapture()
+                    }
+                }
+                self.stopScreenShareDebounceWorkItem = workItem
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5, execute: workItem)
+            }
         }
     }
 
-    /// 移除 `UIScreenCapturedDidChange` 通知。
     private func removeScreenCapturedNotification() {
         if let observer = screenCapturedObserver {
             NotificationCenter.default.removeObserver(observer)
             screenCapturedObserver = nil
         }
+        stopScreenShareDebounceWorkItem?.cancel()
+        stopScreenShareDebounceWorkItem = nil
+        isScreenSharing = false
+    }
+
+    /// 校验共享容器中的广播扩展握手标记，确认是自己的扩展后再启动屏幕分享。
+    private func confirmOwnBroadcastThenStart() {
+        let appGroup = Self.screenShareAppGroup
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            var foundDate: Date? = nil
+            for _ in 0..<Self.broadcastMarkerRetryCount {
+                foundDate = Self.readFreshBroadcastMarker(appGroup: appGroup)
+                if foundDate != nil { break }
+                Thread.sleep(forTimeInterval: Self.broadcastMarkerRetryInterval)
+            }
+            let markerDate = foundDate
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self else { return }
+                // 已退房/通知已移除，不再启动
+                guard self.screenCapturedObserver != nil else { return }
+                guard UIScreen.main.isCaptured, !self.isScreenSharing else { return }
+                guard let markerDate = markerDate else {
+                    NSLog("[ScreenShare] no fresh broadcast marker after %d retries (interval: %.1fs), skip startScreenCapture — not our extension (system screen recording / AirPlay / stale marker), appGroup=%@",
+                          Self.broadcastMarkerRetryCount, Self.broadcastMarkerRetryInterval, appGroup)
+                    return
+                }
+                self.isScreenSharing = true
+                self.engine.startScreenCapture(appGroup: Self.screenShareAppGroup)
+            }
+        }
+    }
+
+    private static func readFreshBroadcastMarker(appGroup: String) -> Date? {
+        guard !appGroup.isEmpty,
+              let dir = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroup) else {
+            return nil
+        }
+        let url = dir.appendingPathComponent(broadcastMarkerFileName)
+        guard let dict = NSDictionary(contentsOf: url) as? [String: Any],
+              let startedAt = dict[broadcastMarkerStartedAtKey] as? TimeInterval else {
+            return nil
+        }
+        let startedDate = Date(timeIntervalSince1970: startedAt)
+        guard abs(Date().timeIntervalSince(startedDate)) <= broadcastMarkerFreshness else {
+            return nil
+        }
+        return startedDate
     }
 
     // MARK: - observer 管理
@@ -1400,31 +1478,32 @@ fileprivate enum Codec {
 
     /// 按 options 中实际存在的字段推断 modifyFlag（OptionSet）。
     static func buildModifyFlag(opts: [String: Any]?) -> TUIConferenceModifyFlag {
-        guard let opts = opts else { return [] }
-        var flag: TUIConferenceModifyFlag = []
-        if opts["roomName"] != nil { flag.insert(.roomName) }
-        if opts["scheduleStartTime"] != nil { flag.insert(.scheduleStartTime) }
-        if opts["scheduleEndTime"] != nil { flag.insert(.scheduleEndTime) }
-        if opts["password"] != nil { flag.insert(.password) }
-        if opts["reminderSecondsBeforeStart"] != nil { flag.insert(.reminderSecondsBeforeStart) }
-        if opts["isAllMessageDisabled"] != nil { flag.insert(.disableMessage) }
-        if opts["isAllCameraDisabled"] != nil { flag.insert(.disableCamera) }
-        if opts["isAllMicrophoneDisabled"] != nil { flag.insert(.disableMicrophone) }
-        if opts["isAllScreenShareDisabled"] != nil { flag.insert(.disableScreenSharing) }
-        return flag
+        guard let opts = opts else { return TUIConferenceModifyFlag(rawValue: 0) }
+        var raw: UInt = 0
+        if opts["roomName"] != nil { raw |= TUIConferenceModifyFlag.roomName.rawValue }
+        if opts["scheduleStartTime"] != nil { raw |= TUIConferenceModifyFlag.scheduleStartTime.rawValue }
+        if opts["scheduleEndTime"] != nil { raw |= TUIConferenceModifyFlag.scheduleEndTime.rawValue }
+        if opts["password"] != nil { raw |= TUIConferenceModifyFlag.password.rawValue }
+        if opts["reminderSecondsBeforeStart"] != nil { raw |= TUIConferenceModifyFlag.reminderSecondsBeforeStart.rawValue }
+        if opts["isAllMessageDisabled"] != nil { raw |= TUIConferenceModifyFlag.disableMessage.rawValue }
+        if opts["isAllCameraDisabled"] != nil { raw |= TUIConferenceModifyFlag.disableCamera.rawValue }
+        if opts["isAllMicrophoneDisabled"] != nil { raw |= TUIConferenceModifyFlag.disableMicrophone.rawValue }
+        if opts["isAllScreenShareDisabled"] != nil { raw |= TUIConferenceModifyFlag.disableScreenSharing.rawValue }
+        return TUIConferenceModifyFlag(rawValue: raw)
     }
 
     static func conferenceModifyFlagToTsList(_ flag: TUIConferenceModifyFlag) -> [String] {
+        let raw = flag.rawValue
         var list: [String] = []
-        if flag.contains(.roomName) { list.append("roomName") }
-        if flag.contains(.scheduleStartTime) { list.append("scheduleStartTime") }
-        if flag.contains(.scheduleEndTime) { list.append("scheduleEndTime") }
-        if flag.contains(.password) { list.append("password") }
-        if flag.contains(.reminderSecondsBeforeStart) { list.append("reminderSecondsBeforeStart") }
-        if flag.contains(.disableMessage) { list.append("isAllMessageDisabled") }
-        if flag.contains(.disableCamera) { list.append("isAllCameraDisabled") }
-        if flag.contains(.disableMicrophone) { list.append("isAllMicrophoneDisabled") }
-        if flag.contains(.disableScreenSharing) { list.append("isAllScreenShareDisabled") }
+        if raw & TUIConferenceModifyFlag.roomName.rawValue != 0 { list.append("roomName") }
+        if raw & TUIConferenceModifyFlag.scheduleStartTime.rawValue != 0 { list.append("scheduleStartTime") }
+        if raw & TUIConferenceModifyFlag.scheduleEndTime.rawValue != 0 { list.append("scheduleEndTime") }
+        if raw & TUIConferenceModifyFlag.password.rawValue != 0 { list.append("password") }
+        if raw & TUIConferenceModifyFlag.reminderSecondsBeforeStart.rawValue != 0 { list.append("reminderSecondsBeforeStart") }
+        if raw & TUIConferenceModifyFlag.disableMessage.rawValue != 0 { list.append("isAllMessageDisabled") }
+        if raw & TUIConferenceModifyFlag.disableCamera.rawValue != 0 { list.append("isAllCameraDisabled") }
+        if raw & TUIConferenceModifyFlag.disableMicrophone.rawValue != 0 { list.append("isAllMicrophoneDisabled") }
+        if raw & TUIConferenceModifyFlag.disableScreenSharing.rawValue != 0 { list.append("isAllScreenShareDisabled") }
         return list
     }
 
@@ -1441,7 +1520,7 @@ fileprivate enum Codec {
 
     /// `TUIConferenceStatus` 是 OptionSet，映射到 ts RoomStatus：running=2 / 其它兜底=1。
     static func conferenceStatusToTs(_ status: TUIConferenceStatus) -> Int {
-        if status.contains(.running) { return 2 }
+        if status.rawValue & TUIConferenceStatus.running.rawValue != 0 { return 2 }
         return 1
     }
 

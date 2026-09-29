@@ -1,0 +1,4445 @@
+
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>atomicx-core sdk API 文档</title>
+    <link rel="stylesheet" href="../assets/styles.css">
+</head>
+<body>
+    <div class="sidebar">
+        <div class="toc">
+  <h3>目录</h3>
+  <ul>
+    <li><a href="#overview">atomicx-core sdk </a></li>
+    <li><a href="#module-LoginState">LoginState</a>
+      <ul>
+      <li><a href="#data-LoginState" class="section-category">响应式数据</a>
+        <ul>
+          <li><a href="#loginUserInfo" class="sub-item">loginUserInfo</a></li>
+          <li><a href="#loginStatus" class="sub-item">loginStatus</a></li>
+        </ul>
+      </li>
+      <li><a href="#api-LoginState" class="section-category">接口函数</a>
+        <ul>
+          <li><a href="#login" class="sub-item">login</a></li>
+          <li><a href="#logout" class="sub-item">logout</a></li>
+          <li><a href="#setSelfInfo" class="sub-item">setSelfInfo</a></li>
+        </ul>
+      </li>
+      </ul>
+    </li>
+    <li><a href="#module-LiveListState">LiveListState</a>
+      <ul>
+      <li><a href="#data-LiveListState" class="section-category">响应式数据</a>
+        <ul>
+          <li><a href="#liveList" class="sub-item">liveList</a></li>
+          <li><a href="#liveListCursor" class="sub-item">liveListCursor</a></li>
+          <li><a href="#currentLive" class="sub-item">currentLive</a></li>
+        </ul>
+      </li>
+      <li><a href="#api-LiveListState" class="section-category">接口函数</a>
+        <ul>
+          <li><a href="#fetchLiveList" class="sub-item">fetchLiveList</a></li>
+          <li><a href="#createLive" class="sub-item">createLive</a></li>
+          <li><a href="#joinLive" class="sub-item">joinLive</a></li>
+          <li><a href="#leaveLive" class="sub-item">leaveLive</a></li>
+          <li><a href="#endLive" class="sub-item">endLive</a></li>
+          <li><a href="#updateLiveInfo" class="sub-item">updateLiveInfo</a></li>
+          <li><a href="#updateLiveMetaData" class="sub-item">updateLiveMetaData</a></li>
+          <li><a href="#addLiveListListener" class="sub-item">addLiveListListener</a></li>
+          <li><a href="#removeLiveListListener" class="sub-item">removeLiveListListener</a></li>
+        </ul>
+      </li>
+      </ul>
+    </li>
+    <li><a href="#module-LiveSeatState">LiveSeatState</a>
+      <ul>
+      <li><a href="#data-LiveSeatState" class="section-category">响应式数据</a>
+        <ul>
+          <li><a href="#seatList" class="sub-item">seatList</a></li>
+          <li><a href="#canvas" class="sub-item">canvas</a></li>
+          <li><a href="#speakingUsers" class="sub-item">speakingUsers</a></li>
+        </ul>
+      </li>
+      <li><a href="#api-LiveSeatState" class="section-category">接口函数</a>
+        <ul>
+          <li><a href="#takeSeat" class="sub-item">takeSeat</a></li>
+          <li><a href="#leaveSeat" class="sub-item">leaveSeat</a></li>
+          <li><a href="#muteMicrophone" class="sub-item">muteMicrophone</a></li>
+          <li><a href="#unmuteMicrophone" class="sub-item">unmuteMicrophone</a></li>
+          <li><a href="#kickUserOutOfSeat" class="sub-item">kickUserOutOfSeat</a></li>
+          <li><a href="#moveUserToSeat" class="sub-item">moveUserToSeat</a></li>
+          <li><a href="#lockSeat" class="sub-item">lockSeat</a></li>
+          <li><a href="#unlockSeat" class="sub-item">unlockSeat</a></li>
+          <li><a href="#openRemoteCamera" class="sub-item">openRemoteCamera</a></li>
+          <li><a href="#closeRemoteCamera" class="sub-item">closeRemoteCamera</a></li>
+          <li><a href="#openRemoteMicrophone" class="sub-item">openRemoteMicrophone</a></li>
+          <li><a href="#closeRemoteMicrophone" class="sub-item">closeRemoteMicrophone</a></li>
+          <li><a href="#addLiveSeatEventListener" class="sub-item">addLiveSeatEventListener</a></li>
+          <li><a href="#removeLiveSeatEventListener" class="sub-item">removeLiveSeatEventListener</a></li>
+        </ul>
+      </li>
+      </ul>
+    </li>
+    <li><a href="#module-LiveAudienceState">LiveAudienceState</a>
+      <ul>
+      <li><a href="#data-LiveAudienceState" class="section-category">响应式数据</a>
+        <ul>
+          <li><a href="#audienceList" class="sub-item">audienceList</a></li>
+          <li><a href="#audienceCount" class="sub-item">audienceCount</a></li>
+          <li><a href="#messageBannedUserList" class="sub-item">messageBannedUserList</a></li>
+        </ul>
+      </li>
+      <li><a href="#api-LiveAudienceState" class="section-category">接口函数</a>
+        <ul>
+          <li><a href="#fetchAudienceList" class="sub-item">fetchAudienceList</a></li>
+          <li><a href="#setAdministrator" class="sub-item">setAdministrator</a></li>
+          <li><a href="#revokeAdministrator" class="sub-item">revokeAdministrator</a></li>
+          <li><a href="#kickUserOutOfRoom" class="sub-item">kickUserOutOfRoom</a></li>
+          <li><a href="#disableSendMessage" class="sub-item">disableSendMessage</a></li>
+          <li><a href="#addAudienceListener" class="sub-item">addAudienceListener</a></li>
+          <li><a href="#removeAudienceListener" class="sub-item">removeAudienceListener</a></li>
+        </ul>
+      </li>
+      </ul>
+    </li>
+    <li><a href="#module-CoGuestState">CoGuestState</a>
+      <ul>
+      <li><a href="#data-CoGuestState" class="section-category">响应式数据</a>
+        <ul>
+          <li><a href="#connected" class="sub-item">connected</a></li>
+          <li><a href="#invitees" class="sub-item">invitees</a></li>
+          <li><a href="#applicants" class="sub-item">applicants</a></li>
+          <li><a href="#candidates" class="sub-item">candidates</a></li>
+        </ul>
+      </li>
+      <li><a href="#api-CoGuestState" class="section-category">接口函数</a>
+        <ul>
+          <li><a href="#applyForSeat" class="sub-item">applyForSeat</a></li>
+          <li><a href="#cancelApplication" class="sub-item">cancelApplication</a></li>
+          <li><a href="#acceptApplication" class="sub-item">acceptApplication</a></li>
+          <li><a href="#rejectApplication" class="sub-item">rejectApplication</a></li>
+          <li><a href="#inviteToSeat" class="sub-item">inviteToSeat</a></li>
+          <li><a href="#cancelInvitation" class="sub-item">cancelInvitation</a></li>
+          <li><a href="#acceptInvitation" class="sub-item">acceptInvitation</a></li>
+          <li><a href="#rejectInvitation" class="sub-item">rejectInvitation</a></li>
+          <li><a href="#disconnect" class="sub-item">disconnect</a></li>
+          <li><a href="#addCoGuestGuestListener" class="sub-item">addCoGuestGuestListener</a></li>
+          <li><a href="#removeCoGuestGuestListener" class="sub-item">removeCoGuestGuestListener</a></li>
+          <li><a href="#addCoGuestHostListener" class="sub-item">addCoGuestHostListener</a></li>
+          <li><a href="#removeCoGuestHostListener" class="sub-item">removeCoGuestHostListener</a></li>
+        </ul>
+      </li>
+      </ul>
+    </li>
+    <li><a href="#module-CoHostState">CoHostState</a>
+      <ul>
+      <li><a href="#data-CoHostState" class="section-category">响应式数据</a>
+        <ul>
+          <li><a href="#connected" class="sub-item">connected</a></li>
+          <li><a href="#invitees" class="sub-item">invitees</a></li>
+          <li><a href="#applicant" class="sub-item">applicant</a></li>
+          <li><a href="#coHostStatus" class="sub-item">coHostStatus</a></li>
+        </ul>
+      </li>
+      <li><a href="#api-CoHostState" class="section-category">接口函数</a>
+        <ul>
+          <li><a href="#requestHostConnection" class="sub-item">requestHostConnection</a></li>
+          <li><a href="#cancelHostConnection" class="sub-item">cancelHostConnection</a></li>
+          <li><a href="#acceptHostConnection" class="sub-item">acceptHostConnection</a></li>
+          <li><a href="#rejectHostConnection" class="sub-item">rejectHostConnection</a></li>
+          <li><a href="#exitHostConnection" class="sub-item">exitHostConnection</a></li>
+          <li><a href="#addCoHostListener" class="sub-item">addCoHostListener</a></li>
+          <li><a href="#removeCoHostListener" class="sub-item">removeCoHostListener</a></li>
+        </ul>
+      </li>
+      </ul>
+    </li>
+    <li><a href="#module-BattleState">BattleState</a>
+      <ul>
+      <li><a href="#data-BattleState" class="section-category">响应式数据</a>
+        <ul>
+          <li><a href="#currentBattleInfo" class="sub-item">currentBattleInfo</a></li>
+          <li><a href="#battleUsers" class="sub-item">battleUsers</a></li>
+          <li><a href="#battleScore" class="sub-item">battleScore</a></li>
+        </ul>
+      </li>
+      <li><a href="#api-BattleState" class="section-category">接口函数</a>
+        <ul>
+          <li><a href="#requestBattle" class="sub-item">requestBattle</a></li>
+          <li><a href="#cancelBattleRequest" class="sub-item">cancelBattleRequest</a></li>
+          <li><a href="#acceptBattle" class="sub-item">acceptBattle</a></li>
+          <li><a href="#rejectBattle" class="sub-item">rejectBattle</a></li>
+          <li><a href="#exitBattle" class="sub-item">exitBattle</a></li>
+          <li><a href="#addBattleListener" class="sub-item">addBattleListener</a></li>
+          <li><a href="#removeBattleListener" class="sub-item">removeBattleListener</a></li>
+        </ul>
+      </li>
+      </ul>
+    </li>
+    <li><a href="#module-DeviceState">DeviceState</a>
+      <ul>
+      <li><a href="#data-DeviceState" class="section-category">响应式数据</a>
+        <ul>
+          <li><a href="#microphoneStatus" class="sub-item">microphoneStatus</a></li>
+          <li><a href="#microphoneLastError" class="sub-item">microphoneLastError</a></li>
+          <li><a href="#hasPublishAudioPermission" class="sub-item">hasPublishAudioPermission</a></li>
+          <li><a href="#captureVolume" class="sub-item">captureVolume</a></li>
+          <li><a href="#currentMicVolume" class="sub-item">currentMicVolume</a></li>
+          <li><a href="#outputVolume" class="sub-item">outputVolume</a></li>
+          <li><a href="#cameraStatus" class="sub-item">cameraStatus</a></li>
+          <li><a href="#cameraLastError" class="sub-item">cameraLastError</a></li>
+          <li><a href="#isFrontCamera" class="sub-item">isFrontCamera</a></li>
+          <li><a href="#localMirrorType" class="sub-item">localMirrorType</a></li>
+          <li><a href="#localVideoQuality" class="sub-item">localVideoQuality</a></li>
+          <li><a href="#currentAudioRoute" class="sub-item">currentAudioRoute</a></li>
+          <li><a href="#screenStatus" class="sub-item">screenStatus</a></li>
+          <li><a href="#networkInfo" class="sub-item">networkInfo</a></li>
+        </ul>
+      </li>
+      <li><a href="#api-DeviceState" class="section-category">接口函数</a>
+        <ul>
+          <li><a href="#openLocalMicrophone" class="sub-item">openLocalMicrophone</a></li>
+          <li><a href="#closeLocalMicrophone" class="sub-item">closeLocalMicrophone</a></li>
+          <li><a href="#setCaptureVolume" class="sub-item">setCaptureVolume</a></li>
+          <li><a href="#setOutputVolume" class="sub-item">setOutputVolume</a></li>
+          <li><a href="#setAudioRoute" class="sub-item">setAudioRoute</a></li>
+          <li><a href="#openLocalCamera" class="sub-item">openLocalCamera</a></li>
+          <li><a href="#closeLocalCamera" class="sub-item">closeLocalCamera</a></li>
+          <li><a href="#switchCamera" class="sub-item">switchCamera</a></li>
+          <li><a href="#switchMirror" class="sub-item">switchMirror</a></li>
+          <li><a href="#updateVideoQuality" class="sub-item">updateVideoQuality</a></li>
+          <li><a href="#startScreenShare" class="sub-item">startScreenShare</a></li>
+          <li><a href="#stopScreenShare" class="sub-item">stopScreenShare</a></li>
+          <li><a href="#clearDeviceState" class="sub-item">clearDeviceState</a></li>
+        </ul>
+      </li>
+      </ul>
+    </li>
+    <li><a href="#module-AudioEffectState">AudioEffectState</a>
+      <ul>
+      <li><a href="#data-AudioEffectState" class="section-category">响应式数据</a>
+        <ul>
+          <li><a href="#isEarMonitorOpened" class="sub-item">isEarMonitorOpened</a></li>
+          <li><a href="#earMonitorVolume" class="sub-item">earMonitorVolume</a></li>
+          <li><a href="#audioChangerType" class="sub-item">audioChangerType</a></li>
+          <li><a href="#audioReverbType" class="sub-item">audioReverbType</a></li>
+        </ul>
+      </li>
+      <li><a href="#api-AudioEffectState" class="section-category">接口函数</a>
+        <ul>
+          <li><a href="#setAudioChangerType" class="sub-item">setAudioChangerType</a></li>
+          <li><a href="#setAudioReverbType" class="sub-item">setAudioReverbType</a></li>
+          <li><a href="#setVoiceEarMonitorEnable" class="sub-item">setVoiceEarMonitorEnable</a></li>
+          <li><a href="#setVoiceEarMonitorVolume" class="sub-item">setVoiceEarMonitorVolume</a></li>
+        </ul>
+      </li>
+      </ul>
+    </li>
+    <li><a href="#module-BarrageState">BarrageState</a>
+      <ul>
+      <li><a href="#data-BarrageState" class="section-category">响应式数据</a>
+        <ul>
+          <li><a href="#messageList" class="sub-item">messageList</a></li>
+        </ul>
+      </li>
+      <li><a href="#api-BarrageState" class="section-category">接口函数</a>
+        <ul>
+          <li><a href="#sendTextMessage" class="sub-item">sendTextMessage</a></li>
+          <li><a href="#sendCustomMessage" class="sub-item">sendCustomMessage</a></li>
+          <li><a href="#appendLocalTip" class="sub-item">appendLocalTip</a></li>
+        </ul>
+      </li>
+      </ul>
+    </li>
+    <li><a href="#module-BaseBeautyState">BaseBeautyState</a>
+      <ul>
+      <li><a href="#data-BaseBeautyState" class="section-category">响应式数据</a>
+        <ul>
+          <li><a href="#smoothLevel" class="sub-item">smoothLevel</a></li>
+          <li><a href="#whitenessLevel" class="sub-item">whitenessLevel</a></li>
+          <li><a href="#ruddyLevel" class="sub-item">ruddyLevel</a></li>
+        </ul>
+      </li>
+      <li><a href="#api-BaseBeautyState" class="section-category">接口函数</a>
+        <ul>
+          <li><a href="#setSmoothLevel" class="sub-item">setSmoothLevel</a></li>
+          <li><a href="#setWhitenessLevel" class="sub-item">setWhitenessLevel</a></li>
+          <li><a href="#setRuddyLevel" class="sub-item">setRuddyLevel</a></li>
+        </ul>
+      </li>
+      </ul>
+    </li>
+    <li><a href="#module-GiftState">GiftState</a>
+      <ul>
+      <li><a href="#data-GiftState" class="section-category">响应式数据</a>
+        <ul>
+          <li><a href="#usableGifts" class="sub-item">usableGifts</a></li>
+        </ul>
+      </li>
+      <li><a href="#api-GiftState" class="section-category">接口函数</a>
+        <ul>
+          <li><a href="#refreshUsableGifts" class="sub-item">refreshUsableGifts</a></li>
+          <li><a href="#sendGift" class="sub-item">sendGift</a></li>
+          <li><a href="#setLanguage" class="sub-item">setLanguage</a></li>
+          <li><a href="#addGiftListener" class="sub-item">addGiftListener</a></li>
+          <li><a href="#removeGiftListener" class="sub-item">removeGiftListener</a></li>
+        </ul>
+      </li>
+      </ul>
+    </li>
+    <li><a href="#module-LikeState">LikeState</a>
+      <ul>
+      <li><a href="#data-LikeState" class="section-category">响应式数据</a>
+        <ul>
+          <li><a href="#totalLikeCount" class="sub-item">totalLikeCount</a></li>
+        </ul>
+      </li>
+      <li><a href="#api-LikeState" class="section-category">接口函数</a>
+        <ul>
+          <li><a href="#sendLike" class="sub-item">sendLike</a></li>
+          <li><a href="#addLikeListener" class="sub-item">addLikeListener</a></li>
+          <li><a href="#removeLikeListener" class="sub-item">removeLikeListener</a></li>
+        </ul>
+      </li>
+      </ul>
+    </li>
+    <li><a href="#module-CallState">CallState</a>
+      <ul>
+      <li><a href="#data-CallState" class="section-category">响应式数据</a>
+        <ul>
+          <li><a href="#activeCall" class="sub-item">activeCall</a></li>
+          <li><a href="#recentCalls" class="sub-item">recentCalls</a></li>
+          <li><a href="#cursor" class="sub-item">cursor</a></li>
+          <li><a href="#selfInfo" class="sub-item">selfInfo</a></li>
+          <li><a href="#allParticipants" class="sub-item">allParticipants</a></li>
+          <li><a href="#speakerVolumes" class="sub-item">speakerVolumes</a></li>
+          <li><a href="#networkQualities" class="sub-item">networkQualities</a></li>
+        </ul>
+      </li>
+      <li><a href="#api-CallState" class="section-category">接口函数</a>
+        <ul>
+          <li><a href="#calls" class="sub-item">calls</a></li>
+          <li><a href="#accept" class="sub-item">accept</a></li>
+          <li><a href="#reject" class="sub-item">reject</a></li>
+          <li><a href="#hangup" class="sub-item">hangup</a></li>
+          <li><a href="#join" class="sub-item">join</a></li>
+          <li><a href="#invite" class="sub-item">invite</a></li>
+          <li><a href="#queryRecentCalls" class="sub-item">queryRecentCalls</a></li>
+          <li><a href="#deleteRecentCalls" class="sub-item">deleteRecentCalls</a></li>
+          <li><a href="#addCallListener" class="sub-item">addCallListener</a></li>
+          <li><a href="#removeCallListener" class="sub-item">removeCallListener</a></li>
+        </ul>
+      </li>
+      </ul>
+    </li>
+  </ul>
+</div>
+
+    </div>
+    
+    <div class="content">
+        <header>
+            <h1>atomicx-core sdk API 文档</h1>
+        </header>
+        
+        <div class="search-container">
+            <input type="text" class="search-input" placeholder="搜索API..." onkeyup="search(this.value)">
+        </div>
+        
+        <section id="overview">
+<h2>atomicx-core sdk </h2>
+<p>atomicx-core sdk 是腾讯云最新推出的面向即时通信、音视频通话、视频直播、语聊房等场景的全新一代基于响应式的 API，您可以非常快速的在基于这组 API 构建自己的 UI 页面，它支持房间管理、屏幕分享、成员管理、麦位控制、基础美颜等丰富功能，同时基于 TRTC SDK，能够提供超低延时、高品质的音视频体验，本页面包含 atomicx-core sdk 的所有API接口，按功能模块分类展示。</p>
+</section>
+
+<section id="module-LoginState">
+  <h2>LoginState</h2>
+  <div class="module-description">
+    <div class="module-description-content">用户身份认证与登录管理模块<br>核心功能：负责用户身份验证、登录状态管理、用户信息维护等基础认证服务。<br>技术特点：支持多种认证方式、会话管理、权限验证等高级功能，确保用户身份的安全和有效。<br>业务价值：为直播平台提供基础的用户认证能力，是所有其他业务模块的前置条件。<br>应用场景：用户登录、身份验证、会话管理、权限控制等基础认证场景。</div>
+  </div>
+  <section id="data-LoginState">
+    <h3>响应式数据</h3>
+    <div class="data-item" id="loginUserInfo">
+      <h4>loginUserInfo</h4>
+      <div class="api-signature">const loginUserInfo: Ref<UserProfileParam | undefined></div>
+    <div class="api-description">当前登录用户信息</div>
+    <div class="type-info">
+      <strong>类型:</strong> <code>Ref<UserProfileParam | undefined></code>
+    </div>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useLoginState } from &#39;@/uni_modules/tuikit-atomic-x/state/LoginState&#39;;
+const { loginUserInfo } = useLoginState();
+
+// 监听用户信息变化
+watch(loginUserInfo, (newUserInfo) =&gt; {
+  if (newUserInfo) {
+    console.log(&#39;用户信息更新:&#39;, newUserInfo);
+    console.log(&#39;用户ID:&#39;, newUserInfo.userID);
+    console.log(&#39;用户昵称:&#39;, newUserInfo.nickname);
+    console.log(&#39;用户头像:&#39;, newUserInfo.avatarURL);
+  }
+});
+
+// 获取当前用户信息
+const currentUser = loginUserInfo.value;
+if (currentUser) {
+  console.log(&#39;当前登录用户:&#39;, currentUser.nickname);
+}</code></pre>
+    </div>
+    </div>
+    <div class="data-item" id="loginStatus">
+      <h4>loginStatus</h4>
+      <div class="api-signature">const loginStatus: Ref<string | undefined></div>
+    <div class="api-description">当前登录状态</div>
+    <div class="type-info">
+      <strong>类型:</strong> <code>Ref<string | undefined></code>
+    </div>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useLoginState } from &#39;@/uni_modules/tuikit-atomic-x/state/LoginState&#39;;
+const { loginStatus } = useLoginState();
+
+// 监听登录状态变化
+watch(loginStatus, (newStatus) =&gt; {
+  if (newStatus) {
+    console.log(&#39;登录状态更新:&#39;, newStatus);
+  }
+});
+
+// 获取当前登录状态
+const status = loginStatus.value;
+console.log(&#39;当前登录状态:&#39;, status);</code></pre>
+    </div>
+    </div>
+  </section>
+  <section id="api-LoginState">
+    <h3>接口函数</h3>
+    <div class="api-item" id="login">
+      <h4>login</h4>
+      <div class="api-signature">function login(params: LoginOptions)</div>
+    <div class="api-description">登录方法</div>
+    <h3>参数</h3>
+    <table class="param-table">
+      <tr>
+        <th>参数名</th>
+        <th>类型</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td>params</td>
+        <td><a href="interface.html#LoginOptions">LoginOptions</a></td>
+        <td>登录参数</td>
+      </tr>
+    </table>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useLoginState } from &#39;@/uni_modules/tuikit-atomic-x/state/LoginState&#39;;
+const { login } = useLoginState();
+login({
+  sdkAppID: 1400000000,
+  userID: &#39;user123&#39;,
+  userSig: &#39;eJx1kF1PwzAMhv9KlG...&#39;,
+  success: () =&gt; console.log(&#39;登录成功&#39;),
+  fail: (code, message) =&gt; console.error(&#39;登录失败:&#39;, code, message)
+});</code></pre>
+    </div>
+    </div>
+    <div class="api-item" id="logout">
+      <h4>logout</h4>
+      <div class="api-signature">function logout(params?: LogoutOptions)</div>
+    <div class="api-description">登出方法</div>
+    <h3>参数</h3>
+    <table class="param-table">
+      <tr>
+        <th>参数名</th>
+        <th>类型</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td>[params]</td>
+        <td><a href="interface.html#LogoutOptions">LogoutOptions</a></td>
+        <td>登出参数（可选）</td>
+      </tr>
+    </table>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useLoginState } from &#39;@/uni_modules/tuikit-atomic-x/state/LoginState&#39;;
+const { logout } = useLoginState();
+logout({
+  success: () =&gt; console.log(&#39;登出成功&#39;),
+  fail: (code, message) =&gt; console.error(&#39;登出失败:&#39;, code, message)
+});</code></pre>
+    </div>
+    </div>
+    <div class="api-item" id="setSelfInfo">
+      <h4>setSelfInfo</h4>
+      <div class="api-signature">function setSelfInfo(params: SetSelfInfoOptions)</div>
+    <div class="api-description">设置用户信息</div>
+    <h3>参数</h3>
+    <table class="param-table">
+      <tr>
+        <th>参数名</th>
+        <th>类型</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td>userInfo</td>
+        <td><a href="interface.html#SetSelfInfoOptions">SetSelfInfoOptions</a></td>
+        <td>用户信息</td>
+      </tr>
+    </table>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useLoginState } from &#39;@/uni_modules/tuikit-atomic-x/state/LoginState&#39;;
+const { setSelfInfo } = useLoginState();
+setSelfInfo({
+  userProfile: {
+    userID: &#39;user123&#39;,
+    nickname: &#39;张三&#39;,
+    avatarURL: &#39;https://example.com/avatar.jpg&#39;,
+  },
+  success: () =&gt; console.log(&#39;用户信息设置成功&#39;),
+  fail: (code, message) =&gt; console.error(&#39;用户信息设置失败:&#39;, code, message)
+});</code></pre>
+    </div>
+    </div>
+  </section>
+</section>
+
+<section id="module-LiveListState">
+  <h2>LiveListState</h2>
+  <div class="module-description">
+    <div class="module-description-content">直播列表状态管理模块<br>核心功能：管理直播间列表的获取、刷新、分页加载等操作，提供直播间创建、销毁、状态查询等基础服务。<br>技术特点：支持直播列表分页加载、实时状态同步、多端数据一致性保证等高级功能。<br>业务价值：为直播平台提供直播间发现和管理的核心入口，是所有直播业务的基础。<br>应用场景：直播列表展示、直播间创建与管理、直播状态查询、用户信息管理等核心场景。</div>
+  </div>
+  <section id="data-LiveListState">
+    <h3>响应式数据</h3>
+    <div class="data-item" id="liveList">
+      <h4>liveList</h4>
+      <div class="api-signature">const liveList: Ref<LiveInfoParam[]></div>
+    <div class="api-description">直播列表数据</div>
+    <div class="type-info">
+      <strong>类型:</strong> <code>Ref<LiveInfoParam[]></code>
+    </div>
+    </div>
+    <div class="data-item" id="liveListCursor">
+      <h4>liveListCursor</h4>
+      <div class="api-signature">const liveListCursor: Ref<string></div>
+    <div class="api-description">直播列表游标，用于分页加载</div>
+    <div class="type-info">
+      <strong>类型:</strong> <code>Ref<string></code>
+    </div>
+    </div>
+    <div class="data-item" id="currentLive">
+      <h4>currentLive</h4>
+      <div class="api-signature">const currentLive: Ref<LiveInfoParam | null></div>
+    <div class="api-description">当前直播信息</div>
+    <div class="type-info">
+      <strong>类型:</strong> <code>Ref<LiveInfoParam | null></code>
+    </div>
+    </div>
+  </section>
+  <section id="api-LiveListState">
+    <h3>接口函数</h3>
+    <div class="api-item" id="fetchLiveList">
+      <h4>fetchLiveList</h4>
+      <div class="api-signature">function fetchLiveList(params: FetchLiveListOptions)</div>
+    <div class="api-description">获取直播列表</div>
+    <h3>参数</h3>
+    <table class="param-table">
+      <tr>
+        <th>参数名</th>
+        <th>类型</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td>params</td>
+        <td><a href="interface.html#FetchLiveListOptions">FetchLiveListOptions</a></td>
+        <td>获取参数</td>
+      </tr>
+    </table>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useLiveState } from &#39;@/uni_modules/tuikit-atomic-x/state/LiveListState&#39;;
+const { fetchLiveList } = useLiveState();
+fetchLiveList({ cursor: &quot;&quot;, count: 20 });</code></pre>
+    </div>
+    </div>
+    <div class="api-item" id="createLive">
+      <h4>createLive</h4>
+      <div class="api-signature">function createLive(params: CreateLiveOptions)</div>
+    <div class="api-description">创建直播</div>
+    <h3>参数</h3>
+    <table class="param-table">
+      <tr>
+        <th>参数名</th>
+        <th>类型</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td>params</td>
+        <td><a href="interface.html#CreateLiveOptions">CreateLiveOptions</a></td>
+        <td>创建参数</td>
+      </tr>
+    </table>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useLiveState } from &#39;@/uni_modules/tuikit-atomic-x/state/LiveListState&#39;;
+const { createLive } = useLiveState();
+createLive({ liveID: &#39;xxx&#39;, coverUrl: &#39;https://example.com/cover.jpg&#39;});</code></pre>
+    </div>
+    </div>
+    <div class="api-item" id="joinLive">
+      <h4>joinLive</h4>
+      <div class="api-signature">function joinLive(params: JoinLiveOptions)</div>
+    <div class="api-description">加入直播</div>
+    <h3>参数</h3>
+    <table class="param-table">
+      <tr>
+        <th>参数名</th>
+        <th>类型</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td>params</td>
+        <td><a href="interface.html#JoinLiveOptions">JoinLiveOptions</a></td>
+        <td>加入参数</td>
+      </tr>
+    </table>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useLiveState } from &#39;@/uni_modules/tuikit-atomic-x/state/LiveListState&#39;;
+const { joinLive } = useLiveState();
+joinLive({ liveID: &#39;host_live_id&#39; });</code></pre>
+    </div>
+    </div>
+    <div class="api-item" id="leaveLive">
+      <h4>leaveLive</h4>
+      <div class="api-signature">function leaveLive(params?: LeaveLiveOptions)</div>
+    <div class="api-description">离开直播</div>
+    <h3>参数</h3>
+    <table class="param-table">
+      <tr>
+        <th>参数名</th>
+        <th>类型</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td>[params]</td>
+        <td><a href="interface.html#LeaveLiveOptions">LeaveLiveOptions</a></td>
+        <td>离开参数（可选）</td>
+      </tr>
+    </table>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useLiveState } from &#39;@/uni_modules/tuikit-atomic-x/state/LiveListState&#39;;
+const { leaveLive } = useLiveState();
+leaveLive();</code></pre>
+    </div>
+    </div>
+    <div class="api-item" id="endLive">
+      <h4>endLive</h4>
+      <div class="api-signature">function endLive(params?: EndLiveOptions)</div>
+    <div class="api-description">结束直播</div>
+    <h3>参数</h3>
+    <table class="param-table">
+      <tr>
+        <th>参数名</th>
+        <th>类型</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td>[params]</td>
+        <td><a href="interface.html#EndLiveOptions">EndLiveOptions</a></td>
+        <td>结束参数（可选）</td>
+      </tr>
+    </table>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useLiveState } from &#39;@/uni_modules/tuikit-atomic-x/state/LiveListState&#39;;
+const { endLive } = useLiveState();
+endLive();</code></pre>
+    </div>
+    </div>
+    <div class="api-item" id="updateLiveInfo">
+      <h4>updateLiveInfo</h4>
+      <div class="api-signature">function updateLiveInfo(params: UpdateLiveInfoOptions)</div>
+    <div class="api-description">更新直播信息</div>
+    <h3>参数</h3>
+    <table class="param-table">
+      <tr>
+        <th>参数名</th>
+        <th>类型</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td>params</td>
+        <td><a href="interface.html#UpdateLiveInfoOptions">UpdateLiveInfoOptions</a></td>
+        <td>更新参数</td>
+      </tr>
+    </table>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useLiveState } from &#39;@/uni_modules/tuikit-atomic-x/state/LiveListState&#39;;
+const { updateLiveInfo } = useLiveState();
+updateLiveInfo({ liveID: &#39;your_live_id&#39;, title: &#39;new title&#39; });</code></pre>
+    </div>
+    </div>
+    <div class="api-item" id="updateLiveMetaData">
+      <h4>updateLiveMetaData</h4>
+      <div class="api-signature">function updateLiveMetaData(params: UpdateLiveMetaDataOptions)</div>
+    <div class="api-description">更新直播元数据
+- 只有管理员或房主可以调用此接口。
+- 元数据更新后，房间内所有用户都会收到 {currentLive.meta} 数据更新。
+- 键长度不能超过 50 字节，值长度不超过 200 字节。</div>
+    <h3>参数</h3>
+    <table class="param-table">
+      <tr>
+        <th>参数名</th>
+        <th>类型</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td>params</td>
+        <td><a href="interface.html#UpdateLiveMetaDataOptions">UpdateLiveMetaDataOptions</a></td>
+        <td>更新参数</td>
+      </tr>
+    </table>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useLiveState } from &#39;@/uni_modules/tuikit-atomic-x/state/LiveListState&#39;;
+const { updateLiveMetaData } = useLiveState();
+updateLiveMetaData({ metaData: JSON.stringify({ key: &#39;value&#39; }) });</code></pre>
+    </div>
+    </div>
+    <div class="api-item" id="addLiveListListener">
+      <h4>addLiveListListener</h4>
+      <div class="api-signature">function addLiveListListener(eventName: string, listener: ListenerCallback)</div>
+    <div class="api-description">添加直播列表事件监听</div>
+    <h3>参数</h3>
+    <table class="param-table">
+      <tr>
+        <th>参数名</th>
+        <th>类型</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td>eventName</td>
+        <td>string</td>
+        <td>事件名称，可选值: 'onLiveEnded'(直播结束)<br>'onKickedOutOfLive'(被踢出直播间)</td>
+      </tr>
+      <tr>
+        <td>listener</td>
+        <td>(eventData: string) => void</td>
+        <td>事件监听器函数</td>
+      </tr>
+    </table>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useLiveState } from &#39;@/uni_modules/tuikit-atomic-x/state/LiveListState&#39;;
+const { addLiveListListener } = useLiveState();
+addLiveListListener(&#39;onLiveEnded&#39;, (eventData) =&gt; {
+	console.log(&#39;eventData:&#39;, eventData);
+});</code></pre>
+    </div>
+    </div>
+    <div class="api-item" id="removeLiveListListener">
+      <h4>removeLiveListListener</h4>
+      <div class="api-signature">function removeLiveListListener(eventName: string, listener: ListenerCallback)</div>
+    <div class="api-description">移除直播列表事件监听</div>
+    <h3>参数</h3>
+    <table class="param-table">
+      <tr>
+        <th>参数名</th>
+        <th>类型</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td>eventName</td>
+        <td>string</td>
+        <td>事件名称，可选值: 'onLiveEnded'(直播结束)<br>'onKickedOutOfLive'(被踢出直播间)</td>
+      </tr>
+      <tr>
+        <td>listener</td>
+        <td>(eventData: string) => void</td>
+        <td>事件监听器函数，需要传入添加时相同的函数引用</td>
+      </tr>
+    </table>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useLiveState } from &#39;@/uni_modules/tuikit-atomic-x/state/LiveListState&#39;;
+const { addLiveListListener, removeLiveListListener } = useLiveState();
+const onLiveEnded = (eventData) =&gt; {
+	console.log(&#39;eventData:&#39;, eventData);
+};
+addLiveListListener(&#39;onLiveEnded&#39;, onLiveEnded);
+// 移除监听时传入相同的函数引用
+removeLiveListListener(&#39;onLiveEnded&#39;, onLiveEnded);</code></pre>
+    </div>
+    </div>
+  </section>
+</section>
+
+<section id="module-LiveSeatState">
+  <h2>LiveSeatState</h2>
+  <div class="module-description">
+    <div class="module-description-content">直播间麦位管理模块<br>核心功能：实现多人连麦场景下的座位控制，支持复杂的座位状态管理和音视频设备控制。<br>技术特点：基于音视频技术，支持多路音视频流管理，提供座位锁定、设备控制、权限管理等高级功能。<br>业务价值：为多人互动直播提供核心技术支撑，支持PK、连麦、多人游戏等丰富的互动场景。<br>应用场景：多人连麦、主播PK、互动游戏、在线教育、会议直播等需要多人音视频互动的场景。</div>
+  </div>
+  <section id="data-LiveSeatState">
+    <h3>响应式数据</h3>
+    <div class="data-item" id="seatList">
+      <h4>seatList</h4>
+      <div class="api-signature">const seatList: Ref<SeatInfo[]></div>
+    <div class="api-description">座位列表</div>
+    <div class="type-info">
+      <strong>类型:</strong> <code>Ref<SeatInfo[]></code>
+    </div>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useLiveSeatState } from &#39;@/uni_modules/tuikit-atomic-x/state/LiveSeatState&#39;;
+const { seatList } = useLiveSeatState(&#39;your_live_id&#39;);
+
+// 监听座位列表变化
+watch(seatList, (newSeatList) =&gt; {
+  if (newSeatList &amp;&amp; newSeatList.length &gt; 0) {
+    console.log(&#39;座位列表更新:&#39;, newSeatList);
+    newSeatList.forEach(seat =&gt; {
+      console.log(&#39;座位索引:&#39;, seat.index);
+      console.log(&#39;座位是否锁定:&#39;, seat.isLocked);
+      if (seat.userInfo) {
+        console.log(&#39;座位上用户ID:&#39;, seat.userInfo.userID);
+      }
+    });
+  }
+});
+
+// 获取当前座位列表
+const seats = seatList.value;
+console.log(&#39;当前座位数:&#39;, seats.length);</code></pre>
+    </div>
+    </div>
+    <div class="data-item" id="canvas">
+      <h4>canvas</h4>
+      <div class="api-signature">const canvas: Ref<LiveCanvasParams | null></div>
+    <div class="api-description">画布信息</div>
+    <div class="type-info">
+      <strong>类型:</strong> <code>Ref<LiveCanvasParams | null></code>
+    </div>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useLiveSeatState } from &#39;@/uni_modules/tuikit-atomic-x/state/LiveSeatState&#39;;
+const { canvas } = useLiveSeatState(&#39;your_live_id&#39;);
+
+// 监听画布信息变化
+watch(canvas, (newCanvas) =&gt; {
+  if (newCanvas) {
+    console.log(&#39;画布信息更新:&#39;, newCanvas);
+  }
+});
+
+// 获取当前画布信息
+const currentCanvas = canvas.value;
+if (currentCanvas) {
+  console.log(&#39;当前画布分辨率:&#39;, currentCanvas.w, &#39;x&#39;, currentCanvas.h);
+}</code></pre>
+    </div>
+    </div>
+    <div class="data-item" id="speakingUsers">
+      <h4>speakingUsers</h4>
+      <div class="api-signature">const speakingUsers: Ref<Map<string, number> | null></div>
+    <div class="api-description">正在说话的用户列表</div>
+    <div class="type-info">
+      <strong>类型:</strong> <code>Ref<Map<string, number> | null></code>
+    </div>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useLiveSeatState } from &#39;@/uni_modules/tuikit-atomic-x/state/LiveSeatState&#39;;
+const { speakingUsers } = useLiveSeatState(&#39;your_live_id&#39;);
+
+// 监听正在说话的用户列表变化
+watch(speakingUsers, (newSpeakingUsers) =&gt; {
+  if (newSpeakingUsers &amp;&amp; newSpeakingUsers.size &gt; 0) {
+    console.log(&#39;正在说话的用户更新&#39;);
+    newSpeakingUsers.forEach((volume, userID) =&gt; {
+      console.log(&#39;用户ID:&#39;, userID);
+      console.log(&#39;音量:&#39;, volume);
+    });
+  }
+});
+
+// 获取当前正在说话的用户数量
+const users = speakingUsers.value;
+if (users) {
+  console.log(&#39;当前说话的用户数:&#39;, users.size);
+}</code></pre>
+    </div>
+    </div>
+  </section>
+  <section id="api-LiveSeatState">
+    <h3>接口函数</h3>
+    <div class="api-item" id="takeSeat">
+      <h4>takeSeat</h4>
+      <div class="api-signature">function takeSeat(params: TakeSeatOptions)</div>
+    <div class="api-description">用户上麦</div>
+    <h3>参数</h3>
+    <table class="param-table">
+      <tr>
+        <th>参数名</th>
+        <th>类型</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td>params</td>
+        <td><a href="interface.html#TakeSeatOptions">TakeSeatOptions</a></td>
+        <td>上麦参数</td>
+      </tr>
+    </table>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useLiveSeatState } from &#39;@/uni_modules/tuikit-atomic-x/state/LiveSeatState&#39;;
+const { takeSeat } = useLiveSeatState(&#39;your_live_id&#39;);
+takeSeat({
+  liveID: &#39;your_live_id&#39;,
+  seatIndex: 1,
+  success: () =&gt; console.log(&#39;上麦成功&#39;),
+  fail: (code, message) =&gt; console.error(&#39;上麦失败:&#39;, code, message)
+});</code></pre>
+    </div>
+    </div>
+    <div class="api-item" id="leaveSeat">
+      <h4>leaveSeat</h4>
+      <div class="api-signature">function leaveSeat(params: LeaveSeatOptions)</div>
+    <div class="api-description">用户下麦</div>
+    <h3>参数</h3>
+    <table class="param-table">
+      <tr>
+        <th>参数名</th>
+        <th>类型</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td>params</td>
+        <td><a href="interface.html#LeaveSeatOptions">LeaveSeatOptions</a></td>
+        <td>下麦参数</td>
+      </tr>
+    </table>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useLiveSeatState } from &#39;@/uni_modules/tuikit-atomic-x/state/LiveSeatState&#39;;
+const { leaveSeat } = useLiveSeatState(&#39;your_live_id&#39;);
+leaveSeat({
+  liveID: &#39;your_live_id&#39;,
+  success: () =&gt; console.log(&#39;下麦成功&#39;),
+  fail: (code, message) =&gt; console.error(&#39;下麦失败:&#39;, code, message)
+});</code></pre>
+    </div>
+    </div>
+    <div class="api-item" id="muteMicrophone">
+      <h4>muteMicrophone</h4>
+      <div class="api-signature">function muteMicrophone(params: MuteMicrophoneOptions)</div>
+    <div class="api-description">静音麦克风</div>
+    <h3>参数</h3>
+    <table class="param-table">
+      <tr>
+        <th>参数名</th>
+        <th>类型</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td>params</td>
+        <td><a href="interface.html#MuteMicrophoneOptions">MuteMicrophoneOptions</a></td>
+        <td>静音参数</td>
+      </tr>
+    </table>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useLiveSeatState } from &#39;@/uni_modules/tuikit-atomic-x/state/LiveSeatState&#39;;
+const { muteMicrophone } = useLiveSeatState(&#39;your_live_id&#39;);
+muteMicrophone({
+  liveID: &#39;your_live_id&#39;,
+});</code></pre>
+    </div>
+    </div>
+    <div class="api-item" id="unmuteMicrophone">
+      <h4>unmuteMicrophone</h4>
+      <div class="api-signature">function unmuteMicrophone(params: UnmuteMicrophoneOptions)</div>
+    <div class="api-description">取消静音麦克风</div>
+    <h3>参数</h3>
+    <table class="param-table">
+      <tr>
+        <th>参数名</th>
+        <th>类型</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td>params</td>
+        <td><a href="interface.html#UnmuteMicrophoneOptions">UnmuteMicrophoneOptions</a></td>
+        <td>取消静音参数</td>
+      </tr>
+    </table>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useLiveSeatState } from &#39;@/uni_modules/tuikit-atomic-x/state/LiveSeatState&#39;;
+const { unmuteMicrophone } = useLiveSeatState(&#39;your_live_id&#39;);
+unmuteMicrophone({
+  liveID: &#39;your_live_id&#39;,
+  success: () =&gt; console.log(&#39;麦克风取消静音成功&#39;),
+  fail: (code, message) =&gt; console.error(&#39;麦克风取消静音失败:&#39;, code, message)
+});</code></pre>
+    </div>
+    </div>
+    <div class="api-item" id="kickUserOutOfSeat">
+      <h4>kickUserOutOfSeat</h4>
+      <div class="api-signature">function kickUserOutOfSeat(params: KickUserOutOfSeatOptions)</div>
+    <div class="api-description">将用户踢出座位</div>
+    <h3>参数</h3>
+    <table class="param-table">
+      <tr>
+        <th>参数名</th>
+        <th>类型</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td>params</td>
+        <td><a href="interface.html#KickUserOutOfSeatOptions">KickUserOutOfSeatOptions</a></td>
+        <td>踢出参数</td>
+      </tr>
+    </table>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useLiveSeatState } from &#39;@/uni_modules/tuikit-atomic-x/state/LiveSeatState&#39;;
+const { kickUserOutOfSeat } = useLiveSeatState(&#39;your_live_id&#39;);
+kickUserOutOfSeat({
+  liveID: &#39;your_live_id&#39;,
+  userID: &#39;用户 ID&#39;,
+  success: () =&gt; console.log(&#39;踢出用户成功&#39;),
+  fail: (code, message) =&gt; console.error(&#39;踢出用户失败:&#39;, code, message)
+});</code></pre>
+    </div>
+    </div>
+    <div class="api-item" id="moveUserToSeat">
+      <h4>moveUserToSeat</h4>
+      <div class="api-signature">function moveUserToSeat(params: MoveUserToSeatOptions)</div>
+    <div class="api-description">移动用户到指定座位</div>
+    <h3>参数</h3>
+    <table class="param-table">
+      <tr>
+        <th>参数名</th>
+        <th>类型</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td>params</td>
+        <td><a href="interface.html#MoveUserToSeatOptions">MoveUserToSeatOptions</a></td>
+        <td>移动参数</td>
+      </tr>
+    </table>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useLiveSeatState } from &#39;@/uni_modules/tuikit-atomic-x/state/LiveSeatState&#39;;
+const { moveUserToSeat } = useLiveSeatState(&#39;your_live_id&#39;);
+moveUserToSeat({
+  liveID: &#39;your_live_id&#39;,
+  userID: &#39;用户 ID&#39;,
+  targetIndex: 1,
+  success: () =&gt; console.log(&#39;用户移动成功&#39;),
+  fail: (code, message) =&gt; console.error(&#39;用户移动失败:&#39;, code, message)
+});</code></pre>
+    </div>
+    </div>
+    <div class="api-item" id="lockSeat">
+      <h4>lockSeat</h4>
+      <div class="api-signature">function lockSeat(params: LockSeatOptions)</div>
+    <div class="api-description">锁定座位</div>
+    <h3>参数</h3>
+    <table class="param-table">
+      <tr>
+        <th>参数名</th>
+        <th>类型</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td>params</td>
+        <td><a href="interface.html#LockSeatOptions">LockSeatOptions</a></td>
+        <td>锁定参数</td>
+      </tr>
+    </table>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useLiveSeatState } from &#39;@/uni_modules/tuikit-atomic-x/state/LiveSeatState&#39;;
+const { lockSeat } = useLiveSeatState(&#39;your_live_id&#39;);
+lockSeat({
+  liveID: &#39;your_live_id&#39;,
+  seatIndex: 2,
+  success: () =&gt; console.log(&#39;座位锁定成功&#39;),
+  fail: (code, message) =&gt; console.error(&#39;座位锁定失败:&#39;, code, message)
+});</code></pre>
+    </div>
+    </div>
+    <div class="api-item" id="unlockSeat">
+      <h4>unlockSeat</h4>
+      <div class="api-signature">function unlockSeat(params: UnlockSeatOptions)</div>
+    <div class="api-description">解锁座位</div>
+    <h3>参数</h3>
+    <table class="param-table">
+      <tr>
+        <th>参数名</th>
+        <th>类型</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td>params</td>
+        <td><a href="interface.html#UnlockSeatOptions">UnlockSeatOptions</a></td>
+        <td>解锁参数</td>
+      </tr>
+    </table>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useLiveSeatState } from &#39;@/uni_modules/tuikit-atomic-x/state/LiveSeatState&#39;;
+const { unlockSeat } = useLiveSeatState(&#39;your_live_id&#39;);
+unlockSeat({
+  liveID: &#39;your_live_id&#39;,
+  seatIndex: 2,
+  success: () =&gt; console.log(&#39;座位解锁成功&#39;),
+  fail: (code, message) =&gt; console.error(&#39;座位解锁失败:&#39;, code, message)
+});</code></pre>
+    </div>
+    </div>
+    <div class="api-item" id="openRemoteCamera">
+      <h4>openRemoteCamera</h4>
+      <div class="api-signature">function openRemoteCamera(params: OpenRemoteCameraOptions)</div>
+    <div class="api-description">开启远程摄像头</div>
+    <h3>参数</h3>
+    <table class="param-table">
+      <tr>
+        <th>参数名</th>
+        <th>类型</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td>params</td>
+        <td><a href="interface.html#OpenRemoteCameraOptions">OpenRemoteCameraOptions</a></td>
+        <td>开启摄像头参数</td>
+      </tr>
+    </table>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useLiveSeatState } from &#39;@/uni_modules/tuikit-atomic-x/state/LiveSeatState&#39;;
+const { openRemoteCamera } = useLiveSeatState(&#39;your_live_id&#39;);
+openRemoteCamera({
+  liveID: &#39;your_live_id&#39;,
+  userID: &#39;用户 ID&#39;,
+  policy: &#39;UNLOCK_ONLY&#39;,
+  success: () =&gt; console.log(&#39;远程摄像头开启成功&#39;),
+  fail: (code, message) =&gt; console.error(&#39;远程摄像头开启失败:&#39;, code, message)
+});</code></pre>
+    </div>
+    </div>
+    <div class="api-item" id="closeRemoteCamera">
+      <h4>closeRemoteCamera</h4>
+      <div class="api-signature">function closeRemoteCamera(params: CloseRemoteCameraOptions)</div>
+    <div class="api-description">关闭远程摄像头</div>
+    <h3>参数</h3>
+    <table class="param-table">
+      <tr>
+        <th>参数名</th>
+        <th>类型</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td>params</td>
+        <td><a href="interface.html#CloseRemoteCameraOptions">CloseRemoteCameraOptions</a></td>
+        <td>关闭摄像头参数</td>
+      </tr>
+    </table>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useLiveSeatState } from &#39;@/uni_modules/tuikit-atomic-x/state/LiveSeatState&#39;;
+const { closeRemoteCamera } = useLiveSeatState(&#39;your_live_id&#39;);
+closeRemoteCamera({
+  liveID: &#39;your_live_id&#39;,
+  userID: &#39;用户 ID&#39;,
+  success: () =&gt; console.log(&#39;远程摄像头关闭成功&#39;),
+  fail: (code, message) =&gt; console.error(&#39;远程摄像头关闭失败:&#39;, code, message)
+});</code></pre>
+    </div>
+    </div>
+    <div class="api-item" id="openRemoteMicrophone">
+      <h4>openRemoteMicrophone</h4>
+      <div class="api-signature">function openRemoteMicrophone(params: OpenRemoteMicrophoneOptions)</div>
+    <div class="api-description">开启远程麦克风</div>
+    <h3>参数</h3>
+    <table class="param-table">
+      <tr>
+        <th>参数名</th>
+        <th>类型</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td>params</td>
+        <td><a href="interface.html#OpenRemoteMicrophoneOptions">OpenRemoteMicrophoneOptions</a></td>
+        <td>开启麦克风参数</td>
+      </tr>
+    </table>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useLiveSeatState } from &#39;@/uni_modules/tuikit-atomic-x/state/LiveSeatState&#39;;
+const { openRemoteMicrophone } = useLiveSeatState(&#39;your_live_id&#39;);
+openRemoteMicrophone({
+  liveID: &#39;your_live_id&#39;,
+  userID: &#39;用户 ID&#39;,
+  policy: &#39;UNLOCK_ONLY&#39;,
+  success: () =&gt; console.log(&#39;远程麦克风开启成功&#39;),
+  fail: (code, message) =&gt; console.error(&#39;远程麦克风开启失败:&#39;, code, message)
+});</code></pre>
+    </div>
+    </div>
+    <div class="api-item" id="closeRemoteMicrophone">
+      <h4>closeRemoteMicrophone</h4>
+      <div class="api-signature">function closeRemoteMicrophone(params: CloseRemoteMicrophoneOptions)</div>
+    <div class="api-description">关闭远程麦克风</div>
+    <h3>参数</h3>
+    <table class="param-table">
+      <tr>
+        <th>参数名</th>
+        <th>类型</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td>params</td>
+        <td><a href="interface.html#CloseRemoteMicrophoneOptions">CloseRemoteMicrophoneOptions</a></td>
+        <td>关闭麦克风参数</td>
+      </tr>
+    </table>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useLiveSeatState } from &#39;@/uni_modules/tuikit-atomic-x/state/LiveSeatState&#39;;
+const { closeRemoteMicrophone } = useLiveSeatState(&#39;your_live_id&#39;);
+closeRemoteMicrophone({
+  liveID: &#39;your_live_id&#39;,
+  userID: &#39;用户 ID&#39;,
+  success: () =&gt; console.log(&#39;远程麦克风关闭成功&#39;),
+  fail: (code, message) =&gt; console.error(&#39;远程麦克风关闭失败:&#39;, code, message)
+});</code></pre>
+    </div>
+    </div>
+    <div class="api-item" id="addLiveSeatEventListener">
+      <h4>addLiveSeatEventListener</h4>
+      <div class="api-signature">function addLiveSeatEventListener(liveID: string, eventName: string, listener: ListenerCallback)</div>
+    <div class="api-description">添加座位事件监听</div>
+    <h3>参数</h3>
+    <table class="param-table">
+      <tr>
+        <th>参数名</th>
+        <th>类型</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td>liveID</td>
+        <td>string</td>
+        <td>直播间ID</td>
+      </tr>
+      <tr>
+        <td>eventName</td>
+        <td>string</td>
+        <td>事件名称，可选值: 'onLocalCameraOpenedByAdmin'(本地摄像头被管理员开启)<br>'onLocalCameraClosedByAdmin'(本地摄像头被管理员关闭)<br>'onLocalMicrophoneOpenedByAdmin'(本地麦克风被管理员开启)<br>'onLocalMicrophoneClosedByAdmin'(本地麦克风被管理员关闭)</td>
+      </tr>
+      <tr>
+        <td>listener</td>
+        <td>(eventData: string) => void</td>
+        <td>事件监听器函数</td>
+      </tr>
+    </table>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useLiveSeatState } from &#39;@/uni_modules/tuikit-atomic-x/state/LiveSeatState&#39;;
+const { addLiveSeatEventListener } = useLiveSeatState(&#39;your_live_id&#39;);
+addLiveSeatEventListener(&#39;your_live_id&#39;, &#39;onLocalCameraOpenedByAdmin&#39;, (eventData) =&gt; {
+	console.log(&#39;eventData:&#39;, eventData);
+});</code></pre>
+    </div>
+    </div>
+    <div class="api-item" id="removeLiveSeatEventListener">
+      <h4>removeLiveSeatEventListener</h4>
+      <div class="api-signature">function removeLiveSeatEventListener(liveID: string, eventName: string, listener: ListenerCallback)</div>
+    <div class="api-description">移除座位事件监听</div>
+    <h3>参数</h3>
+    <table class="param-table">
+      <tr>
+        <th>参数名</th>
+        <th>类型</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td>liveID</td>
+        <td>string</td>
+        <td>直播间ID</td>
+      </tr>
+      <tr>
+        <td>eventName</td>
+        <td>string</td>
+        <td>事件名称，可选值: 'onLocalCameraOpenedByAdmin'(本地摄像头被管理员开启)<br>'onLocalCameraClosedByAdmin'(本地摄像头被管理员关闭)<br>'onLocalMicrophoneOpenedByAdmin'(本地麦克风被管理员开启)<br>'onLocalMicrophoneClosedByAdmin'(本地麦克风被管理员关闭)</td>
+      </tr>
+      <tr>
+        <td>listener</td>
+        <td>(eventData: string) => void</td>
+        <td>事件监听器函数，需要传入添加时相同的函数引用</td>
+      </tr>
+    </table>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useLiveSeatState } from &#39;@/uni_modules/tuikit-atomic-x/state/LiveSeatState&#39;;
+const { addLiveSeatEventListener, removeLiveSeatEventListener } = useLiveSeatState(&#39;your_live_id&#39;);
+const onCameraOpened = (eventData) =&gt; {
+	console.log(&#39;eventData:&#39;, eventData);
+};
+addLiveSeatEventListener(&#39;your_live_id&#39;, &#39;onLocalCameraOpenedByAdmin&#39;, onCameraOpened);
+// 移除监听时传入相同的函数引用
+removeLiveSeatEventListener(&#39;your_live_id&#39;, &#39;onLocalCameraOpenedByAdmin&#39;, onCameraOpened);</code></pre>
+    </div>
+    </div>
+  </section>
+</section>
+
+<section id="module-LiveAudienceState">
+  <h2>LiveAudienceState</h2>
+  <div class="module-description">
+    <div class="module-description-content">直播间观众状态管理模块<br>核心功能：管理直播间观众列表，提供观众权限控制、管理员设置等直播间秩序维护功能。<br>技术特点：支持实时观众列表更新、权限分级管理、批量操作等高级功能，确保直播间秩序和用户体验。<br>业务价值：为直播平台提供完整的观众管理解决方案，支持大规模观众场景下的秩序维护。<br>应用场景：观众管理、权限控制、直播间秩序维护、观众互动管理等核心业务场景。</div>
+  </div>
+  <section id="data-LiveAudienceState">
+    <h3>响应式数据</h3>
+    <div class="data-item" id="audienceList">
+      <h4>audienceList</h4>
+      <div class="api-signature">const audienceList: Ref<LiveUserInfoParam[]></div>
+    <div class="api-description">直播间观众列表</div>
+    <div class="type-info">
+      <strong>类型:</strong> <code>Ref<LiveUserInfoParam[]></code>
+    </div>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useLiveAudienceState } from &#39;@/uni_modules/tuikit-atomic-x/state/LiveAudienceState&#39;;
+const { audienceList } = useLiveAudienceState(&#39;your_live_id&#39;);
+
+// 监听观众列表变化
+watch(audienceList, (newAudienceList) =&gt; {
+  if (newAudienceList &amp;&amp; newAudienceList.length &gt; 0) {
+    console.log(&#39;观众列表更新:&#39;, newAudienceList);
+    newAudienceList.forEach(audience =&gt; {
+      console.log(&#39;观众ID:&#39;, audience.userID);
+    });
+  }
+});
+
+// 获取当前观众列表
+const audiences = audienceList.value;
+console.log(&#39;当前观众数:&#39;, audiences.length);</code></pre>
+    </div>
+    </div>
+    <div class="data-item" id="audienceCount">
+      <h4>audienceCount</h4>
+      <div class="api-signature">const audienceCount: Ref<number></div>
+    <div class="api-description">直播间观众数量</div>
+    <div class="type-info">
+      <strong>类型:</strong> <code>Ref<number></code>
+    </div>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useLiveAudienceState } from &#39;@/uni_modules/tuikit-atomic-x/state/LiveAudienceState&#39;;
+const { audienceCount } = useLiveAudienceState(&#39;your_live_id&#39;);
+
+// 监听观众数量变化
+watch(audienceCount, (newCount) =&gt; {
+  console.log(&#39;观众数量更新:&#39;, newCount);
+  // 当观众数量达到某个阈值时可以进行特殊处理
+  if (newCount &gt;= 100) {
+    console.log(&#39;直播热度很高，观众数超过100&#39;);
+  }
+});
+
+// 获取当前观众数量
+const count = audienceCount.value;
+console.log(&#39;当前观众数量:&#39;, count);</code></pre>
+    </div>
+    </div>
+    <div class="data-item" id="messageBannedUserList">
+      <h4>messageBannedUserList</h4>
+      <div class="api-signature">const messageBannedUserList: Ref<LiveUserInfoParam[]></div>
+    <div class="api-description">被禁止发送消息的用户列表</div>
+    <div class="type-info">
+      <strong>类型:</strong> <code>Ref<LiveUserInfoParam[]></code>
+    </div>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useLiveAudienceState } from &#39;@/uni_modules/tuikit-atomic-x/state/LiveAudienceState&#39;;
+const { messageBannedUserList } = useLiveAudienceState(&#39;your_live_id&#39;);
+
+// 监听禁言用户列表变化
+watch(messageBannedUserList, (newList) =&gt; {
+  console.log(&#39;禁言用户列表更新:&#39;, newList);
+});</code></pre>
+    </div>
+    </div>
+  </section>
+  <section id="api-LiveAudienceState">
+    <h3>接口函数</h3>
+    <div class="api-item" id="fetchAudienceList">
+      <h4>fetchAudienceList</h4>
+      <div class="api-signature">function fetchAudienceList(params?: FetchAudienceListOptions)</div>
+    <div class="api-description">获取直播间观众列表</div>
+    <h3>参数</h3>
+    <table class="param-table">
+      <tr>
+        <th>参数名</th>
+        <th>类型</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td>[params]</td>
+        <td><a href="interface.html#FetchAudienceListOptions">FetchAudienceListOptions</a></td>
+        <td>获取观众列表参数</td>
+      </tr>
+    </table>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useLiveAudienceState } from &#39;@/uni_modules/tuikit-atomic-x/state/LiveAudienceState&#39;;
+const { fetchAudienceList } = useLiveAudienceState(&quot;your_live_id&quot;);
+fetchAudienceList({
+  liveID: &#39;your_live_id&#39;,
+});</code></pre>
+    </div>
+    </div>
+    <div class="api-item" id="setAdministrator">
+      <h4>setAdministrator</h4>
+      <div class="api-signature">function setAdministrator(params: SetAdministratorOptions)</div>
+    <div class="api-description">设置管理员</div>
+    <h3>参数</h3>
+    <table class="param-table">
+      <tr>
+        <th>参数名</th>
+        <th>类型</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td>params</td>
+        <td><a href="interface.html#SetAdministratorOptions">SetAdministratorOptions</a></td>
+        <td>设置管理员参数</td>
+      </tr>
+    </table>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useLiveAudienceState } from &#39;@/uni_modules/tuikit-atomic-x/state/LiveAudienceState&#39;;
+const { setAdministrator } = useLiveAudienceState(&quot;your_live_id&quot;);
+setAdministrator({ liveID: &#39;your_live_id&#39;, userID: &#39;user123&#39; });</code></pre>
+    </div>
+    </div>
+    <div class="api-item" id="revokeAdministrator">
+      <h4>revokeAdministrator</h4>
+      <div class="api-signature">function revokeAdministrator(params: RevokeAdministratorOptions)</div>
+    <div class="api-description">撤销管理员权限</div>
+    <h3>参数</h3>
+    <table class="param-table">
+      <tr>
+        <th>参数名</th>
+        <th>类型</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td>params</td>
+        <td><a href="interface.html#RevokeAdministratorOptions">RevokeAdministratorOptions</a></td>
+        <td>撤销管理员参数</td>
+      </tr>
+    </table>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useLiveAudienceState } from &#39;@/uni_modules/tuikit-atomic-x/state/LiveAudienceState&#39;;
+const { revokeAdministrator } = useLiveAudienceState(&quot;your_live_id&quot;);
+revokeAdministrator({ liveID: &#39;your_live_id&#39;, userID: &#39;user123&#39; });</code></pre>
+    </div>
+    </div>
+    <div class="api-item" id="kickUserOutOfRoom">
+      <h4>kickUserOutOfRoom</h4>
+      <div class="api-signature">function kickUserOutOfRoom(params: KickUserOutOfRoomOptions)</div>
+    <div class="api-description">将用户踢出直播间</div>
+    <h3>参数</h3>
+    <table class="param-table">
+      <tr>
+        <th>参数名</th>
+        <th>类型</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td>params</td>
+        <td><a href="interface.html#KickUserOutOfRoomOptions">KickUserOutOfRoomOptions</a></td>
+        <td>踢出用户参数</td>
+      </tr>
+    </table>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useLiveAudienceState } from &#39;@/uni_modules/tuikit-atomic-x/state/LiveAudienceState&#39;;
+const { kickUserOutOfRoom } = useLiveAudienceState(&quot;your_live_id&quot;);
+kickUserOutOfRoom({ liveID: &#39;your_live_id&#39;, userID: &#39;user123&#39; });</code></pre>
+    </div>
+    </div>
+    <div class="api-item" id="disableSendMessage">
+      <h4>disableSendMessage</h4>
+      <div class="api-signature">function disableSendMessage(params: DisableSendMessageOptions)</div>
+    <div class="api-description">禁用用户发送消息</div>
+    <h3>参数</h3>
+    <table class="param-table">
+      <tr>
+        <th>参数名</th>
+        <th>类型</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td>params</td>
+        <td><a href="interface.html#DisableSendMessageOptions">DisableSendMessageOptions</a></td>
+        <td>禁用发送消息参数</td>
+      </tr>
+    </table>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useLiveAudienceState } from &#39;@/uni_modules/tuikit-atomic-x/state/LiveAudienceState&#39;;
+const { disableSendMessage } = useLiveAudienceState(&quot;your_live_id&quot;);
+disableSendMessage({ liveID: &#39;your_live_id&#39;, userID: &#39;user123&#39;, isDisable: true });</code></pre>
+    </div>
+    </div>
+    <div class="api-item" id="addAudienceListener">
+      <h4>addAudienceListener</h4>
+      <div class="api-signature">function addAudienceListener(liveID: string, eventName: string, listener: ListenerCallback)</div>
+    <div class="api-description">添加观众事件监听器</div>
+    <h3>参数</h3>
+    <table class="param-table">
+      <tr>
+        <th>参数名</th>
+        <th>类型</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td>liveID</td>
+        <td>string</td>
+        <td>直播间ID</td>
+      </tr>
+      <tr>
+        <td>eventName</td>
+        <td>string</td>
+        <td>事件名称，可选值: 'onAudienceJoined'(观众加入)<br>'onAudienceLeft'(观众离开)</td>
+      </tr>
+      <tr>
+        <td>listener</td>
+        <td>(eventData: string) => void</td>
+        <td>事件监听器函数</td>
+      </tr>
+    </table>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useLiveAudienceState } from &#39;@/uni_modules/tuikit-atomic-x/state/LiveAudienceState&#39;;
+const { addAudienceListener } = useLiveAudienceState(&quot;your_live_id&quot;);
+addAudienceListener(&#39;your_live_id&#39;, &#39;onAudienceJoined&#39;, (eventData) =&gt; {
+	console.log(&#39;eventData:&#39;, eventData);
+});</code></pre>
+    </div>
+    </div>
+    <div class="api-item" id="removeAudienceListener">
+      <h4>removeAudienceListener</h4>
+      <div class="api-signature">function removeAudienceListener(liveID: string, eventName: string, listener: ListenerCallback)</div>
+    <div class="api-description">移除观众事件监听</div>
+    <h3>参数</h3>
+    <table class="param-table">
+      <tr>
+        <th>参数名</th>
+        <th>类型</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td>liveID</td>
+        <td>string</td>
+        <td>直播间ID</td>
+      </tr>
+      <tr>
+        <td>eventName</td>
+        <td>string</td>
+        <td>事件名称，可选值: 'onAudienceJoined'(观众加入)<br>'onAudienceLeft'(观众离开)</td>
+      </tr>
+      <tr>
+        <td>listenerID</td>
+        <td>string</td>
+        <td>监听器ID, 用于标识监听器,需保证唯一，删除时需要传入相同的listenerID</td>
+      </tr>
+    </table>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useLiveAudienceState } from &#39;@/uni_modules/tuikit-atomic-x/state/LiveAudienceState&#39;;
+const { removeAudienceListener } = useLiveAudienceState(&quot;your_live_id&quot;);
+removeAudienceListener(&#39;your_live_id&#39;, &#39;onAudienceJoined&#39;, &#39;listener_001&#39;);</code></pre>
+    </div>
+    </div>
+  </section>
+</section>
+
+<section id="module-CoGuestState">
+  <h2>CoGuestState</h2>
+  <div class="module-description">
+    <div class="module-description-content">直播连麦管理相关接口<br>核心功能：处理观众与主播之间的连麦互动，管理连麦申请、邀请、接受、拒绝等完整的连麦流程。<br>技术特点：基于音视频技术，支持连麦状态实时同步、音视频质量自适应、网络状况监控等高级功能。<br>业务价值：为直播平台提供观众参与互动的核心能力，增强用户粘性和直播趣味性。<br>应用场景：观众连麦、互动问答、在线K歌、游戏直播等需要观众参与的互动场景。</div>
+  </div>
+  <section id="data-CoGuestState">
+    <h3>响应式数据</h3>
+    <div class="data-item" id="connected">
+      <h4>connected</h4>
+      <div class="api-signature">const connected: Ref<SeatUserInfoParam[]></div>
+    <div class="api-description">已连接的连麦嘉宾列表</div>
+    <div class="type-info">
+      <strong>类型:</strong> <code>Ref<SeatUserInfoParam[]></code>
+    </div>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useCoGuestState } from &#39;@/uni_modules/tuikit-atomic-x/state/CoGuestState&#39;;
+const { connected } = useCoGuestState(&#39;your_live_id&#39;);
+
+// 监听已连接的连麦嘉宾列表变化
+watch(connected, (newConnected) =&gt; {
+  if (newConnected &amp;&amp; newConnected.length &gt; 0) {
+    console.log(&#39;连麦嘉宾列表更新:&#39;, newConnected);
+    newConnected.forEach(guest =&gt; {
+      console.log(&#39;嘉宾用户ID:&#39;, guest.userID);
+      console.log(&#39;嘉宾名称:&#39;, guest.userName);
+    });
+  }
+});
+
+// 获取当前连麦嘉宾列表
+const guests = connected.value;
+console.log(&#39;当前连麦嘉宾数量:&#39;, guests.length);</code></pre>
+    </div>
+    </div>
+    <div class="data-item" id="invitees">
+      <h4>invitees</h4>
+      <div class="api-signature">const invitees: Ref<LiveUserInfoParam[]></div>
+    <div class="api-description">被邀请上麦的用户列表</div>
+    <div class="type-info">
+      <strong>类型:</strong> <code>Ref<LiveUserInfoParam[]></code>
+    </div>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useCoGuestState } from &#39;@/uni_modules/tuikit-atomic-x/state/CoGuestState&#39;;
+const { invitees } = useCoGuestState(&#39;your_live_id&#39;);
+
+// 监听被邀请用户列表变化
+watch(invitees, (newInvitees) =&gt; {
+  if (newInvitees &amp;&amp; newInvitees.length &gt; 0) {
+    console.log(&#39;被邀请用户列表更新:&#39;, newInvitees);
+    newInvitees.forEach(user =&gt; {
+      console.log(&#39;被邀请用户ID:&#39;, user.userID);
+      console.log(&#39;被邀请用户名称:&#39;, user.userName);
+    });
+  }
+});
+
+// 获取当前被邀请用户列表
+const invitedUsers = invitees.value;
+console.log(&#39;当前被邀请用户数量:&#39;, invitedUsers.length);</code></pre>
+    </div>
+    </div>
+    <div class="data-item" id="applicants">
+      <h4>applicants</h4>
+      <div class="api-signature">const applicants: Ref<LiveUserInfoParam[]></div>
+    <div class="api-description">申请上麦的用户列表</div>
+    <div class="type-info">
+      <strong>类型:</strong> <code>Ref<LiveUserInfoParam[]></code>
+    </div>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useCoGuestState } from &#39;@/uni_modules/tuikit-atomic-x/state/CoGuestState&#39;;
+const { applicants } = useCoGuestState(&#39;your_live_id&#39;);
+
+// 监听申请上麦用户列表变化
+watch(applicants, (newApplicants) =&gt; {
+  if (newApplicants &amp;&amp; newApplicants.length &gt; 0) {
+    console.log(&#39;申请上麦用户列表更新:&#39;, newApplicants);
+    newApplicants.forEach(user =&gt; {
+      console.log(&#39;申请用户ID:&#39;, user.userID);
+      console.log(&#39;申请用户名称:&#39;, user.userName);
+    });
+  }
+});
+
+// 获取当前申请上麦用户列表
+const applyingUsers = applicants.value;
+console.log(&#39;当前申请用户数量:&#39;, applyingUsers.length);</code></pre>
+    </div>
+    </div>
+    <div class="data-item" id="candidates">
+      <h4>candidates</h4>
+      <div class="api-signature">const candidates: Ref<LiveUserInfoParam[]></div>
+    <div class="api-description">可邀请上麦的候选用户列表</div>
+    <div class="type-info">
+      <strong>类型:</strong> <code>Ref<LiveUserInfoParam[]></code>
+    </div>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useCoGuestState } from &#39;@/uni_modules/tuikit-atomic-x/state/CoGuestState&#39;;
+const { candidates } = useCoGuestState(&#39;your_live_id&#39;);
+
+// 监听候选用户列表变化
+watch(candidates, (newCandidates) =&gt; {
+  if (newCandidates &amp;&amp; newCandidates.length &gt; 0) {
+    console.log(&#39;候选用户列表更新:&#39;, newCandidates);
+    newCandidates.forEach(user =&gt; {
+      console.log(&#39;候选用户ID:&#39;, user.userID);
+      console.log(&#39;候选用户名称:&#39;, user.userName);
+    });
+  }
+});
+
+// 获取当前候选用户列表
+const candidateUsers = candidates.value;
+console.log(&#39;当前候选用户数量:&#39;, candidateUsers.length);</code></pre>
+    </div>
+    </div>
+  </section>
+  <section id="api-CoGuestState">
+    <h3>接口函数</h3>
+    <div class="api-item" id="applyForSeat">
+      <h4>applyForSeat</h4>
+      <div class="api-signature">function applyForSeat(params: ApplyForSeatOptions)</div>
+    <div class="api-description">申请连麦座位</div>
+    <h3>参数</h3>
+    <table class="param-table">
+      <tr>
+        <th>参数名</th>
+        <th>类型</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td>params</td>
+        <td><a href="interface.html#ApplyForSeatOptions">ApplyForSeatOptions</a></td>
+        <td>申请连麦座位参数</td>
+      </tr>
+    </table>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useCoGuestState } from &#39;@/uni_modules/tuikit-atomic-x/state/CoGuestState&#39;;
+const { applyForSeat } = useCoGuestState(&quot;your_live_id&quot;);
+applyForSeat({ liveID: &#39;your_live_id&#39;, seatIndex: 2, timeout: 30 , extension: &#39;extra info&#39;});</code></pre>
+    </div>
+    </div>
+    <div class="api-item" id="cancelApplication">
+      <h4>cancelApplication</h4>
+      <div class="api-signature">function cancelApplication(params: CancelApplicationOptions)</div>
+    <div class="api-description">取消申请</div>
+    <h3>参数</h3>
+    <table class="param-table">
+      <tr>
+        <th>参数名</th>
+        <th>类型</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td>params</td>
+        <td><a href="interface.html#CancelApplicationOptions">CancelApplicationOptions</a></td>
+        <td>取消申请参数</td>
+      </tr>
+    </table>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useCoGuestState } from &#39;@/uni_modules/tuikit-atomic-x/state/CoGuestState&#39;;
+const { cancelApplication } = useCoGuestState(&quot;your_live_id&quot;);
+cancelApplication({ liveID: &#39;your_live_id&#39; });</code></pre>
+    </div>
+    </div>
+    <div class="api-item" id="acceptApplication">
+      <h4>acceptApplication</h4>
+      <div class="api-signature">function acceptApplication(params: AcceptApplicationOptions)</div>
+    <div class="api-description">接受申请</div>
+    <h3>参数</h3>
+    <table class="param-table">
+      <tr>
+        <th>参数名</th>
+        <th>类型</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td>params</td>
+        <td><a href="interface.html#AcceptApplicationOptions">AcceptApplicationOptions</a></td>
+        <td>接受申请参数</td>
+      </tr>
+    </table>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useCoGuestState } from &#39;@/uni_modules/tuikit-atomic-x/state/CoGuestState&#39;;
+const { acceptApplication } = useCoGuestState(&quot;your_live_id&quot;);
+acceptApplication({ liveID: &#39;your_live_id&#39;, userID: &#39;user123&#39;, seatIndex: 0 });</code></pre>
+    </div>
+    </div>
+    <div class="api-item" id="rejectApplication">
+      <h4>rejectApplication</h4>
+      <div class="api-signature">function rejectApplication(params: RejectApplicationOptions)</div>
+    <div class="api-description">拒绝申请</div>
+    <h3>参数</h3>
+    <table class="param-table">
+      <tr>
+        <th>参数名</th>
+        <th>类型</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td>params</td>
+        <td><a href="interface.html#RejectApplicationOptions">RejectApplicationOptions</a></td>
+        <td>拒绝申请参数</td>
+      </tr>
+    </table>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useCoGuestState } from &#39;@/uni_modules/tuikit-atomic-x/state/CoGuestState&#39;;
+const { rejectApplication } = useCoGuestState(&quot;your_live_id&quot;);
+rejectApplication({ liveID: &#39;your_live_id&#39;, userID: &#39;user123&#39; });</code></pre>
+    </div>
+    </div>
+    <div class="api-item" id="inviteToSeat">
+      <h4>inviteToSeat</h4>
+      <div class="api-signature">function inviteToSeat(params: InviteToSeatOptions)</div>
+    <div class="api-description">邀请上麦</div>
+    <h3>参数</h3>
+    <table class="param-table">
+      <tr>
+        <th>参数名</th>
+        <th>类型</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td>params</td>
+        <td><a href="interface.html#InviteToSeatOptions">InviteToSeatOptions</a></td>
+        <td>邀请上麦参数</td>
+      </tr>
+    </table>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useCoGuestState } from &#39;@/uni_modules/tuikit-atomic-x/state/CoGuestState&#39;;
+const { inviteToSeat } = useCoGuestState(&quot;your_live_id&quot;);
+inviteToSeat({ liveID: &#39;your_live_id&#39;, inviteeID: &#39;user123&#39;, seatIndex: 2, timeout: 30 , extension: &#39;extra info&#39;});</code></pre>
+    </div>
+    </div>
+    <div class="api-item" id="cancelInvitation">
+      <h4>cancelInvitation</h4>
+      <div class="api-signature">function cancelInvitation(params: CancelInvitationOptions)</div>
+    <div class="api-description">取消邀请</div>
+    <h3>参数</h3>
+    <table class="param-table">
+      <tr>
+        <th>参数名</th>
+        <th>类型</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td>params</td>
+        <td><a href="interface.html#CancelInvitationOptions">CancelInvitationOptions</a></td>
+        <td>取消邀请参数</td>
+      </tr>
+    </table>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useCoGuestState } from &#39;@/uni_modules/tuikit-atomic-x/state/CoGuestState&#39;;
+const { cancelInvitation } = useCoGuestState(&quot;your_live_id&quot;);
+cancelInvitation({ inviteeID: &#39;user123&#39; });</code></pre>
+    </div>
+    </div>
+    <div class="api-item" id="acceptInvitation">
+      <h4>acceptInvitation</h4>
+      <div class="api-signature">function acceptInvitation(params: AcceptInvitationOptions)</div>
+    <div class="api-description">接受邀请</div>
+    <h3>参数</h3>
+    <table class="param-table">
+      <tr>
+        <th>参数名</th>
+        <th>类型</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td>params</td>
+        <td><a href="interface.html#AcceptInvitationOptions">AcceptInvitationOptions</a></td>
+        <td>接受邀请参数</td>
+      </tr>
+    </table>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useCoGuestState } from &#39;@/uni_modules/tuikit-atomic-x/state/CoGuestState&#39;;
+const { acceptInvitation } = useCoGuestState(&quot;your_live_id&quot;);
+acceptInvitation({ liveID: &#39;your_live_id&#39;, inviterID: &#39;user123&#39; });</code></pre>
+    </div>
+    </div>
+    <div class="api-item" id="rejectInvitation">
+      <h4>rejectInvitation</h4>
+      <div class="api-signature">function rejectInvitation(params: RejectInvitationOptions)</div>
+    <div class="api-description">拒绝邀请</div>
+    <h3>参数</h3>
+    <table class="param-table">
+      <tr>
+        <th>参数名</th>
+        <th>类型</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td>params</td>
+        <td><a href="interface.html#RejectInvitationOptions">RejectInvitationOptions</a></td>
+        <td>拒绝邀请参数</td>
+      </tr>
+    </table>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useCoGuestState } from &#39;@/uni_modules/tuikit-atomic-x/state/CoGuestState&#39;;
+const { rejectInvitation } = useCoGuestState(&quot;your_live_id&quot;);
+rejectInvitation({ liveID: &#39;your_live_id&#39;, inviterID: &#39;user123&#39;});</code></pre>
+    </div>
+    </div>
+    <div class="api-item" id="disconnect">
+      <h4>disconnect</h4>
+      <div class="api-signature">function disconnect(params: DisconnectOptions)</div>
+    <div class="api-description">断开连麦连接</div>
+    <h3>参数</h3>
+    <table class="param-table">
+      <tr>
+        <th>参数名</th>
+        <th>类型</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td>params</td>
+        <td><a href="interface.html#DisconnectOptions">DisconnectOptions</a></td>
+        <td>断开连接参数</td>
+      </tr>
+    </table>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useCoGuestState } from &#39;@/uni_modules/tuikit-atomic-x/state/CoGuestState&#39;;
+const { disconnect } = useCoGuestState(&quot;your_live_id&quot;);
+disconnect({ liveID: &#39;your_live_id&#39; });</code></pre>
+    </div>
+    </div>
+    <div class="api-item" id="addCoGuestGuestListener">
+      <h4>addCoGuestGuestListener</h4>
+      <div class="api-signature">function addCoGuestGuestListener(liveID: string, eventName: string, listener: ListenerCallback)</div>
+    <div class="api-description">添加连麦嘉宾侧事件监听</div>
+    <h3>参数</h3>
+    <table class="param-table">
+      <tr>
+        <th>参数名</th>
+        <th>类型</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td>liveID</td>
+        <td>string</td>
+        <td>直播间ID</td>
+      </tr>
+      <tr>
+        <td>eventName</td>
+        <td>string</td>
+        <td>事件名称，可选值: 'onHostInvitationReceived'(收到主播邀请)<br>'onHostInvitationCancelled'(主播取消邀请)<br>'onGuestApplicationResponded'(嘉宾申请响应)<br>'onGuestApplicationNoResponse'(嘉宾申请无响应)<br>'onKickedOffSeat'(被踢下座位)</td>
+      </tr>
+      <tr>
+        <td>listener</td>
+        <td>(eventData: string) => void</td>
+        <td>事件监听器函数</td>
+      </tr>
+    </table>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useCoGuestState } from &#39;@/uni_modules/tuikit-atomic-x/state/CoGuestState&#39;;
+const { addCoGuestGuestListener } = useCoGuestState(&quot;your_live_id&quot;);
+addCoGuestGuestListener(&#39;your_live_id&#39;, &#39;onHostInvitationReceived&#39;, (eventData) =&gt; {
+	console.log(&#39;eventData:&#39;, eventData);
+});</code></pre>
+    </div>
+    </div>
+    <div class="api-item" id="removeCoGuestGuestListener">
+      <h4>removeCoGuestGuestListener</h4>
+      <div class="api-signature">function removeCoGuestGuestListener(liveID: string, eventName: string, listener: ListenerCallback)</div>
+    <div class="api-description">移除连麦嘉宾侧事件监听</div>
+    <h3>参数</h3>
+    <table class="param-table">
+      <tr>
+        <th>参数名</th>
+        <th>类型</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td>liveID</td>
+        <td>string</td>
+        <td>直播间ID</td>
+      </tr>
+      <tr>
+        <td>eventName</td>
+        <td>string</td>
+        <td>事件名称，可选值: 'onHostInvitationReceived'(收到主播邀请)<br>'onHostInvitationCancelled'(主播取消邀请)<br>'onGuestApplicationResponded'(嘉宾申请响应)<br>'onGuestApplicationNoResponse'(嘉宾申请无响应)<br>'onKickedOffSeat'(被踢下座位)</td>
+      </tr>
+    </table>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useCoGuestState } from &#39;@/uni_modules/tuikit-atomic-x/state/CoGuestState&#39;;
+const { addCoGuestGuestListener, removeCoGuestGuestListener } = useCoGuestState(&quot;your_live_id&quot;);
+const onHostInvitation = (eventData) =&gt; {
+	console.log(&#39;eventData:&#39;, eventData);
+};
+addCoGuestGuestListener(&#39;your_live_id&#39;, &#39;onHostInvitationReceived&#39;, onHostInvitation);
+// 移除监听时传入相同的函数引用
+removeCoGuestGuestListener(&#39;your_live_id&#39;, &#39;onHostInvitationReceived&#39;, onHostInvitation);</code></pre>
+    </div>
+    </div>
+    <div class="api-item" id="addCoGuestHostListener">
+      <h4>addCoGuestHostListener</h4>
+      <div class="api-signature">function addCoGuestHostListener(liveID: string, eventName: string, listener: ListenerCallback)</div>
+    <div class="api-description">添加连麦主播侧事件监听</div>
+    <h3>参数</h3>
+    <table class="param-table">
+      <tr>
+        <th>参数名</th>
+        <th>类型</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td>liveID</td>
+        <td>string</td>
+        <td>直播间ID</td>
+      </tr>
+      <tr>
+        <td>eventName</td>
+        <td>string</td>
+        <td>事件名称，可选值: 'onGuestApplicationReceived'(收到嘉宾申请)<br>'onGuestApplicationCancelled'(嘉宾取消申请)<br>'onGuestApplicationProcessedByOtherHost'(嘉宾申请被其他主播处理)<br>'onHostInvitationResponded'(主播邀请得到回应)<br>'onHostInvitationNoResponse'(主播邀请无响应)</td>
+      </tr>
+      <tr>
+        <td>listener</td>
+        <td>(eventData: string) => void</td>
+        <td>事件监听器函数</td>
+      </tr>
+    </table>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useCoGuestState } from &#39;@/uni_modules/tuikit-atomic-x/state/CoGuestState&#39;;
+const { addCoGuestHostListener } = useCoGuestState(&quot;your_live_id&quot;);
+addCoGuestHostListener(&#39;your_live_id&#39;, &#39;onGuestApplicationReceived&#39;, (eventData) =&gt; {
+	console.log(&#39;eventData:&#39;, eventData);
+});</code></pre>
+    </div>
+    </div>
+    <div class="api-item" id="removeCoGuestHostListener">
+      <h4>removeCoGuestHostListener</h4>
+      <div class="api-signature">function removeCoGuestHostListener(liveID: string, eventName: string, listener: ListenerCallback)</div>
+    <div class="api-description">移除连麦主播侧事件监听</div>
+    <h3>参数</h3>
+    <table class="param-table">
+      <tr>
+        <th>参数名</th>
+        <th>类型</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td>liveID</td>
+        <td>string</td>
+        <td>直播间ID</td>
+      </tr>
+      <tr>
+        <td>eventName</td>
+        <td>string</td>
+        <td>事件名称，可选值: 'onGuestApplicationReceived'(收到嘉宾申请)<br>'onGuestApplicationCancelled'(嘉宾取消申请)<br>'onGuestApplicationProcessedByOtherHost'(嘉宾申请被其他主播处理)<br>'onHostInvitationResponded'(主播邀请得到回应)<br>'onHostInvitationNoResponse'(主播邀请无响应)</td>
+      </tr>
+    </table>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useCoGuestState } from &#39;@/uni_modules/tuikit-atomic-x/state/CoGuestState&#39;;
+const { removeCoGuestHostListener } = useCoGuestState(&quot;your_live_id&quot;);
+removeCoGuestHostListener(&#39;your_live_id&#39;, &#39;onGuestApplicationReceived&#39;, &#39;listener_001&#39;);</code></pre>
+    </div>
+    </div>
+  </section>
+</section>
+
+<section id="module-CoHostState">
+  <h2>CoHostState</h2>
+  <div class="module-description">
+    <div class="module-description-content">连线主播管理模块<br>核心功能：实现主播间的连线功能，支持主播邀请、连线申请、连线状态管理等主播间互动功能。<br>技术特点：支持多主播音视频同步、画中画显示、音视频质量优化等高级技术，确保连线体验的流畅性。<br>业务价值：为直播平台提供主播间协作的核心能力，支持PK、合作直播等高级业务场景。<br>应用场景：主播连线、合作直播、跨平台连线、主播互动等高级直播场景。</div>
+  </div>
+  <section id="data-CoHostState">
+    <h3>响应式数据</h3>
+    <div class="data-item" id="connected">
+      <h4>connected</h4>
+      <div class="api-signature">const connected: Ref<LiveUserInfoParam[]></div>
+    <div class="api-description">已连接的连线主播列表</div>
+    <div class="type-info">
+      <strong>类型:</strong> <code>Ref<LiveUserInfoParam[]></code>
+    </div>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useCoHostState } from &#39;@/uni_modules/tuikit-atomic-x/state/CoHostState&#39;;
+const { connected } = useCoHostState(&#39;your_live_id&#39;);
+
+// 监听已连接的连线主播列表变化
+watch(connected, (newConnected) =&gt; {
+  if (newConnected &amp;&amp; newConnected.length &gt; 0) {
+    console.log(&#39;已连接的主播列表:&#39;, newConnected);
+  }
+});
+
+// 获取当前已连接的连线主播数量
+const coHosts = connected.value;
+console.log(&#39;已连接的主播数:&#39;, coHosts.length);</code></pre>
+    </div>
+    </div>
+    <div class="data-item" id="invitees">
+      <h4>invitees</h4>
+      <div class="api-signature">const invitees: Ref<LiveUserInfoParam[]></div>
+    <div class="api-description">被邀请连线的主播列表</div>
+    <div class="type-info">
+      <strong>类型:</strong> <code>Ref<LiveUserInfoParam[]></code>
+    </div>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useCoHostState } from &#39;@/uni_modules/tuikit-atomic-x/state/CoHostState&#39;;
+const { invitees } = useCoHostState(&#39;your_live_id&#39;);
+
+// 监听被邀请的主播列表变化
+watch(invitees, (newInvitees) =&gt; {
+  if (newInvitees &amp;&amp; newInvitees.length &gt; 0) {
+    console.log(&#39;被邀请的主播列表:&#39;, newInvitees);
+  }
+});
+
+// 获取当前被邀请的主播列表
+const invitedHosts = invitees.value;
+console.log(&#39;被邀请的主播数:&#39;, invitedHosts.length);</code></pre>
+    </div>
+    </div>
+    <div class="data-item" id="applicant">
+      <h4>applicant</h4>
+      <div class="api-signature">const applicant: Ref<LiveUserInfoParam | null></div>
+    <div class="api-description">当前申请连线的主播信息</div>
+    <div class="type-info">
+      <strong>类型:</strong> <code>Ref<LiveUserInfoParam | null></code>
+    </div>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useCoHostState } from &#39;@/uni_modules/tuikit-atomic-x/state/CoHostState&#39;;
+const { applicant } = useCoHostState(&#39;your_live_id&#39;);
+
+// 监听申请连线的主播信息变化
+watch(applicant, (newApplicant) =&gt; {
+  if (newApplicant) {
+    console.log(&#39;申请主播:&#39;, newApplicant.userID);
+  }
+});
+
+// 获取当前申请连线的主播信息
+const currentApplicant = applicant.value;
+if (currentApplicant) {
+  console.log(&#39;当前申请连线的主播:&#39;, currentApplicant.userName);
+}</code></pre>
+    </div>
+    </div>
+    <div class="data-item" id="coHostStatus">
+      <h4>coHostStatus</h4>
+      <div class="api-signature">const coHostStatus: Ref<CoHostStatusType | number></div>
+    <div class="api-description">当前连线状态</div>
+    <div class="type-info">
+      <strong>类型:</strong> <code>Ref<CoHostStatusType | number></code>
+    </div>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useCoHostState } from &#39;@/uni_modules/tuikit-atomic-x/state/CoHostState&#39;;
+const { coHostStatus } = useCoHostState(&#39;your_live_id&#39;);
+
+// 监听连线状态变化
+watch(coHostStatus, (newStatus) =&gt; {
+  console.log(&#39;连线状态:&#39;, newStatus);
+});
+
+// 获取当前连线状态
+const status = coHostStatus.value;
+console.log(&#39;当前连线状态:&#39;, status);</code></pre>
+    </div>
+    </div>
+  </section>
+  <section id="api-CoHostState">
+    <h3>接口函数</h3>
+    <div class="api-item" id="requestHostConnection">
+      <h4>requestHostConnection</h4>
+      <div class="api-signature">function requestHostConnection(params: RequestHostConnectionOptions)</div>
+    <div class="api-description">请求连线</div>
+    <h3>参数</h3>
+    <table class="param-table">
+      <tr>
+        <th>参数名</th>
+        <th>类型</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td>params</td>
+        <td><a href="interface.html#RequestHostConnectionOptions">RequestHostConnectionOptions</a></td>
+        <td>请求连线参数</td>
+      </tr>
+    </table>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useCoHostState } from &#39;@/uni_modules/tuikit-atomic-x/state/CoHostState&#39;;
+const { requestHostConnection } = useCoHostState(&quot;your_live_id&quot;);
+requestHostConnection({
+ liveID: &#39;your_live_id&#39;,
+ targetHostLiveID: &#39;target_live_id&#39;,
+ layoutTemplate: 600,
+ timeout: 30,
+});</code></pre>
+    </div>
+    </div>
+    <div class="api-item" id="cancelHostConnection">
+      <h4>cancelHostConnection</h4>
+      <div class="api-signature">function cancelHostConnection(params: CancelHostConnectionOptions)</div>
+    <div class="api-description">取消连线请求</div>
+    <h3>参数</h3>
+    <table class="param-table">
+      <tr>
+        <th>参数名</th>
+        <th>类型</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td>params</td>
+        <td><a href="interface.html#CancelHostConnectionOptions">CancelHostConnectionOptions</a></td>
+        <td>取消连线请求参数</td>
+      </tr>
+    </table>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useCoHostState } from &#39;@/uni_modules/tuikit-atomic-x/state/CoHostState&#39;;
+const { cancelHostConnection } = useCoHostState(&quot;your_live_id&quot;);
+cancelHostConnection({ liveID: &#39;your_live_id&#39;, toHostLiveID : &quot;target_live_id&quot; });</code></pre>
+    </div>
+    </div>
+    <div class="api-item" id="acceptHostConnection">
+      <h4>acceptHostConnection</h4>
+      <div class="api-signature">function acceptHostConnection(params: AcceptHostConnectionOptions)</div>
+    <div class="api-description">接受连线请求</div>
+    <h3>参数</h3>
+    <table class="param-table">
+      <tr>
+        <th>参数名</th>
+        <th>类型</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td>params</td>
+        <td><a href="interface.html#AcceptHostConnectionOptions">AcceptHostConnectionOptions</a></td>
+        <td>接受连线请求参数</td>
+      </tr>
+    </table>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useCoHostState } from &#39;@/uni_modules/tuikit-atomic-x/state/CoHostState&#39;;
+const { acceptHostConnection } = useCoHostState(&quot;your_live_id&quot;);
+acceptHostConnection({ liveID: &#39;your_live_id&#39;, fromHostLiveID: &quot;from_live_id&quot; });</code></pre>
+    </div>
+    </div>
+    <div class="api-item" id="rejectHostConnection">
+      <h4>rejectHostConnection</h4>
+      <div class="api-signature">function rejectHostConnection(params: RejectHostConnectionOptions)</div>
+    <div class="api-description">拒绝连线请求</div>
+    <h3>参数</h3>
+    <table class="param-table">
+      <tr>
+        <th>参数名</th>
+        <th>类型</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td>params</td>
+        <td><a href="interface.html#RejectHostConnectionOptions">RejectHostConnectionOptions</a></td>
+        <td>拒绝连线请求参数</td>
+      </tr>
+    </table>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useCoHostState } from &#39;@/uni_modules/tuikit-atomic-x/state/CoHostState&#39;;
+const { rejectHostConnection } = useCoHostState(&quot;your_live_id&quot;);
+rejectHostConnection({ liveID: &#39;your_live_id&#39;, fromHostLiveID: &quot;from_live_id&quot; });</code></pre>
+    </div>
+    </div>
+    <div class="api-item" id="exitHostConnection">
+      <h4>exitHostConnection</h4>
+      <div class="api-signature">function exitHostConnection(params: ExitHostConnectionOptions)</div>
+    <div class="api-description">退出连线</div>
+    <h3>参数</h3>
+    <table class="param-table">
+      <tr>
+        <th>参数名</th>
+        <th>类型</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td>params</td>
+        <td><a href="interface.html#ExitHostConnectionOptions">ExitHostConnectionOptions</a></td>
+        <td>退出连线参数</td>
+      </tr>
+    </table>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useCoHostState } from &#39;@/uni_modules/tuikit-atomic-x/state/CoHostState&#39;;
+const { exitHostConnection } = useCoHostState(&quot;your_live_id&quot;);
+exitHostConnection({ liveID: &#39;your_live_id&#39; });</code></pre>
+    </div>
+    </div>
+    <div class="api-item" id="addCoHostListener">
+      <h4>addCoHostListener</h4>
+      <div class="api-signature">function addCoHostListener(liveID: string, eventName: string, listener: ListenerCallback)</div>
+    <div class="api-description">添加连线主播事件监听</div>
+    <h3>参数</h3>
+    <table class="param-table">
+      <tr>
+        <th>参数名</th>
+        <th>类型</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td>liveID</td>
+        <td>string</td>
+        <td>直播间ID</td>
+      </tr>
+      <tr>
+        <td>eventName</td>
+        <td>string</td>
+        <td>事件名称，可选值: 'onCoHostRequestReceived'(收到连线请求)<br>'onCoHostRequestCancelled'(连线请求被取消)<br>'onCoHostRequestAccepted'(连线请求被接受)<br>'onCoHostRequestRejected'(连线请求被拒绝)<br>'onCoHostRequestTimeout'(连线请求超时)<br>'onCoHostUserJoined'(连线用户加入)<br>'onCoHostUserLeft'(连线用户离开)</td>
+      </tr>
+      <tr>
+        <td>listener</td>
+        <td>(eventData: string) => void</td>
+        <td>事件监听器函数</td>
+      </tr>
+    </table>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useCoHostState } from &#39;@/uni_modules/tuikit-atomic-x/state/CoHostState&#39;;
+const { addCoHostListener } = useCoHostState(&quot;your_live_id&quot;);
+addCoHostListener(&#39;your_live_id&#39;, &#39;onCoHostRequestReceived&#39;, (eventData) =&gt; {
+	console.log(&#39;eventData:&#39;, eventData);
+});</code></pre>
+    </div>
+    </div>
+    <div class="api-item" id="removeCoHostListener">
+      <h4>removeCoHostListener</h4>
+      <div class="api-signature">function removeCoHostListener(liveID: string, eventName: string, listener: ListenerCallback)</div>
+    <div class="api-description">移除连线主播事件监听</div>
+    <h3>参数</h3>
+    <table class="param-table">
+      <tr>
+        <th>参数名</th>
+        <th>类型</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td>liveID</td>
+        <td>string</td>
+        <td>直播间ID</td>
+      </tr>
+      <tr>
+        <td>eventName</td>
+        <td>string</td>
+        <td>事件名称，可选值: 'onCoHostRequestReceived'(收到连线请求)<br>'onCoHostRequestCancelled'(连线请求被取消)<br>'onCoHostRequestAccepted'(连线请求被接受)<br>'onCoHostRequestRejected'(连线请求被拒绝)<br>'onCoHostRequestTimeout'(连线请求超时)<br>'onCoHostUserJoined'(连线用户加入)<br>'onCoHostUserLeft'(连线用户离开)</td>
+      </tr>
+      <tr>
+        <td>listener</td>
+        <td>(eventData: string) => void</td>
+        <td>事件监听器函数，需要传入添加时相同的函数引用</td>
+      </tr>
+    </table>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useCoHostState } from &#39;@/uni_modules/tuikit-atomic-x/state/CoHostState&#39;;
+const { addCoHostListener, removeCoHostListener } = useCoHostState(&quot;your_live_id&quot;);
+const onCoHostRequest = (eventData) =&gt; {
+	console.log(&#39;eventData:&#39;, eventData);
+};
+addCoHostListener(&#39;your_live_id&#39;, &#39;onCoHostRequestReceived&#39;, onCoHostRequest);
+// 移除监听时传入相同的函数引用
+removeCoHostListener(&#39;your_live_id&#39;, &#39;onCoHostRequestReceived&#39;, onCoHostRequest);</code></pre>
+    </div>
+    </div>
+  </section>
+</section>
+
+<section id="module-BattleState">
+  <h2>BattleState</h2>
+  <div class="module-description">
+    <div class="module-description-content">直播 PK 管理模块<br>核心功能：处理主播间的PK对战流程，包括PK请求、接受、拒绝、退出等完整的PK管理功能。<br>技术特点：支持实时PK状态同步、分数统计、PK时长控制、结果计算等高级功能。<br>业务价值：为直播平台提供丰富的互动玩法，增加主播收益和用户粘性。<br>应用场景：主播PK、对战直播、分数统计、互动游戏等娱乐互动场景。</div>
+  </div>
+  <section id="data-BattleState">
+    <h3>响应式数据</h3>
+    <div class="data-item" id="currentBattleInfo">
+      <h4>currentBattleInfo</h4>
+      <div class="api-signature">const currentBattleInfo: Ref<BattleInfoParam | null></div>
+    <div class="api-description">当前 PK 信息</div>
+    <div class="type-info">
+      <strong>类型:</strong> <code>Ref<BattleInfoParam | null></code>
+    </div>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useBattleState } from &#39;@/uni_modules/tuikit-atomic-x/state/BattleState&#39;;
+const { currentBattleInfo } = useBattleState(&#39;your_live_id&#39;);
+
+// 监听当前 PK 信息变化
+watch(currentBattleInfo, (newBattle) =&gt; {
+  if (newBattle) {
+    console.log(&#39; PK 已开始:&#39;, newBattle.battleID);
+  }
+});
+
+// 获取当前 PK 信息
+const battle = currentBattleInfo.value;</code></pre>
+    </div>
+    </div>
+    <div class="data-item" id="battleUsers">
+      <h4>battleUsers</h4>
+      <div class="api-signature">const battleUsers: Ref<SeatUserInfoParam[]></div>
+    <div class="api-description">PK 用户列表</div>
+    <div class="type-info">
+      <strong>类型:</strong> <code>Ref<SeatUserInfoParam[]></code>
+    </div>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useBattleState } from &#39;@/uni_modules/tuikit-atomic-x/state/BattleState&#39;;
+const { battleUsers } = useBattleState(&#39;your_live_id&#39;);
+
+// 监听当前 PK 用户列表变化
+watch(battleUsers, (newUsers) =&gt; {
+  console.log(&#39;PK 用户列表更新:&#39;, newUsers);
+});
+
+// 获取当前 PK 用户列表
+const users = battleUsers.value;
+console.log(&#39;PK 用户列表更新:&#39;, users);</code></pre>
+    </div>
+    </div>
+    <div class="data-item" id="battleScore">
+      <h4>battleScore</h4>
+      <div class="api-signature">const battleScore: Ref<Map<string, number> | null></div>
+    <div class="api-description">PK 分数映射</div>
+    <div class="type-info">
+      <strong>类型:</strong> <code>Ref<Map<string, number> | null></code>
+    </div>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useBattleState } from &#39;@/uni_modules/tuikit-atomic-x/state/BattleState&#39;;
+const { battleScore } = useBattleState(&#39;your_live_id&#39;);
+
+// 监听当前 PK 分数变化
+watch(battleScore, (newScore) =&gt; {
+  console.log(&#39;PK 分数更新:&#39;, newScore);
+});
+
+// 获取当前 PK 分数
+const score = battleScore.value;
+console.log(&#39;当前 PK 分数:&#39;, score);</code></pre>
+    </div>
+    </div>
+  </section>
+  <section id="api-BattleState">
+    <h3>接口函数</h3>
+    <div class="api-item" id="requestBattle">
+      <h4>requestBattle</h4>
+      <div class="api-signature">function requestBattle(params: RequestBattleOptions)</div>
+    <div class="api-description">请求 PK</div>
+    <h3>参数</h3>
+    <table class="param-table">
+      <tr>
+        <th>参数名</th>
+        <th>类型</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td>params</td>
+        <td><a href="interface.html#RequestBattleOptions">RequestBattleOptions</a></td>
+        <td>请求 PK 参数</td>
+      </tr>
+    </table>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useBattleState } from &#39;@/uni_modules/tuikit-atomic-x/state/BattleState&#39;;
+const { requestBattle } = useBattleState(&quot;your_live_id&quot;);
+requestBattle({
+  liveID: &quot;your_live_id&quot;,
+  userIDList: [&quot;target_user_id&quot;],
+  timeout: 10,
+  config: {
+    duration: 300,
+    needResponse: true,
+    extensionInfo: &#39;{&quot;type&quot;:&quot;standard&quot;}&#39;
+  },
+  success: (battleInfo, result) =&gt; {
+    console.log(&#39; PK 请求成功:&#39;, battleInfo, result);
+  },
+  fail: (code, desc) =&gt; {
+    console.error(&#39; PK 请求失败:&#39;, code, desc);
+  }
+});</code></pre>
+    </div>
+    </div>
+    <div class="api-item" id="cancelBattleRequest">
+      <h4>cancelBattleRequest</h4>
+      <div class="api-signature">function cancelBattleRequest(params: CancelBattleRequestOptions)</div>
+    <div class="api-description">取消 PK 请求</div>
+    <h3>参数</h3>
+    <table class="param-table">
+      <tr>
+        <th>参数名</th>
+        <th>类型</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td>params</td>
+        <td><a href="interface.html#CancelBattleRequestOptions">CancelBattleRequestOptions</a></td>
+        <td>取消 PK 请求参数</td>
+      </tr>
+    </table>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useBattleState } from &#39;@/uni_modules/tuikit-atomic-x/state/BattleState&#39;;
+const { cancelBattleRequest } = useBattleState(&quot;your_live_id&quot;);
+cancelBattleRequest({
+  liveID: &quot;your_live_id&quot;,
+  battleID: &quot;battle_id&quot;,
+  userIDList: [&quot;target_user_id&quot;],
+  success: () =&gt; {
+    console.log(&#39;取消 PK 请求成功&#39;);
+  },
+  fail: (code, desc) =&gt; {
+    console.error(&#39;取消 PK 请求失败:&#39;, code, desc);
+  }
+});</code></pre>
+    </div>
+    </div>
+    <div class="api-item" id="acceptBattle">
+      <h4>acceptBattle</h4>
+      <div class="api-signature">function acceptBattle(params: AcceptBattleOptions)</div>
+    <div class="api-description">接受 PK</div>
+    <h3>参数</h3>
+    <table class="param-table">
+      <tr>
+        <th>参数名</th>
+        <th>类型</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td>params</td>
+        <td><a href="interface.html#AcceptBattleOptions">AcceptBattleOptions</a></td>
+        <td>接受 PK 参数</td>
+      </tr>
+    </table>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useBattleState } from &#39;@/uni_modules/tuikit-atomic-x/state/BattleState&#39;;
+const { acceptBattle } = useBattleState(&quot;your_live_id&quot;);
+acceptBattle({
+  liveID: &quot;your_live_id&quot;,
+  battleID: &quot;battle_id&quot;,
+  success: () =&gt; {
+    console.log(&#39;接受 PK 成功&#39;);
+  },
+  fail: (code, desc) =&gt; {
+    console.error(&#39;接受 PK 失败:&#39;, code, desc);
+  }
+});</code></pre>
+    </div>
+    </div>
+    <div class="api-item" id="rejectBattle">
+      <h4>rejectBattle</h4>
+      <div class="api-signature">function rejectBattle(params: RejectBattleOptions)</div>
+    <div class="api-description">拒绝 PK</div>
+    <h3>参数</h3>
+    <table class="param-table">
+      <tr>
+        <th>参数名</th>
+        <th>类型</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td>params</td>
+        <td><a href="interface.html#RejectBattleOptions">RejectBattleOptions</a></td>
+        <td>拒绝 PK 参数</td>
+      </tr>
+    </table>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useBattleState } from &#39;@/uni_modules/tuikit-atomic-x/state/BattleState&#39;;
+const { rejectBattle } = useBattleState(&quot;your_live_id&quot;);
+rejectBattle({
+  liveID: &quot;your_live_id&quot;,
+  battleID: &quot;battle_id&quot;,
+  success: () =&gt; {
+    console.log(&#39;拒绝 PK 成功&#39;);
+  },
+  fail: (code, desc) =&gt; {
+    console.error(&#39;拒绝 PK 失败:&#39;, code, desc);
+  }
+});</code></pre>
+    </div>
+    </div>
+    <div class="api-item" id="exitBattle">
+      <h4>exitBattle</h4>
+      <div class="api-signature">function exitBattle(params: ExitBattleOptions)</div>
+    <div class="api-description">退出 PK</div>
+    <h3>参数</h3>
+    <table class="param-table">
+      <tr>
+        <th>参数名</th>
+        <th>类型</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td>params</td>
+        <td><a href="interface.html#ExitBattleOptions">ExitBattleOptions</a></td>
+        <td>退出 PK 参数</td>
+      </tr>
+    </table>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useBattleState } from &#39;@/uni_modules/tuikit-atomic-x/state/BattleState&#39;;
+const { exitBattle } = useBattleState(&quot;your_live_id&quot;);
+exitBattle({
+  liveID: &quot;your_live_id&quot;,
+  battleID: &quot;battle_id&quot;,
+  success: () =&gt; {
+    console.log(&#39;退出 PK 成功&#39;);
+  },
+  fail: (code, desc) =&gt; {
+    console.error(&#39;退出 PK 失败:&#39;, code, desc);
+  }
+});</code></pre>
+    </div>
+    </div>
+    <div class="api-item" id="addBattleListener">
+      <h4>addBattleListener</h4>
+      <div class="api-signature">function addBattleListener(liveID: string, eventName: string, listener: ListenerCallback)</div>
+    <div class="api-description">添加 PK 事件监听器</div>
+    <h3>参数</h3>
+    <table class="param-table">
+      <tr>
+        <th>参数名</th>
+        <th>类型</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td>liveID</td>
+        <td>string</td>
+        <td>直播间ID</td>
+      </tr>
+      <tr>
+        <td>eventName</td>
+        <td>string</td>
+        <td>事件名称，可选值: 'onBattleStarted'( PK 开始)<br>'onBattleEnded'( PK 结束)<br>'onUserJoinBattle'(当前有用户加入 PK 对战)<br>'onUserExitBattle'(当前有用户退出 PK 对战)<br>'onBattleRequestReceived'(收到 PK 请求)<br>'onBattleRequestCancelled'(取消 PK 请求)<br>'onBattleRequestTimeout'(当前 PK 对战请求超时)<br>'onBattleRequestAccept'(当前 PK 对战请求被接受)<br>'onBattleRequestReject'(当前 PK 对战请求被拒绝)</td>
+      </tr>
+      <tr>
+        <td>listener</td>
+        <td>(eventData: string) => void</td>
+        <td>事件监听器函数</td>
+      </tr>
+    </table>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useBattleState } from &#39;@/uni_modules/tuikit-atomic-x/state/BattleState&#39;;
+const { addBattleListener } = useBattleState(&#39;your_live_id&#39;);
+addBattleListener(&#39;your_live_id&#39;, &#39;onBattleStarted&#39;, (eventData) =&gt; {
+	console.log(&#39;eventData:&#39;, eventData);
+});</code></pre>
+    </div>
+    </div>
+    <div class="api-item" id="removeBattleListener">
+      <h4>removeBattleListener</h4>
+      <div class="api-signature">function removeBattleListener(liveID: string, eventName: string, listener: ListenerCallback)</div>
+    <div class="api-description">移除 PK 事件监听器</div>
+    <h3>参数</h3>
+    <table class="param-table">
+      <tr>
+        <th>参数名</th>
+        <th>类型</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td>liveID</td>
+        <td>string</td>
+        <td>直播间ID</td>
+      </tr>
+      <tr>
+        <td>eventName</td>
+        <td>string</td>
+        <td>事件名称，可选值: 'onBattleStarted'( PK 开始)<br>'onBattleEnded'( PK 结束)<br>'onUserJoinBattle'(当前有用户加入 PK 对战)<br>'onUserExitBattle'(当前有用户退出 PK 对战)<br>'onBattleRequestReceived'(收到 PK 请求)<br>'onBattleRequestCancelled'(取消 PK 请求)<br>'onBattleRequestTimeout'(当前 PK 对战请求超时)<br>'onBattleRequestAccept'(当前 PK 对战请求被接受)<br>'onBattleRequestReject'(当前 PK 对战请求被拒绝)</td>
+      </tr>
+      <tr>
+        <td>listener</td>
+        <td>(eventData: string) => void</td>
+        <td>事件监听器函数，需要传入添加时相同的函数引用</td>
+      </tr>
+    </table>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useBattleState } from &#39;@/uni_modules/tuikit-atomic-x/state/BattleState&#39;;
+const { addBattleListener, removeBattleListener } = useBattleState(&#39;your_live_id&#39;);
+const onBattleStarted = (eventData) =&gt; {
+	console.log(&#39;eventData:&#39;, eventData);
+};
+addBattleListener(&#39;your_live_id&#39;, &#39;onBattleStarted&#39;, onBattleStarted);
+// 移除监听时传入相同的函数引用
+removeBattleListener(&#39;your_live_id&#39;, &#39;onBattleStarted&#39;, onBattleStarted);</code></pre>
+    </div>
+    </div>
+  </section>
+</section>
+
+<section id="module-DeviceState">
+  <h2>DeviceState</h2>
+  <div class="module-description">
+    <div class="module-description-content">设备状态管理模块<br>核心功能：管理摄像头、麦克风等音视频设备的控制，提供设备状态监控、权限检查等基础设备服务。<br>技术特点：支持多设备管理、设备状态实时监控、权限动态检查、设备故障自动恢复等高级功能。<br>业务价值：为直播系统提供稳定的设备基础，确保音视频采集的可靠性和用户体验。<br>应用场景：设备管理、权限控制、音视频采集、设备故障处理等基础技术场景。</div>
+  </div>
+  <section id="data-DeviceState">
+    <h3>响应式数据</h3>
+    <div class="data-item" id="microphoneStatus">
+      <h4>microphoneStatus</h4>
+      <div class="api-signature">const microphoneStatus: Ref<DeviceStatus></div>
+    <div class="api-description">麦克风开启状态</div>
+    <div class="type-info">
+      <strong>类型:</strong> <code>Ref<DeviceStatus></code>
+    </div>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useDeviceState } from &#39;@/uni_modules/tuikit-atomic-x/state/DeviceState&#39;;
+const { microphoneStatus } = useDeviceState();
+
+// 监听麦克风状态变化
+watch(microphoneStatus, (newStatus) =&gt; {
+  console.log(&#39;麦克风状态:&#39;, newStatus);
+  if (newStatus === &#39;ON&#39;) {
+    console.log(&#39;麦克风已打开&#39;);
+  } else if (newStatus === &#39;OFF&#39;) {
+    console.log(&#39;麦克风已关闭&#39;);
+  }
+});</code></pre>
+    </div>
+    </div>
+    <div class="data-item" id="microphoneLastError">
+      <h4>microphoneLastError</h4>
+      <div class="api-signature">const microphoneLastError: Ref<DeviceError></div>
+    <div class="api-description">麦克风最后一次错误状态</div>
+    <div class="type-info">
+      <strong>类型:</strong> <code>Ref<DeviceError></code>
+    </div>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useDeviceState } from &#39;@/uni_modules/tuikit-atomic-x/state/DeviceState&#39;;
+const { microphoneLastError } = useDeviceState();
+
+// 监听麦克风错误状态
+watch(microphoneLastError, (newError) =&gt; {
+  if (newError !== undefined &amp;&amp; newError !== DeviceError.NO_ERROR) {
+    console.log(&#39;麦克风错误:&#39;, newError);
+  }
+});</code></pre>
+    </div>
+    </div>
+    <div class="data-item" id="hasPublishAudioPermission">
+      <h4>hasPublishAudioPermission</h4>
+      <div class="api-signature">const hasPublishAudioPermission: Ref<boolean></div>
+    <div class="api-description">是否有音频发布权限</div>
+    <div class="type-info">
+      <strong>类型:</strong> <code>Ref<boolean></code>
+    </div>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useDeviceState } from &#39;@/uni_modules/tuikit-atomic-x/state/DeviceState&#39;;
+const { hasPublishAudioPermission } = useDeviceState();
+
+// 检查是否有音频发布权限
+const hasPermission = hasPublishAudioPermission.value;
+if (!hasPermission) {
+  console.log(&#39;没有音频发布权限&#39;);
+}</code></pre>
+    </div>
+    </div>
+    <div class="data-item" id="captureVolume">
+      <h4>captureVolume</h4>
+      <div class="api-signature">const captureVolume: Ref<number></div>
+    <div class="api-description">采集音量大小（0-100）</div>
+    <div class="type-info">
+      <strong>类型:</strong> <code>Ref<number></code>
+    </div>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useDeviceState } from &#39;@/uni_modules/tuikit-atomic-x/state/DeviceState&#39;;
+const { captureVolume } = useDeviceState();
+
+// 监听采集音量变化
+watch(captureVolume, (newVolume) =&gt; {
+  console.log(&#39;采集音量:&#39;, newVolume);
+});</code></pre>
+    </div>
+    </div>
+    <div class="data-item" id="currentMicVolume">
+      <h4>currentMicVolume</h4>
+      <div class="api-signature">const currentMicVolume: Ref<number></div>
+    <div class="api-description">当前麦克风音量（0-100）</div>
+    <div class="type-info">
+      <strong>类型:</strong> <code>Ref<number></code>
+    </div>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useDeviceState } from &#39;@/uni_modules/tuikit-atomic-x/state/DeviceState&#39;;
+const { currentMicVolume } = useDeviceState();
+
+// 监听麦克风音量变化
+watch(currentMicVolume, (newVolume) =&gt; {
+  console.log(&#39;当前麦克风音量:&#39;, newVolume);
+});</code></pre>
+    </div>
+    </div>
+    <div class="data-item" id="outputVolume">
+      <h4>outputVolume</h4>
+      <div class="api-signature">const outputVolume: Ref<number></div>
+    <div class="api-description">输出音量大小（0-100）</div>
+    <div class="type-info">
+      <strong>类型:</strong> <code>Ref<number></code>
+    </div>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useDeviceState } from &#39;@/uni_modules/tuikit-atomic-x/state/DeviceState&#39;;
+const { outputVolume } = useDeviceState();
+
+// 监听输出音量变化
+watch(outputVolume, (newVolume) =&gt; {
+  console.log(&#39;输出音量:&#39;, newVolume);
+});</code></pre>
+    </div>
+    </div>
+    <div class="data-item" id="cameraStatus">
+      <h4>cameraStatus</h4>
+      <div class="api-signature">const cameraStatus: Ref<DeviceStatus></div>
+    <div class="api-description">摄像头开启状态</div>
+    <div class="type-info">
+      <strong>类型:</strong> <code>Ref<DeviceStatus></code>
+    </div>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useDeviceState } from &#39;@/uni_modules/tuikit-atomic-x/state/DeviceState&#39;;
+const { cameraStatus } = useDeviceState();
+
+// 监听摄像头状态变化
+watch(cameraStatus, (newStatus) =&gt; {
+  console.log(&#39;摄像头状态:&#39;, newStatus);
+  if (newStatus === &#39;ON&#39;) {
+    console.log(&#39;摄像头已打开&#39;);
+  }
+});</code></pre>
+    </div>
+    </div>
+    <div class="data-item" id="cameraLastError">
+      <h4>cameraLastError</h4>
+      <div class="api-signature">const cameraLastError: Ref<DeviceError></div>
+    <div class="api-description">摄像头最后一次错误状态</div>
+    <div class="type-info">
+      <strong>类型:</strong> <code>Ref<DeviceError></code>
+    </div>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useDeviceState } from &#39;@/uni_modules/tuikit-atomic-x/state/DeviceState&#39;;
+const { cameraLastError } = useDeviceState();
+
+// 监听摄像头错误状态
+watch(cameraLastError, (newError) =&gt; {
+  if (newError !== undefined &amp;&amp; newError !== DeviceError.NO_ERROR) {
+    console.log(&#39;摄像头错误:&#39;, newError);
+  }
+});</code></pre>
+    </div>
+    </div>
+    <div class="data-item" id="isFrontCamera">
+      <h4>isFrontCamera</h4>
+      <div class="api-signature">const isFrontCamera: Ref<boolean></div>
+    <div class="api-description">是否为前置摄像头</div>
+    <div class="type-info">
+      <strong>类型:</strong> <code>Ref<boolean></code>
+    </div>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useDeviceState } from &#39;@/uni_modules/tuikit-atomic-x/state/DeviceState&#39;;
+const { isFrontCamera } = useDeviceState();
+
+// 检查当前是否为前置摄像头
+const isFront = isFrontCamera.value;
+if (isFront) {
+  console.log(&#39;当前使用前置摄像头&#39;);
+}</code></pre>
+    </div>
+    </div>
+    <div class="data-item" id="localMirrorType">
+      <h4>localMirrorType</h4>
+      <div class="api-signature">const localMirrorType: Ref<MirrorType></div>
+    <div class="api-description">本地镜像类型</div>
+    <div class="type-info">
+      <strong>类型:</strong> <code>Ref<MirrorType></code>
+    </div>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useDeviceState } from &#39;@/uni_modules/tuikit-atomic-x/state/DeviceState&#39;;
+const { localMirrorType } = useDeviceState();
+
+// 获取本地镜像类型
+const mirrorType = localMirrorType.value;
+console.log(&#39;本地镜像类型:&#39;, mirrorType);</code></pre>
+    </div>
+    </div>
+    <div class="data-item" id="localVideoQuality">
+      <h4>localVideoQuality</h4>
+      <div class="api-signature">const localVideoQuality: Ref<any></div>
+    <div class="api-description">本地视频质量设置</div>
+    <div class="type-info">
+      <strong>类型:</strong> <code>Ref<any></code>
+    </div>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useDeviceState } from &#39;@/uni_modules/tuikit-atomic-x/state/DeviceState&#39;;
+const { localVideoQuality } = useDeviceState();
+
+// 获取本地视频质量设置
+const quality = localVideoQuality.value;
+console.log(&#39;本地视频质量:&#39;, quality);</code></pre>
+    </div>
+    </div>
+    <div class="data-item" id="currentAudioRoute">
+      <h4>currentAudioRoute</h4>
+      <div class="api-signature">const currentAudioRoute: Ref<AudioOutput></div>
+    <div class="api-description">当前音频输出路由（扬声器/耳机）</div>
+    <div class="type-info">
+      <strong>类型:</strong> <code>Ref<AudioOutput></code>
+    </div>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useDeviceState } from &#39;@/uni_modules/tuikit-atomic-x/state/DeviceState&#39;;
+const { currentAudioRoute } = useDeviceState();
+
+// 监听音频输出路由变化
+watch(currentAudioRoute, (newRoute) =&gt; {
+  console.log(&#39;音频输出路由:&#39;, newRoute);
+  if (newRoute === &#39;SPEAKERPHONE&#39;) {
+    console.log(&#39;使用扬声器&#39;);
+  } else if (newRoute === &#39;EARPIECE&#39;) {
+    console.log(&#39;使用耳机&#39;);
+  }
+});</code></pre>
+    </div>
+    </div>
+    <div class="data-item" id="screenStatus">
+      <h4>screenStatus</h4>
+      <div class="api-signature">const screenStatus: Ref<DeviceStatus></div>
+    <div class="api-description">屏幕共享状态</div>
+    <div class="type-info">
+      <strong>类型:</strong> <code>Ref<DeviceStatus></code>
+    </div>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useDeviceState } from &#39;@/uni_modules/tuikit-atomic-x/state/DeviceState&#39;;
+const { screenStatus } = useDeviceState();
+
+// 监听屏幕共享状态
+watch(screenStatus, (newStatus) =&gt; {
+  console.log(&#39;屏幕共享状态:&#39;, newStatus);
+  if (newStatus === &#39;ON&#39;) {
+    console.log(&#39;屏幕共享已开启&#39;);
+  }
+});</code></pre>
+    </div>
+    </div>
+    <div class="data-item" id="networkInfo">
+      <h4>networkInfo</h4>
+      <div class="api-signature">const networkInfo: Ref<any></div>
+    <div class="api-description">网络信息状态</div>
+    <div class="type-info">
+      <strong>类型:</strong> <code>Ref<any></code>
+    </div>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useDeviceState } from &#39;@/uni_modules/tuikit-atomic-x/state/DeviceState&#39;;
+const { networkInfo } = useDeviceState();
+
+// 获取网络信息
+const info = networkInfo.value;
+console.log(&#39;网络信息:&#39;, info);</code></pre>
+    </div>
+    </div>
+  </section>
+  <section id="api-DeviceState">
+    <h3>接口函数</h3>
+    <div class="api-item" id="openLocalMicrophone">
+      <h4>openLocalMicrophone</h4>
+      <div class="api-signature">function openLocalMicrophone(params?: OpenLocalMicrophoneOptions)</div>
+    <div class="api-description">打开本地麦克风</div>
+    <h3>参数</h3>
+    <table class="param-table">
+      <tr>
+        <th>参数名</th>
+        <th>类型</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td>[params]</td>
+        <td><a href="interface.html#OpenLocalMicrophoneOptions">OpenLocalMicrophoneOptions</a></td>
+        <td>麦克风参数</td>
+      </tr>
+    </table>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useDeviceState } from &#39;@/uni_modules/tuikit-atomic-x/state/DeviceState&#39;;
+const { openLocalMicrophone } = useDeviceState();
+openLocalMicrophone({})</code></pre>
+    </div>
+    </div>
+    <div class="api-item" id="closeLocalMicrophone">
+      <h4>closeLocalMicrophone</h4>
+      <div class="api-signature">function closeLocalMicrophone()</div>
+    <div class="api-description">关闭本地麦克风</div>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useDeviceState } from &#39;@/uni_modules/tuikit-atomic-x/state/DeviceState&#39;;
+const { closeLocalMicrophone } = useDeviceState();
+closeLocalMicrophone()</code></pre>
+    </div>
+    </div>
+    <div class="api-item" id="setCaptureVolume">
+      <h4>setCaptureVolume</h4>
+      <div class="api-signature">function setCaptureVolume(params: VolumeOptions)</div>
+    <div class="api-description">设置采集音量</div>
+    <h3>参数</h3>
+    <table class="param-table">
+      <tr>
+        <th>参数名</th>
+        <th>类型</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td>params</td>
+        <td><a href="interface.html#VolumeOptions">VolumeOptions</a></td>
+        <td>音量参数</td>
+      </tr>
+    </table>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useDeviceState } from &#39;@/uni_modules/tuikit-atomic-x/state/DeviceState&#39;;
+const { setCaptureVolume } = useDeviceState();
+setCaptureVolume({ volume: 80 })</code></pre>
+    </div>
+    </div>
+    <div class="api-item" id="setOutputVolume">
+      <h4>setOutputVolume</h4>
+      <div class="api-signature">function setOutputVolume(params: VolumeOptions)</div>
+    <div class="api-description">设置输出音量</div>
+    <h3>参数</h3>
+    <table class="param-table">
+      <tr>
+        <th>参数名</th>
+        <th>类型</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td>params</td>
+        <td><a href="interface.html#VolumeOptions">VolumeOptions</a></td>
+        <td>音量参数</td>
+      </tr>
+    </table>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useDeviceState } from &#39;@/uni_modules/tuikit-atomic-x/state/DeviceState&#39;;
+const { setOutputVolume } = useDeviceState();
+setOutputVolume({ volume: 90 })</code></pre>
+    </div>
+    </div>
+    <div class="api-item" id="setAudioRoute">
+      <h4>setAudioRoute</h4>
+      <div class="api-signature">function setAudioRoute(params: SetAudioRouteOptions)</div>
+    <div class="api-description">设置音频路由</div>
+    <h3>参数</h3>
+    <table class="param-table">
+      <tr>
+        <th>参数名</th>
+        <th>类型</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td>params</td>
+        <td><a href="interface.html#SetAudioRouteOptions">SetAudioRouteOptions</a></td>
+        <td>音频路由参数</td>
+      </tr>
+    </table>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>// 设置为扬声器
+import { useDeviceState } from &#39;@/uni_modules/tuikit-atomic-x/state/DeviceState&#39;;
+const { setAudioRoute } = useDeviceState();
+setAudioRoute({ audioRoute: AudioOutput.SPEAKERPHONE })</code></pre>
+    </div>
+    </div>
+    <div class="api-item" id="openLocalCamera">
+      <h4>openLocalCamera</h4>
+      <div class="api-signature">function openLocalCamera(params?: OpenLocalCameraOptions)</div>
+    <div class="api-description">打开本地摄像头</div>
+    <h3>参数</h3>
+    <table class="param-table">
+      <tr>
+        <th>参数名</th>
+        <th>类型</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td>[params]</td>
+        <td><a href="interface.html#OpenLocalCameraOptions">OpenLocalCameraOptions</a></td>
+        <td>摄像头参数</td>
+      </tr>
+    </table>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useDeviceState } from &#39;@/uni_modules/tuikit-atomic-x/state/DeviceState&#39;;
+const { openLocalCamera } = useDeviceState();
+openLocalCamera({ isFront: true })</code></pre>
+    </div>
+    </div>
+    <div class="api-item" id="closeLocalCamera">
+      <h4>closeLocalCamera</h4>
+      <div class="api-signature">function closeLocalCamera()</div>
+    <div class="api-description">关闭本地摄像头</div>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useDeviceState } from &#39;@/uni_modules/tuikit-atomic-x/state/DeviceState&#39;;
+const { closeLocalCamera } = useDeviceState();
+closeLocalCamera()</code></pre>
+    </div>
+    </div>
+    <div class="api-item" id="switchCamera">
+      <h4>switchCamera</h4>
+      <div class="api-signature">function switchCamera(params: SwitchCameraOptions)</div>
+    <div class="api-description">切换摄像头前后置</div>
+    <h3>参数</h3>
+    <table class="param-table">
+      <tr>
+        <th>参数名</th>
+        <th>类型</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td>params</td>
+        <td><a href="interface.html#SwitchCameraOptions">SwitchCameraOptions</a></td>
+        <td>切换参数</td>
+      </tr>
+    </table>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>// 切换到前置摄像头
+import { useDeviceState } from &#39;@/uni_modules/tuikit-atomic-x/state/DeviceState&#39;;
+const { switchCamera } = useDeviceState();
+switchCamera({ isFront: true })</code></pre>
+    </div>
+    </div>
+    <div class="api-item" id="switchMirror">
+      <h4>switchMirror</h4>
+      <div class="api-signature">function switchMirror(params: SwitchMirrorOptions)</div>
+    <div class="api-description">切换镜像</div>
+    <h3>参数</h3>
+    <table class="param-table">
+      <tr>
+        <th>参数名</th>
+        <th>类型</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td>params</td>
+        <td><a href="interface.html#SwitchMirrorOptions">SwitchMirrorOptions</a></td>
+        <td>镜像参数</td>
+      </tr>
+    </table>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>// 设置自动镜像
+import { useDeviceState } from &#39;@/uni_modules/tuikit-atomic-x/state/DeviceState&#39;;
+const { switchMirror } = useDeviceState();
+switchMirror({ mirrorType: &#39;AUTO&#39; })</code></pre>
+    </div>
+    </div>
+    <div class="api-item" id="updateVideoQuality">
+      <h4>updateVideoQuality</h4>
+      <div class="api-signature">function updateVideoQuality(params: UpdateVideoQualityOptions)</div>
+    <div class="api-description">更新视频质量</div>
+    <h3>参数</h3>
+    <table class="param-table">
+      <tr>
+        <th>参数名</th>
+        <th>类型</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td>params</td>
+        <td><a href="interface.html#UpdateVideoQualityOptions">UpdateVideoQualityOptions</a></td>
+        <td>视频质量参数</td>
+      </tr>
+    </table>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useDeviceState } from &#39;@/uni_modules/tuikit-atomic-x/state/DeviceState&#39;;
+const { updateVideoQuality } = useDeviceState();
+updateVideoQuality({ quality: VideoQuality.QUALITY_1080P })</code></pre>
+    </div>
+    </div>
+    <div class="api-item" id="startScreenShare">
+      <h4>startScreenShare</h4>
+      <div class="api-signature">function startScreenShare()</div>
+    <div class="api-description">开始屏幕共享</div>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useDeviceState } from &#39;@/uni_modules/tuikit-atomic-x/state/DeviceState&#39;;
+const { startScreenShare } = useDeviceState();
+startScreenShare()</code></pre>
+    </div>
+    </div>
+    <div class="api-item" id="stopScreenShare">
+      <h4>stopScreenShare</h4>
+      <div class="api-signature">function stopScreenShare()</div>
+    <div class="api-description">停止屏幕共享</div>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useDeviceState } from &#39;@/uni_modules/tuikit-atomic-x/state/DeviceState&#39;;
+const { stopScreenShare } = useDeviceState();
+stopScreenShare()</code></pre>
+    </div>
+    </div>
+    <div class="api-item" id="clearDeviceState">
+      <h4>clearDeviceState</h4>
+      <div class="api-signature">function clearDeviceState()</div>
+    <div class="api-description">清除设备状态数据</div>
+    </div>
+  </section>
+</section>
+
+<section id="module-AudioEffectState">
+  <h2>AudioEffectState</h2>
+  <div class="module-description">
+    <div class="module-description-content">音效设置管理模块<br>核心功能：提供变声、混响、耳返等高级音效功能，支持多种音效效果和实时音效调节。<br>技术特点：基于音频处理算法，支持实时音效处理、低延迟音频传输、音质优化等高级技术。<br>业务价值：为直播平台提供差异化的音效体验，增强用户参与度和直播趣味性。<br>应用场景：变声直播、K歌直播、音效娱乐、专业音效等需要音频处理的场景。</div>
+  </div>
+  <section id="data-AudioEffectState">
+    <h3>响应式数据</h3>
+    <div class="data-item" id="isEarMonitorOpened">
+      <h4>isEarMonitorOpened</h4>
+      <div class="api-signature">const isEarMonitorOpened: Ref<boolean></div>
+    <div class="api-description">耳返开关状态</div>
+    <div class="type-info">
+      <strong>类型:</strong> <code>Ref<boolean></code>
+    </div>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useAudioEffectState } from &#39;@/uni_modules/tuikit-atomic-x/state/AudioEffectState&#39;;
+const { isEarMonitorOpened } = useAudioEffectState(&#39;your_live_id&#39;);
+
+// 监听耳返开关状态变化
+watch(isEarMonitorOpened, (newStatus) =&gt; {
+  console.log(&#39;耳返开关状态:&#39;, newStatus);
+});
+
+// 获取当前耳返开关状态
+const isOpen = isEarMonitorOpened.value;
+console.log(&#39;当前耳返状态:&#39;, isOpen);</code></pre>
+    </div>
+    </div>
+    <div class="data-item" id="earMonitorVolume">
+      <h4>earMonitorVolume</h4>
+      <div class="api-signature">const earMonitorVolume: Ref<number></div>
+    <div class="api-description">耳返音量大小</div>
+    <div class="type-info">
+      <strong>类型:</strong> <code>Ref<number></code>
+    </div>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useAudioEffectState } from &#39;@/uni_modules/tuikit-atomic-x/state/AudioEffectState&#39;;
+const { earMonitorVolume } = useAudioEffectState(&#39;your_live_id&#39;);
+
+// 监听耳返音量变化
+watch(earMonitorVolume, (newVolume) =&gt; {
+  console.log(&#39;耳返音量:&#39;, newVolume);
+});
+
+// 获取当前耳返音量
+const volume = earMonitorVolume.value;
+console.log(&#39;当前耳返音量:&#39;, volume);</code></pre>
+    </div>
+    </div>
+    <div class="data-item" id="audioChangerType">
+      <h4>audioChangerType</h4>
+      <div class="api-signature">const audioChangerType: Ref<AudioChangerType></div>
+    <div class="api-description">变声状态</div>
+    <div class="type-info">
+      <strong>类型:</strong> <code>Ref<AudioChangerType></code>
+    </div>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useAudioEffectState } from &#39;@/uni_modules/tuikit-atomic-x/state/AudioEffectState&#39;;
+const { audioChangerType } = useAudioEffectState(&#39;your_live_id&#39;);
+
+// 监听变声类型变化
+watch(audioChangerType, (newType) =&gt; {
+  console.log(&#39;变声类型:&#39;, newType);
+});
+
+// 获取当前变声类型
+const type = audioChangerType.value;
+console.log(&#39;当前变声类型:&#39;, type);</code></pre>
+    </div>
+    </div>
+    <div class="data-item" id="audioReverbType">
+      <h4>audioReverbType</h4>
+      <div class="api-signature">const audioReverbType: Ref<AudioReverbType></div>
+    <div class="api-description">混响状态</div>
+    <div class="type-info">
+      <strong>类型:</strong> <code>Ref<AudioReverbType></code>
+    </div>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useAudioEffectState } from &#39;@/uni_modules/tuikit-atomic-x/state/AudioEffectState&#39;;
+const { audioReverbType } = useAudioEffectState(&#39;your_live_id&#39;);
+
+// 监听混响类型变化
+watch(audioReverbType, (newType) =&gt; {
+  console.log(&#39;混响类型:&#39;, newType);
+});
+
+// 获取当前混响类型
+const type = audioReverbType.value;
+console.log(&#39;当前混响类型:&#39;, type);</code></pre>
+    </div>
+    </div>
+  </section>
+  <section id="api-AudioEffectState">
+    <h3>接口函数</h3>
+    <div class="api-item" id="setAudioChangerType">
+      <h4>setAudioChangerType</h4>
+      <div class="api-signature">function setAudioChangerType(params: SetAudioChangerTypeOptions)</div>
+    <div class="api-description">设置变声效果</div>
+    <h3>参数</h3>
+    <table class="param-table">
+      <tr>
+        <th>参数名</th>
+        <th>类型</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td>params</td>
+        <td><a href="interface.html#SetAudioChangerTypeOptions">SetAudioChangerTypeOptions</a></td>
+        <td>变声效果参数</td>
+      </tr>
+    </table>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useAudioEffectState } from &#39;@/uni_modules/tuikit-atomic-x/state/AudioEffectState&#39;;
+const { setAudioChangerType } = useAudioEffectState(&quot;your_live_id&quot;);
+setAudioChangerType({ changerType: &#39;MAN&#39; });</code></pre>
+    </div>
+    </div>
+    <div class="api-item" id="setAudioReverbType">
+      <h4>setAudioReverbType</h4>
+      <div class="api-signature">function setAudioReverbType(params: SetAudioReverbTypeOptions)</div>
+    <div class="api-description">设置混响效果</div>
+    <h3>参数</h3>
+    <table class="param-table">
+      <tr>
+        <th>参数名</th>
+        <th>类型</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td>params</td>
+        <td><a href="interface.html#SetAudioReverbTypeOptions">SetAudioReverbTypeOptions</a></td>
+        <td>混响效果参数</td>
+      </tr>
+    </table>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useAudioEffectState } from &#39;@/uni_modules/tuikit-atomic-x/state/AudioEffectState&#39;;
+const { setAudioReverbType } = useAudioEffectState(&quot;your_live_id&quot;);
+setAudioReverbType({ reverbType: &#39;KTV&#39; });</code></pre>
+    </div>
+    </div>
+    <div class="api-item" id="setVoiceEarMonitorEnable">
+      <h4>setVoiceEarMonitorEnable</h4>
+      <div class="api-signature">function setVoiceEarMonitorEnable(params: SetVoiceEarMonitorEnableOptions)</div>
+    <div class="api-description">设置耳返开关状态</div>
+    <h3>参数</h3>
+    <table class="param-table">
+      <tr>
+        <th>参数名</th>
+        <th>类型</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td>params</td>
+        <td><a href="interface.html#SetVoiceEarMonitorEnableOptions">SetVoiceEarMonitorEnableOptions</a></td>
+        <td>耳返开关参数</td>
+      </tr>
+    </table>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useAudioEffectState } from &#39;@/uni_modules/tuikit-atomic-x/state/AudioEffectState&#39;;
+const { setVoiceEarMonitorEnable } = useAudioEffectState(&quot;your_live_id&quot;);
+setVoiceEarMonitorEnable({ enable: true });</code></pre>
+    </div>
+    </div>
+    <div class="api-item" id="setVoiceEarMonitorVolume">
+      <h4>setVoiceEarMonitorVolume</h4>
+      <div class="api-signature">function setVoiceEarMonitorVolume(params: VolumeOptions)</div>
+    <div class="api-description">设置耳返音量大小</div>
+    <h3>参数</h3>
+    <table class="param-table">
+      <tr>
+        <th>参数名</th>
+        <th>类型</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td>params</td>
+        <td><a href="interface.html#VolumeOptions">VolumeOptions</a></td>
+        <td>耳返音量参数</td>
+      </tr>
+    </table>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useAudioEffectState } from &#39;@/uni_modules/tuikit-atomic-x/state/AudioEffectState&#39;;
+const { setVoiceEarMonitorVolume } = useAudioEffectState(&quot;your_live_id&quot;);
+setVoiceEarMonitorVolume({ volume: 50 });</code></pre>
+    </div>
+    </div>
+  </section>
+</section>
+
+<section id="module-BarrageState">
+  <h2>BarrageState</h2>
+  <div class="module-description">
+    <div class="module-description-content">弹幕管理模块<br>核心功能：管理直播间弹幕消息，支持文本弹幕发送、自定义弹幕发送、本地提示消息等弹幕互动功能。<br>技术特点：支持实时弹幕推送、弹幕消息列表管理、自定义消息类型扩展等高级功能。<br>业务价值：为直播平台提供核心的弹幕互动能力，增强观众参与感和直播氛围。<br>应用场景：文本弹幕、自定义弹幕、系统提示消息、弹幕互动等直播聊天场景。</div>
+  </div>
+  <section id="data-BarrageState">
+    <h3>响应式数据</h3>
+    <div class="data-item" id="messageList">
+      <h4>messageList</h4>
+      <div class="api-signature">const messageList: Ref<BarrageParam[]></div>
+    <div class="api-description">弹幕消息列表</div>
+    <div class="type-info">
+      <strong>类型:</strong> <code>Ref<BarrageParam[]></code>
+    </div>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useBarrageState } from &#39;@/uni_modules/tuikit-atomic-x/state/BarrageState&#39;;
+const { messageList } = useBarrageState(&#39;your_live_id&#39;);
+
+// 监听弹幕消息列表变化
+watch(messageList, (newMessages) =&gt; {
+  if (newMessages &amp;&amp; newMessages.length &gt; 0) {
+    console.log(&#39;弹幕消息列表更新:&#39;, newMessages);
+    const lastMsg = newMessages[newMessages.length - 1];
+    console.log(&#39;最新弹幕:&#39;, lastMsg.textContent);
+  }
+});
+
+// 获取当前弹幕消息列表
+const messages = messageList.value;
+console.log(&#39;当前弹幕数量:&#39;, messages.length);</code></pre>
+    </div>
+    </div>
+  </section>
+  <section id="api-BarrageState">
+    <h3>接口函数</h3>
+    <div class="api-item" id="sendTextMessage">
+      <h4>sendTextMessage</h4>
+      <div class="api-signature">function sendTextMessage(params: SendTextMessageOptions)</div>
+    <div class="api-description">发送文本消息</div>
+    <h3>参数</h3>
+    <table class="param-table">
+      <tr>
+        <th>参数名</th>
+        <th>类型</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td>params</td>
+        <td><a href="interface.html#SendTextMessageOptions">SendTextMessageOptions</a></td>
+        <td>发送消息参数</td>
+      </tr>
+    </table>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useBarrageState } from &#39;@/uni_modules/tuikit-atomic-x/state/BarrageState&#39;;
+const { sendTextMessage } = useBarrageState(&#39;your_live_id&#39;);
+sendTextMessage({ liveID: &#39;your_live_id&#39;, text: &#39;Hello World&#39; });</code></pre>
+    </div>
+    </div>
+    <div class="api-item" id="sendCustomMessage">
+      <h4>sendCustomMessage</h4>
+      <div class="api-signature">function sendCustomMessage(params: SendCustomMessageOptions)</div>
+    <div class="api-description">发送自定义消息</div>
+    <h3>参数</h3>
+    <table class="param-table">
+      <tr>
+        <th>参数名</th>
+        <th>类型</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td>params</td>
+        <td><a href="interface.html#SendCustomMessageOptions">SendCustomMessageOptions</a></td>
+        <td>发送自定义消息参数</td>
+      </tr>
+    </table>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useBarrageState } from &#39;@/uni_modules/tuikit-atomic-x/state/BarrageState&#39;;
+const { sendCustomMessage } = useBarrageState(&#39;your_live_id&#39;);
+sendCustomMessage({ liveID: &#39;your_live_id&#39;, businessID: &#39;livekit&#39;, data: JSON.stringify(&#39;my custom message&#39;) });</code></pre>
+    </div>
+    </div>
+    <div class="api-item" id="appendLocalTip">
+      <h4>appendLocalTip</h4>
+      <div class="api-signature">function appendLocalTip(params: AppendLocalTipOptions)</div>
+    <div class="api-description">添加本地提示消息</div>
+    <h3>参数</h3>
+    <table class="param-table">
+      <tr>
+        <th>参数名</th>
+        <th>类型</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td>params</td>
+        <td><a href="interface.html#AppendLocalTipOptions">AppendLocalTipOptions</a></td>
+        <td>本地提示消息参数</td>
+      </tr>
+    </table>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useBarrageState } from &#39;@/uni_modules/tuikit-atomic-x/state/BarrageState&#39;;
+const { appendLocalTip } = useBarrageState(&#39;your_live_id&#39;);
+appendLocalTip({ liveID: &#39;your_live_id&#39;, message: { liveID: &#39;your_live_id&#39;, sender: { userID: &#39;user_id&#39; }, sequence: 0, timestampInSecond: 0, messageType: BarrageType.TEXT, textContent: &#39;tip message&#39; } });</code></pre>
+    </div>
+    </div>
+  </section>
+</section>
+
+<section id="module-BaseBeautyState">
+  <h2>BaseBeautyState</h2>
+  <div class="module-description">
+    <div class="module-description-content">基础美颜管理模块<br>核心功能：提供磨皮、美白、红润等基础美颜效果调节，支持实时美颜参数调整。<br>技术特点：支持实时美颜处理、参数平滑调节、性能优化等高级技术。<br>业务价值：为直播平台提供基础的美颜能力，提升用户形象和直播质量。<br>应用场景：美颜直播、形象优化、美颜调节、直播美化等需要美颜功能的场景。</div>
+  </div>
+  <section id="data-BaseBeautyState">
+    <h3>响应式数据</h3>
+    <div class="data-item" id="smoothLevel">
+      <h4>smoothLevel</h4>
+      <div class="api-signature">const smoothLevel: Ref<number></div>
+    <div class="api-description">磨皮级别 取值范围[0,9]: 0 表示关闭，9 表示效果最明显</div>
+    <div class="type-info">
+      <strong>类型:</strong> <code>Ref<number></code>
+    </div>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useBaseBeautyState } from &#39;@/uni_modules/tuikit-atomic-x/state/BaseBeautyState&#39;;
+const { smoothLevel } = useBaseBeautyState(&#39;your_live_id&#39;);
+
+// 监听磨皮级别变化
+watch(smoothLevel, (newLevel) =&gt; {
+  console.log(&#39;磨皮级别:&#39;, newLevel);
+});
+
+// 获取当前磨皮级别
+const level = smoothLevel.value;
+console.log(&#39;当前磨皮级别:&#39;, level);</code></pre>
+    </div>
+    </div>
+    <div class="data-item" id="whitenessLevel">
+      <h4>whitenessLevel</h4>
+      <div class="api-signature">const whitenessLevel: Ref<number></div>
+    <div class="api-description">美白级别 取值范围[0,9]: 0 表示关闭，9 表示效果最明显</div>
+    <div class="type-info">
+      <strong>类型:</strong> <code>Ref<number></code>
+    </div>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useBaseBeautyState } from &#39;@/uni_modules/tuikit-atomic-x/state/BaseBeautyState&#39;;
+const { whitenessLevel } = useBaseBeautyState(&#39;your_live_id&#39;);
+
+// 监听美白级别变化
+watch(whitenessLevel, (newLevel) =&gt; {
+  console.log(&#39;美白级别:&#39;, newLevel);
+});
+
+// 获取当前美白级别
+const level = whitenessLevel.value;
+console.log(&#39;当前美白级别:&#39;, level);</code></pre>
+    </div>
+    </div>
+    <div class="data-item" id="ruddyLevel">
+      <h4>ruddyLevel</h4>
+      <div class="api-signature">const ruddyLevel: Ref<number></div>
+    <div class="api-description">红润级别 取值范围[0,9]: 0 表示关闭，9 表示效果最明显</div>
+    <div class="type-info">
+      <strong>类型:</strong> <code>Ref<number></code>
+    </div>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useBaseBeautyState } from &#39;@/uni_modules/tuikit-atomic-x/state/BaseBeautyState&#39;;
+const { ruddyLevel } = useBaseBeautyState(&#39;your_live_id&#39;);
+
+// 监听红润级别变化
+watch(ruddyLevel, (newLevel) =&gt; {
+  console.log(&#39;红润级别:&#39;, newLevel);
+});
+
+// 获取当前红润级别
+const level = ruddyLevel.value;
+console.log(&#39;当前红润级别:&#39;, level);</code></pre>
+    </div>
+    </div>
+  </section>
+  <section id="api-BaseBeautyState">
+    <h3>接口函数</h3>
+    <div class="api-item" id="setSmoothLevel">
+      <h4>setSmoothLevel</h4>
+      <div class="api-signature">function setSmoothLevel(params: SetSmoothLevelOptions)</div>
+    <div class="api-description">设置磨皮级别</div>
+    <h3>参数</h3>
+    <table class="param-table">
+      <tr>
+        <th>参数名</th>
+        <th>类型</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td>params</td>
+        <td><a href="interface.html#SetSmoothLevelOptions">SetSmoothLevelOptions</a></td>
+        <td>磨皮参数，取值范围[0,9]: 0 表示关闭，9 表示效果最明显</td>
+      </tr>
+    </table>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useBaseBeautyState } from &#39;@/uni_modules/tuikit-atomic-x/state/BaseBeautyState&#39;;
+const { setSmoothLevel } = useBaseBeautyState(&#39;your_live_id&#39;);
+setSmoothLevel({ smoothLevel: 5 });</code></pre>
+    </div>
+    </div>
+    <div class="api-item" id="setWhitenessLevel">
+      <h4>setWhitenessLevel</h4>
+      <div class="api-signature">function setWhitenessLevel(params: SetWhitenessLevelOptions)</div>
+    <div class="api-description">设置美白级别</div>
+    <h3>参数</h3>
+    <table class="param-table">
+      <tr>
+        <th>参数名</th>
+        <th>类型</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td>params</td>
+        <td><a href="interface.html#SetWhitenessLevelOptions">SetWhitenessLevelOptions</a></td>
+        <td>美白参数，取值范围[0,9]: 0 表示关闭，9 表示效果最明显</td>
+      </tr>
+    </table>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useBaseBeautyState } from &#39;@/uni_modules/tuikit-atomic-x/state/BaseBeautyState&#39;;
+const { setWhitenessLevel } = useBaseBeautyState(&#39;your_live_id&#39;);
+setWhitenessLevel({ whitenessLevel: 6 });</code></pre>
+    </div>
+    </div>
+    <div class="api-item" id="setRuddyLevel">
+      <h4>setRuddyLevel</h4>
+      <div class="api-signature">function setRuddyLevel(params: SetRuddyLevelOptions)</div>
+    <div class="api-description">设置红润级别</div>
+    <h3>参数</h3>
+    <table class="param-table">
+      <tr>
+        <th>参数名</th>
+        <th>类型</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td>params</td>
+        <td><a href="interface.html#SetRuddyLevelOptions">SetRuddyLevelOptions</a></td>
+        <td>红润参数，取值范围[0,9]: 0 表示关闭，9 表示效果最明显</td>
+      </tr>
+    </table>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useBaseBeautyState } from &#39;@/uni_modules/tuikit-atomic-x/state/BaseBeautyState&#39;;
+const { setRuddyLevel } = useBaseBeautyState(&#39;your_live_id&#39;);
+setRuddyLevel({ ruddyLevel: 4 });</code></pre>
+    </div>
+    </div>
+  </section>
+</section>
+
+<section id="module-GiftState">
+  <h2>GiftState</h2>
+  <div class="module-description">
+    <div class="module-description-content">礼物互动管理模块<br>核心功能：管理直播间礼物的发送、接收、展示等礼物互动功能，支持普通礼物和自定义礼物类型。<br>技术特点：支持礼物列表管理、礼物发送与接收事件监听、礼物动画展示等高级功能。<br>业务价值：为直播平台提供核心的礼物打赏能力，是直播变现的重要途径。<br>应用场景：礼物打赏、礼物动画、礼物排行榜、自定义礼物等直播打赏互动场景。</div>
+  </div>
+  <section id="data-GiftState">
+    <h3>响应式数据</h3>
+    <div class="data-item" id="usableGifts">
+      <h4>usableGifts</h4>
+      <div class="api-signature">const usableGifts: Ref<GiftCategoryParam[]></div>
+    <div class="api-description">可用礼物列表</div>
+    <div class="type-info">
+      <strong>类型:</strong> <code>Ref<GiftCategoryParam[]></code>
+    </div>
+    </div>
+  </section>
+  <section id="api-GiftState">
+    <h3>接口函数</h3>
+    <div class="api-item" id="refreshUsableGifts">
+      <h4>refreshUsableGifts</h4>
+      <div class="api-signature">function refreshUsableGifts(params: RefreshUsableGiftsOptions)</div>
+    <div class="api-description">刷新可用礼物列表</div>
+    <h3>参数</h3>
+    <table class="param-table">
+      <tr>
+        <th>参数名</th>
+        <th>类型</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td>params</td>
+        <td><a href="interface.html#RefreshUsableGiftsOptions">RefreshUsableGiftsOptions</a></td>
+        <td>刷新礼物列表参数</td>
+      </tr>
+    </table>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useGiftState } from &#39;@/uni_modules/tuikit-atomic-x/state/GiftState&#39;;
+const { refreshUsableGifts } = useGiftState(&quot;your_live_id&quot;);
+refreshUsableGifts({});</code></pre>
+    </div>
+    </div>
+    <div class="api-item" id="sendGift">
+      <h4>sendGift</h4>
+      <div class="api-signature">function sendGift(params: SendGiftOptions)</div>
+    <div class="api-description">发送礼物</div>
+    <h3>参数</h3>
+    <table class="param-table">
+      <tr>
+        <th>参数名</th>
+        <th>类型</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td>params</td>
+        <td><a href="interface.html#SendGiftOptions">SendGiftOptions</a></td>
+        <td>发送礼物参数</td>
+      </tr>
+    </table>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useGiftState } from &#39;@/uni_modules/tuikit-atomic-x/state/GiftState&#39;;
+const { sendGift } = useGiftState(&quot;your_live_id&quot;)
+sendGift({ liveID: &#39;your_live_id&#39;, giftID: &quot;gift001&quot;, count: 1 });</code></pre>
+    </div>
+    </div>
+    <div class="api-item" id="setLanguage">
+      <h4>setLanguage</h4>
+      <div class="api-signature">function setLanguage(params: SetLanguageOptions)</div>
+    <div class="api-description">设置礼物语言</div>
+    <h3>参数</h3>
+    <table class="param-table">
+      <tr>
+        <th>参数名</th>
+        <th>类型</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td>params</td>
+        <td><a href="interface.html#SetLanguageOptions">SetLanguageOptions</a></td>
+        <td>设置语言参数</td>
+      </tr>
+    </table>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useGiftState } from &#39;@/uni_modules/tuikit-atomic-x/state/GiftState&#39;;
+const { setLanguage } = useGiftState(&quot;your_live_id&quot;);
+setLanguage({ liveID: &#39;your_live_id&#39;, language: &#39;zh&#39; });</code></pre>
+    </div>
+    </div>
+    <div class="api-item" id="addGiftListener">
+      <h4>addGiftListener</h4>
+      <div class="api-signature">function addGiftListener(liveID: string, eventName: string, listener: ListenerCallback)</div>
+    <div class="api-description">添加礼物事件监听器</div>
+    <h3>参数</h3>
+    <table class="param-table">
+      <tr>
+        <th>参数名</th>
+        <th>类型</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td>liveID</td>
+        <td>string</td>
+        <td>直播间ID</td>
+      </tr>
+      <tr>
+        <td>eventName</td>
+        <td>string</td>
+        <td>事件名称，可选值: 'onReceiveGift'(收到礼物)</td>
+      </tr>
+      <tr>
+        <td>listener</td>
+        <td>(eventData: string) => void</td>
+        <td>事件监听器函数</td>
+      </tr>
+    </table>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useGiftState } from &#39;@/uni_modules/tuikit-atomic-x/state/GiftState&#39;;
+const { addGiftListener } = useGiftState(&quot;your_live_id&quot;);
+addGiftListener(&#39;your_live_id&#39;, &#39;onReceiveGift&#39;, (eventData) =&gt; {
+	console.log(&#39;eventData:&#39;, eventData);
+});</code></pre>
+    </div>
+    </div>
+    <div class="api-item" id="removeGiftListener">
+      <h4>removeGiftListener</h4>
+      <div class="api-signature">function removeGiftListener(liveID: string, eventName: string, listener: ListenerCallback)</div>
+    <div class="api-description">移除礼物事件监听器</div>
+    <h3>参数</h3>
+    <table class="param-table">
+      <tr>
+        <th>参数名</th>
+        <th>类型</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td>liveID</td>
+        <td>string</td>
+        <td>直播间ID</td>
+      </tr>
+      <tr>
+        <td>eventName</td>
+        <td>string</td>
+        <td>事件名称，可选值: 'onReceiveGift'(收到礼物)</td>
+      </tr>
+    </table>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useGiftState } from &#39;@/uni_modules/tuikit-atomic-x/state/GiftState&#39;;
+const { removeGiftListener } = useGiftState(&quot;your_live_id&quot;)
+removeGiftListener(&#39;your_live_id&#39;, &#39;onReceiveGift&#39;, &#39;listener_001&#39;);</code></pre>
+    </div>
+    </div>
+  </section>
+</section>
+
+<section id="module-LikeState">
+  <h2>LikeState</h2>
+  <div class="module-description">
+    <div class="module-description-content">点赞互动管理模块<br>核心功能：处理直播间的点赞功能，支持点赞发送、点赞统计、点赞事件监听等互动功能。<br>技术特点：支持高并发点赞处理、实时点赞统计、点赞动画效果、点赞排行榜等高级功能。<br>业务价值：为直播平台提供基础的互动能力，增强用户参与度和直播氛围。<br>应用场景：点赞互动、人气统计、互动效果、用户参与等基础互动场景。</div>
+  </div>
+  <section id="data-LikeState">
+    <h3>响应式数据</h3>
+    <div class="data-item" id="totalLikeCount">
+      <h4>totalLikeCount</h4>
+      <div class="api-signature">const totalLikeCount: Ref<number></div>
+    <div class="api-description">总点赞数量</div>
+    <div class="type-info">
+      <strong>类型:</strong> <code>Ref<number></code>
+    </div>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useLikeState } from &#39;@/uni_modules/tuikit-atomic-x/state/LikeState&#39;;
+const { totalLikeCount } = useLikeState(&#39;your_live_id&#39;);
+
+// 监听总点赞数量变化
+watch(totalLikeCount, (newCount) =&gt; {
+  console.log(&#39;总点赞数量:&#39;, newCount);
+});
+
+// 获取当前总点赞数量
+const likeCount = totalLikeCount.value;
+console.log(&#39;当前获赞数:&#39;, likeCount);</code></pre>
+    </div>
+    </div>
+  </section>
+  <section id="api-LikeState">
+    <h3>接口函数</h3>
+    <div class="api-item" id="sendLike">
+      <h4>sendLike</h4>
+      <div class="api-signature">function sendLike(params: SendLikeOptions)</div>
+    <div class="api-description">发送点赞</div>
+    <h3>参数</h3>
+    <table class="param-table">
+      <tr>
+        <th>参数名</th>
+        <th>类型</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td>params</td>
+        <td><a href="interface.html#SendLikeOptions">SendLikeOptions</a></td>
+        <td>点赞参数</td>
+      </tr>
+    </table>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useLikeState } from &#39;@/uni_modules/tuikit-atomic-x/state/LikeState&#39;;
+const { sendLike } = useLikeState(&quot;your_live_id&quot;);
+sendLike({ liveID: &#39;your_live_id&#39;, count: 1 });</code></pre>
+    </div>
+    </div>
+    <div class="api-item" id="addLikeListener">
+      <h4>addLikeListener</h4>
+      <div class="api-signature">function addLikeListener(liveID: string, eventName: string, listener: ListenerCallback)</div>
+    <div class="api-description">添加点赞事件监听</div>
+    <h3>参数</h3>
+    <table class="param-table">
+      <tr>
+        <th>参数名</th>
+        <th>类型</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td>liveID</td>
+        <td>string</td>
+        <td>直播ID</td>
+      </tr>
+      <tr>
+        <td>eventName</td>
+        <td>string</td>
+        <td>事件名称，可选值: 'onReceiveLikesMessage'(收到点赞消息)</td>
+      </tr>
+      <tr>
+        <td>listener</td>
+        <td>(eventData: string) => void</td>
+        <td>事件监听器函数</td>
+      </tr>
+    </table>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useLikeState } from &#39;@/uni_modules/tuikit-atomic-x/state/LikeState&#39;;
+const { addLikeListener } = useLikeState(&quot;your_live_id&quot;);
+addLikeListener(&#39;your_live_id&#39;, &#39;onReceiveLikesMessage&#39;, (eventData) =&gt; {
+	console.log(&#39;eventData:&#39;, eventData);
+});</code></pre>
+    </div>
+    </div>
+    <div class="api-item" id="removeLikeListener">
+      <h4>removeLikeListener</h4>
+      <div class="api-signature">function removeLikeListener(liveID: string, eventName: string, listener: ListenerCallback)</div>
+    <div class="api-description">移除点赞事件监听</div>
+    <h3>参数</h3>
+    <table class="param-table">
+      <tr>
+        <th>参数名</th>
+        <th>类型</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td>liveID</td>
+        <td>string</td>
+        <td>直播ID</td>
+      </tr>
+      <tr>
+        <td>eventName</td>
+        <td>string</td>
+        <td>事件名称，可选值: 'onReceiveLikesMessage'(收到点赞消息)</td>
+      </tr>
+      <tr>
+        <td>listener</td>
+        <td>(eventData: string) => void</td>
+        <td>事件监听器函数，需要传入添加时相同的函数引用</td>
+      </tr>
+    </table>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useLikeState } from &#39;@/uni_modules/tuikit-atomic-x/state/LikeState&#39;;
+const { addLikeListener, removeLikeListener } = useLikeState(&quot;your_live_id&quot;);
+const onReceiveLikes = (eventData) =&gt; {
+	console.log(&#39;eventData:&#39;, eventData);
+};
+addLikeListener(&#39;your_live_id&#39;, &#39;onReceiveLikesMessage&#39;, onReceiveLikes);
+// 移除监听时传入相同的函数引用
+removeLikeListener(&#39;your_live_id&#39;, &#39;onReceiveLikesMessage&#39;, onReceiveLikes);</code></pre>
+    </div>
+    </div>
+  </section>
+</section>
+
+<section id="module-CallState">
+  <h2>CallState</h2>
+  <div class="module-description">
+    <div class="module-description-content">通话状态管理模块<br>核心功能：负责音视频通话的状态管理、通话控制、参与者管理等通话核心服务。<br>技术特点：支持音频通话、视频通话、多人通话、通话记录查询等高级功能。<br>业务价值：为直播平台提供完整的音视频通话能力，支持一对一和多人通话场景。<br>应用场景：语音通话、视频通话、群组通话、通话历史管理等通话场景。</div>
+  </div>
+  <section id="data-CallState">
+    <h3>响应式数据</h3>
+    <div class="data-item" id="activeCall">
+      <h4>activeCall</h4>
+      <div class="api-signature">const activeCall: Ref<CallInfo | null></div>
+    <div class="api-description">当前活跃通话信息</div>
+    <div class="type-info">
+      <strong>类型:</strong> <code>Ref<CallInfo | null></code>
+    </div>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useCallState } from &#39;@/uni_modules/tuikit-atomic-x/state/CallState&#39;;
+const { activeCall } = useCallState();
+
+// 监听通话信息变化
+watch(activeCall, (newCall) =&gt; {
+  if (newCall) {
+    console.log(&#39;当前通话:&#39;, newCall.callId);
+    console.log(&#39;通话类型:&#39;, newCall.mediaType);
+  }
+});</code></pre>
+    </div>
+    </div>
+    <div class="data-item" id="recentCalls">
+      <h4>recentCalls</h4>
+      <div class="api-signature">const recentCalls: Ref<RecentCall[]></div>
+    <div class="api-description">最近通话记录列表</div>
+    <div class="type-info">
+      <strong>类型:</strong> <code>Ref<RecentCall[]></code>
+    </div>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useCallState } from &#39;@/uni_modules/tuikit-atomic-x/state/CallState&#39;;
+const { recentCalls } = useCallState();
+
+// 监听最近通话记录变化
+watch(recentCalls, (newCalls) =&gt; {
+  console.log(&#39;最近通话记录:&#39;, newCalls);
+  newCalls.forEach((call) =&gt; {
+    console.log(&#39;通话ID:&#39;, call.callId, &#39;类型:&#39;, call.mediaType);
+  });
+});</code></pre>
+    </div>
+    </div>
+    <div class="data-item" id="cursor">
+      <h4>cursor</h4>
+      <div class="api-signature">const cursor: Ref<string></div>
+    <div class="api-description">通话记录查询游标</div>
+    <div class="type-info">
+      <strong>类型:</strong> <code>Ref<string></code>
+    </div>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useCallState } from &#39;@/uni_modules/tuikit-atomic-x/state/CallState&#39;;
+const { cursor } = useCallState();
+
+// 监听查询游标变化
+watch(cursor, (newCursor) =&gt; {
+  console.log(&#39;当前游标:&#39;, newCursor);
+  if (newCursor) {
+    console.log(&#39;还有更多通话记录可加载&#39;);
+  }
+});</code></pre>
+    </div>
+    </div>
+    <div class="data-item" id="selfInfo">
+      <h4>selfInfo</h4>
+      <div class="api-signature">const selfInfo: Ref<CallParticipant | null></div>
+    <div class="api-description">当前用户在通话中的信息</div>
+    <div class="type-info">
+      <strong>类型:</strong> <code>Ref<CallParticipant | null></code>
+    </div>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useCallState } from &#39;@/uni_modules/tuikit-atomic-x/state/CallState&#39;;
+const { selfInfo } = useCallState();
+
+// 监听自身通话信息变化
+watch(selfInfo, (newInfo) =&gt; {
+  if (newInfo) {
+    console.log(&#39;用户ID:&#39;, newInfo.userId);
+    console.log(&#39;麦克风状态:&#39;, newInfo.isMicMuted ? &#39;静音&#39; : &#39;开启&#39;);
+    console.log(&#39;摄像头状态:&#39;, newInfo.isCameraMuted ? &#39;关闭&#39; : &#39;开启&#39;);
+  }
+});</code></pre>
+    </div>
+    </div>
+    <div class="data-item" id="allParticipants">
+      <h4>allParticipants</h4>
+      <div class="api-signature">const allParticipants: Ref<CallParticipant[]></div>
+    <div class="api-description">所有通话参与者列表</div>
+    <div class="type-info">
+      <strong>类型:</strong> <code>Ref<CallParticipant[]></code>
+    </div>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useCallState } from &#39;@/uni_modules/tuikit-atomic-x/state/CallState&#39;;
+const { allParticipants } = useCallState();
+
+// 监听通话参与者变化
+watch(allParticipants, (newParticipants) =&gt; {
+  console.log(&#39;参与者数量:&#39;, newParticipants.length);
+  newParticipants.forEach((participant) =&gt; {
+    console.log(&#39;用户:&#39;, participant.userId, &#39;音频:&#39;, participant.hasAudio, &#39;视频:&#39;, participant.hasVideo);
+  });
+});</code></pre>
+    </div>
+    </div>
+    <div class="data-item" id="speakerVolumes">
+      <h4>speakerVolumes</h4>
+      <div class="api-signature">const speakerVolumes: Ref<SpeakerVolume[]></div>
+    <div class="api-description">参与者音量列表</div>
+    <div class="type-info">
+      <strong>类型:</strong> <code>Ref<SpeakerVolume[]></code>
+    </div>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useCallState } from &#39;@/uni_modules/tuikit-atomic-x/state/CallState&#39;;
+const { speakerVolumes } = useCallState();
+
+// 监听参与者音量变化
+watch(speakerVolumes, (newVolumes) =&gt; {
+  newVolumes.forEach((item) =&gt; {
+    console.log(&#39;用户:&#39;, item.userId, &#39;音量:&#39;, item.volume);
+  });
+});</code></pre>
+    </div>
+    </div>
+    <div class="data-item" id="networkQualities">
+      <h4>networkQualities</h4>
+      <div class="api-signature">const networkQualities: Ref<Record<string, NetworkQuality>></div>
+    <div class="api-description">参与者网络质量信息</div>
+    <div class="type-info">
+      <strong>类型:</strong> <code>Ref<Record<string, NetworkQuality>></code>
+    </div>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useCallState } from &#39;@/uni_modules/tuikit-atomic-x/state/CallState&#39;;
+const { networkQualities } = useCallState();
+
+// 监听网络质量变化
+watch(networkQualities, (newQualities) =&gt; {
+  Object.entries(newQualities).forEach(([userId, quality]) =&gt; {
+    console.log(&#39;用户:&#39;, userId, &#39;网络质量:&#39;, quality);
+  });
+});</code></pre>
+    </div>
+    </div>
+  </section>
+  <section id="api-CallState">
+    <h3>接口函数</h3>
+    <div class="api-item" id="calls">
+      <h4>calls</h4>
+      <div class="api-signature">function calls(params: CallsOptions)</div>
+    <div class="api-description">发起通话</div>
+    <h3>参数</h3>
+    <table class="param-table">
+      <tr>
+        <th>参数名</th>
+        <th>类型</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td>params</td>
+        <td><a href="interface.html#CallsOptions">CallsOptions</a></td>
+        <td>通话参数</td>
+      </tr>
+    </table>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useCallState, CallMediaType } from &#39;@/uni_modules/tuikit-atomic-x/state/CallState&#39;;
+const { calls } = useCallState();
+calls({
+  participantIds: [&#39;user123&#39;, &#39;user456&#39;],
+  mediaType: CallMediaType.Video,
+  success: () =&gt; console.log(&#39;发起通话成功&#39;),
+  fail: (code, message) =&gt; console.error(&#39;发起通话失败:&#39;, code, message)
+});</code></pre>
+    </div>
+    </div>
+    <div class="api-item" id="accept">
+      <h4>accept</h4>
+      <div class="api-signature">function accept(params?: AcceptOptions)</div>
+    <div class="api-description">接听通话</div>
+    <h3>参数</h3>
+    <table class="param-table">
+      <tr>
+        <th>参数名</th>
+        <th>类型</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td>[params]</td>
+        <td><a href="interface.html#AcceptOptions">AcceptOptions</a></td>
+        <td>接听参数（可选）</td>
+      </tr>
+    </table>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useCallState } from &#39;@/uni_modules/tuikit-atomic-x/state/CallState&#39;;
+const { accept } = useCallState();
+accept({
+  success: () =&gt; console.log(&#39;接听成功&#39;),
+  fail: (code, message) =&gt; console.error(&#39;接听失败:&#39;, code, message)
+});</code></pre>
+    </div>
+    </div>
+    <div class="api-item" id="reject">
+      <h4>reject</h4>
+      <div class="api-signature">function reject(params?: RejectOptions)</div>
+    <div class="api-description">拒绝通话</div>
+    <h3>参数</h3>
+    <table class="param-table">
+      <tr>
+        <th>参数名</th>
+        <th>类型</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td>[params]</td>
+        <td><a href="interface.html#RejectOptions">RejectOptions</a></td>
+        <td>拒绝参数（可选）</td>
+      </tr>
+    </table>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useCallState } from &#39;@/uni_modules/tuikit-atomic-x/state/CallState&#39;;
+const { reject } = useCallState();
+reject({
+  success: () =&gt; console.log(&#39;拒绝成功&#39;),
+  fail: (code, message) =&gt; console.error(&#39;拒绝失败:&#39;, code, message)
+});</code></pre>
+    </div>
+    </div>
+    <div class="api-item" id="hangup">
+      <h4>hangup</h4>
+      <div class="api-signature">function hangup(params?: HangupOptions)</div>
+    <div class="api-description">挂断通话</div>
+    <h3>参数</h3>
+    <table class="param-table">
+      <tr>
+        <th>参数名</th>
+        <th>类型</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td>[params]</td>
+        <td><a href="interface.html#HangupOptions">HangupOptions</a></td>
+        <td>挂断参数（可选）</td>
+      </tr>
+    </table>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useCallState } from &#39;@/uni_modules/tuikit-atomic-x/state/CallState&#39;;
+const { hangup } = useCallState();
+hangup({
+  success: () =&gt; console.log(&#39;挂断成功&#39;),
+  fail: (code, message) =&gt; console.error(&#39;挂断失败:&#39;, code, message)
+});</code></pre>
+    </div>
+    </div>
+    <div class="api-item" id="join">
+      <h4>join</h4>
+      <div class="api-signature">function join(params: JoinOptions)</div>
+    <div class="api-description">加入通话</div>
+    <h3>参数</h3>
+    <table class="param-table">
+      <tr>
+        <th>参数名</th>
+        <th>类型</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td>params</td>
+        <td><a href="interface.html#JoinOptions">JoinOptions</a></td>
+        <td>加入通话参数</td>
+      </tr>
+    </table>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useCallState } from &#39;@/uni_modules/tuikit-atomic-x/state/CallState&#39;;
+const { join } = useCallState();
+join({
+  callId: &#39;call_123456&#39;,
+  success: () =&gt; console.log(&#39;加入通话成功&#39;),
+  fail: (code, message) =&gt; console.error(&#39;加入通话失败:&#39;, code, message)
+});</code></pre>
+    </div>
+    </div>
+    <div class="api-item" id="invite">
+      <h4>invite</h4>
+      <div class="api-signature">function invite(params: InviteOptions)</div>
+    <div class="api-description">邀请用户加入通话</div>
+    <h3>参数</h3>
+    <table class="param-table">
+      <tr>
+        <th>参数名</th>
+        <th>类型</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td>params</td>
+        <td><a href="interface.html#InviteOptions">InviteOptions</a></td>
+        <td>邀请参数</td>
+      </tr>
+    </table>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useCallState } from &#39;@/uni_modules/tuikit-atomic-x/state/CallState&#39;;
+const { invite } = useCallState();
+invite({
+  participantIds: [&#39;user789&#39;],
+  success: () =&gt; console.log(&#39;邀请成功&#39;),
+  fail: (code, message) =&gt; console.error(&#39;邀请失败:&#39;, code, message)
+});</code></pre>
+    </div>
+    </div>
+    <div class="api-item" id="queryRecentCalls">
+      <h4>queryRecentCalls</h4>
+      <div class="api-signature">function queryRecentCalls(params?: QueryRecentCallsOptions)</div>
+    <div class="api-description">查询通话记录</div>
+    <h3>参数</h3>
+    <table class="param-table">
+      <tr>
+        <th>参数名</th>
+        <th>类型</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td>[params]</td>
+        <td><a href="interface.html#QueryRecentCallsOptions">QueryRecentCallsOptions</a></td>
+        <td>查询参数（可选）</td>
+      </tr>
+    </table>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useCallState } from &#39;@/uni_modules/tuikit-atomic-x/state/CallState&#39;;
+const { queryRecentCalls } = useCallState();
+queryRecentCalls({
+  cursor: &#39;&#39;,
+  count: 20,
+  success: () =&gt; console.log(&#39;查询成功&#39;),
+  fail: (code, message) =&gt; console.error(&#39;查询失败:&#39;, code, message)
+});</code></pre>
+    </div>
+    </div>
+    <div class="api-item" id="deleteRecentCalls">
+      <h4>deleteRecentCalls</h4>
+      <div class="api-signature">function deleteRecentCalls(params: DeleteRecentCallsOptions)</div>
+    <div class="api-description">删除通话记录</div>
+    <h3>参数</h3>
+    <table class="param-table">
+      <tr>
+        <th>参数名</th>
+        <th>类型</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td>params</td>
+        <td><a href="interface.html#DeleteRecentCallsOptions">DeleteRecentCallsOptions</a></td>
+        <td>删除参数</td>
+      </tr>
+    </table>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useCallState } from &#39;@/uni_modules/tuikit-atomic-x/state/CallState&#39;;
+const { deleteRecentCalls } = useCallState();
+deleteRecentCalls({
+  callIdList: [&#39;call_123&#39;, &#39;call_456&#39;],
+  success: () =&gt; console.log(&#39;删除成功&#39;),
+  fail: (code, message) =&gt; console.error(&#39;删除失败:&#39;, code, message)
+});</code></pre>
+    </div>
+    </div>
+    <div class="api-item" id="addCallListener">
+      <h4>addCallListener</h4>
+      <div class="api-signature">function addCallListener(eventName: string, listener: ICallListener, listenerID?: string)</div>
+    <div class="api-description">添加通话事件监听</div>
+    <h3>参数</h3>
+    <table class="param-table">
+      <tr>
+        <th>参数名</th>
+        <th>类型</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td>eventName</td>
+        <td>string</td>
+        <td>事件名称，可选值: 'onCallStarted'(通话开始) | 'onCallReceived'(收到通话) | 'onCallEnded'(通话结束)</td>
+      </tr>
+      <tr>
+        <td>listener</td>
+        <td><a href="interface.html#ICallListener">ICallListener</a></td>
+        <td>事件回调函数</td>
+      </tr>
+      <tr>
+        <td>[listenerID]</td>
+        <td>string</td>
+        <td>监听器ID（可选，用于标识和移除特定监听器）</td>
+      </tr>
+    </table>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useCallState } from &#39;@/uni_modules/tuikit-atomic-x/state/CallState&#39;;
+const { addCallListener } = useCallState();
+
+// 监听收到通话事件
+addCallListener(&#39;onCallReceived&#39;, (params) =&gt; {
+  console.log(&#39;收到通话:&#39;, params);
+  // params 包含: { callId, mediaType, userData }
+}, &#39;myListener&#39;);
+
+// 监听通话开始事件
+addCallListener(&#39;onCallStarted&#39;, (params) =&gt; {
+  console.log(&#39;通话已开始:&#39;, params);
+  // params 包含: { callId, mediaType }
+});
+
+// 监听通话结束事件
+addCallListener(&#39;onCallEnded&#39;, (params) =&gt; {
+  console.log(&#39;通话已结束:&#39;, params);
+  // params 包含: { callId, mediaType, reason, userId }
+});</code></pre>
+    </div>
+    </div>
+    <div class="api-item" id="removeCallListener">
+      <h4>removeCallListener</h4>
+      <div class="api-signature">function removeCallListener(eventName: string, listenerID?: string)</div>
+    <div class="api-description">移除通话事件监听</div>
+    <h3>参数</h3>
+    <table class="param-table">
+      <tr>
+        <th>参数名</th>
+        <th>类型</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td>eventName</td>
+        <td>string</td>
+        <td>事件名称</td>
+      </tr>
+      <tr>
+        <td>[listenerID]</td>
+        <td>string</td>
+        <td>监听器ID（可选，如果不传则移除该事件的所有监听器）</td>
+      </tr>
+    </table>
+    <div class="example">
+      <h4>示例</h4>
+      <pre><code>import { useCallState } from &#39;@/uni_modules/tuikit-atomic-x/state/CallState&#39;;
+const { removeCallListener } = useCallState();
+
+// 移除特定监听器
+removeCallListener(&#39;onCallReceived&#39;, &#39;myListener&#39;);
+
+// 移除该事件的所有监听器
+removeCallListener(&#39;onCallReceived&#39;);</code></pre>
+    </div>
+    </div>
+  </section>
+</section>
+
+        
+        <script src="../assets/search.js"></script>
+    </div>
+</body>
+</html>
+  

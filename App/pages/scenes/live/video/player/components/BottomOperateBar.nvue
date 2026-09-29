@@ -1,0 +1,171 @@
+<template>
+  <view class="operate-buttons">
+    <view
+      class="btn-bg co-mic-btn"
+      :class="{ 'disabled': micDisabled }"
+      :ref="(el: any) => { if (el) buttonRefs['coMic'] = el; }"
+      v-if="micEnabled && !micConnected"
+      @touchstart="startPress('coMic')"
+      @touchend="handleTouchEndWithAction('coMic', () => emit('coGuestTap'))"
+      @touchcancel="endPress('coMic')"
+    >
+      <image class="btn-icon" src="/static/images/live/live-co-guest.png" mode="aspectFit" />
+    </view>
+    <view
+      class="btn-bg co-mic-connected-btn"
+      :ref="(el: any) => { if (el) buttonRefs['coMicConnected'] = el; }"
+      v-if="micEnabled && micConnected"
+      @touchstart="startPress('coMicConnected')"
+      @touchend="handleTouchEndWithAction('coMicConnected', () => emit('micConnectedTap'))"
+      @touchcancel="endPress('coMicConnected')"
+    >
+      <image
+        class="co-mic-connected-icon"
+        :class="{ 'is-breathing': isBreathing }"
+        src="/static/images/live/live-connected.png"
+        mode="aspectFit"
+      />
+    </view>
+    <view
+      class="btn-bg gift-btn"
+      :ref="(el: any) => { if (el) buttonRefs['gift'] = el; }"
+      @touchstart="startPress('gift')"
+      @touchend="handleTouchEndWithAction('gift', () => emit('giftTap'))"
+      @touchcancel="endPress('gift')"
+    >
+      <image class="btn-icon" src="/static/images/live/live-gift.png" mode="aspectFit" />
+    </view>
+    <view
+      class="btn-bg more-btn"
+      :ref="(el: any) => { if (el) buttonRefs['more'] = el; }"
+      @touchstart="startPress('more')"
+      @touchend="handleTouchEndWithAction('more', () => emit('moreTap'))"
+      @touchcancel="endPress('more')"
+    >
+      <image class="more-icon" src="/static/images/live/more-share-arrow.png" mode="aspectFit" />
+    </view>
+    <Like />
+  </view>
+</template>
+
+<script setup lang="ts">
+  import { ref, onMounted, onUnmounted } from 'vue';
+  import Like from '@/uni_modules/tuikit-atomic-x/components/Like.nvue';
+
+  const props = defineProps<{
+    micEnabled: boolean;  // 该直播间布局是否支持连麦(纯语聊房 templateLayout=200 时为 false)
+    micConnected: boolean;// 连麦中(显示呼吸态图标)
+    micDisabled: boolean; // 连麦按钮禁用(跨房连麦中)
+  }>();
+  const emit = defineEmits(['coGuestTap', 'micConnectedTap', 'giftTap', 'moreTap']);
+  const animation = uni.requireNativePlugin('animation');
+
+  let breathTimer: any = null;
+  let lastActionAt = 0;
+  const isBreathing = ref(false);
+  const buttonRefs: Record<string, any> = {};
+  const PRESS_ANIM_DURATION = 120;
+  const PRESS_ANIM_TIMING = 'ease';
+  const PRESS_ANIM_SCALE = 0.92;
+  const MIN_PRESS_VISIBLE_MS = 120;  // 最小按下可见时长:轻点(按下立即抬起)时补足按压动画时长,保证能看到收缩到位后再回弹
+  const ACTION_LOCK_MS = 400;        // 动作互斥锁窗口:nvue(尤其 Android)双指同按不同按钮会各自触发 touchend、弹出多个 drawer
+  const pressStartAt: Record<string, number> = {};
+  const releaseDelayTimer: Record<string, any> = {};
+
+  const animateScale = (id: string, pressed: boolean) => {
+    const el = buttonRefs[id];
+    if (!el) return;
+    animation.transition(el, {
+      styles: {
+        transform: pressed ? `scale(${PRESS_ANIM_SCALE})` : 'scale(1)'
+      },
+      duration: PRESS_ANIM_DURATION,
+      timingFunction: PRESS_ANIM_TIMING
+    });
+  };
+
+  const startPress = (id: string) => {
+    if (releaseDelayTimer[id] != null) {
+      clearTimeout(releaseDelayTimer[id]);
+      releaseDelayTimer[id] = null;
+    }
+    pressStartAt[id] = Date.now();
+    animateScale(id, true);
+  };
+
+  const endPress = (id: string) => {
+    const elapsed = Date.now() - (pressStartAt[id] || 0);
+    const delay = Math.max(0, MIN_PRESS_VISIBLE_MS - elapsed);
+    if (releaseDelayTimer[id] != null) {
+      clearTimeout(releaseDelayTimer[id]);
+      releaseDelayTimer[id] = null;
+    }
+    if (delay === 0) {
+      animateScale(id, false);
+      return;
+    }
+    releaseDelayTimer[id] = setTimeout(() => {
+      animateScale(id, false);
+      releaseDelayTimer[id] = null;
+    }, delay);
+  };
+
+  const handleTouchEndWithAction = (id: string, cb: () => void) => {
+    endPress(id);
+    const now = Date.now();
+    if (now - lastActionAt < ACTION_LOCK_MS) return;
+    lastActionAt = now;
+    cb();
+  };
+
+  onMounted(() => {
+    breathTimer = setInterval(() => {
+      isBreathing.value = !isBreathing.value;
+    }, 800);
+  });
+  onUnmounted(() => {
+    if (breathTimer) { clearInterval(breathTimer); breathTimer = null; }
+  });
+</script>
+
+<style>
+  .operate-buttons {
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .btn-bg {
+    width: 72rpx;
+    height: 72rpx;
+    background-color: rgba(20, 20, 22, 0.54);
+    border-radius: 50%;
+    border: 2rpx solid rgba(255, 255, 255, 0.055);
+    margin-left: 16rpx;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .btn-icon {
+    width: 72rpx;
+    height: 72rpx;
+  }
+
+  .more-icon {
+    width: 56rpx;
+    height: 56rpx;
+  }
+
+  .co-mic-connected-icon {
+    width: 72rpx;
+    height: 72rpx;
+    transform: scale(1);
+    transition-property: transform;
+    transition-duration: 800ms;
+    transition-timing-function: ease-in-out;
+  }
+
+  .co-mic-connected-icon.is-breathing {
+    transform: scale(1.12);
+  }
+</style>

@@ -46,6 +46,16 @@
       </view>
     </view>
   </view>
+
+  <!-- 轻提示(替代 uni.showToast):关注结果反馈(当前关注按钮处于注释态,
+       解开即生效)。 -->
+  <LiveToast
+    v-if="tipVisible"
+    :key="tipSeq"
+    v-model="tipVisible"
+    :title="tipTitle"
+    :duration="2000"
+  />
 </template>
 
 <script setup>
@@ -58,6 +68,7 @@
   import {
     useLiveAudienceState
   } from "@/uni_modules/tuikit-atomic-x/state/LiveAudienceState";
+  import LiveToast from '@/uni_modules/tuikit-atomic-x/components/LiveToast.nvue';
   const {
     currentLive
   } = useLiveListState();
@@ -128,13 +139,20 @@
     });
   };
 
+  // 轻提示(LiveToast)状态:tipSeq 递增强制重建(重复触发时 v-model 同值不触发 watch)。
+  const tipVisible = ref(false);
+  const tipSeq = ref(0);
+  const tipTitle = ref('');
+  const showTip = (title) => {
+    tipTitle.value = title;
+    tipSeq.value++;
+    tipVisible.value = true;
+  };
+
   const followUser = () => {
     console.warn('== 关注用户 ', userInfo?.userName);
     // 这里可以添加关注用户的逻辑
-    uni.showToast({
-      title: '关注成功',
-      icon: 'success'
-    });
+    showTip('关注成功');
   }
 </script>
 
@@ -216,6 +234,14 @@
     font-size: 32rpx;
     font-weight: 500;
     margin-right: 16rpx;
+    /* 超长用户名截断:单行 + 省略号,并把压缩只作用于名字
+       (flex-shrink:1),保证右侧等级徽章不被挤走/撑破行。 */
+    flex-shrink: 1;
+    min-width: 0;
+    max-width: 400rpx;
+    lines: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .badge {

@@ -19,15 +19,15 @@
     },
     {
       "name": "TXLiteAVSDK_Professional",
-      "version": "13.4.21067"
+      "version": "13.5.21355"
     },
     {
       "name": "RTCRoomEngine/Professional",
-      "version": "~> 4.3.0"
+      "version": "4.3.9"
     },
     {
       "name": "AtomicXCore",
-      "version": "~> 4.3.0"
+      "version": "4.3.9"
     },
 	  {
 	  "name": "AlbumPicker",

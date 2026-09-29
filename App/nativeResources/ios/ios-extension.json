@@ -1,0 +1,11 @@
+{
+  "ScreenShareExtension.appex": {
+    "identifier": "com.tencent.tuikit.demo.xa.upload",
+    "profile": "ios-screenShareUpload.mobileprovision",
+    "entitlements": {
+      "com.apple.security.application-groups": [
+        "group.com.tencent.tuikit.demo.xa"
+      ]
+    }
+  }
+}

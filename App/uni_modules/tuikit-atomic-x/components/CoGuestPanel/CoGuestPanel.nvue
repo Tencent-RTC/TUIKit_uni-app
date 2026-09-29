@@ -1,7 +1,7 @@
 <template>
-  <view class="bottom-drawer-container" v-if="modelValue">
-    <view class="drawer-overlay" @tap="close"></view>
-    <view class="bottom-drawer" :class="{ 'drawer-open': modelValue }">
+  <view class="bottom-drawer-container" v-if="mounted">
+    <view class="drawer-overlay" ref="overlayRef" @tap="close"></view>
+    <view class="bottom-drawer" ref="drawerRef">
       <view class="audience-header">
         <view class="tab-container">
           <!-- <view
@@ -122,7 +122,9 @@
     ref,
     reactive,
     onMounted,
-    computed
+    computed,
+    watch,
+    nextTick
   } from 'vue'
 
   import {
@@ -138,6 +140,9 @@
 
   const defaultAvatarURL = 'https://web.sdk.qcloud.com/component/TUIKit/assets/avatar_01.png';
 
+  // nvue 原生 animation / dom 模块
+  const animation = uni.requireNativePlugin('animation');
+  const dom = uni.requireNativePlugin('dom');
 
   const props = defineProps({
     modelValue: {
@@ -153,6 +158,13 @@
   const isLoading = ref(false);
   const currentCursor = ref(0);
   const scrollTop = ref(0);
+  const mounted = ref(false);
+  const drawerRef = ref(null);
+  const overlayRef = ref(null);
+  let closeTimer = null;
+
+  const ANIM_DURATION = 300;
+  const ANIM_TIMING = 'cubic-bezier(0.32, 0.72, 0, 1)';
 
   const emit = defineEmits(['update:modelValue'])
 
@@ -160,14 +172,84 @@
     emit('update:modelValue', false);
   }
 
+  // 确认 drawer 已布局完成后执行滑入动画（用 dom.getComponentRect 检测，不依赖延时）
+  function tryOpenAnimation(retries = 0) {
+    const drawer = drawerRef.value;
+    if (!drawer) {
+      if (retries < 10) setTimeout(() => tryOpenAnimation(retries + 1), 16);
+      return;
+    }
+    dom.getComponentRect(drawer, (res) => {
+      const ready = (res?.size?.height || res?.height || 0) > 0;
+      if (!ready) {
+        if (retries < 10) setTimeout(() => tryOpenAnimation(retries + 1), 16);
+        return;
+      }
+      // 先强制设到隐藏位置，再执行滑入
+      animation.transition(drawer, {
+        styles: { transform: 'translateY(100%)' },
+        duration: 0,
+        timingFunction: 'linear'
+      }, () => {
+        animation.transition(drawer, {
+          styles: { transform: 'translateY(0)' },
+          duration: ANIM_DURATION,
+          timingFunction: ANIM_TIMING
+        });
+      });
+      const overlay = overlayRef.value;
+      if (overlay) {
+        animation.transition(overlay, {
+          styles: { backgroundColor: 'rgba(0, 0, 0, 0.4)' },
+          duration: ANIM_DURATION,
+          timingFunction: 'ease'
+        });
+      }
+    });
+  }
+
+  // 监听 modelValue 变化，用 animation 模块驱动开关动画
+  watch(() => props.modelValue, (val) => {
+    if (val) {
+      // 打开
+      if (closeTimer) { clearTimeout(closeTimer); closeTimer = null; }
+      mounted.value = true;
+      nextTick(() => {
+        tryOpenAnimation();
+      });
+    } else {
+      // 关闭
+      if (closeTimer) { clearTimeout(closeTimer); closeTimer = null; }
+      const drawer = drawerRef.value;
+      const overlay = overlayRef.value;
+      if (drawer) {
+        animation.transition(drawer, {
+          styles: { transform: 'translateY(100%)' },
+          duration: ANIM_DURATION,
+          timingFunction: ANIM_TIMING
+        });
+      }
+      if (overlay) {
+        animation.transition(overlay, {
+          styles: { backgroundColor: 'rgba(0, 0, 0, 0)' },
+          duration: ANIM_DURATION,
+          timingFunction: 'ease'
+        });
+      }
+      closeTimer = setTimeout(() => {
+        mounted.value = false;
+      }, ANIM_DURATION);
+    }
+  });
+
   const handleScroll = (e) => {
-    if (this.currentCursor.value === 0) return;
+    if (currentCursor.value === 0) return;
 
     const {
       scrollHeight,
-      scrollTop
+      scrollTop: st
     } = e.detail;
-    scrollTop.value = scrollTop;
+    scrollTop.value = st;
 
     if (scrollHeight - scrollTop.value < 100) {
       // this.loadAudiences(this.currentCursor);
@@ -220,15 +302,17 @@
     z-index: 1000;
   }
 
+  /* 遮罩层：背景色由 animation 模块驱动 */
   .drawer-overlay {
     position: absolute;
     top: 0;
     left: 0;
     right: 0;
     bottom: 0;
-    background-color: rgba(0, 0, 0, 0.4);
+    background-color: rgba(0, 0, 0, 0);
   }
 
+  /* drawer 主体：transform 由 animation 模块驱动，CSS 只保留初始隐藏状态 */
   .bottom-drawer {
     position: absolute;
     bottom: 0;
@@ -238,15 +322,8 @@
     border-top-left-radius: 32rpx;
     border-top-right-radius: 32rpx;
     transform: translateY(100%);
-    transition-property: transform;
-    transition-duration: 0.3s;
-    transition-timing-function: ease;
     flex-direction: column;
     height: 1000rpx;
-  }
-
-  .drawer-open {
-    transform: translateY(0);
   }
 
   .audience-header {

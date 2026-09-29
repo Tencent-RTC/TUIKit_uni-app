@@ -183,6 +183,9 @@ const BINDABLE_DATA_NAMES = [
 let boundLiveID: string | null = null;
 
 function bindEvent(liveID: string): void {
+  if (!liveID || currentLive.value?.liveID !== liveID) {
+    return;
+  }
   if (boundLiveID === liveID) {
     return;
   }
@@ -230,17 +233,28 @@ function unbindEvent(liveID: string): void {
 
 let stopWatchingCurrentLive: (() => void) | null = null;
 
+// 重置弹幕相关状态为初值:退房/切换房间时清空,避免上个房间的消息列表残留到新房间。
+function resetBarrageState(): void {
+  messageList.value = [];
+}
+
 function ensureWatchCurrentLive() {
   if (stopWatchingCurrentLive) return;
   stopWatchingCurrentLive = watch(
     () => currentLive.value,
-    (newVal, oldVal) => {
-      if (oldVal && oldVal.liveID !== '') {
-        if (newVal.liveID === '' && boundLiveID) {
+    (newVal: any) => {
+      const newLiveID = newVal?.liveID ?? '';
+      if (newLiveID === '') {
+        if (boundLiveID) {
           unbindEvent(boundLiveID);
         }
+        resetBarrageState();
+      } else if (newLiveID !== boundLiveID) {
+        resetBarrageState();
+        bindEvent(newLiveID);
       }
-    }
+    },
+    { flush: 'sync' }
   );
 }
 

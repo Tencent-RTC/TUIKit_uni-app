@@ -353,16 +353,15 @@ const BINDABLE_DATA_NAMES = [
 let boundLiveID: string | null = null;
 
 function bindEvent(liveID: string): void {
-  // 已经绑定过该 liveID，无需重复绑定
+  if (!liveID || currentLive.value?.liveID !== liveID) {
+    return;
+  }
   if (boundLiveID === liveID) {
     return;
   }
-
-  // 如果之前绑定了其他 liveID，先解绑
   if (boundLiveID) {
     unbindEvent(boundLiveID);
   }
-
   boundLiveID = liveID;
 
   BINDABLE_DATA_NAMES.forEach(dataName => {
@@ -405,17 +404,35 @@ function unbindEvent(liveID: string): void {
 // 监听 currentLive 变化，当 currentLive 为空时自动解绑
 let stopWatchingCurrentLive: (() => void) | null = null;
 
+// 重置观众相关状态为初值:退房/切换房间时清空,避免上个房间的观众列表残留到新房间。
+function resetAudienceState(): void {
+  audienceList.value = [];
+  audienceCount.value = 0;
+  messageBannedUserList.value = [];
+}
+
 function ensureWatchCurrentLive() {
   if (stopWatchingCurrentLive) return;
   stopWatchingCurrentLive = watch(
     () => currentLive.value,
-    (newVal, oldVal) => {
-      if (oldVal && oldVal.liveID !== '') {
-        if (newVal.liveID === '' && boundLiveID) {
+    (newVal: any) => {
+      // currentLive 可能被 native 或本地 leaveLive 推为 null:
+      // - liveID 为空/null → 视为退房,解绑 + 重置状态;
+      // - liveID 变化 → 切房间,重绑;
+      // - liveID 不变(同房内字段更新)→ 空分支保护,不动订阅避免推送丢失。
+      // flush:'sync' 保证 room→null→room 快速切换时 null 过渡不被合并丢弃。
+      const newLiveID = newVal?.liveID ?? '';
+      if (newLiveID === '') {
+        if (boundLiveID) {
           unbindEvent(boundLiveID);
         }
+        resetAudienceState();
+      } else if (newLiveID !== boundLiveID) {
+        resetAudienceState();
+        bindEvent(newLiveID);
       }
-    }
+    },
+    { flush: 'sync' }
   );
 }
 

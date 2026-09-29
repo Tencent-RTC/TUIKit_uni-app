@@ -1,32 +1,24 @@
 <template>
-  <!-- 美颜面板组件 -->
-  <!-- 使用方式: <BeautyPanel v-model="showBeautyPanel" @adjust-beauty="handleAdjustBeauty" @reset="handleReset" /> -->
   <view class="bottom-drawer-container" v-if="modelValue">
     <view class="drawer-overlay"  @tap="close"></view>
     <view class="bottom-drawer" :class="{ 'drawer-open': modelValue }" @click.stop>
-      <!-- 程度控制区域 -->
       <view class="slider-section" v-if="currentOptionName !== '关闭'">
         <view class="control-container">
           <view class="custom-slider">
-            <!-- 减号按钮 -->
             <view style="width: 40rpx; height: 40rpx;" @tap="decreaseValue">
               <text class="btn-text">-</text>
             </view>
 
-            <!-- 进度条区域 -->
             <view class="progress-section">
-              <!-- 进度条背景 -->
               <view class="progress-bar">
                 <view
                   class="progress-fill"
                   :style="{ width: (currentRealValue / 100 * 400) + 'rpx' }"
                 ></view>
               </view>
-              <!-- 当前数值显示 - 定位在进度条右侧 -->
               <text class="current-value">{{ currentRealValue }}</text>
             </view>
 
-            <!-- 加号按钮 -->
             <view style="width: 40rpx; height: 40rpx;" @tap="increaseValue">
               <text class="btn-text">+</text>
             </view>
@@ -34,7 +26,6 @@
         </view>
       </view>
 
-      <!-- 功能标签页 -->
 <!--      <view class="feature-tabs">
         <view
           v-for="(tab, index) in featureTabs"
@@ -50,7 +41,6 @@
         </view>
       </view> -->
 
-      <!-- 详细选项区域 -->
       <view class="options-section">
         <view class="options-grid">
           <view
@@ -111,9 +101,8 @@ const props = defineProps({
 // Emits 定义
 const emit = defineEmits(['update:modelValue', 'adjust-beauty', 'reset'])
 
-// 响应式数据
 const activeTabIndex = ref(0)
-const selectedOptionIndex = ref(0) // 默认选中"关闭"
+const selectedOptionIndex = ref(0) // 0 对应"关闭"选项
 
 const featureTabs = ref([
   { name: '美颜', icon: null },
@@ -161,7 +150,6 @@ const styleOptions = ref([
   { name: '时尚', icon: '/static/images/beauty.png' }
 ])
 
-// 计算属性
 const currentOptions = computed(() => {
   const optionsMap = {
     0: beautyOptions.value,
@@ -173,18 +161,15 @@ const currentOptions = computed(() => {
   return optionsMap[activeTabIndex.value] || beautyOptions.value
 })
 
-// 获取当前选项名称
 const currentOptionName = computed(() => {
   return currentOptions.value[selectedOptionIndex.value]?.name || '关闭'
 })
 
-// 获取当前激活的美颜效果名称（排除"关闭"选项）
 const activeBeautyOption = computed(() => {
   const options = currentOptions.value
   for (let i = 0; i < options.length; i++) {
     const option = options[i]
     if (option.name !== '关闭') {
-      // 检查这个美颜效果是否有值
       let hasValue = false
       switch (option.name) {
         case '美白':
@@ -205,7 +190,6 @@ const activeBeautyOption = computed(() => {
   return null
 })
 
-// 获取当前选项对应的真实UI显示值（显示用户拖动的真实数据）
 const currentRealValue = computed(() => {
   switch (currentOptionName.value) {
     case '美白':
@@ -220,88 +204,79 @@ const currentRealValue = computed(() => {
   }
 })
 
-// 监听外部状态变化，只在初始化时设置真实的UI值
+// UI 值"已写"标记(替代旧实现 getRealUiValue()===0 的"未设置过"启发式):用户拖动
+// 或程序清除(点关闭)后置 true,API 状态回推不再反填 UI。旧启发式把"刚被清除为 0"
+// 误判为"从未设置"——点关闭后三个 setXxxLevel(0) 的状态回推【逐条】到达,先到的那
+// 条触发 watch 把【尚未回推、本地 ref 仍是旧值】的另两项重新填回 UI,造成"关闭后
+// 滑杆值复活/设置看似没清干净"的显示残留(本轮修复的根因)。
+const uiValueTouched = { whiteness: false, smooth: false, ruddy: false }
+
 watch([smoothLevel, whitenessLevel, ruddyLevel], () => {
-  // 只在组件初始化时，如果真实UI值未设置过，才从API状态初始化
-  // 这样可以保持用户拖动的真实数据不被覆盖
-  if (getRealUiValue('whiteness') === 0 && whitenessLevel.value > 0) {
+  // 仅当 UI 值从未被本面板写过才从 API 状态初始化,保持用户拖动/清除值不被回推覆盖
+  if (!uiValueTouched.whiteness && whitenessLevel.value > 0) {
     setRealUiValue('whiteness', Math.round(whitenessLevel.value * 10))
   }
-  if (getRealUiValue('ruddy') === 0 && ruddyLevel.value > 0) {
+  if (!uiValueTouched.ruddy && ruddyLevel.value > 0) {
     setRealUiValue('ruddy', Math.round(ruddyLevel.value * 10))
   }
-  if (getRealUiValue('smooth') === 0 && smoothLevel.value > 0) {
+  if (!uiValueTouched.smooth && smoothLevel.value > 0) {
     setRealUiValue('smooth', Math.round(smoothLevel.value * 10))
   }
 }, { immediate: true })
 
-// 监听面板显示状态，当面板打开时初始化UI值
+// 面板打开时同样仅在未写过时从 API 状态初始化(同上,immediate 只覆盖挂载时刻)
 watch(() => props.modelValue, (newValue) => {
   if (newValue) {
-    // 面板打开时，只有在真实UI值未设置过的情况下才从API状态初始化
-    // 这样可以保持用户上次拖动的真实数据
-    if (getRealUiValue('whiteness') === 0 && whitenessLevel.value > 0) {
+    if (!uiValueTouched.whiteness && whitenessLevel.value > 0) {
       setRealUiValue('whiteness', Math.round((whitenessLevel.value || 0) * 10))
     }
-    if (getRealUiValue('ruddy') === 0 && ruddyLevel.value > 0) {
+    if (!uiValueTouched.ruddy && ruddyLevel.value > 0) {
       setRealUiValue('ruddy', Math.round((ruddyLevel.value || 0) * 10))
     }
-    if (getRealUiValue('smooth') === 0 && smoothLevel.value > 0) {
+    if (!uiValueTouched.smooth && smoothLevel.value > 0) {
       setRealUiValue('smooth', Math.round((smoothLevel.value || 0) * 10))
     }
   }
 })
 
-// 方法
-/**
- * 关闭面板
- */
 const close = () => {
   emit('update:modelValue', false)
 }
 
-/**
- * 减少数值
- */
 const decreaseValue = () => {
   const newValue = Math.max(0, currentRealValue.value - 10)
   updateBeautyValue(newValue)
 }
 
-/**
- * 增加数值
- */
 const increaseValue = () => {
   const newValue = Math.min(100, currentRealValue.value + 10)
   updateBeautyValue(newValue)
 }
 
-/**
- * 更新美颜数值
- */
 const updateBeautyValue = (uiValue) => {
   const currentOption = currentOptions.value[selectedOptionIndex.value]
 
-  // 保存真实的UI拖动值到全局状态
   switch (currentOption.name) {
     case '美白':
       setRealUiValue('whiteness', uiValue)
+      uiValueTouched.whiteness = true
       break
     case '红润':
       setRealUiValue('ruddy', uiValue)
+      uiValueTouched.ruddy = true
       break
     case '磨皮':
       setRealUiValue('smooth', uiValue)
+      uiValueTouched.smooth = true
       break
     case '关闭':
       return
   }
 
-  // 如果UI值超过90，API调用时限制为90
+  // UI 滑杆量程 0-100,但 API 上限 90:超过截断为 90
   const limitedUiValue = uiValue > 90 ? 90 : uiValue
-  const apiValue = limitedUiValue / 10 // 转换为接口值：0-9
+  const apiValue = limitedUiValue / 10 // UI 值(0-100) → 接口值(0-9)
 
-  // 调用对应的设置方法，传入转换后的参数值
   switch (currentOption.name) {
     case '美白':
       setWhitenessLevel({ whitenessLevel: apiValue })
@@ -321,17 +296,13 @@ const updateBeautyValue = (uiValue) => {
   })
 }
 
-/**
- * 切换标签页
- */
 const switchTab = (index) => {
   activeTabIndex.value = index
   selectedOptionIndex.value = 0
 
-  // 如果是重置标签，触发重置事件
+  // 5 = 预留的"重置"标签(见 featureTabs 中被注释的重置项)
   if (index === 5) {
     emit('reset')
-    // 重置所有美颜参数
     setSmoothLevel({ smoothLevel: 0 })
     setWhitenessLevel({ whitenessLevel: 0 })
     setRuddyLevel({ ruddyLevel: 0 })
@@ -340,39 +311,22 @@ const switchTab = (index) => {
   }
 }
 
-/**
- * 选择选项
- */
 const selectOption = (index) => {
   const currentOption = currentOptions.value[index]
 
-  // 如果选择"关闭"，重置当前选中的美颜效果
   if (currentOption.name === '关闭') {
-    // 获取当前选中的美颜效果（在更新selectedOptionIndex之前）
-    const currentSelectedOption = currentOptions.value[selectedOptionIndex.value]
-
-    // 根据当前选中的美颜效果来重置对应的参数
-    switch (currentSelectedOption?.name) {
-      case '美白':
-        setWhitenessLevel({ whitenessLevel: 0 })
-        setRealUiValue('whiteness', 0)
-        break
-      case '红润':
-        setRuddyLevel({ ruddyLevel: 0 })
-        setRealUiValue('ruddy', 0)
-        break
-      case '磨皮':
-        setSmoothLevel({ smoothLevel: 0 })
-        setRealUiValue('smooth', 0)
-        break
-      default:
-        // 如果当前选中的不是具体的美颜选项，则重置所有
-        setSmoothLevel({ smoothLevel: 0 })
-        setWhitenessLevel({ whitenessLevel: 0 })
-        setRuddyLevel({ ruddyLevel: 0 })
-        resetRealUiValues()
-        break
-    }
+    // "关闭"语义:关闭【全部】美颜效果,与此前选中哪项无关。此前按"单选"模型只清除
+    // 旧选中项——依次设置美白/磨皮/红润后点关闭,仅最后选中的那项被清除、其余残留
+    // (典型复现:最后调的是红润,则只有红润被清)。
+    setSmoothLevel({ smoothLevel: 0 })
+    setWhitenessLevel({ whitenessLevel: 0 })
+    setRuddyLevel({ ruddyLevel: 0 })
+    resetRealUiValues()
+    // 标记三项 UI 值均"已写":阻止状态回推逐条到达的竞态窗口内,把尚未回推的
+    // 旧本地 ref 值反填回 UI(见 uiValueTouched 定义处注释)。
+    uiValueTouched.whiteness = true
+    uiValueTouched.smooth = true
+    uiValueTouched.ruddy = true
   }
 
   selectedOptionIndex.value = index
@@ -423,13 +377,11 @@ const selectOption = (index) => {
   transform: translateY(0);
 }
 
-/* 滑块区域 */
 .slider-section {
   padding: 40rpx 48rpx 20rpx;
   background-color: rgba(34, 38, 46, 1);
 }
 
-/* 自定义控制区域样式 */
 .control-container {
   flex-direction: row;
   align-items: center;
@@ -509,7 +461,6 @@ const selectOption = (index) => {
   z-index: 10;
 }
 
-/* 详细选项区域 */
 .options-section {
   flex: 1;
   background-color: rgba(34, 38, 46, 1);

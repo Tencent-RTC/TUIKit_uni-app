@@ -39,7 +39,17 @@ const close = () => { emit('update:modelValue', false); };
 .avatar-container { width: 200rpx; height: 120rpx; justify-content: center; align-items: center; position: absolute; }
 .avatar { width: 112rpx; height: 112rpx; border-radius: 56rpx; }
 .user-info-container { flex: 1; padding-top: 120rpx; align-items: center; }
-.user-name { font-size: 32rpx; color: rgba(255, 255, 255, 0.9); }
+/* 超长用户名截断:单行 + 省略号。nvue 的 text 无宽度上限时会被长文本撑开、
+   把抽屉内容挤变形,故限宽 600rpx(抽屉满屏 750,留左右边距)并 nowrap。 */
+.user-name {
+  font-size: 32rpx;
+  color: rgba(255, 255, 255, 0.9);
+  max-width: 600rpx;
+  lines: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .user-roomid { font-size: 24rpx; color: rgba(255, 255, 255, 0.55); margin: 20rpx 0; }
 .divider-line-container { height: 68rpx; justify-content: center; position: relative; align-items: center; }
 .divider-line { width: 268rpx; height: 10rpx; border-radius: 200rpx; background-color: rgba(255, 255, 255, 1); position: absolute; bottom: 16rpx; }

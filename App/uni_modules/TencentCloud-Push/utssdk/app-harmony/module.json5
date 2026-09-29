@@ -1,0 +1,19 @@
+{
+  "module": {
+    "name": "uni_modules__tencentcloud_push",
+    "type": "har",
+    "deviceTypes": [
+      "default",
+      "tablet",
+      "2in1"
+    ],
+    "requestPermissions": [
+      {
+        "name": "ohos.permission.GET_NETWORK_INFO"
+      },
+	  {
+	    "name": "ohos.permission.INTERNET"
+	  },
+    ]
+  }
+}
