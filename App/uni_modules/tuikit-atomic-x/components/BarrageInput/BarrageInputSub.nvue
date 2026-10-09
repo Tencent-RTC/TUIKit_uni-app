@@ -1,0 +1,118 @@
+<template>
+  <!-- 弹幕输入 subNVue 原生子窗体（浮在直播页最上层，可覆盖 SVGA 等原生组件）。
+       内嵌 web-view 加载本地 H5 富文本输入页（contenteditable 图文混排，支持 TUI 图片表情）。
+       nvue ↔ H5 通信：H5 用 uni.webview.js postMessage → 本页 @onPostMessage 接收；
+       本页 → H5 用 webview.evalJS 注入。 -->
+  <view class="sub-root">
+    <view class="sub-mask" @tap="closeSelf"></view>
+    <!-- web-view 铺满全屏(H5 内部自行布局遮罩+底部输入区+键盘处理)。
+         nvue 下 web-view 需显式宽高,用 style 绑定屏幕宽高。 -->
+    <web-view
+      class="sub-webview"
+      :src="h5Url"
+      :style="{ width: screenWidth + 'px', height: screenHeight + 'px' }"
+      @onPostMessage="onH5Message"
+      ref="webviewRef"
+    ></web-view>
+  </view>
+</template>
+
+<script setup lang="ts">
+  import { ref, onMounted, onUnmounted } from 'vue';
+
+  // 与主页面通信的事件通道
+  const EVT_CLOSE = 'barrageInputSub:close';
+  const EVT_SEND = 'barrageInputSub:send';
+
+  // 本地 H5 页面地址（相对本 nvue 文件）
+  const h5Url = './html/index.html';
+
+  const screenWidth = ref(375);
+  const screenHeight = ref(667);
+
+  const webviewRef = ref<any>(null);
+
+  // 接收 H5 postMessage
+  // H5 通过 uni.webview.js 的 uni.postMessage({ data: {...} }) 发来，
+  // nvue web-view 的 @onPostMessage 事件 e.detail.data 为数组（历史消息聚合）。
+  function onH5Message(e: any) {
+    const list = (e && e.detail && e.detail.data) || [];
+    const msg = Array.isArray(list) ? list[list.length - 1] : list;
+    if (!msg || !msg.type) return;
+    handleH5Action(msg);
+  }
+
+  function handleH5Action(msg: any) {
+    switch (msg.type) {
+      case 'send':
+        // H5 已把 contenteditable 转成含 [TUIEmoji_Xxx] key 的纯文本
+        uni.$emit(EVT_SEND, { text: msg.text || '' });
+        hideSelf();
+        break;
+      case 'close':
+        uni.$emit(EVT_CLOSE, {});
+        hideSelf();
+        break;
+      default:
+        break;
+    }
+  }
+
+  // 关闭自身子窗体
+  function closeSelf() {
+    uni.$emit(EVT_CLOSE, {});
+    hideSelf();
+  }
+
+  function hideSelf() {
+    // #ifdef APP-PLUS
+    try {
+      const self = uni.getCurrentSubNVue && uni.getCurrentSubNVue();
+      if (self) {
+        self.hide('slide-out-bottom', 200);
+      }
+    } catch (e) {
+      console.error('hideSelf error', e);
+    }
+    // #endif
+  }
+
+  onMounted(() => {
+    // #ifdef APP-PLUS
+    try {
+      const info = uni.getSystemInfoSync();
+      screenWidth.value = info.windowWidth || info.screenWidth || 375;
+      screenHeight.value = info.windowHeight || info.screenHeight || 667;
+    } catch (e) {
+      console.error('getSystemInfo error', e);
+    }
+    // #endif
+  });
+  onUnmounted(() => {});
+</script>
+
+<style>
+  .sub-root {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: 0;
+  }
+
+  .sub-mask {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.01);
+  }
+
+  /* web-view 铺满整个子窗体（H5 内部自绘遮罩+输入区）。绝对定位左上角。 */
+  .sub-webview {
+    position: absolute;
+    left: 0;
+    top: 0;
+  }
+</style>

@@ -1,0 +1,279 @@
+<template>
+  <view class="top-operate-bar">
+    <view class="top-bar-left">
+      <view class="stream-info">
+        <image class="avatar" :src="hostAvatarSrc" mode="aspectFill" @error="onHostAvatarError" />
+        <view class="stream-details">
+          <text class="stream-title" :numberOfLines="1">{{ hostName }}的直播</text>
+          <text class="stream-meta" :numberOfLines="1">本场直播 · {{ hostViewCount }} 观看</text>
+        </view>
+        <view
+          class="follow-button"
+          :class="{ 'follow-button-following': isFollowingHost }"
+          @click="toggleFollowHost"
+        >
+          <text class="follow-text" :class="{ 'follow-text-following': isFollowingHost }">{{ isFollowingHost ? '已关注' : '关注' }}</text>
+        </view>
+      </view>
+    </view>
+    <view class="top-bar-right">
+      <!-- nvue 同级 z-index 不可靠,改用 row-reverse + 数据倒序:DOM 里最后渲染的元素在最上层,视觉正序但最左头像叠在最上。 -->
+      <view class="participants" @click="emit('audienceTap')">
+        <view class="participant-avatars">
+          <view
+            class="participant-avatar-wrap"
+            :class="{ 'participant-avatar-overlap': index > 0 }"
+            v-for="(user, index) in avatarListReversed"
+            :key="index"
+          >
+            <image class="participant-avatar" :src="user?.avatarURL || defaultAvatarURL" mode="aspectFill" />
+          </view>
+        </view>
+        <view class="participant-count">
+          <text class="count-text">{{ formatOnlineCount(currentAudienceCount) }}</text>
+        </view>
+      </view>
+      <view class="control-icons" @click.stop="emit('exit')">
+        <image class="control-icon" src="/static/images/close.png" />
+      </view>
+    </view>
+  </view>
+</template>
+
+<script setup lang="ts">
+  import { ref, computed, watch } from 'vue';
+  import { isUserFollowed, toggleUserFollowed } from '@/uni_modules/tuikit-atomic-x/utils/followStore';
+  import { useLiveListState } from '@/uni_modules/tuikit-atomic-x/state/LiveListState';
+  import { useLiveAudienceState } from '@/uni_modules/tuikit-atomic-x/state/LiveAudienceState';
+
+  const emit = defineEmits(['exit', 'audienceTap']);
+  const { currentLive } = useLiveListState(uni?.$liveID);
+  const { audienceList, audienceCount } = useLiveAudienceState(uni?.$liveID);
+
+  const defaultAvatarURL = 'https://web.sdk.qcloud.com/component/TUIKit/assets/avatar_01.png';
+  const hostAvatarSrc = ref(defaultAvatarURL);
+  const hostName = ref('');
+  const isFollowingHost = ref(false);
+  const hostViewCountCache = ref(0);
+
+  const hostViewCount = computed(() => formatViewCount(hostViewCountCache.value));
+  const currentAudienceCount = computed(() => audienceList.value?.length > 100 ? audienceCount : audienceList.value?.length);
+  const avatarListReversed = computed(() => (audienceList.value || []).slice(0, 3).reverse());
+
+  const normalizeAvatar = (url: string) => {
+    const s = (url == null ? '' : String(url)).trim();
+    if (!s || s === 'null' || s === 'undefined') return defaultAvatarURL;
+    return s;
+  };
+  const formatViewCount = (n: number): string => {
+    const v = Math.max(0, Math.floor(Number(n) || 0));
+    if (v >= 100000) return `${Math.floor(v / 10000)}万+`;
+    if (v >= 10000) {
+      const w = v / 10000;
+      return `${w >= 10 ? Math.floor(w) : Math.round(w * 10) / 10}万`;
+    }
+    return String(v);
+  };
+  const formatOnlineCount = (n: number): string => {
+    const v = Math.max(0, Math.floor(Number(n) || 0));
+    if (v >= 10000) return `${Math.floor(v / 10000)}万+`;
+    return String(v);
+  };
+  const onHostAvatarError = () => {
+    if (hostAvatarSrc.value !== defaultAvatarURL) {
+      hostAvatarSrc.value = defaultAvatarURL;
+    }
+  };
+  const toggleFollowHost = () => {
+    const ownerID = currentLive.value?.liveOwner?.userID;
+    if (!ownerID) return;
+    isFollowingHost.value = toggleUserFollowed(ownerID);
+  };
+
+  watch(
+    () => currentLive.value?.liveOwner?.avatarURL,
+    (url) => { if (url) hostAvatarSrc.value = normalizeAvatar(url); },
+    { immediate: true }
+  );
+  watch(
+    () => currentLive.value?.liveOwner?.userName || currentLive.value?.liveOwner?.userID || '',
+    (name) => { if (name) hostName.value = name; },
+    { immediate: true }
+  );
+  watch(() => currentLive.value?.liveOwner?.userID, (ownerID) => {
+    if (ownerID) isFollowingHost.value = isUserFollowed(ownerID);
+  }, { immediate: true });
+  watch(
+    () => currentLive.value?.totalViewerCount || 0,
+    (v) => { if (v > 0) hostViewCountCache.value = v; },
+    { immediate: true }
+  );
+</script>
+
+<style>
+  .top-operate-bar {
+    position: absolute;
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20rpx 32rpx;
+    margin-top: 80rpx;
+    width: 750rpx;
+    z-index: 1000;
+  }
+
+  .top-bar-left {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .stream-info {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    max-width: 440rpx;
+    background-color: rgba(0, 0, 0, 0.3);
+    padding-top: 4rpx;
+    padding-bottom: 4rpx;
+    padding-left: 4rpx;
+    padding-right: 4rpx;
+    border-radius: 40rpx;
+  }
+
+  .avatar {
+    width: 64rpx;
+    height: 64rpx;
+    border-radius: 32rpx;
+    border-width: 2rpx;
+    border-color: #ffffff;
+    margin-right: 12rpx;
+    flex-shrink: 0;
+  }
+
+  .stream-details {
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 1;
+    min-width: 0;
+  }
+
+  .stream-title {
+    color: #ffffff;
+    font-size: 28rpx;
+    font-weight: 500;
+    margin-bottom: 4rpx;
+    max-width: 180rpx;
+    height: 38rpx;
+    lines: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .stream-meta {
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 16rpx;
+    max-width: 180rpx;
+    lines: 1;
+  }
+
+  .follow-button {
+    height: 64rpx;
+    width: 124rpx;
+    border-radius: 32rpx;
+    background-color: #fe2876;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    margin-left: 16rpx;
+    flex-shrink: 0;
+  }
+
+  .follow-button-following {
+    background-color: rgba(254, 40, 118, 0.25);
+  }
+
+  .follow-text {
+    color: #ffffff;
+    font-size: 26rpx;
+    font-weight: 600;
+  }
+
+  .follow-text-following {
+    color: rgba(255, 255, 255, 0.82);
+  }
+
+  .top-bar-right {
+    position: absolute;
+    right: 32rpx;
+    top: 30rpx;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .participants {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .participant-avatars {
+    display: flex;
+    flex-direction: row-reverse;
+    align-items: center;
+  }
+
+  .participant-avatar-wrap {
+    width: 52rpx;
+    height: 52rpx;
+    border-radius: 26rpx;
+    overflow: hidden;
+    border-width: 2rpx;
+    border-color: rgba(255, 255, 255, 0.9);
+    background-color: rgba(0, 0, 0, 0.2);
+  }
+
+  .participant-avatar-overlap {
+    margin-right: -18rpx;
+  }
+
+  .participant-avatar {
+    width: 48rpx;
+    height: 48rpx;
+    border-radius: 24rpx;
+  }
+
+  .participant-count {
+    height: 52rpx;
+    min-width: 52rpx;
+    border-radius: 26rpx;
+    background-color: rgba(10, 12, 18, 0.35);
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    padding-left: 16rpx;
+    padding-right: 16rpx;
+    margin-left: 12rpx;
+  }
+
+  .count-text {
+    color: #ffffff;
+    font-size: 24rpx;
+    font-weight: 500;
+  }
+
+  .control-icons {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .control-icon {
+    width: 48rpx;
+    height: 48rpx;
+    margin-left: 16rpx;
+  }
+</style>

@@ -18,7 +18,7 @@
 import { ref } from 'vue';
 import type { Ref } from 'vue';
 // @ts-ignore - UTS module
-import { invokeEngineBridgeApi, addEngineBridgeObserver, setFramework, reportMetrics } from '@/uni_modules/tuikit-atomic-x';
+import { invokeEngineBridgeApi, addEngineBridgeObserver, setFramework, reportMetrics, callAPI } from '@/uni_modules/tuikit-atomic-x';
 import type { IRoomState } from './interface/room';
 import {
   CallRejectReason,
@@ -521,6 +521,12 @@ class RoomStateImpl implements IRoomState {
   };
 
   /* ============== 房间生命周期 ============== */
+
+  private setDeviceFocus(): void {
+    // @ts-ignore - UTS module
+    callAPI(JSON.stringify({ api: 'setFocus', params: { owner: 'room' } }), () => {});
+  }
+
   createAndJoinRoom = async (options: {
     roomID: string;
     roomType?: RoomType;
@@ -529,6 +535,7 @@ class RoomStateImpl implements IRoomState {
     setFramework(COMPONENT_ROOM);
     reportKeyMetrics(KeyMetricsKey.T_METRICS_STATE_API_CREATE_ROOM_COUNT);
     roomLifecycle.beforeEnterRoom(options.roomID);
+    this.setDeviceFocus();
     const data = await invokeApi<{ roomInfo: RoomInfo }>(ApiKeys.CREATE_AND_JOIN_ROOM, {
       roomID: options.roomID,
       roomType: options.roomType ?? RoomType.Standard,
@@ -543,6 +550,7 @@ class RoomStateImpl implements IRoomState {
     setFramework(COMPONENT_ROOM);
     reportKeyMetrics(KeyMetricsKey.T_METRICS_STATE_API_JOIN_ROOM_COUNT);
     roomLifecycle.beforeEnterRoom(options.roomID);
+    this.setDeviceFocus();
     const innerOptions: Record<string, any> = {};
     if (options.password) innerOptions.password = options.password;
     const data = await invokeApi<{ roomInfo: RoomInfo }>(ApiKeys.JOIN_ROOM, {

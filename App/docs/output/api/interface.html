@@ -1,0 +1,3846 @@
+
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interface 接口文档</title>
+    <link rel="stylesheet" href="../assets/styles.css">
+</head>
+<body>
+    <div class="sidebar">
+        <div class="toc">
+  <h3>目录</h3>
+  <ul>
+    <li><a href="#overview">接口定义总览</a></li>
+    <li><a href="#CallExperimentalAPIOptions">CallExperimentalAPIOptions</a></li>
+    <li><a href="#HybridListenerOptions">HybridListenerOptions</a></li>
+    <li><a href="#PickSingleImageFromAlbum">PickSingleImageFromAlbum</a></li>
+    <li><a href="#AllowType">AllowType</a></li>
+    <li><a href="#Gender">Gender</a></li>
+    <li><a href="#UserProfileParam">UserProfileParam</a></li>
+    <li><a href="#LoginOptions">LoginOptions</a></li>
+    <li><a href="#LogoutOptions">LogoutOptions</a></li>
+    <li><a href="#SetSelfInfoOptions">SetSelfInfoOptions</a></li>
+    <li><a href="#TakeSeatMode">TakeSeatMode</a></li>
+    <li><a href="#MoveSeatPolicy">MoveSeatPolicy</a></li>
+    <li><a href="#LiveModifyFlag">LiveModifyFlag</a></li>
+    <li><a href="#LiveUserInfoParam">LiveUserInfoParam</a></li>
+    <li><a href="#LiveInfoParam">LiveInfoParam</a></li>
+    <li><a href="#FetchLiveListOptions">FetchLiveListOptions</a></li>
+    <li><a href="#CreateLiveOptions">CreateLiveOptions</a></li>
+    <li><a href="#JoinLiveOptions">JoinLiveOptions</a></li>
+    <li><a href="#LeaveLiveOptions">LeaveLiveOptions</a></li>
+    <li><a href="#EndLiveOptions">EndLiveOptions</a></li>
+    <li><a href="#UpdateLiveInfoOptions">UpdateLiveInfoOptions</a></li>
+    <li><a href="#UpdateLiveMetaDataOptions">UpdateLiveMetaDataOptions</a></li>
+    <li><a href="#DeviceControlPolicy">DeviceControlPolicy</a></li>
+    <li><a href="#SeatUserInfoParam">SeatUserInfoParam</a></li>
+    <li><a href="#LiveCanvasParams">LiveCanvasParams</a></li>
+    <li><a href="#SeatInfo">SeatInfo</a></li>
+    <li><a href="#TakeSeatOptions">TakeSeatOptions</a></li>
+    <li><a href="#LeaveSeatOptions">LeaveSeatOptions</a></li>
+    <li><a href="#MuteMicrophoneOptions">MuteMicrophoneOptions</a></li>
+    <li><a href="#UnmuteMicrophoneOptions">UnmuteMicrophoneOptions</a></li>
+    <li><a href="#KickUserOutOfSeatOptions">KickUserOutOfSeatOptions</a></li>
+    <li><a href="#MoveUserToSeatOptions">MoveUserToSeatOptions</a></li>
+    <li><a href="#LockSeatOptions">LockSeatOptions</a></li>
+    <li><a href="#UnlockSeatOptions">UnlockSeatOptions</a></li>
+    <li><a href="#OpenRemoteCameraOptions">OpenRemoteCameraOptions</a></li>
+    <li><a href="#CloseRemoteCameraOptions">CloseRemoteCameraOptions</a></li>
+    <li><a href="#OpenRemoteMicrophoneOptions">OpenRemoteMicrophoneOptions</a></li>
+    <li><a href="#CloseRemoteMicrophoneOptions">CloseRemoteMicrophoneOptions</a></li>
+    <li><a href="#FetchAudienceListOptions">FetchAudienceListOptions</a></li>
+    <li><a href="#SetAdministratorOptions">SetAdministratorOptions</a></li>
+    <li><a href="#RevokeAdministratorOptions">RevokeAdministratorOptions</a></li>
+    <li><a href="#KickUserOutOfRoomOptions">KickUserOutOfRoomOptions</a></li>
+    <li><a href="#DisableSendMessageOptions">DisableSendMessageOptions</a></li>
+    <li><a href="#ApplyForSeatOptions">ApplyForSeatOptions</a></li>
+    <li><a href="#CancelApplicationOptions">CancelApplicationOptions</a></li>
+    <li><a href="#AcceptApplicationOptions">AcceptApplicationOptions</a></li>
+    <li><a href="#RejectApplicationOptions">RejectApplicationOptions</a></li>
+    <li><a href="#InviteToSeatOptions">InviteToSeatOptions</a></li>
+    <li><a href="#CancelInvitationOptions">CancelInvitationOptions</a></li>
+    <li><a href="#AcceptInvitationOptions">AcceptInvitationOptions</a></li>
+    <li><a href="#RejectInvitationOptions">RejectInvitationOptions</a></li>
+    <li><a href="#DisconnectOptions">DisconnectOptions</a></li>
+    <li><a href="#NoResponseReason">NoResponseReason</a></li>
+    <li><a href="#CoHostLayoutTemplateType">CoHostLayoutTemplateType</a></li>
+    <li><a href="#CoHostStatusType">CoHostStatusType</a></li>
+    <li><a href="#RequestHostConnectionOptions">RequestHostConnectionOptions</a></li>
+    <li><a href="#CancelHostConnectionOptions">CancelHostConnectionOptions</a></li>
+    <li><a href="#AcceptHostConnectionOptions">AcceptHostConnectionOptions</a></li>
+    <li><a href="#RejectHostConnectionOptions">RejectHostConnectionOptions</a></li>
+    <li><a href="#ExitHostConnectionOptions">ExitHostConnectionOptions</a></li>
+    <li><a href="#BattleConfigParam">BattleConfigParam</a></li>
+    <li><a href="#BattleInfoParam">BattleInfoParam</a></li>
+    <li><a href="#RequestBattleOptions">RequestBattleOptions</a></li>
+    <li><a href="#CancelBattleRequestOptions">CancelBattleRequestOptions</a></li>
+    <li><a href="#AcceptBattleOptions">AcceptBattleOptions</a></li>
+    <li><a href="#RejectBattleOptions">RejectBattleOptions</a></li>
+    <li><a href="#ExitBattleOptions">ExitBattleOptions</a></li>
+    <li><a href="#VideoQuality">VideoQuality</a></li>
+    <li><a href="#OpenLocalMicrophoneOptions">OpenLocalMicrophoneOptions</a></li>
+    <li><a href="#VolumeOptions">VolumeOptions</a></li>
+    <li><a href="#OpenLocalCameraOptions">OpenLocalCameraOptions</a></li>
+    <li><a href="#SwitchCameraOptions">SwitchCameraOptions</a></li>
+    <li><a href="#UpdateVideoQualityOptions">UpdateVideoQualityOptions</a></li>
+    <li><a href="#StartScreenShareOptions">StartScreenShareOptions</a></li>
+    <li><a href="#SetAudioRouteOptions">SetAudioRouteOptions</a></li>
+    <li><a href="#SwitchMirrorOptions">SwitchMirrorOptions</a></li>
+    <li><a href="#AudioChangerType">AudioChangerType</a></li>
+    <li><a href="#AudioReverbType">AudioReverbType</a></li>
+    <li><a href="#SetAudioChangerTypeOptions">SetAudioChangerTypeOptions</a></li>
+    <li><a href="#SetAudioReverbTypeOptions">SetAudioReverbTypeOptions</a></li>
+    <li><a href="#SetVoiceEarMonitorEnableOptions">SetVoiceEarMonitorEnableOptions</a></li>
+    <li><a href="#BarrageType">BarrageType</a></li>
+    <li><a href="#BarrageParam">BarrageParam</a></li>
+    <li><a href="#SendTextMessageOptions">SendTextMessageOptions</a></li>
+    <li><a href="#SendCustomMessageOptions">SendCustomMessageOptions</a></li>
+    <li><a href="#AppendLocalTipOptions">AppendLocalTipOptions</a></li>
+    <li><a href="#SetSmoothLevelOptions">SetSmoothLevelOptions</a></li>
+    <li><a href="#SetWhitenessLevelOptions">SetWhitenessLevelOptions</a></li>
+    <li><a href="#SetRuddyLevelOptions">SetRuddyLevelOptions</a></li>
+    <li><a href="#GiftParam">GiftParam</a></li>
+    <li><a href="#GiftCategoryParam">GiftCategoryParam</a></li>
+    <li><a href="#RefreshUsableGiftsOptions">RefreshUsableGiftsOptions</a></li>
+    <li><a href="#SendGiftOptions">SendGiftOptions</a></li>
+    <li><a href="#SetLanguageOptions">SetLanguageOptions</a></li>
+    <li><a href="#SendLikeOptions">SendLikeOptions</a></li>
+    <li><a href="#CallInfo">CallInfo</a></li>
+    <li><a href="#CallParticipant">CallParticipant</a></li>
+    <li><a href="#RecentCall">RecentCall</a></li>
+    <li><a href="#SpeakerVolume">SpeakerVolume</a></li>
+    <li><a href="#NetworkQualityInfo">NetworkQualityInfo</a></li>
+    <li><a href="#CallsOptions">CallsOptions</a></li>
+    <li><a href="#AcceptOptions">AcceptOptions</a></li>
+    <li><a href="#RejectOptions">RejectOptions</a></li>
+    <li><a href="#HangupOptions">HangupOptions</a></li>
+    <li><a href="#JoinOptions">JoinOptions</a></li>
+    <li><a href="#InviteOptions">InviteOptions</a></li>
+    <li><a href="#QueryRecentCallsOptions">QueryRecentCallsOptions</a></li>
+    <li><a href="#DeleteRecentCallsOptions">DeleteRecentCallsOptions</a></li>
+    <li><a href="#StartFloatWindowOptions">StartFloatWindowOptions</a></li>
+    <li><a href="#ICallListener">ICallListener</a></li>
+  </ul>
+</div>
+
+    </div>
+    
+    <div class="content">
+        <header>
+            <h1>Interface 接口文档</h1>
+        </header>
+        
+        <div class="search-container">
+            <input type="text" class="search-input" placeholder="搜索API..." onkeyup="search(this.value)">
+        </div>
+        
+        <section id="overview">
+<h2>接口定义总览</h2>
+<p>本页面包含所有的接口类型定义。</p>
+</section>
+
+<section id="CallExperimentalAPIOptions">
+  <h2>CallExperimentalAPIOptions</h2>
+  <div class="api-description"><p>interface接口</p></div>
+  <div class="params-table-container">
+    <h4>属性列表</h4>
+    <table class="param-table">
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td>jsonData</td>
+        <td><span class="param-type">string</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>onResponse</td>
+        <td><span class="param-type">(jsonData: string) =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="HybridListenerOptions">
+  <h2>HybridListenerOptions</h2>
+  <div class="api-description"><p>hybridBridge addListener 参数</p></div>
+  <div class="params-table-container">
+    <h4>属性列表</h4>
+    <table class="param-table">
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td>type</td>
+        <td><span class="param-type">string</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>store</td>
+        <td><span class="param-type">string</span></td>
+        <td>store 名称（必填）</td>
+      </tr>
+      <tr>
+        <td>name</td>
+        <td><span class="param-type">string</span></td>
+        <td>监听的变量名称（必填）</td>
+      </tr>
+      <tr>
+        <td>roomID</td>
+        <td><span class="param-type">string</span></td>
+        <td> (可选)</td>
+      </tr>
+      <tr>
+        <td>listenerID</td>
+        <td><span class="param-type">string</span></td>
+        <td> (可选)</td>
+      </tr>
+      <tr>
+        <td>params</td>
+        <td><span class="param-type">any</span></td>
+        <td>参数 (可选)</td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="PickSingleImageFromAlbum">
+  <h2>PickSingleImageFromAlbum</h2>
+  <div class="api-description"><p>从系统相册选择单张图片</p></div>
+  </section>
+
+<section id="AllowType">
+  <h2>AllowType</h2>
+  <div class="api-description"><p>用户权限类型</p></div>
+  <div class="params-table-container">
+    <h4>枚举值</h4>
+    <table class="param-table">
+      <tr>
+        <th>名称</th>
+        <th>值</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td><code>ALLOW_ANY</code></td>
+        <td>0</td>
+        <td>允许任何人</td>
+      </tr>
+      <tr>
+        <td><code>NEED_CONFIRM</code></td>
+        <td>1</td>
+        <td>需要确认</td>
+      </tr>
+      <tr>
+        <td><code>DENY_ANY</code></td>
+        <td>2</td>
+        <td>拒绝任何人</td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="Gender">
+  <h2>Gender</h2>
+  <div class="api-description"><p>性别类型</p></div>
+  <div class="params-table-container">
+    <h4>枚举值</h4>
+    <table class="param-table">
+      <tr>
+        <th>名称</th>
+        <th>值</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td><code>UNKNOWN</code></td>
+        <td>0</td>
+        <td>未知</td>
+      </tr>
+      <tr>
+        <td><code>MALE</code></td>
+        <td>1</td>
+        <td>男</td>
+      </tr>
+      <tr>
+        <td><code>FEMALE</code></td>
+        <td>2</td>
+        <td>女</td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="UserProfileParam">
+  <h2>UserProfileParam</h2>
+  <div class="api-description"><p>用户资料参数</p></div>
+  <div class="params-table-container">
+    <h4>属性列表</h4>
+    <table class="param-table">
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td>userID</td>
+        <td><span class="param-type">string</span></td>
+        <td> (可选)</td>
+      </tr>
+      <tr>
+        <td>nickname</td>
+        <td><span class="param-type">string</span></td>
+        <td> (可选)</td>
+      </tr>
+      <tr>
+        <td>avatarURL</td>
+        <td><span class="param-type">string</span></td>
+        <td> (可选)</td>
+      </tr>
+      <tr>
+        <td>selfSignature</td>
+        <td><span class="param-type">string</span></td>
+        <td> (可选)</td>
+      </tr>
+      <tr>
+        <td>gender</td>
+        <td><span class="param-type"><a href="#Gender">Gender</a></span></td>
+        <td> (可选)</td>
+      </tr>
+      <tr>
+        <td>role</td>
+        <td><span class="param-type">number</span></td>
+        <td> (可选)</td>
+      </tr>
+      <tr>
+        <td>level</td>
+        <td><span class="param-type">number</span></td>
+        <td> (可选)</td>
+      </tr>
+      <tr>
+        <td>birthday</td>
+        <td><span class="param-type">number</span></td>
+        <td> (可选)</td>
+      </tr>
+      <tr>
+        <td>allowType</td>
+        <td><span class="param-type"><a href="#AllowType">AllowType</a></span></td>
+        <td> (可选)</td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="LoginOptions">
+  <h2>LoginOptions</h2>
+  <div class="api-description"><p>登录参数</p></div>
+  <div class="params-table-container">
+    <h4>属性列表</h4>
+    <table class="param-table">
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td>sdkAppID</td>
+        <td><span class="param-type">number</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>userID</td>
+        <td><span class="param-type">string</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>userSig</td>
+        <td><span class="param-type">string</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>success</td>
+        <td><span class="param-type">() =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+      <tr>
+        <td>fail</td>
+        <td><span class="param-type">(errCode: number, errMsg: string) =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="LogoutOptions">
+  <h2>LogoutOptions</h2>
+  <div class="api-description"><p>登出参数</p></div>
+  <div class="params-table-container">
+    <h4>属性列表</h4>
+    <table class="param-table">
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td>success</td>
+        <td><span class="param-type">() =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+      <tr>
+        <td>fail</td>
+        <td><span class="param-type">(errCode: number, errMsg: string) =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="SetSelfInfoOptions">
+  <h2>SetSelfInfoOptions</h2>
+  <div class="api-description"><p>设置用户信息参数</p></div>
+  <div class="params-table-container">
+    <h4>属性列表</h4>
+    <table class="param-table">
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td>userProfile</td>
+        <td><span class="param-type"><a href="#UserProfileParam">UserProfileParam</a></span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>success</td>
+        <td><span class="param-type">(data?: any) =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+      <tr>
+        <td>fail</td>
+        <td><span class="param-type">(errCode: number, errMsg: string) =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="TakeSeatMode">
+  <h2>TakeSeatMode</h2>
+  <div class="api-description"><p>上麦模式类型</p></div>
+  <div class="params-table-container">
+    <h4>枚举值</h4>
+    <table class="param-table">
+      <tr>
+        <th>名称</th>
+        <th>值</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td><code>FREE</code></td>
+        <td>0</td>
+        <td>自由上麦模式</td>
+      </tr>
+      <tr>
+        <td><code>APPLY</code></td>
+        <td>1</td>
+        <td>申请上麦模式</td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="MoveSeatPolicy">
+  <h2>MoveSeatPolicy</h2>
+  <div class="api-description"><p>移动座位策略类型</p></div>
+  <div class="params-table-container">
+    <h4>枚举值</h4>
+    <table class="param-table">
+      <tr>
+        <th>名称</th>
+        <th>值</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td><code>ABORT_WHEN_OCCUPIED</code></td>
+        <td>0</td>
+        <td>当目标座位被占用时中止操作</td>
+      </tr>
+      <tr>
+        <td><code>FORCE_REPLACE</code></td>
+        <td>1</td>
+        <td>强制替换目标座位上的用户</td>
+      </tr>
+      <tr>
+        <td><code>SWAP_POSITION</code></td>
+        <td>2</td>
+        <td>交换位置</td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="LiveModifyFlag">
+  <h2>LiveModifyFlag</h2>
+  <div class="api-description"><p>直播间信息修改标志类型</p></div>
+  <div class="params-table-container">
+    <h4>枚举值</h4>
+    <table class="param-table">
+      <tr>
+        <th>名称</th>
+        <th>值</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td><code>NONE</code></td>
+        <td>0</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td><code>LIVE_NAME</code></td>
+        <td>1 << 0</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td><code>NOTICE</code></td>
+        <td>1 << 1</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td><code>IS_MESSAGE_DISABLE</code></td>
+        <td>1 << 2</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td><code>IS_PUBLIC_VISIBLE</code></td>
+        <td>1 << 5</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td><code>SEAT_MODE</code></td>
+        <td>1 << 6</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td><code>COVER_URL</code></td>
+        <td>1 << 7</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td><code>BACKGROUND_URL</code></td>
+        <td>1 << 8</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td><code>CATEGORY_LIST</code></td>
+        <td>1 << 9</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td><code>ACTIVITY_STATUS</code></td>
+        <td>1 << 10</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td><code>SEAT_LAYOUT_TEMPLATE_ID</code></td>
+        <td>1 << 11</td>
+        <td></td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="LiveUserInfoParam">
+  <h2>LiveUserInfoParam</h2>
+  <div class="api-description"><p>直播间用户信息参数</p></div>
+  <div class="params-table-container">
+    <h4>属性列表</h4>
+    <table class="param-table">
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td>userID</td>
+        <td><span class="param-type">string</span></td>
+        <td>用户ID（必填） (可选)</td>
+      </tr>
+      <tr>
+        <td>userName</td>
+        <td><span class="param-type">string</span></td>
+        <td>用户名（可选） (可选)</td>
+      </tr>
+      <tr>
+        <td>avatarURL</td>
+        <td><span class="param-type">string</span></td>
+        <td>头像URL（可选） (可选)</td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="LiveInfoParam">
+  <h2>LiveInfoParam</h2>
+  <div class="api-description"><p>直播间信息参数</p></div>
+  <div class="params-table-container">
+    <h4>属性列表</h4>
+    <table class="param-table">
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td>liveID</td>
+        <td><span class="param-type">string</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>liveName</td>
+        <td><span class="param-type">string</span></td>
+        <td> (可选)</td>
+      </tr>
+      <tr>
+        <td>notice</td>
+        <td><span class="param-type">string</span></td>
+        <td> (可选)</td>
+      </tr>
+      <tr>
+        <td>isMessageDisable</td>
+        <td><span class="param-type">boolean</span></td>
+        <td> (可选)</td>
+      </tr>
+      <tr>
+        <td>isPublicVisible</td>
+        <td><span class="param-type">boolean</span></td>
+        <td> (可选)</td>
+      </tr>
+      <tr>
+        <td>isSeatEnabled</td>
+        <td><span class="param-type">boolean</span></td>
+        <td> (可选)</td>
+      </tr>
+      <tr>
+        <td>keepOwnerOnSeat</td>
+        <td><span class="param-type">boolean</span></td>
+        <td> (可选)</td>
+      </tr>
+      <tr>
+        <td>maxSeatCount</td>
+        <td><span class="param-type">number</span></td>
+        <td> (可选)</td>
+      </tr>
+      <tr>
+        <td>seatMode</td>
+        <td><span class="param-type"><a href="#TakeSeatMode">TakeSeatMode</a></span></td>
+        <td> (可选)</td>
+      </tr>
+      <tr>
+        <td>seatLayoutTemplateID</td>
+        <td><span class="param-type">number</span></td>
+        <td> (可选)</td>
+      </tr>
+      <tr>
+        <td>coverURL</td>
+        <td><span class="param-type">string</span></td>
+        <td> (可选)</td>
+      </tr>
+      <tr>
+        <td>backgroundURL</td>
+        <td><span class="param-type">string</span></td>
+        <td> (可选)</td>
+      </tr>
+      <tr>
+        <td>categoryList</td>
+        <td><span class="param-type">number[]</span></td>
+        <td> (可选)</td>
+      </tr>
+      <tr>
+        <td>activityStatus</td>
+        <td><span class="param-type">number</span></td>
+        <td> (可选)</td>
+      </tr>
+      <tr>
+        <td><em>readonly</em> totalViewerCount</td>
+        <td><span class="param-type">number</span></td>
+        <td> (可选)</td>
+      </tr>
+      <tr>
+        <td><em>readonly</em> liveOwner</td>
+        <td><span class="param-type"><a href="#LiveUserInfoParam">LiveUserInfoParam</a></span></td>
+        <td> (可选)</td>
+      </tr>
+      <tr>
+        <td><em>readonly</em> createTime</td>
+        <td><span class="param-type">number</span></td>
+        <td> (可选)</td>
+      </tr>
+      <tr>
+        <td>isGiftEnabled</td>
+        <td><span class="param-type">boolean</span></td>
+        <td> (可选)</td>
+      </tr>
+      <tr>
+        <td>metaData</td>
+        <td><span class="param-type">Map&lt;string, string&gt;</span></td>
+        <td> (可选)</td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="FetchLiveListOptions">
+  <h2>FetchLiveListOptions</h2>
+  <div class="api-description"><p>获取直播间列表参数</p></div>
+  <div class="params-table-container">
+    <h4>属性列表</h4>
+    <table class="param-table">
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td>cursor</td>
+        <td><span class="param-type">string</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>count</td>
+        <td><span class="param-type">number</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>success</td>
+        <td><span class="param-type">() =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+      <tr>
+        <td>fail</td>
+        <td><span class="param-type">(errCode: number, errMsg: string) =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="CreateLiveOptions">
+  <h2>CreateLiveOptions</h2>
+  <div class="api-description"><p>创建直播间参数</p></div>
+  <div class="params-table-container">
+    <h4>属性列表</h4>
+    <table class="param-table">
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td>liveInfo</td>
+        <td><span class="param-type"><a href="#LiveInfoParam">LiveInfoParam</a></span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>success</td>
+        <td><span class="param-type">(liveInfo: string) =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+      <tr>
+        <td>fail</td>
+        <td><span class="param-type">(errCode: number, errMsg: string) =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="JoinLiveOptions">
+  <h2>JoinLiveOptions</h2>
+  <div class="api-description"><p>加入直播间参数</p></div>
+  <div class="params-table-container">
+    <h4>属性列表</h4>
+    <table class="param-table">
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td>liveID</td>
+        <td><span class="param-type">string</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>success</td>
+        <td><span class="param-type">(liveInfo: string) =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+      <tr>
+        <td>fail</td>
+        <td><span class="param-type">(errCode: number, errMsg: string) =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="LeaveLiveOptions">
+  <h2>LeaveLiveOptions</h2>
+  <div class="api-description"><p>离开直播间参数</p></div>
+  <div class="params-table-container">
+    <h4>属性列表</h4>
+    <table class="param-table">
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td>success</td>
+        <td><span class="param-type">() =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+      <tr>
+        <td>fail</td>
+        <td><span class="param-type">(errCode: number, errMsg: string) =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="EndLiveOptions">
+  <h2>EndLiveOptions</h2>
+  <div class="api-description"><p>结束直播间参数</p></div>
+  <div class="params-table-container">
+    <h4>属性列表</h4>
+    <table class="param-table">
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td>success</td>
+        <td><span class="param-type">(data: string) =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+      <tr>
+        <td>fail</td>
+        <td><span class="param-type">(errCode: number, errMsg: string) =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="UpdateLiveInfoOptions">
+  <h2>UpdateLiveInfoOptions</h2>
+  <div class="api-description"><p>更新直播间信息参数</p></div>
+  <div class="params-table-container">
+    <h4>属性列表</h4>
+    <table class="param-table">
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td>liveInfo</td>
+        <td><span class="param-type"><a href="#LiveInfoParam">LiveInfoParam</a></span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>modifyFlagList</td>
+        <td><span class="param-type"><a href="#LiveModifyFlag">LiveModifyFlag</a>[]</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>success</td>
+        <td><span class="param-type">() =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+      <tr>
+        <td>fail</td>
+        <td><span class="param-type">(errCode: number, errMsg: string) =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="UpdateLiveMetaDataOptions">
+  <h2>UpdateLiveMetaDataOptions</h2>
+  <div class="api-description"><p>更新直播间元数据参数</p></div>
+  <div class="params-table-container">
+    <h4>属性列表</h4>
+    <table class="param-table">
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td>metaData</td>
+        <td><span class="param-type">string</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>success</td>
+        <td><span class="param-type">() =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+      <tr>
+        <td>fail</td>
+        <td><span class="param-type">(errCode: number, errMsg: string) =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="DeviceControlPolicy">
+  <h2>DeviceControlPolicy</h2>
+  <div class="api-description"><p>设备控制策略类型</p></div>
+  <div class="params-table-container">
+    <h4>枚举值</h4>
+    <table class="param-table">
+      <tr>
+        <th>名称</th>
+        <th>值</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td><code>UNLOCK_ONLY</code></td>
+        <td>1</td>
+        <td>仅解锁设备权限</td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="SeatUserInfoParam">
+  <h2>SeatUserInfoParam</h2>
+  <div class="api-description"><p>座位用户信息参数</p></div>
+  <div class="params-table-container">
+    <h4>属性列表</h4>
+    <table class="param-table">
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td>userID</td>
+        <td><span class="param-type">string</span></td>
+        <td>用户ID (可选)</td>
+      </tr>
+      <tr>
+        <td>userName</td>
+        <td><span class="param-type">string</span></td>
+        <td>用户名 (可选)</td>
+      </tr>
+      <tr>
+        <td>avatarURL</td>
+        <td><span class="param-type">string</span></td>
+        <td>头像URL (可选)</td>
+      </tr>
+      <tr>
+        <td>role</td>
+        <td><span class="param-type">string</span></td>
+        <td>用户角色 (可选)</td>
+      </tr>
+      <tr>
+        <td>liveID</td>
+        <td><span class="param-type">string</span></td>
+        <td>直播间ID (可选)</td>
+      </tr>
+      <tr>
+        <td>microphoneStatus</td>
+        <td><span class="param-type"><a href="#DeviceStatus">DeviceStatus</a></span></td>
+        <td>麦克风状态 (可选)</td>
+      </tr>
+      <tr>
+        <td>allowOpenMicrophone</td>
+        <td><span class="param-type">boolean</span></td>
+        <td>是否允许开启麦克风 (可选)</td>
+      </tr>
+      <tr>
+        <td>cameraStatus</td>
+        <td><span class="param-type"><a href="#DeviceStatus">DeviceStatus</a></span></td>
+        <td>摄像头状态 (可选)</td>
+      </tr>
+      <tr>
+        <td>allowOpenCamera</td>
+        <td><span class="param-type">boolean</span></td>
+        <td>是否允许开启摄像头 (可选)</td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="LiveCanvasParams">
+  <h2>LiveCanvasParams</h2>
+  <div class="api-description"><p>直播画布参数类型定义</p></div>
+  <div class="params-table-container">
+    <h4>属性列表</h4>
+    <table class="param-table">
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td>w</td>
+        <td><span class="param-type">number</span></td>
+        <td>画布宽度</td>
+      </tr>
+      <tr>
+        <td>h</td>
+        <td><span class="param-type">number</span></td>
+        <td>画布高度</td>
+      </tr>
+      <tr>
+        <td>background</td>
+        <td><span class="param-type">string</span></td>
+        <td>背景色（可选） (可选)</td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="SeatInfo">
+  <h2>SeatInfo</h2>
+  <div class="api-description"><p>座位信息类型定义</p></div>
+  <div class="params-table-container">
+    <h4>属性列表</h4>
+    <table class="param-table">
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td>index</td>
+        <td><span class="param-type">number</span></td>
+        <td>座位索引</td>
+      </tr>
+      <tr>
+        <td>isLocked</td>
+        <td><span class="param-type">boolean</span></td>
+        <td>是否锁定</td>
+      </tr>
+      <tr>
+        <td>userInfo</td>
+        <td><span class="param-type"><a href="#SeatUserInfoParam">SeatUserInfoParam</a></span></td>
+        <td>座位上用户信息</td>
+      </tr>
+      <tr>
+        <td>region</td>
+        <td><span class="param-type"><a href="#RegionInfoParams">RegionInfoParams</a></span></td>
+        <td>座位区域信息</td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="TakeSeatOptions">
+  <h2>TakeSeatOptions</h2>
+  <div class="api-description"><p>上麦参数</p></div>
+  <div class="params-table-container">
+    <h4>属性列表</h4>
+    <table class="param-table">
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td>liveID</td>
+        <td><span class="param-type">string</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>seatIndex</td>
+        <td><span class="param-type">number</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>success</td>
+        <td><span class="param-type">() =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+      <tr>
+        <td>fail</td>
+        <td><span class="param-type">(errCode: number, errMsg: string) =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="LeaveSeatOptions">
+  <h2>LeaveSeatOptions</h2>
+  <div class="api-description"><p>下麦参数</p></div>
+  <div class="params-table-container">
+    <h4>属性列表</h4>
+    <table class="param-table">
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td>liveID</td>
+        <td><span class="param-type">string</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>success</td>
+        <td><span class="param-type">() =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+      <tr>
+        <td>fail</td>
+        <td><span class="param-type">(errCode: number, errMsg: string) =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="MuteMicrophoneOptions">
+  <h2>MuteMicrophoneOptions</h2>
+  <div class="api-description"><p>静音麦克风参数</p></div>
+  <div class="params-table-container">
+    <h4>属性列表</h4>
+    <table class="param-table">
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td>liveID</td>
+        <td><span class="param-type">string</span></td>
+        <td></td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="UnmuteMicrophoneOptions">
+  <h2>UnmuteMicrophoneOptions</h2>
+  <div class="api-description"><p>取消静音麦克风参数</p></div>
+  <div class="params-table-container">
+    <h4>属性列表</h4>
+    <table class="param-table">
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td>liveID</td>
+        <td><span class="param-type">string</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>success</td>
+        <td><span class="param-type">() =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+      <tr>
+        <td>fail</td>
+        <td><span class="param-type">(errCode: number, errMsg: string) =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="KickUserOutOfSeatOptions">
+  <h2>KickUserOutOfSeatOptions</h2>
+  <div class="api-description"><p>踢用户下麦参数</p></div>
+  <div class="params-table-container">
+    <h4>属性列表</h4>
+    <table class="param-table">
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td>liveID</td>
+        <td><span class="param-type">string</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>userID</td>
+        <td><span class="param-type">string</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>success</td>
+        <td><span class="param-type">() =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+      <tr>
+        <td>fail</td>
+        <td><span class="param-type">(errCode: number, errMsg: string) =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="MoveUserToSeatOptions">
+  <h2>MoveUserToSeatOptions</h2>
+  <div class="api-description"><p>移动用户到座位参数</p></div>
+  <div class="params-table-container">
+    <h4>属性列表</h4>
+    <table class="param-table">
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td>liveID</td>
+        <td><span class="param-type">string</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>userID</td>
+        <td><span class="param-type">string</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>targetIndex</td>
+        <td><span class="param-type">number</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>policy</td>
+        <td><span class="param-type"><a href="#MoveSeatPolicy">MoveSeatPolicy</a></span></td>
+        <td> (可选)</td>
+      </tr>
+      <tr>
+        <td>success</td>
+        <td><span class="param-type">() =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+      <tr>
+        <td>fail</td>
+        <td><span class="param-type">(errCode: number, errMsg: string) =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="LockSeatOptions">
+  <h2>LockSeatOptions</h2>
+  <div class="api-description"><p>锁定座位参数</p></div>
+  <div class="params-table-container">
+    <h4>属性列表</h4>
+    <table class="param-table">
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td>liveID</td>
+        <td><span class="param-type">string</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>seatIndex</td>
+        <td><span class="param-type">number</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>success</td>
+        <td><span class="param-type">() =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+      <tr>
+        <td>fail</td>
+        <td><span class="param-type">(errCode: number, errMsg: string) =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="UnlockSeatOptions">
+  <h2>UnlockSeatOptions</h2>
+  <div class="api-description"><p>解锁座位参数</p></div>
+  <div class="params-table-container">
+    <h4>属性列表</h4>
+    <table class="param-table">
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td>liveID</td>
+        <td><span class="param-type">string</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>seatIndex</td>
+        <td><span class="param-type">number</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>success</td>
+        <td><span class="param-type">() =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+      <tr>
+        <td>fail</td>
+        <td><span class="param-type">(errCode: number, errMsg: string) =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="OpenRemoteCameraOptions">
+  <h2>OpenRemoteCameraOptions</h2>
+  <div class="api-description"><p>开启远程摄像头参数</p></div>
+  <div class="params-table-container">
+    <h4>属性列表</h4>
+    <table class="param-table">
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td>liveID</td>
+        <td><span class="param-type">string</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>userID</td>
+        <td><span class="param-type">string</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>policy</td>
+        <td><span class="param-type"><a href="#DeviceControlPolicy">DeviceControlPolicy</a></span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>success</td>
+        <td><span class="param-type">() =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+      <tr>
+        <td>fail</td>
+        <td><span class="param-type">(errCode: number, errMsg: string) =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="CloseRemoteCameraOptions">
+  <h2>CloseRemoteCameraOptions</h2>
+  <div class="api-description"><p>关闭远程摄像头参数</p></div>
+  <div class="params-table-container">
+    <h4>属性列表</h4>
+    <table class="param-table">
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td>liveID</td>
+        <td><span class="param-type">string</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>userID</td>
+        <td><span class="param-type">string</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>success</td>
+        <td><span class="param-type">() =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+      <tr>
+        <td>fail</td>
+        <td><span class="param-type">(errCode: number, errMsg: string) =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="OpenRemoteMicrophoneOptions">
+  <h2>OpenRemoteMicrophoneOptions</h2>
+  <div class="api-description"><p>开启远程麦克风参数</p></div>
+  <div class="params-table-container">
+    <h4>属性列表</h4>
+    <table class="param-table">
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td>liveID</td>
+        <td><span class="param-type">string</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>userID</td>
+        <td><span class="param-type">string</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>policy</td>
+        <td><span class="param-type"><a href="#DeviceControlPolicy">DeviceControlPolicy</a></span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>success</td>
+        <td><span class="param-type">() =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+      <tr>
+        <td>fail</td>
+        <td><span class="param-type">(errCode: number, errMsg: string) =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="CloseRemoteMicrophoneOptions">
+  <h2>CloseRemoteMicrophoneOptions</h2>
+  <div class="api-description"><p>关闭远程麦克风参数</p></div>
+  <div class="params-table-container">
+    <h4>属性列表</h4>
+    <table class="param-table">
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td>liveID</td>
+        <td><span class="param-type">string</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>userID</td>
+        <td><span class="param-type">string</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>success</td>
+        <td><span class="param-type">() =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+      <tr>
+        <td>fail</td>
+        <td><span class="param-type">(errCode: number, errMsg: string) =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="FetchAudienceListOptions">
+  <h2>FetchAudienceListOptions</h2>
+  <div class="api-description"><p>获取观众列表参数</p></div>
+  <div class="params-table-container">
+    <h4>属性列表</h4>
+    <table class="param-table">
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td>liveID</td>
+        <td><span class="param-type">string</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>success</td>
+        <td><span class="param-type">() =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+      <tr>
+        <td>fail</td>
+        <td><span class="param-type">(errCode: number, errMsg: string) =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="SetAdministratorOptions">
+  <h2>SetAdministratorOptions</h2>
+  <div class="api-description"><p>设置管理员参数</p></div>
+  <div class="params-table-container">
+    <h4>属性列表</h4>
+    <table class="param-table">
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td>liveID</td>
+        <td><span class="param-type">string</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>userID</td>
+        <td><span class="param-type">string</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>success</td>
+        <td><span class="param-type">() =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+      <tr>
+        <td>fail</td>
+        <td><span class="param-type">(errCode: number, errMsg: string) =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="RevokeAdministratorOptions">
+  <h2>RevokeAdministratorOptions</h2>
+  <div class="api-description"><p>撤销管理员参数</p></div>
+  <div class="params-table-container">
+    <h4>属性列表</h4>
+    <table class="param-table">
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td>liveID</td>
+        <td><span class="param-type">string</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>userID</td>
+        <td><span class="param-type">string</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>success</td>
+        <td><span class="param-type">() =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+      <tr>
+        <td>fail</td>
+        <td><span class="param-type">(errCode: number, errMsg: string) =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="KickUserOutOfRoomOptions">
+  <h2>KickUserOutOfRoomOptions</h2>
+  <div class="api-description"><p>踢出房间参数</p></div>
+  <div class="params-table-container">
+    <h4>属性列表</h4>
+    <table class="param-table">
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td>liveID</td>
+        <td><span class="param-type">string</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>userID</td>
+        <td><span class="param-type">string</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>success</td>
+        <td><span class="param-type">() =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+      <tr>
+        <td>fail</td>
+        <td><span class="param-type">(errCode: number, errMsg: string) =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="DisableSendMessageOptions">
+  <h2>DisableSendMessageOptions</h2>
+  <div class="api-description"><p>禁用发送消息参数</p></div>
+  <div class="params-table-container">
+    <h4>属性列表</h4>
+    <table class="param-table">
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td>liveID</td>
+        <td><span class="param-type">string</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>userID</td>
+        <td><span class="param-type">string</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>isDisable</td>
+        <td><span class="param-type">boolean</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>success</td>
+        <td><span class="param-type">() =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+      <tr>
+        <td>fail</td>
+        <td><span class="param-type">(errCode: number, errMsg: string) =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="ApplyForSeatOptions">
+  <h2>ApplyForSeatOptions</h2>
+  <div class="api-description"><p>申请上麦参数</p></div>
+  <div class="params-table-container">
+    <h4>属性列表</h4>
+    <table class="param-table">
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td>liveID</td>
+        <td><span class="param-type">string</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>seatIndex</td>
+        <td><span class="param-type">number</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>timeout</td>
+        <td><span class="param-type">number</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>extraInfo</td>
+        <td><span class="param-type">string</span></td>
+        <td> (可选)</td>
+      </tr>
+      <tr>
+        <td>success</td>
+        <td><span class="param-type">() =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+      <tr>
+        <td>fail</td>
+        <td><span class="param-type">(errCode: number, errMsg: string) =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="CancelApplicationOptions">
+  <h2>CancelApplicationOptions</h2>
+  <div class="api-description"><p>取消申请参数</p></div>
+  <div class="params-table-container">
+    <h4>属性列表</h4>
+    <table class="param-table">
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td>liveID</td>
+        <td><span class="param-type">string</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>success</td>
+        <td><span class="param-type">() =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+      <tr>
+        <td>fail</td>
+        <td><span class="param-type">(errCode: number, errMsg: string) =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="AcceptApplicationOptions">
+  <h2>AcceptApplicationOptions</h2>
+  <div class="api-description"><p>接受申请参数</p></div>
+  <div class="params-table-container">
+    <h4>属性列表</h4>
+    <table class="param-table">
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td>liveID</td>
+        <td><span class="param-type">string</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>userID</td>
+        <td><span class="param-type">string</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>success</td>
+        <td><span class="param-type">() =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+      <tr>
+        <td>fail</td>
+        <td><span class="param-type">(errCode: number, errMsg: string) =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="RejectApplicationOptions">
+  <h2>RejectApplicationOptions</h2>
+  <div class="api-description"><p>拒绝申请参数</p></div>
+  <div class="params-table-container">
+    <h4>属性列表</h4>
+    <table class="param-table">
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td>liveID</td>
+        <td><span class="param-type">string</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>userID</td>
+        <td><span class="param-type">string</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>success</td>
+        <td><span class="param-type">() =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+      <tr>
+        <td>fail</td>
+        <td><span class="param-type">(errCode: number, errMsg: string) =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="InviteToSeatOptions">
+  <h2>InviteToSeatOptions</h2>
+  <div class="api-description"><p>邀请上麦参数</p></div>
+  <div class="params-table-container">
+    <h4>属性列表</h4>
+    <table class="param-table">
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td>liveID</td>
+        <td><span class="param-type">string</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>inviteeID</td>
+        <td><span class="param-type">string</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>seatIndex</td>
+        <td><span class="param-type">number</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>timeout</td>
+        <td><span class="param-type">number</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>extraInfo</td>
+        <td><span class="param-type">string</span></td>
+        <td> (可选)</td>
+      </tr>
+      <tr>
+        <td>success</td>
+        <td><span class="param-type">() =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+      <tr>
+        <td>fail</td>
+        <td><span class="param-type">(errCode: number, errMsg: string) =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="CancelInvitationOptions">
+  <h2>CancelInvitationOptions</h2>
+  <div class="api-description"><p>取消邀请参数</p></div>
+  <div class="params-table-container">
+    <h4>属性列表</h4>
+    <table class="param-table">
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td>liveID</td>
+        <td><span class="param-type">string</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>inviteeID</td>
+        <td><span class="param-type">string</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>success</td>
+        <td><span class="param-type">() =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+      <tr>
+        <td>fail</td>
+        <td><span class="param-type">(errCode: number, errMsg: string) =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="AcceptInvitationOptions">
+  <h2>AcceptInvitationOptions</h2>
+  <div class="api-description"><p>接受邀请参数</p></div>
+  <div class="params-table-container">
+    <h4>属性列表</h4>
+    <table class="param-table">
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td>liveID</td>
+        <td><span class="param-type">string</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>inviterID</td>
+        <td><span class="param-type">string</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>success</td>
+        <td><span class="param-type">() =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+      <tr>
+        <td>fail</td>
+        <td><span class="param-type">(errCode: number, errMsg: string) =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="RejectInvitationOptions">
+  <h2>RejectInvitationOptions</h2>
+  <div class="api-description"><p>拒绝邀请参数</p></div>
+  <div class="params-table-container">
+    <h4>属性列表</h4>
+    <table class="param-table">
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td>liveID</td>
+        <td><span class="param-type">string</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>inviterID</td>
+        <td><span class="param-type">string</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>success</td>
+        <td><span class="param-type">() =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+      <tr>
+        <td>fail</td>
+        <td><span class="param-type">(errCode: number, errMsg: string) =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="DisconnectOptions">
+  <h2>DisconnectOptions</h2>
+  <div class="api-description"><p>断开连接参数</p></div>
+  <div class="params-table-container">
+    <h4>属性列表</h4>
+    <table class="param-table">
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td>liveID</td>
+        <td><span class="param-type">string</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>success</td>
+        <td><span class="param-type">() =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+      <tr>
+        <td>fail</td>
+        <td><span class="param-type">(errCode: number, errMsg: string) =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="NoResponseReason">
+  <h2>NoResponseReason</h2>
+  <div class="api-description"><p>无响应原因枚举
+用于 onGuestApplicationNoResponse / onHostInvitationNoResponse 回调中标识无响应的具体原因
+@enum {number}</p></div>
+  <div class="params-table-container">
+    <h4>枚举值</h4>
+    <table class="param-table">
+      <tr>
+        <th>名称</th>
+        <th>值</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td><code>TIMEOUT</code></td>
+        <td>0</td>
+        <td></td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="CoHostLayoutTemplateType">
+  <h2>CoHostLayoutTemplateType</h2>
+  <div class="api-description"><p>连麦布局模板类型</p></div>
+  <div class="params-table-container">
+    <h4>枚举值</h4>
+    <table class="param-table">
+      <tr>
+        <th>名称</th>
+        <th>值</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td><code>HOST_VOICE_CONNECTION</code></td>
+        <td>2</td>
+        <td>语音连线布局</td>
+      </tr>
+      <tr>
+        <td><code>HOST_DYNAMIC_GRID</code></td>
+        <td>600</td>
+        <td>动态网格布局</td>
+      </tr>
+      <tr>
+        <td><code>HOST_DYNAMIC_1V6</code></td>
+        <td>601</td>
+        <td>1制6布局</td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="CoHostStatusType">
+  <h2>CoHostStatusType</h2>
+  <div class="api-description"><p>连线状态类型</p></div>
+  <div class="params-table-container">
+    <h4>枚举值</h4>
+    <table class="param-table">
+      <tr>
+        <th>名称</th>
+        <th>值</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td><code>CONNECTED</code></td>
+        <td>0</td>
+        <td>0，已连接</td>
+      </tr>
+      <tr>
+        <td><code>DISCONNECTED</code></td>
+        <td>1</td>
+        <td>1，已断开</td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="RequestHostConnectionOptions">
+  <h2>RequestHostConnectionOptions</h2>
+  <div class="api-description"><p>请求主播连麦参数</p></div>
+  <div class="params-table-container">
+    <h4>属性列表</h4>
+    <table class="param-table">
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td>liveID</td>
+        <td><span class="param-type">string</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>targetHostLiveID</td>
+        <td><span class="param-type">string</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>layoutTemplate</td>
+        <td><span class="param-type"><a href="#CoHostLayoutTemplateType">CoHostLayoutTemplateType</a></span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>timeout</td>
+        <td><span class="param-type">number</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>extraInfo</td>
+        <td><span class="param-type">string</span></td>
+        <td> (可选)</td>
+      </tr>
+      <tr>
+        <td>success</td>
+        <td><span class="param-type">() =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+      <tr>
+        <td>fail</td>
+        <td><span class="param-type">(errCode: number, errMsg: string) =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="CancelHostConnectionOptions">
+  <h2>CancelHostConnectionOptions</h2>
+  <div class="api-description"><p>取消主播连麦请求参数</p></div>
+  <div class="params-table-container">
+    <h4>属性列表</h4>
+    <table class="param-table">
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td>liveID</td>
+        <td><span class="param-type">string</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>toHostLiveID</td>
+        <td><span class="param-type">string</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>success</td>
+        <td><span class="param-type">() =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+      <tr>
+        <td>fail</td>
+        <td><span class="param-type">(errCode: number, errMsg: string) =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="AcceptHostConnectionOptions">
+  <h2>AcceptHostConnectionOptions</h2>
+  <div class="api-description"><p>接受主播连麦请求参数</p></div>
+  <div class="params-table-container">
+    <h4>属性列表</h4>
+    <table class="param-table">
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td>liveID</td>
+        <td><span class="param-type">string</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>fromHostLiveID</td>
+        <td><span class="param-type">string</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>success</td>
+        <td><span class="param-type">() =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+      <tr>
+        <td>fail</td>
+        <td><span class="param-type">(errCode: number, errMsg: string) =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="RejectHostConnectionOptions">
+  <h2>RejectHostConnectionOptions</h2>
+  <div class="api-description"><p>拒绝主播连麦请求参数</p></div>
+  <div class="params-table-container">
+    <h4>属性列表</h4>
+    <table class="param-table">
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td>liveID</td>
+        <td><span class="param-type">string</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>fromHostLiveID</td>
+        <td><span class="param-type">string</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>success</td>
+        <td><span class="param-type">() =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+      <tr>
+        <td>fail</td>
+        <td><span class="param-type">(errCode: number, errMsg: string) =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="ExitHostConnectionOptions">
+  <h2>ExitHostConnectionOptions</h2>
+  <div class="api-description"><p>退出主播连麦参数</p></div>
+  <div class="params-table-container">
+    <h4>属性列表</h4>
+    <table class="param-table">
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td>liveID</td>
+        <td><span class="param-type">string</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>success</td>
+        <td><span class="param-type">() =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+      <tr>
+        <td>fail</td>
+        <td><span class="param-type">(errCode: number, errMsg: string) =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="BattleConfigParam">
+  <h2>BattleConfigParam</h2>
+  <div class="api-description"><p>PK 配置参数</p></div>
+  <div class="params-table-container">
+    <h4>属性列表</h4>
+    <table class="param-table">
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td>duration</td>
+        <td><span class="param-type">number</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>needResponse</td>
+        <td><span class="param-type">boolean</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>extensionInfo</td>
+        <td><span class="param-type">string</span></td>
+        <td></td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="BattleInfoParam">
+  <h2>BattleInfoParam</h2>
+  <div class="api-description"><p>PK 信息参数</p></div>
+  <div class="params-table-container">
+    <h4>属性列表</h4>
+    <table class="param-table">
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td>battleID</td>
+        <td><span class="param-type">string</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>config</td>
+        <td><span class="param-type"><a href="#BattleConfigParam">BattleConfigParam</a></span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>startTime</td>
+        <td><span class="param-type">number</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>endTime</td>
+        <td><span class="param-type">number</span></td>
+        <td></td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="RequestBattleOptions">
+  <h2>RequestBattleOptions</h2>
+  <div class="api-description"><p>发起 PK 请求参数</p></div>
+  <div class="params-table-container">
+    <h4>属性列表</h4>
+    <table class="param-table">
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td>liveID</td>
+        <td><span class="param-type">string</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>config</td>
+        <td><span class="param-type"><a href="#BattleConfigParam">BattleConfigParam</a></span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>userIDList</td>
+        <td><span class="param-type">string[]</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>timeout</td>
+        <td><span class="param-type">number</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>success</td>
+        <td><span class="param-type">(battleInfo: string, resultMap: string) =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+      <tr>
+        <td>fail</td>
+        <td><span class="param-type">(errCode: number, errMsg: string) =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="CancelBattleRequestOptions">
+  <h2>CancelBattleRequestOptions</h2>
+  <div class="api-description"><p>取消 PK 请求参数</p></div>
+  <div class="params-table-container">
+    <h4>属性列表</h4>
+    <table class="param-table">
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td>liveID</td>
+        <td><span class="param-type">string</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>battleID</td>
+        <td><span class="param-type">string</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>userIDList</td>
+        <td><span class="param-type">string[]</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>success</td>
+        <td><span class="param-type">() =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+      <tr>
+        <td>fail</td>
+        <td><span class="param-type">(errCode: number, errMsg: string) =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="AcceptBattleOptions">
+  <h2>AcceptBattleOptions</h2>
+  <div class="api-description"><p>接受 PK 请求参数</p></div>
+  <div class="params-table-container">
+    <h4>属性列表</h4>
+    <table class="param-table">
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td>liveID</td>
+        <td><span class="param-type">string</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>battleID</td>
+        <td><span class="param-type">string</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>success</td>
+        <td><span class="param-type">() =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+      <tr>
+        <td>fail</td>
+        <td><span class="param-type">(errCode: number, errMsg: string) =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="RejectBattleOptions">
+  <h2>RejectBattleOptions</h2>
+  <div class="api-description"><p>拒绝 PK 请求参数</p></div>
+  <div class="params-table-container">
+    <h4>属性列表</h4>
+    <table class="param-table">
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td>liveID</td>
+        <td><span class="param-type">string</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>battleID</td>
+        <td><span class="param-type">string</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>success</td>
+        <td><span class="param-type">() =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+      <tr>
+        <td>fail</td>
+        <td><span class="param-type">(errCode: number, errMsg: string) =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="ExitBattleOptions">
+  <h2>ExitBattleOptions</h2>
+  <div class="api-description"><p>退出 PK 请求参数</p></div>
+  <div class="params-table-container">
+    <h4>属性列表</h4>
+    <table class="param-table">
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td>liveID</td>
+        <td><span class="param-type">string</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>battleID</td>
+        <td><span class="param-type">string</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>success</td>
+        <td><span class="param-type">() =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+      <tr>
+        <td>fail</td>
+        <td><span class="param-type">(errCode: number, errMsg: string) =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="VideoQuality">
+  <h2>VideoQuality</h2>
+  <div class="api-description"><p>视频质量类型</p></div>
+  <div class="params-table-container">
+    <h4>枚举值</h4>
+    <table class="param-table">
+      <tr>
+        <th>名称</th>
+        <th>值</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td><code>QUALITY_360P</code></td>
+        <td>1</td>
+        <td>360P分辨率</td>
+      </tr>
+      <tr>
+        <td><code>QUALITY_540P</code></td>
+        <td>2</td>
+        <td>540P分辨率</td>
+      </tr>
+      <tr>
+        <td><code>QUALITY_720P</code></td>
+        <td>3</td>
+        <td>720P分辨率</td>
+      </tr>
+      <tr>
+        <td><code>QUALITY_1080P</code></td>
+        <td>4</td>
+        <td>1080P分辨率</td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="OpenLocalMicrophoneOptions">
+  <h2>OpenLocalMicrophoneOptions</h2>
+  <div class="api-description"><p>开启本地麦克风参数</p></div>
+  <div class="params-table-container">
+    <h4>属性列表</h4>
+    <table class="param-table">
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td>success</td>
+        <td><span class="param-type">() =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+      <tr>
+        <td>fail</td>
+        <td><span class="param-type">(errCode: number, errMsg: string) =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="VolumeOptions">
+  <h2>VolumeOptions</h2>
+  <div class="api-description"><p>音量参数</p></div>
+  <div class="params-table-container">
+    <h4>属性列表</h4>
+    <table class="param-table">
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td>volume</td>
+        <td><span class="param-type">number</span></td>
+        <td></td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="OpenLocalCameraOptions">
+  <h2>OpenLocalCameraOptions</h2>
+  <div class="api-description"><p>开启本地摄像头参数</p></div>
+  <div class="params-table-container">
+    <h4>属性列表</h4>
+    <table class="param-table">
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td>isFront</td>
+        <td><span class="param-type">boolean</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>success</td>
+        <td><span class="param-type">() =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+      <tr>
+        <td>fail</td>
+        <td><span class="param-type">(errCode: number, errMsg: string) =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="SwitchCameraOptions">
+  <h2>SwitchCameraOptions</h2>
+  <div class="api-description"><p>切换摄像头参数</p></div>
+  <div class="params-table-container">
+    <h4>属性列表</h4>
+    <table class="param-table">
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td>isFront</td>
+        <td><span class="param-type">boolean</span></td>
+        <td></td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="UpdateVideoQualityOptions">
+  <h2>UpdateVideoQualityOptions</h2>
+  <div class="api-description"><p>更新视频质量参数</p></div>
+  <div class="params-table-container">
+    <h4>属性列表</h4>
+    <table class="param-table">
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td>quality</td>
+        <td><span class="param-type"><a href="#VideoQuality">VideoQuality</a></span></td>
+        <td></td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="StartScreenShareOptions">
+  <h2>StartScreenShareOptions</h2>
+  <div class="api-description"><p>开始屏幕分享参数（仅iOS）</p></div>
+  <div class="params-table-container">
+    <h4>属性列表</h4>
+    <table class="param-table">
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td>appGroup</td>
+        <td><span class="param-type">string</span></td>
+        <td></td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="SetAudioRouteOptions">
+  <h2>SetAudioRouteOptions</h2>
+  <div class="api-description"><p>设置音频路由参数</p></div>
+  <div class="params-table-container">
+    <h4>属性列表</h4>
+    <table class="param-table">
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td>audioRoute</td>
+        <td><span class="param-type"><a href="#AudioOutput">AudioOutput</a></span></td>
+        <td></td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="SwitchMirrorOptions">
+  <h2>SwitchMirrorOptions</h2>
+  <div class="api-description"><p>切换镜像参数</p></div>
+  <div class="params-table-container">
+    <h4>属性列表</h4>
+    <table class="param-table">
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td>mirrorType</td>
+        <td><span class="param-type"><a href="#MirrorType">MirrorType</a></span></td>
+        <td>镜像类型（必填）</td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="AudioChangerType">
+  <h2>AudioChangerType</h2>
+  <div class="api-description"><p>音频变声效果</p></div>
+  <div class="params-table-container">
+    <h4>枚举值</h4>
+    <table class="param-table">
+      <tr>
+        <th>名称</th>
+        <th>值</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td><code>NONE</code></td>
+        <td>0</td>
+        <td>0，无效果</td>
+      </tr>
+      <tr>
+        <td><code>CHILD</code></td>
+        <td>1</td>
+        <td>1，小孩</td>
+      </tr>
+      <tr>
+        <td><code>LITTLE_GIRL</code></td>
+        <td>2</td>
+        <td>2，小女孩</td>
+      </tr>
+      <tr>
+        <td><code>MAN</code></td>
+        <td>3</td>
+        <td>3，男人</td>
+      </tr>
+      <tr>
+        <td><code>HEAVY_METAL</code></td>
+        <td>4</td>
+        <td>4，重金属</td>
+      </tr>
+      <tr>
+        <td><code>COLD</code></td>
+        <td>5</td>
+        <td>5，冷酷</td>
+      </tr>
+      <tr>
+        <td><code>FOREIGNER</code></td>
+        <td>6</td>
+        <td>6，外国人</td>
+      </tr>
+      <tr>
+        <td><code>TRAPPED_BEAST</code></td>
+        <td>7</td>
+        <td>7，野兽</td>
+      </tr>
+      <tr>
+        <td><code>FATSO</code></td>
+        <td>8</td>
+        <td>8，胖子</td>
+      </tr>
+      <tr>
+        <td><code>STRONG_CURRENT</code></td>
+        <td>9</td>
+        <td>9，电流</td>
+      </tr>
+      <tr>
+        <td><code>HEAVY_MACHINERY</code></td>
+        <td>10</td>
+        <td>10，机械</td>
+      </tr>
+      <tr>
+        <td><code>ETHEREAL</code></td>
+        <td>11</td>
+        <td>11，空灵</td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="AudioReverbType">
+  <h2>AudioReverbType</h2>
+  <div class="api-description"><p>音频混响效果</p></div>
+  <div class="params-table-container">
+    <h4>枚举值</h4>
+    <table class="param-table">
+      <tr>
+        <th>名称</th>
+        <th>值</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td><code>NONE</code></td>
+        <td>0</td>
+        <td>0，无效果</td>
+      </tr>
+      <tr>
+        <td><code>KTV</code></td>
+        <td>1</td>
+        <td>1，KTV</td>
+      </tr>
+      <tr>
+        <td><code>SMALL_ROOM</code></td>
+        <td>2</td>
+        <td>2，小房间</td>
+      </tr>
+      <tr>
+        <td><code>AUDITORIUM</code></td>
+        <td>3</td>
+        <td>3，礼堂</td>
+      </tr>
+      <tr>
+        <td><code>DEEP</code></td>
+        <td>4</td>
+        <td>4，深沉</td>
+      </tr>
+      <tr>
+        <td><code>LOUD</code></td>
+        <td>5</td>
+        <td>5，洪亮</td>
+      </tr>
+      <tr>
+        <td><code>METALLIC</code></td>
+        <td>6</td>
+        <td>6，金属</td>
+      </tr>
+      <tr>
+        <td><code>MAGNETIC</code></td>
+        <td>7</td>
+        <td>7，磁性</td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="SetAudioChangerTypeOptions">
+  <h2>SetAudioChangerTypeOptions</h2>
+  <div class="api-description"><p>设置音频变声器类型参数</p></div>
+  <div class="params-table-container">
+    <h4>属性列表</h4>
+    <table class="param-table">
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td>changerType</td>
+        <td><span class="param-type"><a href="#AudioChangerType">AudioChangerType</a></span></td>
+        <td></td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="SetAudioReverbTypeOptions">
+  <h2>SetAudioReverbTypeOptions</h2>
+  <div class="api-description"><p>设置音频混响类型参数</p></div>
+  <div class="params-table-container">
+    <h4>属性列表</h4>
+    <table class="param-table">
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td>reverbType</td>
+        <td><span class="param-type"><a href="#AudioReverbType">AudioReverbType</a></span></td>
+        <td></td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="SetVoiceEarMonitorEnableOptions">
+  <h2>SetVoiceEarMonitorEnableOptions</h2>
+  <div class="api-description"><p>设置语音耳返开关参数</p></div>
+  <div class="params-table-container">
+    <h4>属性列表</h4>
+    <table class="param-table">
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td>enable</td>
+        <td><span class="param-type">boolean</span></td>
+        <td></td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="BarrageType">
+  <h2>BarrageType</h2>
+  <div class="api-description"><p>弹幕消息类型</p></div>
+  <div class="params-table-container">
+    <h4>枚举值</h4>
+    <table class="param-table">
+      <tr>
+        <th>名称</th>
+        <th>值</th>
+        <th>说明</th>
+      </tr>
+      <tr>
+        <td><code>TEXT</code></td>
+        <td>0</td>
+        <td>文本类型弹幕</td>
+      </tr>
+      <tr>
+        <td><code>CUSTOM</code></td>
+        <td>1</td>
+        <td>自定义类型弹幕</td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="BarrageParam">
+  <h2>BarrageParam</h2>
+  <div class="api-description"><p>弹幕参数</p></div>
+  <div class="params-table-container">
+    <h4>属性列表</h4>
+    <table class="param-table">
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td>liveID</td>
+        <td><span class="param-type">string</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>sender</td>
+        <td><span class="param-type"><a href="#LiveUserInfoParam">LiveUserInfoParam</a></span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>sequence</td>
+        <td><span class="param-type">number</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>timestampInSecond</td>
+        <td><span class="param-type">number</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>messageType</td>
+        <td><span class="param-type"><a href="#BarrageType">BarrageType</a></span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>textContent</td>
+        <td><span class="param-type">string</span></td>
+        <td> (可选)</td>
+      </tr>
+      <tr>
+        <td>extensionInfo</td>
+        <td><span class="param-type">Map&lt;string, string&gt;</span></td>
+        <td> (可选)</td>
+      </tr>
+      <tr>
+        <td>businessID</td>
+        <td><span class="param-type">string</span></td>
+        <td> (可选)</td>
+      </tr>
+      <tr>
+        <td>data</td>
+        <td><span class="param-type">string</span></td>
+        <td> (可选)</td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="SendTextMessageOptions">
+  <h2>SendTextMessageOptions</h2>
+  <div class="api-description"><p>发送文本弹幕参数</p></div>
+  <div class="params-table-container">
+    <h4>属性列表</h4>
+    <table class="param-table">
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td>liveID</td>
+        <td><span class="param-type">string</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>text</td>
+        <td><span class="param-type">string</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>extensionInfo</td>
+        <td><span class="param-type">string</span></td>
+        <td> (可选)</td>
+      </tr>
+      <tr>
+        <td>success</td>
+        <td><span class="param-type">() =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+      <tr>
+        <td>fail</td>
+        <td><span class="param-type">(errCode: number, errMsg: string) =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="SendCustomMessageOptions">
+  <h2>SendCustomMessageOptions</h2>
+  <div class="api-description"><p>发送自定义类型弹幕参数</p></div>
+  <div class="params-table-container">
+    <h4>属性列表</h4>
+    <table class="param-table">
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td>liveID</td>
+        <td><span class="param-type">string</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>businessID</td>
+        <td><span class="param-type">string</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>data</td>
+        <td><span class="param-type">string</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>success</td>
+        <td><span class="param-type">() =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+      <tr>
+        <td>fail</td>
+        <td><span class="param-type">(errCode: number, errMsg: string) =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="AppendLocalTipOptions">
+  <h2>AppendLocalTipOptions</h2>
+  <div class="api-description"><p>添加本地提示消息参数</p></div>
+  <div class="params-table-container">
+    <h4>属性列表</h4>
+    <table class="param-table">
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td>liveID</td>
+        <td><span class="param-type">string</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>message</td>
+        <td><span class="param-type"><a href="#BarrageParam">BarrageParam</a></span></td>
+        <td></td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="SetSmoothLevelOptions">
+  <h2>SetSmoothLevelOptions</h2>
+  <div class="api-description"><p>设置美颜平滑等级参数</p></div>
+  <div class="params-table-container">
+    <h4>属性列表</h4>
+    <table class="param-table">
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td>smoothLevel</td>
+        <td><span class="param-type">number</span></td>
+        <td></td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="SetWhitenessLevelOptions">
+  <h2>SetWhitenessLevelOptions</h2>
+  <div class="api-description"><p>设置美白等级参数</p></div>
+  <div class="params-table-container">
+    <h4>属性列表</h4>
+    <table class="param-table">
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td>whitenessLevel</td>
+        <td><span class="param-type">number</span></td>
+        <td></td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="SetRuddyLevelOptions">
+  <h2>SetRuddyLevelOptions</h2>
+  <div class="api-description"><p>设置红润等级参数</p></div>
+  <div class="params-table-container">
+    <h4>属性列表</h4>
+    <table class="param-table">
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td>ruddyLevel</td>
+        <td><span class="param-type">number</span></td>
+        <td></td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="GiftParam">
+  <h2>GiftParam</h2>
+  <div class="api-description"><p>礼物参数类型定义</p></div>
+  <div class="params-table-container">
+    <h4>属性列表</h4>
+    <table class="param-table">
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td>giftID</td>
+        <td><span class="param-type"><a href="#String">String</a></span></td>
+        <td>礼物唯一标识</td>
+      </tr>
+      <tr>
+        <td>name</td>
+        <td><span class="param-type"><a href="#String">String</a></span></td>
+        <td>礼物名称</td>
+      </tr>
+      <tr>
+        <td>desc</td>
+        <td><span class="param-type"><a href="#String">String</a></span></td>
+        <td>礼物描述</td>
+      </tr>
+      <tr>
+        <td>iconURL</td>
+        <td><span class="param-type"><a href="#String">String</a></span></td>
+        <td>礼物图标URL</td>
+      </tr>
+      <tr>
+        <td>resourceURL</td>
+        <td><span class="param-type"><a href="#String">String</a></span></td>
+        <td>礼物动画资源URL</td>
+      </tr>
+      <tr>
+        <td>level</td>
+        <td><span class="param-type">number</span></td>
+        <td>礼物等级</td>
+      </tr>
+      <tr>
+        <td>coins</td>
+        <td><span class="param-type">number</span></td>
+        <td>礼物价格（金币）</td>
+      </tr>
+      <tr>
+        <td>extensionInfo</td>
+        <td><span class="param-type">Map&lt;<a href="#String">String</a>, <a href="#String">String</a>&gt;</span></td>
+        <td>扩展信息</td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="GiftCategoryParam">
+  <h2>GiftCategoryParam</h2>
+  <div class="api-description"><p>礼物分类参数类型定义</p></div>
+  <div class="params-table-container">
+    <h4>属性列表</h4>
+    <table class="param-table">
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td>categoryID</td>
+        <td><span class="param-type">string</span></td>
+        <td>分类ID (可选)</td>
+      </tr>
+      <tr>
+        <td>name</td>
+        <td><span class="param-type">string</span></td>
+        <td>分类名称 (可选)</td>
+      </tr>
+      <tr>
+        <td>desc</td>
+        <td><span class="param-type">string</span></td>
+        <td>分类描述 (可选)</td>
+      </tr>
+      <tr>
+        <td>extensionInfo</td>
+        <td><span class="param-type">Map&lt;string, string&gt;</span></td>
+        <td>扩展信息 (可选)</td>
+      </tr>
+      <tr>
+        <td>giftList</td>
+        <td><span class="param-type"><a href="#GiftParam">GiftParam</a>[]</span></td>
+        <td>分类下的礼物列表 (可选)</td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="RefreshUsableGiftsOptions">
+  <h2>RefreshUsableGiftsOptions</h2>
+  <div class="api-description"><p>刷新可用礼物列表参数</p></div>
+  <div class="params-table-container">
+    <h4>属性列表</h4>
+    <table class="param-table">
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td>liveID</td>
+        <td><span class="param-type">string</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>success</td>
+        <td><span class="param-type">() =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+      <tr>
+        <td>fail</td>
+        <td><span class="param-type">(errCode: number, errMsg: string) =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="SendGiftOptions">
+  <h2>SendGiftOptions</h2>
+  <div class="api-description"><p>发送礼物参数</p></div>
+  <div class="params-table-container">
+    <h4>属性列表</h4>
+    <table class="param-table">
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td>liveID</td>
+        <td><span class="param-type">string</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>giftID</td>
+        <td><span class="param-type">string</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>count</td>
+        <td><span class="param-type">number</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>success</td>
+        <td><span class="param-type">() =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+      <tr>
+        <td>fail</td>
+        <td><span class="param-type">(errCode: number, errMsg: string) =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="SetLanguageOptions">
+  <h2>SetLanguageOptions</h2>
+  <div class="api-description"><p>设置礼物语言参数</p></div>
+  <div class="params-table-container">
+    <h4>属性列表</h4>
+    <table class="param-table">
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td>liveID</td>
+        <td><span class="param-type">string</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>language</td>
+        <td><span class="param-type">string; //("zh-<a href="#CN">CN</a>" for <a href="#Chinese">Chinese</a>, "en" for <a href="#English">English</a>)</span></td>
+        <td></td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="SendLikeOptions">
+  <h2>SendLikeOptions</h2>
+  <div class="api-description"><p>发送点赞参数</p></div>
+  <div class="params-table-container">
+    <h4>属性列表</h4>
+    <table class="param-table">
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td>liveID</td>
+        <td><span class="param-type">string</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>count</td>
+        <td><span class="param-type">number</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>success</td>
+        <td><span class="param-type">() =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+      <tr>
+        <td>fail</td>
+        <td><span class="param-type">(errCode: number, errMsg: string) =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="CallInfo">
+  <h2>CallInfo</h2>
+  <div class="api-description"><p>通话信息接口</p></div>
+  <div class="params-table-container">
+    <h4>属性列表</h4>
+    <table class="param-table">
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td>callId</td>
+        <td><span class="param-type">string</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>mediaType</td>
+        <td><span class="param-type"><a href="#CallMediaType">CallMediaType</a></span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>startTime</td>
+        <td><span class="param-type">number</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>duration</td>
+        <td><span class="param-type">number</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>participantIds</td>
+        <td><span class="param-type">string[]</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>callParams</td>
+        <td><span class="param-type">any</span></td>
+        <td> (可选)</td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="CallParticipant">
+  <h2>CallParticipant</h2>
+  <div class="api-description"><p>通话参与者信息接口</p></div>
+  <div class="params-table-container">
+    <h4>属性列表</h4>
+    <table class="param-table">
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td>userId</td>
+        <td><span class="param-type">string</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>userName</td>
+        <td><span class="param-type">string</span></td>
+        <td> (可选)</td>
+      </tr>
+      <tr>
+        <td>avatarUrl</td>
+        <td><span class="param-type">string</span></td>
+        <td> (可选)</td>
+      </tr>
+      <tr>
+        <td>hasAudio</td>
+        <td><span class="param-type">boolean</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>hasVideo</td>
+        <td><span class="param-type">boolean</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>isMicMuted</td>
+        <td><span class="param-type">boolean</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>isCameraMuted</td>
+        <td><span class="param-type">boolean</span></td>
+        <td></td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="RecentCall">
+  <h2>RecentCall</h2>
+  <div class="api-description"><p>通话记录接口</p></div>
+  <div class="params-table-container">
+    <h4>属性列表</h4>
+    <table class="param-table">
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td>callId</td>
+        <td><span class="param-type">string</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>mediaType</td>
+        <td><span class="param-type"><a href="#CallMediaType">CallMediaType</a></span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>startTime</td>
+        <td><span class="param-type">number</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>duration</td>
+        <td><span class="param-type">number</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>participantIds</td>
+        <td><span class="param-type">string[]</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>endReason</td>
+        <td><span class="param-type"><a href="#CallEndReason">CallEndReason</a></span></td>
+        <td></td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="SpeakerVolume">
+  <h2>SpeakerVolume</h2>
+  <div class="api-description"><p>音量信息接口</p></div>
+  <div class="params-table-container">
+    <h4>属性列表</h4>
+    <table class="param-table">
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td>userId</td>
+        <td><span class="param-type">string</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>volume</td>
+        <td><span class="param-type">number</span></td>
+        <td></td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="NetworkQualityInfo">
+  <h2>NetworkQualityInfo</h2>
+  <div class="api-description"><p>网络质量信息接口</p></div>
+  <div class="params-table-container">
+    <h4>属性列表</h4>
+    <table class="param-table">
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td>userId</td>
+        <td><span class="param-type">string</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>quality</td>
+        <td><span class="param-type"><a href="#NetworkQuality">NetworkQuality</a></span></td>
+        <td></td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="CallsOptions">
+  <h2>CallsOptions</h2>
+  <div class="api-description"><p>发起通话参数</p></div>
+  <div class="params-table-container">
+    <h4>属性列表</h4>
+    <table class="param-table">
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td>participantIds</td>
+        <td><span class="param-type">string[]</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>mediaType</td>
+        <td><span class="param-type"><a href="#CallMediaType">CallMediaType</a></span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>params</td>
+        <td><span class="param-type">any</span></td>
+        <td> (可选)</td>
+      </tr>
+      <tr>
+        <td>success</td>
+        <td><span class="param-type">() =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+      <tr>
+        <td>fail</td>
+        <td><span class="param-type">(code: number, message: string) =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="AcceptOptions">
+  <h2>AcceptOptions</h2>
+  <div class="api-description"><p>接听通话参数</p></div>
+  <div class="params-table-container">
+    <h4>属性列表</h4>
+    <table class="param-table">
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td>success</td>
+        <td><span class="param-type">() =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+      <tr>
+        <td>fail</td>
+        <td><span class="param-type">(code: number, message: string) =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="RejectOptions">
+  <h2>RejectOptions</h2>
+  <div class="api-description"><p>拒绝通话参数</p></div>
+  <div class="params-table-container">
+    <h4>属性列表</h4>
+    <table class="param-table">
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td>success</td>
+        <td><span class="param-type">() =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+      <tr>
+        <td>fail</td>
+        <td><span class="param-type">(code: number, message: string) =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="HangupOptions">
+  <h2>HangupOptions</h2>
+  <div class="api-description"><p>挂断通话参数</p></div>
+  <div class="params-table-container">
+    <h4>属性列表</h4>
+    <table class="param-table">
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td>success</td>
+        <td><span class="param-type">() =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+      <tr>
+        <td>fail</td>
+        <td><span class="param-type">(code: number, message: string) =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="JoinOptions">
+  <h2>JoinOptions</h2>
+  <div class="api-description"><p>加入通话参数</p></div>
+  <div class="params-table-container">
+    <h4>属性列表</h4>
+    <table class="param-table">
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td>callId</td>
+        <td><span class="param-type">string</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>success</td>
+        <td><span class="param-type">() =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+      <tr>
+        <td>fail</td>
+        <td><span class="param-type">(code: number, message: string) =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="InviteOptions">
+  <h2>InviteOptions</h2>
+  <div class="api-description"><p>邀请加入通话参数</p></div>
+  <div class="params-table-container">
+    <h4>属性列表</h4>
+    <table class="param-table">
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td>participantIds</td>
+        <td><span class="param-type">string[]</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>params</td>
+        <td><span class="param-type">any</span></td>
+        <td> (可选)</td>
+      </tr>
+      <tr>
+        <td>success</td>
+        <td><span class="param-type">() =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+      <tr>
+        <td>fail</td>
+        <td><span class="param-type">(code: number, message: string) =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="QueryRecentCallsOptions">
+  <h2>QueryRecentCallsOptions</h2>
+  <div class="api-description"><p>查询通话记录参数</p></div>
+  <div class="params-table-container">
+    <h4>属性列表</h4>
+    <table class="param-table">
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td>cursor</td>
+        <td><span class="param-type">string</span></td>
+        <td> (可选)</td>
+      </tr>
+      <tr>
+        <td>count</td>
+        <td><span class="param-type">number</span></td>
+        <td> (可选)</td>
+      </tr>
+      <tr>
+        <td>success</td>
+        <td><span class="param-type">() =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+      <tr>
+        <td>fail</td>
+        <td><span class="param-type">(code: number, message: string) =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="DeleteRecentCallsOptions">
+  <h2>DeleteRecentCallsOptions</h2>
+  <div class="api-description"><p>删除通话记录参数</p></div>
+  <div class="params-table-container">
+    <h4>属性列表</h4>
+    <table class="param-table">
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td>callIdList</td>
+        <td><span class="param-type">string[]</span></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>success</td>
+        <td><span class="param-type">() =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+      <tr>
+        <td>fail</td>
+        <td><span class="param-type">(code: number, message: string) =&gt; void</span></td>
+        <td> (可选)</td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="StartFloatWindowOptions">
+  <h2>StartFloatWindowOptions</h2>
+  <div class="api-description"><p>悬浮窗配置项</p></div>
+  <div class="params-table-container">
+    <h4>属性列表</h4>
+    <table class="param-table">
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Description</th>
+      </tr>
+      <tr>
+        <td>avatars</td>
+        <td><span class="param-type">Record&lt;string, string&gt;</span></td>
+        <td> (可选)</td>
+      </tr>
+      <tr>
+        <td>waitingAnimation</td>
+        <td><span class="param-type">string</span></td>
+        <td> (可选)</td>
+      </tr>
+      <tr>
+        <td>volumeLevelIcons</td>
+        <td><span class="param-type">Record&lt;string, string&gt;</span></td>
+        <td> (可选)</td>
+      </tr>
+      <tr>
+        <td>networkQualityIcons</td>
+        <td><span class="param-type">Record&lt;string, string&gt;</span></td>
+        <td> (可选)</td>
+      </tr>
+    </table>
+  </div>
+  </section>
+
+<section id="ICallListener">
+  <h2>ICallListener</h2>
+  <div class="api-description"><p>通话事件监听器函数类型</p></div>
+  </section>
+
+        
+        <script src="../assets/search.js"></script>
+    </div>
+</body>
+</html>
+  

@@ -1,6 +1,6 @@
 # 腾讯云 · TUIKit uni-app 解决方案
 
-<img src="https://qcloudimg.tencent-cloud.cn/raw/ec034fc6e4cf42cae579d32f5ab434a1.png" align="left" width=65 height=65> TUIKit 是腾讯云推出的一款适用于即时通信（Chat）和互动直播（Live）场景的 uni-app 解决方案。通过集成本方案，您可以快速为 App 添加聊天、通话、直播等功能。
+TUIKit 是腾讯云推出的一款适用于即时通信（Chat）、互动直播（Live）、视频会议（Room）场景的 uni-app 解决方案。通过集成本方案，您可以快速为 App 添加聊天、通话、直播、会议等功能。
 
 <br clear="left"/>
 
@@ -31,7 +31,7 @@
 ### Room - 视频会议
 
 <p align="center">
-  <img src="https://write-document-release-1258344699.cos.ap-guangzhou.tencentcos.cn/100027501523/1bfddf65872f11f18f59525400a31896.png"/>
+  <img src="https://web.sdk.qcloud.com/component/uni-app/assets/uniapp_room.png"/>
 </p>
 
 - **平台互通:** 支持 Android、iOS、Web、Flutter、Harmony、UniApp 等多平台 TUIRoomKit 组件互联互通，跨端沟通无障碍。

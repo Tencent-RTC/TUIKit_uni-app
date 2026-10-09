@@ -26,23 +26,15 @@
 		</data>
 		<key>Frameworks/TXLiteAVSDK_ReplayKitExt.framework/TXLiteAVSDK_ReplayKitExt</key>
 		<data>
-		uCY84+Ml5v1ElI1KbMDKY0SrdoI=
+		YweSacGrWCNuTfxXGocf6i0QZfs=
 		</data>
 		<key>Frameworks/TXLiteAVSDK_ReplayKitExt.framework/_CodeSignature/CodeResources</key>
 		<data>
-		5oD63IlcnGO8dBtwGSFVhtpwuH0=
+		uHWUvJqCSkaoxNnbmIBLqd99GTU=
 		</data>
 		<key>Info.plist</key>
 		<data>
-		eD+0XaA2LghWCN5brm9OAavBix4=
-		</data>
-		<key>ScreenShareExtension.debug.dylib</key>
-		<data>
-		DYZln4a51E5fy88APJgQiYx7moo=
-		</data>
-		<key>__preview.dylib</key>
-		<data>
-		IOWacGb9HZPMtSg1rKCSy0zjX18=
+		ccMAkKdCAWoRKk0z3+YAhXW/bzQ=
 		</data>
 		<key>embedded.mobileprovision</key>
 		<data>
@@ -90,28 +82,14 @@
 		<dict>
 			<key>hash2</key>
 			<data>
-			Aw76TMTLJu3x2cnQp/+N/rU756kJnuSV0AH39EkDxwM=
+			E3xGQ1Fk70KLM5w/VAleK/hyjXjxk4ZolHsB7f2O8QU=
 			</data>
 		</dict>
 		<key>Frameworks/TXLiteAVSDK_ReplayKitExt.framework/_CodeSignature/CodeResources</key>
 		<dict>
 			<key>hash2</key>
 			<data>
-			E3r9xYhgFUfRozKE7J2vgD44DJIfMXlD6c3/4quFPU0=
-			</data>
-		</dict>
-		<key>ScreenShareExtension.debug.dylib</key>
-		<dict>
-			<key>hash2</key>
-			<data>
-			5lrJAyCK9m4WN/6VqD3fJaOvM94BRuNPeivnI7riYAo=
-			</data>
-		</dict>
-		<key>__preview.dylib</key>
-		<dict>
-			<key>hash2</key>
-			<data>
-			fItFvUqoFkya15hE5WQEUTx2qOdDeJ5C8TSTpBQEpr4=
+			appjzleHqdzO2oQsahRImNhc7vErad3vkzQjFaSVCC4=
 			</data>
 		</dict>
 		<key>embedded.mobileprovision</key>

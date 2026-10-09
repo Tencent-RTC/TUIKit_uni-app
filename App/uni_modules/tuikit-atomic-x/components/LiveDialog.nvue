@@ -1,0 +1,231 @@
+<template>
+  <!-- 居中模态对话框:品牌深蓝渐变语言,小而精(560x320 → 520x288rpx)。
+     阻断式交互——必须等用户决策(区别于自动消失的轻提示 LiveToast)。
+
+     层级约定(重要,调用方必须遵守)：
+     1) nvue 跨组件 fixed 层级由 DOM 书写顺序决定——调用方须把 <LiveDialog> 放在
+        自己模板的【最末尾】才能盖住其他内容。
+     2) mask 的 CSS z-index: 6000 仅在同父容器(如页面根级)内可靠生效,
+        用于压过 ActionSheet(5000) 等显式 z-index 组件;跨组件时不参与比较。
+     3) 收起态输入框是【原生透明 webview】,层级高于一切 nvue view——本对话框打开
+        期间 webview 会拦截其区域触摸(看得见点不到)。调用方必须把显隐状态纳入
+        父页面的 anyOverlayVisible(驱动 barrageInput:setHidden 移出 webview)。 -->
+  <view v-if="innerVisible" class="ld-mask" @tap="onMaskTap">
+    <view class="ld-box" @tap.stop="">
+      <!-- 背景:深色半透明底(替代之前过于花哨的渐变——与黑色直播间融为一体,
+         通过投影+细描边呈现"卡片浮起"感,而不是"渐变屏幕")。 -->
+      <view class="ld-bg"></view>
+
+      <view class="ld-inner">
+        <!-- 标题 + 文案:居中堆叠 -->
+        <text v-if="title" class="ld-title">{{ title }}</text>
+        <text v-if="message" class="ld-message">{{ message }}</text>
+
+        <!-- 按钮行:取消/确认 96rpx 等大胶囊,仅主色差区分主次(取消半透明白底、
+             确认品牌蓝渐变),整体更克制、与 toast chip 视觉语言一致。 -->
+        <view class="ld-btns">
+          <view v-if="cancelText" class="ld-btn is-cancel" @tap="onCancel">
+            <text class="ld-btn-text is-cancel-text">{{ cancelText }}</text>
+          </view>
+          <view v-if="confirmText" class="ld-btn is-confirm" :class="`is-confirm--${confirmType}`" @tap="onConfirm">
+            <text class="ld-btn-text is-confirm-text">{{ confirmText }}</text>
+          </view>
+        </view>
+      </view>
+    </view>
+  </view>
+</template>
+
+<script setup lang="ts">
+  import { computed } from 'vue';
+
+  const props = defineProps({
+    // v-model 显隐
+    modelValue: {
+      type: Boolean,
+      default: false
+    },
+    // 标题(空串不渲染)
+    title: {
+      type: String,
+      default: ''
+    },
+    // 提示文案(空串不渲染)
+    message: {
+      type: String,
+      default: ''
+    },
+    // 确认按钮文案(空串则不渲染该按钮)
+    confirmText: {
+      type: String,
+      default: '确定'
+    },
+    // 取消按钮文案(空串则不渲染该按钮)
+    cancelText: {
+      type: String,
+      default: '取消'
+    },
+    // 确认按钮类型:'danger'(默认,危险操作如退出/删除,红色)| 'primary'(品牌蓝,常规确认)
+    confirmType: {
+      type: String as () => 'danger' | 'primary',
+      default: 'danger'
+    }
+  });
+
+  const emit = defineEmits(['update:modelValue', 'confirm', 'cancel']);
+
+  const innerVisible = computed({
+    get: () => props.modelValue,
+    set: (val: boolean) => emit('update:modelValue', val)
+  });
+
+  // ============ 交互 ============
+  const close = () => {
+    innerVisible.value = false;
+  };
+  // 点确认:发 confirm 并关闭。
+  const onConfirm = () => {
+    emit('confirm');
+    close();
+  };
+  // 点取消:发 cancel 并关闭。
+  const onCancel = () => {
+    emit('cancel');
+    close();
+  };
+  // 点 mask(窗外区域):视为取消。
+  const onMaskTap = () => {
+    emit('cancel');
+    close();
+  };
+</script>
+
+<style scoped>
+  /* mask：全屏半透明黑(对齐 ActionSheet/BaseDrawer 的 0.4),点 mask 取消。
+     z-index 6000：同父容器内压过 ActionSheet(5000)。 */
+  .ld-mask {
+    position: fixed;
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.4);
+    justify-content: center;
+    align-items: center;
+    z-index: 6000;
+  }
+
+  /* 对话框主体:居中小窗。比上一版 520x288 进一步收紧到 500x272,更克制。
+     改用深色单底 + 深色投影呈现"卡片浮起"感,不再用花哨渐变——与黑色直播间更和谐。 */
+  .ld-box {
+    position: relative;
+    width: 500rpx;
+    height: 256rpx;
+    border-top-left-radius: 28rpx;
+    border-top-right-radius: 28rpx;
+    border-bottom-left-radius: 28rpx;
+    border-bottom-right-radius: 28rpx;
+    box-shadow: 0 20rpx 60rpx rgba(0, 0, 0, 0.55);
+  }
+
+  /* 背景层:深色半透明单色(替代之前过深的品牌渐变——与直播间黑色背景更融合),
+     细描边给一点高光。 */
+  .ld-bg {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 500rpx;
+    height: 256rpx;
+    border-top-left-radius: 28rpx;
+    border-top-right-radius: 28rpx;
+    border-bottom-left-radius: 28rpx;
+    border-bottom-right-radius: 28rpx;
+    background-color: rgba(14, 18, 28, 0.94);
+    border-width: 2rpx;
+    border-color: rgba(255, 255, 255, 0.10);
+  }
+
+  /* 内容层:绝对定位覆盖在背景上;居中堆叠标题/文案/按钮。 */
+  .ld-inner {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 500rpx;
+    height: 256rpx;
+    flex-direction: column;
+    align-items: center;
+    padding: 36rpx 40rpx 28rpx 40rpx;
+  }
+
+  .ld-title {
+    color: #ffffff;
+    font-size: 32rpx;
+    font-weight: 700;
+    margin-bottom: 12rpx;
+    text-align: center;
+  }
+
+  .ld-message {
+    color: rgba(255, 255, 255, 0.72);
+    font-size: 24rpx;
+    margin-bottom: 32rpx;
+    text-align: center;
+    lines: 2;
+  }
+
+  /* 按钮行:取消 + 确认 横排。高度 72rpx(上一版 96 过大、与卡片比例失调),
+     圆角 36,字号 28——更小巧克制,与 500x272 的卡片比例协调。 */
+  .ld-btns {
+    flex-direction: row;
+    width: 420rpx;
+  }
+
+  .ld-btn {
+    flex: 1;
+    height: 72rpx;
+    border-radius: 36rpx;
+    justify-content: center;
+    align-items: center;
+  }
+
+  /* 取消:半透明白底,弱化次级操作视觉权重。 */
+  .ld-btn.is-cancel {
+    background-color: rgba(255, 255, 255, 0.10);
+    margin-right: 20rpx;
+  }
+
+  /* 确认:danger=红色(危险操作,与挂断按钮 #FF5158 一致)| primary=品牌蓝渐变(常规)。 */
+  .ld-btn.is-confirm.is-confirm--danger {
+    background-color: #FF5158;
+  }
+
+  .ld-btn.is-confirm.is-confirm--primary {
+    background-image: linear-gradient(to right, #2A6BFF, #4A9EFF);
+  }
+
+  /* 按下态:nvue :active 可能不渲染,无副作用。 */
+  .ld-btn.is-cancel:active {
+    background-color: rgba(255, 255, 255, 0.18);
+  }
+
+  .ld-btn.is-confirm.is-confirm--danger:active {
+    background-color: #E04549;
+  }
+
+  .ld-btn.is-confirm.is-confirm--primary:active {
+    opacity: 0.88;
+  }
+
+  .ld-btn-text {
+    font-size: 28rpx;
+    font-weight: 600;
+  }
+
+  .ld-btn-text.is-cancel-text {
+    color: rgba(255, 255, 255, 0.88);
+  }
+
+  .ld-btn-text.is-confirm-text {
+    color: #ffffff;
+  }
+</style>

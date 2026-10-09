@@ -24,6 +24,10 @@
 		<data>
 		Rm8sceCbGRadxEBqhOoBu1G+9TI=
 		</data>
+		<key>TXLiteAVSDK_ReplayKitExt_arm</key>
+		<data>
+		sCOou9tLEysUJE9gH1e8kJqz0zg=
+		</data>
 	</dict>
 	<key>files2</key>
 	<dict>
@@ -69,6 +73,17 @@
 			<key>hash2</key>
 			<data>
 			xmousTvOfwllv1XCxt/qSiPGMVTGSCH19+a04HKlVa0=
+			</data>
+		</dict>
+		<key>TXLiteAVSDK_ReplayKitExt_arm</key>
+		<dict>
+			<key>hash</key>
+			<data>
+			sCOou9tLEysUJE9gH1e8kJqz0zg=
+			</data>
+			<key>hash2</key>
+			<data>
+			U3nfqpdQx8uw6vAH2QO9zLMi+z3NOMeiErOK/c6emSc=
 			</data>
 		</dict>
 	</dict>

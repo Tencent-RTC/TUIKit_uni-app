@@ -50,7 +50,7 @@
                 <text class="audience-name" :numberOfLines="1">{{ host?.liveOwner?.userName || host?.liveOwner?.userID}}</text>
               </view>
               <view :class=" isHostInviting(host) ? 'start-link-waiting' : 'start-link' " @tap="onStartLinkTap(host)">
-                <text class="start-link-text">{{ isHostInviting(host) ? '邀请中' : '邀请' }}</text>
+                <text class="start-link-text">{{ isHostInviting(host) ? '取消邀请' : '邀请' }}</text>
               </view>
             </view>
           </view>
@@ -61,6 +61,14 @@
       </list>
     </view>
   </view>
+
+  <LiveToast
+    v-if="tipVisible"
+    :key="tipSeq"
+    v-model="tipVisible"
+    :title="tipTitle"
+    :duration="2000"
+  />
 </template>
 
 <script setup lang="ts">
@@ -72,6 +80,7 @@
     watch,
     nextTick
   } from 'vue'
+  import LiveToast from '@/uni_modules/tuikit-atomic-x/components/LiveToast.nvue';
   import {
     CoHostLayoutTemplateType,
     useCoHostState
@@ -92,6 +101,15 @@
     }
   })
   const emit = defineEmits(['update:modelValue'])
+
+  const tipVisible = ref(false);
+  const tipSeq = ref(0);
+  const tipTitle = ref('');
+  const showTip = (title) => {
+    tipTitle.value = title;
+    tipSeq.value++;
+    tipVisible.value = true;
+  };
   const refreshing = ref('hide')
   const isLoading = ref(false)
   const scrollTop = ref(0)
@@ -103,6 +121,7 @@
     candidates,
     connected,
     requestHostConnection,
+    cancelHostConnection,
     invitees,
     exitHostConnection,
   } = useCoHostState(uni?.$liveID)
@@ -198,9 +217,7 @@
       cursor: '', // 首次拉起传空（不能是null),然后根据回调数据的cursor确认是否拉完
       count: 20,   // 分页拉取的个数
       success: () => {
-        uni.showToast({
-          title: '刷新完成'
-        });
+        showTip('刷新完成');
       }
     };
     fetchLiveList(params);
@@ -210,10 +227,7 @@
 
   const loadMore = () => {
     if (!liveListCursor.value) {
-      uni.showToast({
-        title: "没有更多了",
-        icon: "none"
-      });
+      showTip('没有更多了');
       return;
     }
     const params = {
@@ -233,12 +247,26 @@
     return inviteesList.some((item) => item?.liveID === targetLiveID);
   }
 
-  // 点击邀请，若已在邀请中则不重复发起
   function onStartLinkTap(host) {
     if (isHostInviting(host)) {
+      cancelLink(host);
       return;
     }
     startLink(host);
+  }
+
+  function cancelLink(host) {
+    cancelHostConnection({
+      liveID: uni?.$liveID,
+      toHostLiveID: host?.liveID,
+      success: () => {
+        showTip('已取消邀请');
+      },
+      fail: (errCode) => {
+        console.log('cancelHostConnection fail:', errCode);
+        showTip('取消邀请失败');
+      }
+    });
   }
 
   function close() {
@@ -247,10 +275,7 @@
 
   function startLink(host) {
     if (applicants.value.length > 0) {
-      uni.showToast({
-        title: '有人申请连麦，无法发起连线',
-        icon: 'none'
-      })
+      showTip('有人申请连麦，无法发起连线');
       return
     }
     requestHostConnection({
@@ -265,20 +290,11 @@
       fail: (errorCode) => {
         console.log(errorCode)
         if (errorCode === 3) {
-          uni.showToast({
-            icon: 'none',
-            title: '主播连线中，无法发起连线'
-          })
+          showTip('主播连线中，无法发起连线')
         } else if (errorCode === 100404) {
-          uni.showToast({
-            icon: 'none',
-            title: '超过连线和 battle 房间数量上限'
-          })
+          showTip('超过连线和 battle 房间数量上限')
         } else {
-          uni.showToast({
-            icon: 'none',
-            title: '连线失败'
-          })
+          showTip('连线失败')
         }
       }
     },)
@@ -400,7 +416,6 @@
   .end-right {
     position: absolute;
     right: 50rpx;
-    left: auto;
     display: flex;
     flex-direction: row;
   }

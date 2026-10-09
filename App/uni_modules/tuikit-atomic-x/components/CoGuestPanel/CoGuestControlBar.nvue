@@ -1,0 +1,289 @@
+<template>
+  <!-- 连麦接通后的观众自控条：横向 pill 型悬浮条，覆盖在 bottom-bar 上方原入口位置。
+       从左到右：收起（chevron） / 静音 / 关摄像头 / 画面调整 / 挂断（红色）。
+       只在 modelValue=true 时显示，收起后交由父组件切换 modelValue 回落到原入口按钮。
+       样式：82rpx×2 高、圆角、深色半透明玻璃背景。
+       入场动画(transform/opacity)由 nvue 原生 animation 模块驱动【而非 CSS transition】:
+       华为 P70 / 小米 17 Pro 等部分安卓 ROM 上,反复 v-if 挂载/卸载后 CSS 的
+       transform transition 不再正确执行,bar 卡在初始下移位(translateY(40rpx))
+       ——即"定位太靠下、下半部分被遮挡"的根因。animation 模块直连原生动画,
+       双端行为一致(与 BaseDrawer 同款模式)。 -->
+  <view v-if="modelValue" ref="barRef" class="control-bar">
+    <!-- 背景铺底：把复杂 CSS 背景（渐变+发光+顶部亮线）烘焙为一张 PNG，
+         绝对定位覆盖整个控制条，其他按钮层浮在上面。
+         nvue 里 image 不能直接放进 flex-row 容器（会被 flex 计算成 0 宽或按 PNG 原生尺寸），
+         所以外层用 relative 容器 + 绝对定位 image 铺底，内层 .control-bar-inner 做 flex 布局。 -->
+    <image class="control-bar-bg" src="/uni_modules/tuikit-atomic-x/static/assets/live/co-mic-control-bar-bg.png" mode="scaleToFill" />
+    <view class="control-bar-inner">
+      <!-- 按钮组：4 个操作按钮 + 挂断按钮 -->
+      <view class="btn-group">
+        <!-- 收起 chevron：更小 更淡的样式（对齐 .compact） -->
+        <view class="ctrl-btn is-compact" @tap="onHide">
+          <image class="ctrl-icon-img is-small" src="/uni_modules/tuikit-atomic-x/static/assets/live/co-mic-hide.png" mode="aspectFit" />
+        </view>
+        <!-- 静音：正常/静音两态图；激活态白底 + 黑色 slash 图标。 -->
+        <view class="ctrl-btn" :class="{ 'is-active': selfMuted }" @tap="onToggleMute">
+          <image class="ctrl-icon-img" :src="selfMuted ? '/uni_modules/tuikit-atomic-x/static/assets/live/co-mic-mic-slash-dark.png' : '/uni_modules/tuikit-atomic-x/static/assets/live/co-mic-mic.png'" mode="aspectFit" />
+        </view>
+        <!-- 关摄像头：始终显示；语音连麦时用户点击 → 触发主播端授权流程。
+             iOS/Android 侧 openLocalCamera 会走系统权限；若权限拒绝，SDK 会 fail 回调。 -->
+        <view class="ctrl-btn" :class="{ 'is-active': cameraOff }" @tap="onToggleCamera">
+          <image class="ctrl-icon-img" :src="cameraOff ? '/uni_modules/tuikit-atomic-x/static/assets/live/co-mic-camera-slash-dark.png' : '/uni_modules/tuikit-atomic-x/static/assets/live/co-mic-camera.png'" mode="aspectFit" />
+        </view>
+        <!-- 画面调整 -->
+        <view class="ctrl-btn" @tap="onOpenDetail">
+          <image class="ctrl-icon-img" src="/uni_modules/tuikit-atomic-x/static/assets/live/co-mic-adjust.png" mode="aspectFit" />
+        </view>
+      </view>
+      <!-- 挂断（右侧独立，红色圆形） -->
+      <view class="ctrl-btn is-danger" @tap="onEndCoMic">
+        <image class="ctrl-icon-img" src="/uni_modules/tuikit-atomic-x/static/assets/live/co-mic-hangup.png" mode="aspectFit" />
+      </view>
+    </view>
+  </view>
+</template>
+
+<script setup lang="ts">
+  import { ref, computed, watch, nextTick } from 'vue';
+  import { useLiveSeatState } from '@/uni_modules/tuikit-atomic-x/state/LiveSeatState';
+  import { useDeviceState, DeviceStatus } from '@/uni_modules/tuikit-atomic-x/state/DeviceState';
+  import { useCoGuestState } from '@/uni_modules/tuikit-atomic-x/state/CoGuestState';
+
+  const props = defineProps({
+    modelValue: {
+      type: Boolean,
+      default: false,
+    },
+    liveID: {
+      type: String,
+      default: '',
+    },
+    // 当前登录用户的 userID：用于在 seatList 里定位自己的座位，读取麦克风/摄像头状态。
+    userID: {
+      type: String,
+      default: '',
+    },
+    // freezeCamera: 进入画面调整面板期间冻结摄像头图标为"开启"，忽略座位 cameraStatus 的瞬时 OFF。
+    freezeCamera: {
+      type: Boolean,
+      default: false,
+    },
+  });
+  const emit = defineEmits(['update:modelValue', 'openDetail', 'end']);
+
+  // ---------- 数据接入 ----------
+  const { seatList, muteMicrophone, unmuteMicrophone } = useLiveSeatState(props.liveID);
+  const { openLocalCamera, closeLocalCamera, isFrontCamera, localMirrorType, switchMirror, switchCamera } = useDeviceState();
+  const { disconnect } = useCoGuestState(props.liveID);
+
+  // 从 seatList 里找到自己的座位，从座位数据里派生麦克风/摄像头状态。
+  // SeatInfo 结构：{ index, isLocked, region, userInfo: SeatUserInfoParam }
+  // 注意字段名是 userInfo（不是 user）。
+  const selfSeat = computed(() => {
+    const list: any[] = Array.isArray(seatList.value) ? seatList.value : [];
+    for (let i = 0; i < list.length; i++) {
+      if (list[i]?.userInfo?.userID === props.userID) return list[i];
+    }
+    return null;
+  });
+  const selfMuted = computed(() => {
+    // microphoneStatus === OFF 视为已静音；未定义时默认非静音。
+    return selfSeat.value?.userInfo?.microphoneStatus === DeviceStatus.OFF;
+  });
+  const cameraOff = computed(() => {
+    // 进入画面调整面板期间冻结为"开启"：startCameraTest 重绑相机会使 selfSeat.cameraStatus 短暂 OFF，
+    // 此时控制条在面板下方透出会误显"关闭"。从控制条进入调整时摄像头必为开启，故固定显示开启。
+    if (props.freezeCamera) return false;
+    return selfSeat.value?.userInfo?.cameraStatus === DeviceStatus.OFF;
+  });
+  // hasCamera 已废弃：摄像头按钮改为始终显示，让用户随时可开/关摄像头。
+
+  // ---------- 显隐动画(nvue 原生 animation 模块驱动) ----------
+  // 见模板注释:不用 CSS transition 驱动 transform/opacity(部分安卓 ROM 上
+  // 反复挂载/卸载后不正确执行,bar 卡在初始下移位)。挂载后同步连发两个
+  // transition:先 duration:0 设初态(下移+透明),紧接着入场动画(归位+显现)
+  // ——两个调用同步排队进原生动画队列,不依赖桥接 callback(与 BaseDrawer 的
+  // runOpenAnimation 同款模式)。
+  const animation = (uni as any).requireNativePlugin('animation');
+  const barRef = ref<any>(null);
+  watch(() => props.modelValue, (val) => {
+    if (val) {
+      // v-if 挂载完成后下一帧再驱动动画(确保 barRef 可用)。
+      nextTick(() => {
+        setTimeout(() => {
+          const el = barRef.value;
+          if (!el) return;
+          const offsetY = uni.upx2px(40); // 初始下移量(原 CSS translateY(40rpx))
+          animation.transition(el, {
+            styles: { transform: `translateY(${offsetY}px)`, opacity: 0 },
+            duration: 0,
+            timingFunction: 'linear'
+          });
+          animation.transition(el, {
+            styles: { transform: 'translateY(0)', opacity: 1 },
+            duration: 260,
+            timingFunction: 'ease-out'
+          });
+        }, 0);
+      });
+    }
+  }, { immediate: true });
+
+  // ---------- 事件回调 ----------
+  const onHide = () => {
+    // chevronDown 只是"折叠控制条回入口"，不改变连麦状态本身。
+    emit('update:modelValue', false);
+  };
+  const onToggleMute = () => {
+    if (selfMuted.value) {
+      unmuteMicrophone({ liveID: props.liveID });
+    } else {
+      muteMicrophone({ liveID: props.liveID });
+    }
+  };
+  // 关闭摄像头前快照前后置/镜像:closeLocalCamera 后 SDK 可能把全局 isFrontCamera
+  // 复位为前置,故不能在重开时才读全局值——用关闭前的快照恢复,保证与关闭前一致。
+  let lastFrontBeforeClose = true;
+  let lastMirrorBeforeClose: any = null;
+  const onToggleCamera = () => {
+    if (cameraOff.value) {
+      // 重开摄像头:先以【前置】起流——匹配 SDK 冷启动默认,避免"默认前置→内部切后置"
+      // 的混乱过渡闪切;起流成功后再按快照 switchCamera 到目标前后置 + 恢复镜像。
+      // (等价于预览里那次手动翻转,只有一次干净切换,不闪。)
+      openLocalCamera({
+        isFront: true,
+        success: () => {
+          if (lastFrontBeforeClose === false) {
+            switchCamera({ isFront: false });
+          }
+          if (lastMirrorBeforeClose !== undefined && lastMirrorBeforeClose !== null) {
+            switchMirror({ mirrorType: lastMirrorBeforeClose });
+          }
+        },
+      });
+    } else {
+      // 关闭前快照当前前后置与镜像。
+      lastFrontBeforeClose = isFrontCamera.value !== false;
+      lastMirrorBeforeClose = localMirrorType.value;
+      closeLocalCamera();
+    }
+  };
+  const onOpenDetail = () => {
+    // 打开 CoGuestRequestPanel（父组件监听后传入 initialDetailOpen=true 直接进入 detail 层）。
+    emit('openDetail');
+  };
+  const onEndCoMic = () => {
+    // 断开连麦：调 disconnect + 通知父组件同步本地状态（uni.$localGuestStatus = 'IDLE'）。
+    disconnect({ liveID: props.liveID });
+    emit('end');
+  };
+
+  defineExpose({});
+</script>
+
+<style scoped>
+  /* 悬浮条容器：只做定位 + 尺寸，不做 flex 布局（image 放进 flex 会被计算宽度出错）。
+     背景由 .control-bar-bg 图片提供（nvue 不支持复杂渐变/阴影/backdrop-filter）。
+     transform/opacity 的入场动画由原生 animation 模块驱动(见 script),CSS 不再
+     持有初态——CSS transition 驱动 transform 在部分安卓 ROM 上反复挂载后会卡在
+     中间位(定位偏低的根因),已废弃。 */
+  .control-bar {
+    position: relative;
+    /* 显式写死 686rpx,与 .control-bar-bg/.control-bar-inner 同源
+       (686rpx = 750rpx - 2×32rpx 外层左右边距)。nvue 上百分比宽度
+       依赖父容器推导不可靠:父层 .co-mic-control-bar-wrap 若宽度塌缩,
+       100% 会跟着塌缩,控制条只渲染出左侧一截,右侧露出深色背景。 */
+    width: 686rpx;
+    height: 164rpx;
+    /* 静态初态(下移+透明):【首帧隐藏位】,防止挂载第一帧闪现完整条;
+     * 入场动画由原生 animation 模块接管(duration:0 重设同款起点再播入场,
+     * 与 BaseDrawer 同模式)。注意【没有 transition 声明】——CSS transition
+     * 驱动 transform 在部分安卓 ROM(华为 P70/小米 17 Pro)上反复挂载后
+     * 不正确执行、卡在中间位,是"定位太靠下被遮挡"的根因,已废弃。 */
+    transform: translateY(40rpx);
+    opacity: 0;
+  }
+
+  /* 背景铺底图：nvue iOS 上 <image> 的百分比 width/height 解析不可靠，会回退到 PNG 原生尺寸（缩在左上角）；
+     安卓则能拉伸。因此显式写死尺寸，两平台都确定铺满。
+     耦合：686rpx = 750rpx(屏宽) - 2×32rpx(.co-mic-control-bar-wrap 的 left/right)，164rpx 同 .control-bar 高度。
+     若外层间距或控制条高度变化，此处需同步修改。 */
+  .control-bar-bg {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 686rpx;
+    height: 164rpx;
+  }
+
+  /* 按钮层：绝对定位铺满，在 image 之上，承接原来的 flex 布局 + 内边距。
+     nvue iOS 上绝对定位 <view> 的百分比高度（height:100%）解析不可靠，会塌缩导致按钮不垂直居中；
+     安卓则能补偿。故显式写死 686rpx×164rpx（与 .control-bar-bg、.control-bar 高度同源）。
+     耦合同 .control-bar-bg：686rpx = 750rpx - 2×32rpx；外层间距/控制条高度变化需同步 .control-bar-bg 与此处。 */
+  .control-bar-inner {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 686rpx;
+    height: 164rpx;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    padding-left: 24rpx;
+    padding-right: 24rpx;
+  }
+  /* 按钮组：横向排列，按钮之间 20rpx 间隔。 */
+  .btn-group {
+    flex-direction: row;
+    align-items: center;
+  }
+
+  /* 单个操作按钮：96rpx 圆形，半透明白底 + 白色 PNG 图标；
+     按钮之间目视 ~28rpx。 */
+  .ctrl-btn {
+    width: 96rpx;
+    height: 96rpx;
+    margin-left: 14rpx;
+    margin-right: 14rpx;
+    justify-content: center;
+    align-items: center;
+    border-top-left-radius: 48rpx;
+    border-top-right-radius: 48rpx;
+    border-bottom-left-radius: 48rpx;
+    border-bottom-right-radius: 48rpx;
+    background-color: rgba(255, 255, 255, 0.09);
+  }
+
+  /* 收起 chevron 更小更淡（对齐 .audience-co-mic-control.compact） */
+  .ctrl-btn.is-compact {
+    width: 72rpx;
+    height: 72rpx;
+    border-top-left-radius: 36rpx;
+    border-top-right-radius: 36rpx;
+    border-bottom-left-radius: 36rpx;
+    border-bottom-right-radius: 36rpx;
+    background-color: rgba(255, 255, 255, 0.05);
+  }
+
+  /* 激活态：白底。
+     图标切换到深色版本（*-dark.png）实现"白底黑图标"视觉反色。 */
+  .ctrl-btn.is-active {
+    background-color: rgba(255, 255, 255, 0.96);
+  }
+
+  /* 挂断按钮：红色实心 */
+  .ctrl-btn.is-danger {
+    background-color: #FF5158;
+  }
+
+  /* 图标：PNG 版本（88×88 精度，44rpx 显示尺寸）。 */
+  .ctrl-icon-img {
+    width: 44rpx;
+    height: 44rpx;
+  }
+  /* 收起 chevron 图标略小。 */
+  .ctrl-icon-img.is-small {
+    width: 36rpx;
+    height: 36rpx;
+  }
+</style>

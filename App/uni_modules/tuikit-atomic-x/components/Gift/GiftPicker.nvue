@@ -1,0 +1,1048 @@
+<template>
+  <BaseDrawer
+    v-model="innerVisible"
+    :height="drawerHeight"
+    :overlayOpacity="0.4"
+    bgImage="/uni_modules/tuikit-atomic-x/static/assets/live/drawer-bg.png"
+    :bgImageHeight="drawerHeight"
+    :showHandle="true"
+    padding="0"
+  >
+    <!-- 顶部拖拽 handle:由 BaseDrawer 的 showHandle=true 统一提供(带手势+56rpx 热区)。
+         此前 showHandle=false 时自绘 gift-handle 仅作视觉;开启后二者叠加出现双横线,
+         故删除内部自绘的这条。 -->
+
+    <view class="gift-balance">
+      <view class="gift-coin"></view>
+      <text class="gift-balance-value">{{ balance }}</text>
+    </view>
+
+    <text class="gift-title">赠送礼物</text>
+
+    <view class="category-tabs">
+      <view
+        v-for="(category, index) in giftLists"
+        :key="category.categoryID"
+        class="category-item"
+        @tap="switchCategory(index)"
+      >
+        <text class="category-text" :class="{ 'category-text-active': currentCategoryIndex === index }">{{ category.name }}</text>
+        <view v-if="currentCategoryIndex === index" class="category-underline"></view>
+      </view>
+    </view>
+
+    <!-- 纵向滚动礼物网格。布局紧凑；连击涟漪不占格子空间，
+         由顶层 .combo-ripple-overlay 覆盖层按连击环屏幕坐标绘制（见下方）。 -->
+    <view class="gift-scroll-shell">
+      <scroll-view class="gift-scroll" scroll-y :show-scrollbar="false">
+        <view class="gift-grid">
+          <view
+            class="gift-item"
+            v-for="(giftInfo, index) in currentCategoryGifts"
+            :key="giftInfo.giftID"
+            :class="{ 'is-selected': selectedGiftIndex === index && !isComboAt(index) }"
+          >
+            <!-- 连击态：该格子原地替换为连击按钮。
+                 只监听 touchstart（手指按下即发送 + 启动长按重复），touchend 停止长按。
+                 不用 @tap——nvue 里 @tap 会在 touchend 之后再触发一次，导致每次点击发送两次。 -->
+            <view
+              v-if="isComboAt(index)"
+              class="gift-combo"
+              @touchstart="onComboTouchStart"
+              @touchend="onComboTouchEnd"
+              @touchcancel="onComboTouchEnd"
+            >
+              <!-- 倒计时环：静态虚线环 PNG（底，不动）+ 两片深色遮罩按进度旋转收缩。
+                   涟漪不在此处绘制——为避免被格子容器裁剪（nvue Android 每级容器都裁剪溢出），
+                   涟漪提到顶层 .combo-ripple-overlay 覆盖层，按本环的屏幕坐标定位。 -->
+              <view class="combo-ring" ref="comboRingRef">
+                <!-- 黑色底环：124rpx 实心黑圆，最底层。
+                     虚线环 PNG 缩小居中后，四周露出的即是此黑底，形成蓝色进度与容器边缘的黑边间隙。 -->
+                <view class="combo-ring-track"></view>
+                <image class="combo-ring-img" src="/uni_modules/tuikit-atomic-x/static/assets/live/combo-ring.png" mode="scaleToFill" />
+                <!-- 右半区遮罩：前半程收缩，用 JS 计时器逐帧驱动 rotate 角度（不用 CSS transition） -->
+                <view class="combo-ring-mask-right">
+                  <view class="combo-ring-mask-fill" :style="rightMaskStyle"></view>
+                </view>
+                <!-- 左半区遮罩：后半程收缩 -->
+                <view class="combo-ring-mask-left">
+                  <view class="combo-ring-mask-fill" :style="leftMaskStyle"></view>
+                </view>
+                <!-- 内侧黑环：盖住虚线环内侧，
+                     使蓝色进度只露外侧一窄圈，并与中心盘之间拉开黑色间距。 -->
+                <view class="combo-core-ring"></view>
+                <!-- 中心圆盘（在 ring 内居中，盖住内圈形成环）；按压缩放 -->
+                <view class="combo-face" :class="{ 'is-pressing': pressing }">
+                  <text class="combo-label">长按</text>
+                  <text class="combo-label">连击</text>
+                </view>
+              </view>
+              <view class="combo-count">
+                <text class="combo-count-text">{{ comboCount }}</text>
+              </view>
+            </view>
+
+            <view v-else class="gift-select" @tap="onGiftTap(index)">
+              <view class="gift-image-wrap">
+                <image class="gift-image" :class="{ 'gift-image-selected': selectedGiftIndex === index }" :src="giftInfo.iconURL" mode="aspectFit" />
+              </view>
+              <text v-if="selectedGiftIndex !== index" class="gift-name" :numberOfLines="1">{{ giftInfo.name || '' }}</text>
+              <view class="gift-price" :class="{ 'gift-price-selected': selectedGiftIndex === index }">
+                <view class="gift-price-coin"></view>
+                <text class="gift-price-value">{{ giftInfo.coins }}</text>
+              </view>
+              <!-- 选中态底部赠送按钮：背景 PNG（含渐变+外发光）用 image 铺底，文字浮其上。
+                   nvue 里 image 不能直接参与 flex 布局（会被算成 0 宽/原生尺寸），
+                   故外层 relative + image 绝对定位铺底 + 文字层绝对定位居中（对齐 .control-bar-bg 方案）。 -->
+              <view v-if="selectedGiftIndex === index" class="gift-send">
+                <image class="gift-send-bg" src="/uni_modules/tuikit-atomic-x/static/assets/live/gift-send.png" mode="scaleToFill" />
+                <text class="gift-send-text" @tap.stop="onSendTap(index)">赠送</text>
+              </view>
+            </view>
+          </view>
+        </view>
+        <!-- 底部留白，避免最后一行贴边 -->
+        <view class="gift-grid-bottom-space"></view>
+      </scroll-view>
+      <!-- 底部渐隐遮罩（nvue 无 mask，用一层渐变 view 近似） -->
+      <view class="gift-scroll-fade"></view>
+    </view>
+
+    <!-- 连击涟漪覆盖层：置于礼物区之上、fixed 满屏、不拦截点击。
+         涟漪在此层绘制并按连击环的屏幕坐标（rippleCenter）定位，从而不被格子/滚动容器裁剪
+         （nvue Android 每级容器都裁剪溢出，故必须提到顶层覆盖层绘制）。 -->
+    <view
+      v-if="comboIndex >= 0 && rippleCenter.ready"
+      class="combo-ripple-overlay"
+      userInteractionEnabled="false"
+    >
+      <view
+        class="combo-ripple-layer"
+        :style="{ left: rippleCenter.left + 'px', top: rippleCenter.top + 'px' }"
+      >
+        <view
+          v-for="r in ripples"
+          :key="r.id"
+          class="combo-ripple"
+          :ref="(el) => { if (el) rippleEls[r.id] = el; }"
+        ></view>
+      </view>
+    </view>
+  </BaseDrawer>
+</template>
+
+<script setup>
+  import {
+    ref,
+    reactive,
+    computed,
+    watch,
+    nextTick,
+    onMounted,
+    onUnmounted
+  } from 'vue';
+  import BaseDrawer from '@/components/live/BaseDrawer.nvue';
+  import {
+    preloadGiftAnimations
+  } from './giftService';
+  import {
+    useGiftState
+  } from "@/uni_modules/tuikit-atomic-x/state/GiftState";
+  import {
+    getScreenSizeAsync,
+    heightPercentToRpx
+  } from "../../utils/screen";
+
+  // nvue 原生 dom 模块：用 getComponentRect 获取连击环的屏幕坐标，
+  // 供顶层涟漪覆盖层定位（涟漪提层后需按环的实际位置绘制）。
+  const dom = uni.requireNativePlugin('dom');
+  // nvue 原生 animation 模块：驱动涟漪扩散动画（iOS weex 上 CSS transition + class 切换不生效）。
+  const animation = uni.requireNativePlugin('animation');
+
+  const props = defineProps({
+    modelValue: {
+      type: Boolean,
+      default: false
+    },
+    onGiftSelect: {
+      type: Function,
+      default: null
+    },
+  });
+
+  const emit = defineEmits(['update:modelValue', 'recharge', 'giftSent', 'advancedComboStart']);
+
+  // 通过 computed 转发 v-model：props 只读，不能直接 v-model 到 prop。
+  const innerVisible = computed({
+    get: () => props.modelValue,
+    set: (val) => emit('update:modelValue', val)
+  });
+
+  const {
+    usableGifts,
+    sendGift,
+    refreshUsableGifts,
+    setLanguage
+  } = useGiftState(uni?.$liveID);
+
+  // ============ 基础状态 ============
+  const selectedGiftIndex = ref(-1);
+  const currentCategoryIndex = ref(0);
+  // drawer 高度 = 屏幕高度的 50%（rpx），通过 screen.ts 工具动态计算适配不同屏幕尺寸。
+  const drawerHeight = ref(heightPercentToRpx(0.5));
+  // 本地演示余额（当前 state 无余额接口，纯前端展示，不阻断真实 sendGift）
+  const balance = ref(999999);
+
+  // 礼物分类列表（后端已返回分类结构）
+  const giftLists = computed(() => usableGifts.value || []);
+
+  const currentCategoryGifts = computed(() => {
+    const list = giftLists.value;
+    if (!Array.isArray(list) || list.length === 0) return [];
+    const category = list[currentCategoryIndex.value];
+    if (!category || !Array.isArray(category.giftList)) return [];
+    return category.giftList;
+  });
+
+  // ============ 连击状态 ============
+  const COMBO_DURATION = 2000; // 连击窗口 2s
+  const HOLD_REPEAT_DELAY = 300; // 长按首次到重复的间隔
+  const HOLD_REPEAT_INTERVAL = 300; // 长按重复发送间隔
+
+  const comboIndex = ref(-1); // 正在连击的礼物在当前分类中的下标（-1 表示无连击）
+  const comboGiftID = ref('');
+  const comboCount = ref(0);
+  // pressing: 中心圆盘按压缩放态
+  const pressing = ref(false);
+  // ripples: 涟漪列表（每条成功发送生成一条，自动移除）
+  const ripples = ref([]);
+  let rippleSeq = 0;
+  // 涟漪元素引用表（id -> element），供 animation.transition 命令式驱动。
+  const rippleEls = {};
+  // 连击环元素 ref（v-for 里 ref 收集为数组，取第一个即当前连击环）+ 涟漪覆盖层定位坐标。
+  // 涟漪提到顶层覆盖层绘制，需按连击环的屏幕坐标定位：
+  //   rippleCenter.left/top = 涟漪层（176rpx→px）左上角 = 环中心屏幕坐标 - 88rpx(半层，px)。
+  const comboRingRef = ref(null);
+  const rippleCenter = reactive({ left: 0, top: 0, ready: false });
+
+  // 用 dom.getComponentRect 拿连击环的屏幕矩形，换算出涟漪覆盖层的左上角坐标。
+  // 涟漪层 176rpx，环 124rpx；涟漪层中心对齐环中心 → 层左上 = 环中心 - 层半宽(88rpx)。
+  function updateRippleCenter() {
+    const el = Array.isArray(comboRingRef.value) ? comboRingRef.value[0] : comboRingRef.value;
+    if (!el) return;
+    dom.getComponentRect(el, (res) => {
+      const size = res && res.size;
+      if (!size) return;
+      const halfLayerPx = uni.upx2px(88); // 涟漪层 176rpx 的一半
+      const ringCenterX = size.left + size.width / 2;
+      const ringCenterY = size.top + size.height / 2;
+      rippleCenter.left = ringCenterX - halfLayerPx;
+      rippleCenter.top = ringCenterY - halfLayerPx;
+      rippleCenter.ready = true;
+    });
+  }
+  let comboExpireTimer = null;
+  let holdDelayTimer = null;
+  let holdRepeatTimer = null;
+
+  function isComboAt(index) {
+    return comboIndex.value === index;
+  }
+
+  // ============ 涟漪浮层 ============
+  // 涟漪绘制在顶层 .combo-ripple-overlay 覆盖层（见 template），按连击环屏幕坐标定位，
+  // 不被格子/滚动容器裁剪。
+
+  // 倒计时环：用单个 JS 计时器逐帧更新两 leaf 的 rotate 角度（不依赖 CSS transition）。
+  // 完全避开 nvue Weex 里 CSS transition 的所有坑（末尾松弛、打断卡态、delay 不可靠、初态错位）。
+  //
+  // 进度模型：progress p ∈ [0, 1]，覆盖整个 COMBO_DURATION（2000ms）。
+  //   p ∈ [0, 0.5]：right leaf 从 180° → 0°，left leaf 保持 180°（右半环收缩变暗）
+  //   p ∈ [0.5, 1]：right leaf 停在 0°，left leaf 从 180° → 0°（左半环收缩变暗）
+  //
+  // 计时器 60fps（16ms 间隔）—— nvue 单元素每帧改 transform 完全能扛得住，视觉丝滑。
+  const rightLeafDeg = ref(-180);       // right leaf 当前角度（-180=不遮，0=全遮）
+  const leftLeafDeg = ref(-180);        // left leaf 当前角度
+  const FRAME_INTERVAL = 16;           // 计时器间隔（ms，约 60fps）
+  let comboTickTimer = null;           // 逐帧计时器
+  let comboStartAt = 0;                // 本次连击开始时间戳（Date.now），用于计算 progress
+
+  const rightMaskStyle = computed(() => {
+    return { transform: `rotate(${rightLeafDeg.value}deg)` };
+  });
+  const leftMaskStyle = computed(() => {
+    return { transform: `rotate(${leftLeafDeg.value}deg)` };
+  });
+
+  // ============ 交互 ============
+  function close() {
+    stopCombo();
+    emit('update:modelValue', false);
+  }
+
+  function switchCategory(index) {
+    if (currentCategoryIndex.value === index) return;
+    stopCombo();
+    currentCategoryIndex.value = index;
+    selectedGiftIndex.value = -1;
+  }
+
+  // 普通格子点击：未选中则选中；已选中再点则赠送。
+  function onGiftTap(index) {
+    if (selectedGiftIndex.value === index) {
+      doSend(index);
+      return;
+    }
+    stopCombo();
+    selectedGiftIndex.value = index;
+  }
+
+  function onSendTap(index) {
+    doSend(index);
+  }
+
+  // 执行一次赠送：扣余额、UI 立即累加连击、把 count 打包进"待发送队列"（不立即发）。
+  // 真实 sendGift 由 scheduleFlushSend 节流合并成一次带 count=N 的调用，避免高频点击
+  // 触发底层 IM 频率限制导致主播端漏收（比如客户端点 30 次主播只收到 20 次）。
+  function doSend(index) {
+    const gift = currentCategoryGifts.value[index];
+    if (!gift) return false;
+    const price = Math.max(0, Math.floor(Number(gift.coins) || 0));
+    if (price > balance.value) return false;
+
+    const isSameCombo = comboGiftID.value === gift.giftID && comboIndex.value === index;
+
+    // 首次送出「高级礼物」（有 SVGA 动画资源 resourceURL）时，
+    // 关闭抽屉并把连击按钮迁移到画面右下角的浮动连击组件（由 video 侧承接），
+    // 抽屉内不启动网格连击。后续连击由浮动组件处理（含扣费、发送、计数、SVGA）。
+    const isAdvanced = !!(gift.resourceURL && String(gift.resourceURL).length > 0);
+    if (isAdvanced && !isSameCombo) {
+      balance.value -= price;
+      // 先 flush 掉可能残留的普通连击量，并清掉网格连击态
+      flushPendingSend();
+      stopCombo();
+      enqueueSend(gift);
+      emit('giftSent', { gift, count: 1 });
+      emit('advancedComboStart', { gift, count: 1 });
+      return true;
+    }
+
+    balance.value -= price;
+
+    if (isSameCombo) {
+      comboCount.value += 1;
+    } else {
+      // 切换到新礼物：先把上一次的待发送量 flush 掉，避免旧礼物 count 混到新礼物里。
+      flushPendingSend();
+      startCombo(index, gift);
+    }
+    restartComboTimer();
+    spawnRipple(); // 每次点击生成一条向外扩散的涟漪，UI 保持流畅手感
+
+    enqueueSend(gift);
+
+    emit('giftSent', { gift, count: comboCount.value });
+    return true;
+  }
+
+  // ============ 合并发送队列 ============
+  // 累积 300ms 内的所有点击，一次性 sendGift(count=pendingCount)。首次点击零延迟发出，
+  // 后续点击落入窗口累积，窗口结束时 flush。停止连击 / 关闭面板 / 组件销毁前必须 flush，
+  // 避免吞掉未发出的量。
+  const SEND_FLUSH_INTERVAL = 300;
+  let pendingSendGiftID = '';    // 当前累积中的 giftID（用于校验一致性）
+  let pendingSendCount = 0;      // 累积中的 count
+  let sendFlushTimer = null;      // 节流定时器
+  let lastFlushAt = 0;            // 最近一次真实发送时间戳
+
+  function enqueueSend(gift) {
+    // 若上一次累积的 giftID 与当前不同（切礼物场景已在 doSend 里处理，此处双重保险），
+    // 先把之前的量 flush 掉。
+    if (pendingSendGiftID && pendingSendGiftID !== gift.giftID) {
+      flushPendingSend();
+    }
+    pendingSendGiftID = gift.giftID;
+    pendingSendCount += 1;
+
+    // 首次点击（距上次 flush 超过 SEND_FLUSH_INTERVAL）立即 flush，让手感零延迟。
+    // 否则等 SEND_FLUSH_INTERVAL 到期批量 flush。
+    const now = Date.now();
+    if (now - lastFlushAt >= SEND_FLUSH_INTERVAL && sendFlushTimer == null) {
+      flushPendingSend();
+      return;
+    }
+    if (sendFlushTimer == null) {
+      sendFlushTimer = setTimeout(flushPendingSend, SEND_FLUSH_INTERVAL);
+    }
+  }
+
+  function flushPendingSend() {
+    if (sendFlushTimer != null) {
+      clearTimeout(sendFlushTimer);
+      sendFlushTimer = null;
+    }
+    if (pendingSendCount <= 0 || !pendingSendGiftID) {
+      pendingSendCount = 0;
+      pendingSendGiftID = '';
+      return;
+    }
+    const giftID = pendingSendGiftID;
+    const count = pendingSendCount;
+    pendingSendCount = 0;
+    pendingSendGiftID = '';
+    lastFlushAt = Date.now();
+
+    sendGift({
+      liveID: uni.$liveID,
+      giftID: giftID,
+      count: count,
+      success: () => {
+        console.log(`[GiftPicker] flush send success giftID=${giftID}, count=${count}`);
+      },
+      fail: (errCode, errMsg) => {
+        // 失败不回滚 UI（用户已看到点击生效，回滚会造成"少了几次"的错觉更糟）。
+        // 打日志方便排查底层原因（比如频率限制/网络异常）。
+        console.error(`[GiftPicker] flush send fail giftID=${giftID}, count=${count}, code=${errCode}, msg=${errMsg}`);
+      },
+    });
+  }
+
+  // 生成一条涟漪：初态挂载(scale 0.96/opacity 0.7)，下一帧用 animation 模块补间到扩散态
+  // (scale 1.40/opacity 0)，1300ms 后移除。改用 animation 模块而非 CSS transition，因为
+  // iOS weex 上 class/style 切 transition 不生效（Android 才生效），会导致 iOS 无涟漪。
+  function spawnRipple() {
+    const id = ++rippleSeq;
+    ripples.value = [...ripples.value, { id }];
+    setTimeout(() => {
+      const el = rippleEls[id];
+      if (el) {
+        animation.transition(el, {
+          styles: {
+            transform: 'scale(1.40)',
+            opacity: 0,
+          },
+          duration: 1200,
+          timingFunction: 'cubic-bezier(0.16, 0.58, 0.3, 1)',
+        });
+      }
+    }, 32);
+    setTimeout(() => {
+      ripples.value = ripples.value.filter(r => r.id !== id);
+      delete rippleEls[id];
+    }, 1300);
+  }
+
+  function startCombo(index, gift) {
+    // 直接切换 combo 目标，不调用 stopCombo（那会清空 ripples 数组导致涟漪断层）。
+    // 若之前有别的定时器/涟漪残留，clear/自然消失即可，comboIndex 一变就重启计时。
+    clearTimeout(comboExpireTimer);
+    clearInterval(comboTickTimer);
+    comboExpireTimer = null;
+    comboTickTimer = null;
+    stopComboHold();
+    comboIndex.value = index;
+    comboGiftID.value = gift.giftID;
+    comboCount.value = 1;
+    // 连击格子刚切换为 combo，等它渲染后拿环的屏幕坐标，定位顶层涟漪覆盖层。
+    rippleCenter.ready = false;
+    nextTick(() => {
+      setTimeout(updateRippleCenter, 16);
+    });
+  }
+
+  // 连击发送：带去重守卫。nvue 不同平台/手势可能触发多次（如 touchstart 后又触发 @tap），
+  // 100ms 内的重复调用视为同一次点击，避免底层 IM 双发 / 连击计数翻倍。
+  // 安卓原行为仅依赖 @touchstart 单次发送，本守卫不改变正常单次点击语义。
+  let lastComboSendAt = 0;
+  const COMBO_SEND_DEDUPE_MS = 100;
+  function dispatchComboSend() {
+    if (comboIndex.value < 0) return false;
+    const now = Date.now();
+    if (now - lastComboSendAt < COMBO_SEND_DEDUPE_MS) return false;
+    lastComboSendAt = now;
+    return doSend(comboIndex.value);
+  }
+
+  // 长按连发：仅监听 touchstart（手指按下即发送 + 启动长按重复）。
+  // nvue 里不额外绑 @tap——@tap 会在 touchend 之后再触发一次导致双发。
+  function onComboTouchStart() {
+    if (comboIndex.value < 0) return;
+    pressing.value = true;
+    dispatchComboSend();
+    clearTimeout(holdDelayTimer);
+    holdDelayTimer = setTimeout(() => {
+      clearInterval(holdRepeatTimer);
+      holdRepeatTimer = setInterval(() => {
+        if (!dispatchComboSend()) stopComboHold();
+      }, HOLD_REPEAT_INTERVAL);
+    }, HOLD_REPEAT_DELAY);
+  }
+
+  function onComboTouchEnd() {
+    pressing.value = false;
+    stopComboHold();
+  }
+
+  function stopComboHold() {
+    clearTimeout(holdDelayTimer);
+    clearInterval(holdRepeatTimer);
+    holdDelayTimer = null;
+    holdRepeatTimer = null;
+  }
+
+  // 重启倒计时：用单个 60fps 计时器逐帧驱动两 leaf 的 rotate 角度。
+  // 完全不用 CSS transition——避开 nvue Weex 的所有相关坑（末尾松弛、打断卡态、
+  // delay 不可靠、初态错位、runtime 层级冲突）。
+  //
+  // 进度模型：p = elapsed / COMBO_DURATION，p ∈ [0, 1]
+  // 方向：从顶部 12 点起、顺时针消耗（12点→3点→6点→9点→回12点）。
+  // 几何（leaf 用「负向」旋转 -180 → 0，扫入方向为顺时针）：
+  //   - right leaf（transform-origin 左边缘=圆心）rotate -180=不遮(左半裁掉)、0=全遮右半；
+  //     -180→0 经 -90(上半) 到 0(右半)，暗从「12点」向「3点/6点」扫入 → 起点 12 点、顺时针。
+  //   - left leaf（transform-origin 右边缘=圆心）rotate -180=不遮(右半裁掉)、0=全遮左半；
+  //     -180→0 经 -90(下半) 到 0(左半)，暗从「6点」向「9点/12点」扫入 → 接续右半、继续顺时针。
+  //   p ∈ [0, 0.5]: right leaf -180 → 0（右半：12点顺时针暗到6点），left leaf 保持 -180（不遮）
+  //   p ∈ [0.5, 1]: right leaf 保持 0（右半全暗），left leaf -180 → 0（左半：6点顺时针暗到12点）
+  //
+  // 每帧计算 rotate 角度直接写入 ref → 内联 style 更新，nvue 单元素每帧改 transform 完全流畅。
+  function restartComboTimer() {
+    rightLeafDeg.value = -180;
+    leftLeafDeg.value = -180;
+    comboStartAt = Date.now();
+    // 清理旧计时器，避免多个连击窗口叠加
+    clearTimeout(comboExpireTimer);
+    clearInterval(comboTickTimer);
+    comboTickTimer = setInterval(() => {
+      if (comboIndex.value < 0) {
+        clearInterval(comboTickTimer);
+        comboTickTimer = null;
+        return;
+      }
+      const elapsed = Date.now() - comboStartAt;
+      const p = Math.min(1, elapsed / COMBO_DURATION);
+      if (p <= 0.5) {
+        // 前半程：right leaf 从 -180 → 0（右半区从 12 点顺时针变暗），left leaf 保持 -180
+        rightLeafDeg.value = -180 * (1 - p * 2); // p=0 → -180，p=0.5 → 0
+        leftLeafDeg.value = -180;
+      } else {
+        // 后半程：right leaf 保持 0（右半全暗），left leaf 从 -180 → 0（左半区从 6 点顺时针变暗）
+        rightLeafDeg.value = 0;
+        leftLeafDeg.value = -180 * (1 - (p - 0.5) * 2); // p=0.5 → -180，p=1 → 0
+      }
+      // 到达 100%：停止计时器（后续由 expireCombo 收尾）
+      if (p >= 1) {
+        clearInterval(comboTickTimer);
+        comboTickTimer = null;
+      }
+    }, FRAME_INTERVAL);
+    comboExpireTimer = setTimeout(expireCombo, COMBO_DURATION + 40);
+  }
+
+  function expireCombo() {
+    if (comboIndex.value < 0) return;
+    stopCombo();
+  }
+
+  function stopCombo() {
+    // 停止连击前必须 flush 掉累积的待发送量，否则用户看到"送了 30 次"但底层没发出去。
+    flushPendingSend();
+    stopComboHold();
+    clearTimeout(comboExpireTimer);
+    clearInterval(comboTickTimer);
+    comboExpireTimer = null;
+    comboTickTimer = null;
+    rightLeafDeg.value = -180;
+    leftLeafDeg.value = -180;
+    pressing.value = false;
+    comboCount.value = 0;
+    comboGiftID.value = '';
+    comboIndex.value = -1;
+    ripples.value = [];
+    rippleCenter.ready = false;
+  }
+
+  // 资源预下载：拉到礼物列表后立即触发所有 SVGA 后台下载，与 GiftPlayer 共享缓存 key，
+  // 命中缓存瞬时返回，显著缩短特效礼物播放响应时间。
+  watch(giftLists, (newVal) => {
+    preloadGiftAnimations(newVal);
+  });
+
+  watch(() => props.modelValue, (val) => {
+    if (!val) stopCombo();
+  });
+
+  onMounted(() => {
+    if (!uni?.$liveID) return;
+    const LanguageMap = {
+      'zh-CN': 'zh-Hans',
+      'zh-TW': 'zh-Hant',
+      'zh-Hans-US': 'zh-Hans',
+      en: 'en',
+    };
+    uni.getSystemInfo()
+      .then((systemInfo) => {
+        // 初始化屏幕尺寸缓存，更新 drawer 高度为屏幕 50%。
+        getScreenSizeAsync().then(() => {
+          drawerHeight.value = heightPercentToRpx(0.5);
+        });
+        setLanguage({
+          liveID: uni.$liveID,
+          language: LanguageMap[systemInfo.language] || LanguageMap['zh-CN'],
+        });
+        refreshUsableGifts({ liveID: uni.$liveID });
+      })
+      .catch((e) => {
+        console.error('获取系统信息失败', e);
+      });
+  });
+
+  onUnmounted(() => {
+    stopCombo();
+  });
+</script>
+
+<style>
+  /* ============================================================
+     礼物面板样式。
+     品牌色：brand-1 #0052D9 / brand-2 #4A9EFF / brand-3 #7EE8FF。
+     容器/遮罩/抽屉/背景/圆角由 BaseDrawer 提供。
+     ============================================================ */
+
+  /* 顶部 handle:已删除(改用 BaseDrawer 的 showHandle=true,见模板注释)。 */
+
+  .gift-balance {
+    position: absolute;
+    top: 40rpx;
+    right: 32rpx;
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .gift-coin {
+    width: 20rpx;
+    height: 20rpx;
+    border-radius: 10rpx;
+    background-color: #ffc32e;
+    border-width: 2rpx;
+    border-color: rgba(255, 218, 86, 0.9);
+    margin-right: 10rpx;
+  }
+
+  .gift-balance-value {
+    color: rgba(255, 255, 255, 0.82);
+    font-size: 24rpx;
+    font-weight: 600;
+  }
+
+  .gift-title {
+    color: rgba(255, 255, 255, 0.94);
+    font-size: 32rpx;
+    font-weight: 700;
+    line-height: 44rpx;
+    text-align: center;
+    margin-bottom: 10rpx;
+  }
+
+  /* 分类标签：靠左排列。
+     需显式满宽——否则在 BaseDrawer 内容层（align-items:center）里会被当作交叉轴项目居中，
+     导致整个 tab 栏视觉居中；给满宽后 tab 从左侧 padding 处开始排列。 */
+  .category-tabs {
+    width: 750rpx;
+    flex-direction: row;
+    justify-content: flex-start;
+    align-items: flex-start;
+    padding: 0 28rpx;
+    height: 64rpx;
+  }
+
+  .category-item {
+    margin-right: 48rpx;
+    height: 56rpx;
+    justify-content: center;
+    align-items: center;
+    position: relative;
+  }
+
+  .category-text {
+    font-size: 28rpx;
+    color: rgba(255, 255, 255, 0.5);
+    line-height: 56rpx;
+  }
+
+  .category-text-active {
+    color: #ffffff;
+    font-weight: 700;
+  }
+
+  .category-underline {
+    position: absolute;
+    bottom: 0;
+    left: 12rpx;
+    right: 12rpx;
+    height: 4rpx;
+    border-radius: 2rpx;
+    /* nvue 不支持 deg 角度写法，须用关键字方向；参考 90deg（左→右）对应 to right。
+       用 deg 会导致渐变解析失败、下划线不显示（此前 tab 激活下划线看不出的根因）。 */
+    background-image: linear-gradient(to right, #4A9EFF, #0052D9);
+  }
+
+  .gift-scroll-shell {
+    flex: 1;
+    position: relative;
+    width: 750rpx;
+  }
+
+  .gift-scroll {
+    flex: 1;
+    width: 750rpx;
+  }
+
+  /* 4 列网格。顶部 padding 16rpx 让第一行礼物与上方 tabs 分类栏留呼吸空间。 */
+  .gift-grid {
+    flex-direction: row;
+    flex-wrap: wrap;
+    padding: 0rpx 16rpx 0 16rpx;
+  }
+
+  /* 礼物项：4 列 -> 每项约 (750-32)/4 ≈ 179rpx；高度 208rpx。
+     布局紧凑；连击涟漪不占格子空间——涟漪提到顶层覆盖层绘制（见 template
+     顶部 .combo-ripple-overlay），按连击环屏幕坐标定位，故格子无需为涟漪加高。 */
+  .gift-item {
+    position: relative; /* 作为 .gift-send 绝对定位的参照，否则按钮会相对根节点跑飞 */
+    width: 179rpx;
+    height: 208rpx;
+    align-items: center;
+    justify-content: flex-start;
+    border-radius: 28rpx;
+    border-width: 2rpx;
+    border-color: transparent;
+    box-sizing: border-box;
+  }
+
+  .gift-item.is-selected {
+    border-color: #4A9EFF;
+    background-color: rgba(74, 158, 255, 0.15);
+  }
+
+  .gift-select {
+    width: 179rpx;
+    height: 208rpx;
+    align-items: center;
+    justify-content: flex-start;
+    padding-top: 8rpx;
+    position: relative;
+  }
+
+  .gift-image-wrap {
+    width: 108rpx;
+    height: 108rpx;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .gift-image {
+    width: 88rpx;
+    height: 88rpx;
+    transform: scale(1);
+    transition-property: transform;
+    transition-duration: 180ms;
+    transition-timing-function: cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
+  .gift-image-selected {
+    transform: scale(1.2);
+  }
+
+  .gift-name {
+    width: 160rpx;
+    color: rgba(255, 255, 255, 0.94);
+    font-size: 24rpx;
+    font-weight: 600;
+    line-height: 34rpx;
+    text-align: center;
+    lines: 1;
+    text-overflow: ellipsis;
+    overflow: hidden;
+  }
+
+  .gift-price {
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    height: 34rpx;
+    margin-top: 2rpx;
+  }
+
+  .gift-price-coin {
+    width: 16rpx;
+    height: 16rpx;
+    border-radius: 8rpx;
+    background-color: #ffc32e;
+    border-width: 2rpx;
+    border-color: rgba(255, 218, 86, 0.9);
+    margin-right: 6rpx;
+  }
+
+  .gift-price-value {
+    color: rgba(255, 255, 255, 0.58);
+    font-size: 20rpx;
+    line-height: 34rpx;
+  }
+
+  .gift-price.gift-price-selected {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 60rpx;
+  }
+
+  .gift-price.gift-price-selected .gift-price-value {
+    color: rgba(255, 255, 255, 0.94);
+    font-weight: 700;
+  }
+
+  /* 选中态底部赠送按钮：relative 容器，image 绝对垫底当背景，text 作为 flex 子节点居中。
+     nvue 的 <text> 自身不会在盒子内垂直居中，必须靠父级 flex 居中（不能用 absolute+line-height）。
+     SVG 中按钮占画布 72.7% 宽 / 43.75% 高，按 147x44rpx 反推元素 203x100rpx，留出发光空间。 */
+  .gift-send {
+    position: absolute;
+    left: -12rpx;
+    bottom: -20rpx;
+    width: 203rpx;
+    height: 100rpx;
+    flex-direction: row;
+    justify-content: center;
+    align-items: center;
+  }
+
+  /* 背景铺底图：绝对定位铺满 .gift-send（与 .control-bar-bg 一致） */
+  .gift-send-bg {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 203rpx;
+    height: 100rpx;
+  }
+
+  .gift-send-text {
+    color: #ffffff;
+    font-size: 20rpx;
+    font-weight: 700;
+    line-height: 44rpx;
+    text-align: center;
+  }
+
+  .gift-grid-bottom-space {
+    width: 750rpx;
+    height: 40rpx;
+  }
+
+  /* 底部渐隐遮罩。纯视觉层，pointer-events:none 保证不拦截
+     底部礼物格子的触摸（nvue iOS 上透明层也会拦截命中，故显式关闭）。 */
+  .gift-scroll-fade {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 96rpx;
+    pointer-events: none;
+    background-image: linear-gradient(to top, rgba(10, 9, 14, 0.9), rgba(10, 9, 14, 0));
+  }
+
+  /* ============ 连击按钮（原地替换礼物格子），高度 208rpx ============ */
+  .gift-combo {
+    width: 179rpx;
+    height: 208rpx;
+    align-items: center;
+    justify-content: flex-start;
+    position: relative;
+  }
+
+  /* 倒计时环容器 124rpx。margin-top:4rpx：环靠上，与普通礼物图标顶部对齐。
+     涟漪不再放在格子内，故无需为涟漪下移环。 */
+  .combo-ring {
+    width: 124rpx;
+    height: 124rpx;
+    position: relative;
+    margin-top: 4rpx;
+  }
+
+  /* 连击涟漪顶层覆盖层：fixed 满屏、不拦截点击，置于礼物区之上。
+     涟漪提到此层绘制，避免被格子/滚动容器裁剪（nvue Android 每级容器都裁剪溢出）。 */
+  .combo-ripple-overlay {
+    position: fixed;
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    pointer-events: none;
+  }
+
+  /* 涟漪浮层容器：absolute，left/top 由 JS（rippleCenter）按连击环屏幕坐标动态设置。
+     176rpx，中心对齐环中心。pointer-events:none 双保险。 */
+  .combo-ripple-layer {
+    position: absolute;
+    width: 176rpx;
+    height: 176rpx;
+    pointer-events: none;
+  }
+
+  /* 涟漪：品牌色圆环，初态 scale(0.96)/opacity 0.7，扩散动画由 animation 模块命令式驱动到
+     scale(1.40)/opacity 0（不用 CSS transition，因 iOS weex 上 class/style 切 transition 不生效）。
+     居中放在 combo-ripple-layer 内（layer 176rpx，涟漪 124rpx → 左右各 26rpx）；
+     扩散终点 1.40（124×1.4≈174 ≤ 176，不超出 layer，从而不被格子裁）。 */
+  .combo-ripple {
+    position: absolute;
+    left: 26rpx;
+    top: 26rpx;
+    width: 124rpx;
+    height: 124rpx;
+    border-radius: 62rpx;
+    border-width: 2rpx;
+    border-color: rgba(74, 158, 255, 0.6);
+    background-color: rgba(74, 158, 255, 0.14);
+    opacity: 0.7;
+    transform: scale(0.96);
+  }
+
+  /* 黑色底环：124rpx 实心黑圆，铺满容器最底层。
+     虚线环 PNG 缩小居中后，四周露出此黑底，形成蓝色进度与容器边缘的黑边间隙。 */
+  .combo-ring-track {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 124rpx;
+    height: 124rpx;
+    border-radius: 62rpx;
+    background-color: #050812;
+  }
+
+  /* 静态虚线环 PNG（不动）。缩到 120rpx 居中（外露 (124-120)/2=2rpx 黑边），
+     内侧由 core-ring 盖出黑边。 */
+  .combo-ring-img {
+    position: absolute;
+    left: 2rpx;
+    top: 2rpx;
+    width: 120rpx;
+    height: 120rpx;
+  }
+
+  /* 右半遮罩容器：裁出右半区，圆角裁成右半圆，避免 leaf 方角露出黑边 */
+  .combo-ring-mask-right {
+    position: absolute;
+    left: 62rpx;
+    top: 0;
+    width: 62rpx;
+    height: 124rpx;
+    overflow: hidden;
+    border-top-right-radius: 62rpx;
+    border-bottom-right-radius: 62rpx;
+  }
+
+  /* 左半遮罩容器：裁出左半区，圆角裁成左半圆 */
+  .combo-ring-mask-left {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 62rpx;
+    height: 124rpx;
+    overflow: hidden;
+    border-top-left-radius: 62rpx;
+    border-bottom-left-radius: 62rpx;
+  }
+
+  /* 遮罩 leaf：深色半平面，绕圆心旋转把"已消耗"扇形盖暗。
+     transform 由 JS 计时器逐帧驱动（rightMaskStyle / leftMaskStyle 内联 style），
+     不用 CSS transition，避开 nvue Weex 的 transition 各种坑。
+     CSS 默认 rotate 180 = 挂载即为"不遮"状态，避免挂载首帧以 identity（全遮）闪一下。 */
+  .combo-ring-mask-right .combo-ring-mask-fill {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 62rpx;
+    height: 124rpx;
+    background-color: #050812;
+    border-top-right-radius: 62rpx;
+    border-bottom-right-radius: 62rpx;
+    transform-origin: 0% 50%;
+    transform: rotate(-180deg);
+  }
+
+  .combo-ring-mask-left .combo-ring-mask-fill {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 62rpx;
+    height: 124rpx;
+    background-color: #050812;
+    border-top-left-radius: 62rpx;
+    border-bottom-left-radius: 62rpx;
+    transform-origin: 100% 50%;
+    transform: rotate(-180deg);
+  }
+
+  /* 内侧黑环：居中盖在虚线环 PNG 之上、
+     中心盘之下。92rpx——只盖住虚线内边缘，让蓝色虚线露出较宽带宽（外径120、内盖92
+     → 蓝带宽约 (120-92)/2=14rpx）；并与中心盘之间形成黑色间距。 */
+  .combo-core-ring {
+    position: absolute;
+    left: 16rpx;
+    top: 16rpx;
+    width: 92rpx;
+    height: 92rpx;
+    border-radius: 46rpx;
+    background-color: #050812;
+  }
+
+  /* 中心圆盘：brand 渐变。nvue 只支持两种颜色 + 关键字方向（不支持 deg 角度写法，
+     用 deg 会导致渐变解析失败、face 背景透明而露出下层黑色 core-ring）。
+     渐变方向左上→右下，用 nvue 关键字 to bottom right。按压缩放。 */
+  .combo-face {
+    position: absolute;
+    left: 17rpx;
+    top: 17rpx;
+    width: 90rpx;
+    height: 90rpx;
+    border-radius: 45rpx;
+    background-image: linear-gradient(to bottom right, #4A9EFF, #0052D9);
+    justify-content: center;
+    align-items: center;
+    transform: scale(1);
+    transition-property: transform;
+    transition-duration: 120ms;
+    transition-timing-function: ease;
+  }
+
+  .combo-face.is-pressing {
+    transform: scale(0.92);
+  }
+
+  .combo-label {
+    color: #ffffff;
+    font-size: 22rpx;
+    font-weight: 800;
+    line-height: 26rpx;
+    text-align: center;
+  }
+
+  /* 计数气泡：绝对定位对齐其它礼物 item 底部（在 208rpx 高格子里距底约 24rpx）；水平居中。 */
+  .combo-count {
+    position: absolute;
+    bottom: 24rpx;
+    left: 67rpx;
+    min-width: 44rpx;
+    height: 32rpx;
+    padding: 0 8rpx;
+    border-radius: 8rpx;
+    background-image: linear-gradient(to bottom, #4A9EFF, #0052D9);
+    justify-content: center;
+    align-items: center;
+  }
+
+  .combo-count-text {
+    color: #ffffff;
+    font-size: 22rpx;
+    font-weight: 800;
+    line-height: 32rpx;
+  }
+</style>

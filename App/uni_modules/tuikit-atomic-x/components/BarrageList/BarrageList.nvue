@@ -1,0 +1,727 @@
+<template>
+  <view class="barrage-container">
+    <!-- 隐藏的文字尺子：仅用于 canvas measureText 精确测宽，不显示、不参与绘制/转图。
+         nvue iOS 实测 measureText 可用（canvasToTempFilePath 不可用，故不走转图方案）。 -->
+    <canvas canvas-id="barrageRuler" id="barrageRuler" class="barrage-ruler"></canvas>
+
+    <list class="chat-list" scroll-y :show-scrollbar="false" :style="{ top: topPx + 'px', opacity: listReady ? 1 : 0, width: barWidthRpx }" @scroll="onListScroll" ref="chatListRef">
+      <cell class="top-spacer-cell" :style="{ height: topSpacerPx + 'px' }"></cell>
+      <cell class="welcome-cell" ref="welcomeCellRef">
+        <view class="welcome-content-wrapper" :style="{ maxWidth: barWidthRpx }">
+          <text class="welcome-text">欢迎来到直播间！严禁未成年人直播。严禁出现违法违规、低俗色情、吸烟酗酒、人身伤害等直播内容。如主播在直播中以不当方式诱导消费，请谨慎辨别，理性消费。切勿私下交易，以防人身财产损失，谨防网络诈骗。</text>
+        </view>
+      </cell>
+      <!-- 勿加 render-whole:会阻断 JS 对 cell 内子元素的 getComponentRect 实测 -->
+      <cell class="chat-item" :style="{ maxWidth: barWidthRpx }" v-if="mixMessageList.length > 0" v-for="(message) in mixMessageList" :key="msgKey(message)" @tap="onItemTap(message)">
+        <view class="message-content-wrapper" :style="{ opacity: enteringSeqs.includes(msgKey(message)) ? 0 : 1, maxWidth: barWidthRpx }" :ref="(el: any) => collectCellRef(el, msgKey(message))">
+          <view class="nickname-content-gift" :style="{ maxWidth: barWidthRpx }" v-if="message?.gift">
+            <view class="live-level-badge">
+              <image class="live-level-bg" :src="msgLevelBadge(message)" mode="scaleToFill" />
+              <text class="live-level-num">{{ msgLevel(message) }}</text>
+            </view>
+            <text class="chat-nickname" numberOfLines="1">{{ message?.sender?.userName || message?.sender?.userID }}</text>
+            <view class="gift-row">
+              <text class="gift-prefix">送出</text>
+              <text class="gift-name">{{ message?.textContent || '' }}</text>
+              <image class="gift-icon" :src="message?.gift?.iconURL || ''" alt="" />
+              <text class="gift-count">×{{ message?.count || '1' }}</text>
+            </view>
+          </view>
+          <!-- 文本消息:measureText 测宽 + 手动折行,逐行 nowrap(规避 weex flex-wrap bug);首行内联头部 -->
+          <view class="nickname-content-wrapper" v-else>
+            <view class="msg-line" v-for="(line, lidx) in msgLines(message)" :key="lidx">
+              <template v-if="lidx === 0">
+                <view class="live-level-badge">
+                  <image class="live-level-bg" :src="msgLevelBadge(message)" mode="scaleToFill" />
+                  <text class="live-level-num">{{ msgLevel(message) }}</text>
+                </view>
+                <view class="message-right" v-if="isOwner(message)">
+                  <view class="message-role">
+                    <view class="message-role-inner">
+                      <text class="message-role-text">主播</text>
+                    </view>
+                  </view>
+                </view>
+                <text class="chat-nickname" numberOfLines="1">{{ (message?.sender?.userName || message?.sender?.userID) }}：</text>
+              </template>
+              <template v-for="(run, ridx) in line" :key="'r' + ridx">
+                <text v-if="run.type === 'text'" class="chat-content-char">{{ run.text }}</text>
+                <image v-else class="chat-content-emoji" :src="run.src" mode="aspectFit" />
+              </template>
+            </view>
+          </view>
+        </view>
+      </cell>
+      <cell ref="ListBottom" style="height: 10rpx;"></cell>
+    </list>
+
+    <view class="new-message-pill" v-if="unreadCount > 0 && !pillHiddenByOverlay" :style="{ top: pillTopPx + 'px' }" @tap="onNewMessagePillTap">
+      <text class="new-message-pill-count">{{ unreadCount }}</text>
+      <text class="new-message-pill-text">条新消息</text>
+    </view>
+  </view>
+</template>
+
+<script setup lang="ts">
+  import { ref, watch, computed, onMounted, onUnmounted, nextTick, getCurrentInstance } from 'vue';
+  import { useBarrageState, BarrageType } from "@/uni_modules/tuikit-atomic-x/state/BarrageState";
+  import { useGiftState } from "@/uni_modules/tuikit-atomic-x/state/GiftState";
+  import { useLiveListState } from "@/uni_modules/tuikit-atomic-x/state/LiveListState";
+  import { useLoginState } from "@/uni_modules/tuikit-atomic-x/state/LoginState";
+  import { parseTextToSegments } from "@/uni_modules/tuikit-atomic-x/utils/emojiUtils";
+  import { resolveMsgLevel, levelBadgeUrl } from './levelBadge';
+  import { createCharRuler } from './textMeasurer';
+  import { wrapSegmentsIntoLines } from './lineBreaker';
+
+  const props = defineProps<{
+    mode?: 'anchor' | 'audience',
+    bottomPx?: number,
+    topPx?: number,
+    liveID?: string,
+    width?: number, // 消息列表宽度(rpx),接入方可配;默认 500 与旧版一致
+  }>();
+
+  const emit = defineEmits(['itemTap', 'receiveGift']);
+
+  const mode = computed(() => props.mode || 'audience');
+  const bottomPx = computed(() => props.bottomPx ?? 0);
+  const topPx = computed(() => props.topPx ?? 0);
+  const LIST_H_PX = uni.upx2px(380);
+  const PILL_H_PX = uni.upx2px(52);
+  const pillTopPx = computed(() => Math.max(0, topPx.value + LIST_H_PX - PILL_H_PX));
+
+  // 宽度可配:由 width prop 驱动折行,CSS 里的 500rpx 仅作默认兜底。
+  const barWidth = computed(() => props.width ?? 500);
+  const barWidthRpx = computed(() => barWidth.value + 'rpx');
+
+  const { loginUserInfo } = useLoginState();
+  const msgLevel = (message: any): number =>
+    resolveMsgLevel(message, uni.$userID, Number(loginUserInfo.value?.level));
+  const msgLevelBadge = (message: any): string => levelBadgeUrl(msgLevel(message));
+
+  const liveID = computed(() => props.liveID || uni?.$liveID);
+
+  const { messageList } = useBarrageState(liveID.value);
+  const { addGiftListener, removeGiftListener } = useGiftState(uni?.$liveID);
+  const { currentLive } = useLiveListState(liveID.value);
+
+  const isOwner = (message: any): boolean =>
+    !!(message?.sender?.userID && currentLive.value?.liveOwner?.userID
+      && message.sender.userID === currentLive.value.liveOwner.userID);
+
+  // BarrageList 只负责渲染内置可识别的消息(文本/礼物本地合成消息);自定义消息
+  // (BarrageType.CUSTOM)不参与内置渲染,业务侧可自行订阅 messageList 做自定义 UI。
+  // 注意:messageList 本身保持完整不动,过滤仅作用于 mixMessageList 这条渲染链。
+  const isRenderableBarrage = (m: any): boolean => m?.messageType !== BarrageType.CUSTOM;
+
+  const mixMessageList = ref<any[]>((messageList.value || []).filter(isRenderableBarrage));
+
+  // 折行用的布局宽度常量(px):
+  const FONT_PX = uni.upx2px(26);            // 内容字号
+  const EMOJI_PX = uni.upx2px(34);           // 单表情占宽(32 图 + 2 右边距)
+  const NICK_MAX_PX = uni.upx2px(100);       // 昵称最大宽(与 .chat-nickname max-width 一致)
+  const NICK_MARGIN_PX = uni.upx2px(8);      // 昵称右边距
+  const BADGE_PX = uni.upx2px(68 + 8);       // 等级徽章宽 + 右边距
+  const ANCHOR_PX = uni.upx2px(66);          // 主播标签整体占宽(略偏大,偏安全)
+  // 气泡内容宽 = 列表宽 - 气泡水平内边距(12rpx*2)。随 width 响应式变化。
+  const contentWidthPx = computed(() => uni.upx2px(barWidth.value - 24));
+
+  let rulerCtx: any = null;
+  const rulerReady = ref(false);
+  const rulerVersion = ref(0); // 尺子从「估算」切到「精确」时自增,触发布局缓存重算
+
+  const rawMeasure = (ch: string): number | null => {
+    if (!rulerReady.value || !rulerCtx) return null;
+    try {
+      const m: any = rulerCtx.measureText(ch);
+      return (m && m.width > 0) ? m.width : null;
+    } catch (e) { return null; }
+  };
+  // safety 1.05:抵消 600 字重与字距,宁可略偏大(提前换行)也不溢出。
+  const ruler = createCharRuler({ fontPx: FONT_PX, safety: 1.05, measureRaw: rawMeasure });
+
+  const initRuler = () => {
+    try {
+      const inst: any = getCurrentInstance();
+      let ctx: any = null;
+      try { ctx = uni.createCanvasContext('barrageRuler', inst && (inst.proxy || inst)); } catch (e) { ctx = null; }
+      if (!ctx) { try { ctx = uni.createCanvasContext('barrageRuler'); } catch (e) { ctx = null; } }
+      if (!ctx) return;
+      try { ctx.setFontSize(FONT_PX); } catch (e) { /* ignore */ }
+      let ok = false;
+      try { const m: any = ctx.measureText('测'); ok = !!(m && m.width > 0); } catch (e) { ok = false; }
+      rulerCtx = ctx;
+      if (ok) {
+        rulerReady.value = true;
+        ruler.reset();            // 清掉就绪前的估算缓存
+        rulerVersion.value++;     // 触发一次重排,让已渲染消息用上精确宽
+      }
+    } catch (e) { /* ignore: 尺子不可用时全程走估算,CJK 仍精确 */ }
+  };
+
+  // 布局缓存:key 含 消息键 + 内容宽 + 尺子版本 + 是否房主。命中即复用,避免每帧重算。
+  const layoutCache = new Map<string, any>();
+  const msgLines = (message: any): any[] => {
+    const key = msgKey(message) + '|' + contentWidthPx.value + '|' + rulerVersion.value + '|' + (isOwner(message) ? '1' : '0');
+    const cached = layoutCache.get(key);
+    if (cached) return cached;
+    const segs = parseTextToSegments(message?.textContent || '');
+    const nickText = (message?.sender?.userName || message?.sender?.userID || '') + '：';
+    const nickPx = Math.min(ruler.measureStrPx(nickText), NICK_MAX_PX) + NICK_MARGIN_PX;
+    const headerPx = BADGE_PX + (isOwner(message) ? ANCHOR_PX : 0) + nickPx;
+    const line0AvailPx = Math.max(0, contentWidthPx.value - headerPx);
+    const lines = wrapSegmentsIntoLines(segs, {
+      line0AvailPx,
+      lineNAvailPx: contentWidthPx.value,
+      emojiPx: EMOJI_PX,
+      measureCharPx: ruler.measureCharPx,
+    });
+    if (layoutCache.size > 600) layoutCache.clear(); // 简单防膨胀
+    layoutCache.set(key, lines);
+    return lines;
+  };
+
+  const dom = uni.requireNativePlugin('dom');
+  const ListBottom = ref('ListBottom');
+
+  // 延迟 100ms 等 weex 的 list 布局稳定后再滚,否则定位失败、新消息停在视口外。
+  const scrollToBottom = () => {
+    nextTick(() => {
+      setTimeout(() => {
+        dom.scrollToElement(ListBottom.value, {
+          offset: 0,
+          animated: true
+        });
+      }, 100);
+    });
+  };
+
+  // 未读提示:离开底部(看历史)后新消息只累计未读、不自动滚底;点提示条或滚回底部即恢复跟随并清零。
+  const NEAR_BOTTOM_THRESHOLD = 16; // px
+  const following = ref(true);
+
+  // 弹层打开期间隐藏提示条(z-index 跨组件树不可靠,由宿主经事件联动)。
+  const pillHiddenByOverlay = ref(false);
+  const onPillHidden = (hidden: boolean) => { pillHiddenByOverlay.value = !!hidden; };
+
+  // 顶部对齐垫片:nvue 的 cell 不支持 margin-top:auto,改用纯 JS 估算撑高——
+  // spacer = 容器高 - (欢迎语高 + 消息数 × 单行高);不满屏时垫到贴底,满屏后由 onListScroll 精确修正。
+  const topSpacerPx = ref(0);
+  // 首帧 opacity:0 隐藏,等欢迎语实测 + spacer 就绪(listReady)再显示,避免看到欢迎语被推到底的下移过程。
+  const listReady = ref(false);
+  const WELCOME_EST_PX = 95;             // 欢迎语高度估算兜底(实测到达前用,此时列表不可见)
+  const welcomeHeightPx = ref(0);
+  let listContentHeight = 0;             // 估算净内容高(欢迎语 + 消息 × 单行)
+  let listViewportPx = uni.upx2px(380);  // 容器视口高:CSS 固定 380rpx,可同步换算,首帧即有值
+  // 满屏锁定:弹幕只增不减,满屏后 spacer 永久锁 0。否则看历史时视口外新 cell 未渲染,
+  // 滚动上报的 contentH 偏小 → spacer 被错误撑起 → 滚回底部出现大片空白。
+  let spacerFrozen = false;
+  const welcomeCellRef = ref<any>(null);
+  // 单条消息行高 ≈ 34rpx 行高 + 12rpx*2 padding + 8rpx margin ≈ 54rpx;≈ 0.88px/rpx
+  const SINGLE_MSG_HEIGHT_PX = 54 * 0.88;
+  const recomputeTopSpacer = () => {
+    if (spacerFrozen) return;
+    if (listViewportPx <= 0) return;
+    const welcomeH = welcomeHeightPx.value > 0 ? welcomeHeightPx.value : WELCOME_EST_PX;
+    const contentH = listContentHeight > 0 ? listContentHeight : welcomeH;
+    const remain = Math.round(listViewportPx - contentH);
+    if (remain > 2) topSpacerPx.value = remain;
+    else {
+      topSpacerPx.value = 0;
+      spacerFrozen = true;
+    }
+  };
+  const unreadCount = ref(0);
+  const chatListRef = ref<any>(null);
+  let listViewportHeight = 0;
+
+  const measureListHeight = () => {
+    try {
+      if (chatListRef.value) {
+        dom.getComponentRect(chatListRef.value, (res: any) => {
+          const h = res?.size?.height || 0;
+          if (h > 0) {
+            listViewportHeight = h;
+            listViewportPx = h;
+            recomputeTopSpacer();
+          }
+        });
+      }
+    } catch (e) { /* ignore */ }
+  };
+
+  const measureWelcomeHeight = () => {
+    try {
+      const el = welcomeCellRef.value;
+      if (!el) return;
+      dom.getComponentRect(el, (r: any) => {
+        const h = r?.size?.height || 0;
+        if (h > 0) {
+          welcomeHeightPx.value = h;
+          listContentHeight = welcomeHeightPx.value + mixMessageList.value.length * SINGLE_MSG_HEIGHT_PX;
+          recomputeTopSpacer();
+        }
+      });
+    } catch (e) { /* ignore */ }
+  };
+
+  const onListScroll = (e: any) => {
+    const rawY = (e?.contentOffset?.y ?? e?.detail?.scrollTop ?? e?.scrollY ?? 0) as number;
+    const offsetY = Math.abs(rawY);
+    const contentH = (e?.contentSize?.height ?? e?.detail?.scrollHeight ?? e?.contentHeight ?? 0) as number;
+    if (!(contentH > 0) || !(listViewportHeight > 0)) return;
+    const bottomCellPx = 10 * 0.88;
+    const trueNetH = Math.max(0, contentH - topSpacerPx.value - bottomCellPx);
+    if (Math.abs(trueNetH - listContentHeight) > 4) {
+        listContentHeight = trueNetH;
+      recomputeTopSpacer();
+    }
+    const bottomGap = contentH - offsetY - listViewportHeight;
+    const nearBottom = bottomGap <= NEAR_BOTTOM_THRESHOLD;
+    following.value = nearBottom;
+    if (nearBottom && unreadCount.value > 0) {
+      unreadCount.value = 0;
+    }
+  };
+
+  const onNewMessagePillTap = () => {
+    following.value = true;
+    unreadCount.value = 0;
+    scrollToBottom();
+    setTimeout(() => {
+      try {
+        if (following.value) {
+          dom.scrollToElement(ListBottom.value, { offset: 0, animated: false });
+        }
+      } catch (e) { /* ignore */ }
+    }, 600);
+  };
+
+  const scrollOrCountUnread = (added: number) => {
+    if (following.value) {
+      scrollToBottom();
+    } else {
+      unreadCount.value += Math.max(1, added);
+    }
+  };
+
+  const animation = uni.requireNativePlugin('animation');
+
+  const cellRefs = new Map<any, any>();
+  const collectCellRef = (el: any, seq: any) => {
+    if (el) cellRefs.set(seq, el);
+    else cellRefs.delete(seq);
+  };
+
+  let firstAppendDone = false;
+  const enteringSeqs = ref<any[]>([]);
+
+  const dismissEntering = (seqs: any[]) => {
+    enteringSeqs.value = enteringSeqs.value.filter((s: any) => !seqs.includes(s));
+  };
+
+  const appendMessages = (msgs: any[]) => {
+    if (!msgs || msgs.length === 0) return;
+    const animate = firstAppendDone && msgs.length === 1 && enteringSeqs.value.length === 0;
+    const newSeqs = msgs.map((m: any) => msgKey(m));
+    if (animate) {
+      enteringSeqs.value = [...enteringSeqs.value, ...newSeqs];
+    }
+    mixMessageList.value = [...mixMessageList.value, ...msgs];
+    firstAppendDone = true;
+    if (animate) {
+      nextTick(() => {
+        setTimeout(() => {
+          msgs.forEach((m: any) => {
+            const seq = msgKey(m);
+            const el = cellRefs.get(seq);
+            if (el) {
+              try {
+                animation.transition(el, {
+                  styles: { opacity: 1 },
+                  duration: 300,
+                  timingFunction: 'ease-out'
+                }, () => {
+                  dismissEntering([seq]);
+                });
+              } catch (e) {
+                dismissEntering([seq]);
+              }
+            } else {
+              dismissEntering([seq]);
+            }
+          });
+          setTimeout(() => {
+            dismissEntering(newSeqs);
+          }, 600);
+        }, 50);
+      });
+    }
+  };
+
+  watch(messageList, (newVal, oldVal) => {
+    if (!newVal) return;
+    const delta = newVal.slice((oldVal || []).length, (newVal || []).length);
+    const value = delta.filter(isRenderableBarrage);
+    if (value.length > 0) {
+      appendMessages(value);
+      scrollOrCountUnread(value.length);
+      listContentHeight = welcomeHeightPx.value + mixMessageList.value.length * SINGLE_MSG_HEIGHT_PX;
+      recomputeTopSpacer();
+    }
+  }, {
+    deep: true,
+    immediate: true
+  });
+
+  const msgKey = (m: any) => m?.sequence ?? m?.__localKey;
+  const onItemTap = (message: any) => {
+    emit('itemTap', message);
+  };
+
+  const GIFT_COMBO_MS = 2000;
+  const pendingGiftMessages = new Map();
+  const addGiftMessage = (value: any) => {
+    const giftId = value?.gift?.giftID || value?.gift?.name || '';
+    const senderId = value?.sender?.userID || '';
+    const recipientId = (value?.recipient && value.recipient.userID) || '';
+    const comboKey = `${senderId}:${giftId}:${recipientId}`;
+    const pending = pendingGiftMessages.get(comboKey);
+    if (pending) {
+      pending.count += Math.max(1, Math.round(Number(value.count) || 1));
+      clearTimeout(pending.timer);
+    }
+    const count = pending ? pending.count : Math.max(1, Math.round(Number(value.count) || 1));
+    pendingGiftMessages.set(comboKey, {
+      value,
+      count,
+      timer: setTimeout(() => {
+        pendingGiftMessages.delete(comboKey);
+        const merged = { ...value, count };
+        appendMessages([merged]);
+        scrollOrCountUnread(1);
+        listContentHeight = welcomeHeightPx.value + mixMessageList.value.length * SINGLE_MSG_HEIGHT_PX;
+        recomputeTopSpacer();
+      }, GIFT_COMBO_MS),
+    });
+  };
+
+  const handleReceiveGift =
+    (event) => {
+      const res = JSON.parse(event)
+      const gift = typeof res.gift === 'string' ? JSON.parse(res.gift) : res.gift;
+      const sender = typeof res.sender === 'string' ? JSON.parse(res.sender) : res.sender;
+      const giftData = { ...res, gift, sender };
+
+      const value = {
+        ...giftData,
+        textContent: `${gift?.name || ''}`,
+        __localKey: `gift_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      };
+      addGiftMessage(value);
+
+      emit('receiveGift', giftData);
+    }
+
+  onMounted(() => {
+    initRuler();
+    uni.$on('barrageList:setPillHidden', onPillHidden);
+    measureListHeight();
+    measureWelcomeHeight();
+    listContentHeight = (welcomeHeightPx.value > 0 ? welcomeHeightPx.value : WELCOME_EST_PX)
+      + mixMessageList.value.length * SINGLE_MSG_HEIGHT_PX;
+    recomputeTopSpacer();
+    nextTick(() => {
+      measureWelcomeHeight();
+      recomputeTopSpacer();
+      setTimeout(() => {
+        measureWelcomeHeight();
+        recomputeTopSpacer();
+        listReady.value = true;
+      }, 60);
+    });
+    setTimeout(() => {
+      measureListHeight();
+    }, 300);
+    setTimeout(() => { listReady.value = true; }, 600);
+    addGiftListener(uni.$liveID, 'onReceiveGift', handleReceiveGift)
+  });
+  onUnmounted(() => {
+    uni.$off('barrageList:setPillHidden', onPillHidden);
+    removeGiftListener(uni.$liveID, 'onReceiveGift', handleReceiveGift)
+    pendingGiftMessages.forEach(p => clearTimeout(p.timer));
+    pendingGiftMessages.clear();
+  });
+</script>
+
+<style>
+  .barrage-container {
+    position: relative;
+  }
+
+  /* 文字尺子:移到屏外,只为拿到 measureText 上下文,不可见、不占布局视觉。 */
+  .barrage-ruler {
+    position: fixed;
+    left: -1000px;
+    top: -1000px;
+    width: 200px;
+    height: 40px;
+  }
+
+  .chat-list {
+    position: fixed;
+    left: 32rpx;
+    top: 0;
+    height: 380rpx;
+    width: 500rpx;
+  }
+
+  .new-message-pill {
+    position: fixed;
+    left: 32rpx;
+    height: 52rpx;
+    padding-left: 20rpx;
+    padding-right: 20rpx;
+    border-radius: 26rpx;
+    border-width: 2rpx;
+    border-style: solid;
+    border-color: rgba(74, 158, 255, 0.34);
+    background-color: rgba(10, 12, 18, 0.96);
+    box-shadow: 0 10rpx 32rpx rgba(0, 0, 0, 0.38);
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    z-index: 998;
+  }
+
+  .new-message-pill-text {
+    color: #ffffff;
+    font-size: 22rpx;
+    font-weight: 600;
+  }
+
+  .new-message-pill-count {
+    color: #78D8FF;
+    font-size: 22rpx;
+    font-weight: 600;
+    margin-right: 6rpx;
+  }
+
+  .welcome-content-wrapper {
+    background-color: rgba(0, 0, 0, 0.25);
+    border-top-left-radius: 24rpx;
+    border-top-right-radius: 24rpx;
+    border-bottom-left-radius: 24rpx;
+    border-bottom-right-radius: 24rpx;
+    padding: 12rpx 16rpx;
+    max-width: 500rpx;
+    margin-bottom: 10rpx;
+  }
+
+  .welcome-text {
+    color: #78d8ff;
+    font-size: 26rpx;
+    font-weight: 600;
+  }
+
+  .chat-item {
+    flex-direction: row;
+    align-items: flex-start;
+    border-top-left-radius: 24rpx;
+    border-top-right-radius: 24rpx;
+    border-bottom-left-radius: 24rpx;
+    border-bottom-right-radius: 24rpx;
+    padding: 6rpx 6rpx 6rpx 0;
+    max-width: 500rpx;
+  }
+
+  .welcome-cell {
+    flex-direction: row;
+    align-items: flex-start;
+  }
+
+  .top-spacer-cell {
+    width: 1rpx;
+  }
+
+  .message-content-wrapper {
+    flex-direction: row;
+    align-items: flex-start;
+    min-width: 0;
+    max-width: 500rpx;
+    background-color: rgba(0, 0, 0, 0.25);
+    border-top-left-radius: 24rpx;
+    border-top-right-radius: 24rpx;
+    border-bottom-left-radius: 24rpx;
+    border-bottom-right-radius: 24rpx;
+    padding: 8rpx 12rpx;
+    position: relative;
+  }
+
+  /* 文本消息容器:列排布,每个 .msg-line 为手动折行后的一行(不用 flex-wrap) */
+  .nickname-content-wrapper {
+    flex: 1;
+    flex-direction: column;
+    align-items: flex-start;
+    min-width: 0;
+  }
+
+  .msg-line {
+    flex-direction: row;
+    align-items: center;
+    min-width: 0;
+  }
+
+  .nickname-content-gift {
+    flex: 1;
+    min-width: 0;
+    flex-direction: row;
+    align-items: center;
+    min-width: 0;
+    max-width: 500rpx;
+  }
+
+  .message-role {
+    height: 30rpx;
+    margin-right: 8rpx;
+    border-top-left-radius: 15rpx;
+    border-top-right-radius: 15rpx;
+    border-bottom-left-radius: 15rpx;
+    border-bottom-right-radius: 15rpx;
+    background-color: #65a8d1ff;
+  }
+
+  .message-role-inner {
+    flex: 1;
+    margin-top: 2rpx;
+    margin-bottom: 2rpx;
+    margin-left: 2rpx;
+    margin-right: 2rpx;
+    padding-left: 10rpx;
+    padding-right: 10rpx;
+    border-top-left-radius: 13rpx;
+    border-top-right-radius: 13rpx;
+    border-bottom-left-radius: 13rpx;
+    border-bottom-right-radius: 13rpx;
+    background-color: #3266a4;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .message-role-text {
+    color: #ffffff;
+    font-size: 17rpx;
+    font-weight: 800;
+  }
+
+  .chat-nickname {
+    color: #78d8ff;
+    font-size: 26rpx;
+    line-height: 34rpx;
+    margin-right: 8rpx;
+    font-weight: 600;
+    padding: 5rpx 0;
+    max-width: 100rpx;
+    lines: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .gift-row {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    max-width: 300rpx;
+    flex: 1;
+    justify-content: flex-start;
+    flex-wrap: nowrap;
+    padding-top: 2rpx;
+  }
+
+  .gift-icon {
+    width: 24rpx;
+    height: 24rpx;
+    margin: 0;
+  }
+
+  .gift-name {
+    color: #ffe7a3;
+    font-size: 26rpx;
+    line-height: 34rpx;
+    font-weight: 600;
+    z-index: 999;
+    padding: 2rpx 0;
+    margin-right: 6rpx;
+    max-width: 102rpx;
+    lines: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-align: left;
+    min-width: 0;
+  }
+
+  .gift-prefix {
+    color: #fff4cf;
+    font-size: 26rpx;
+    line-height: 34rpx;
+    font-weight: 600;
+    margin-right: 6rpx;
+    z-index: 999;
+  }
+
+  .gift-count {
+    color: #ffe7a3;
+    font-size: 26rpx;
+    line-height: 34rpx;
+    font-weight: 700;
+    margin-left: 6rpx;
+    z-index: 999;
+    white-space: nowrap;
+    max-width: 110rpx;
+    lines: 1;
+    text-overflow: ellipsis;
+  }
+
+  .chat-content-char {
+    color: rgba(255, 255, 255, 0.94);
+    font-size: 26rpx;
+    line-height: 34rpx;
+    font-weight: 600;
+  }
+
+  .chat-content-emoji {
+    width: 32rpx;
+    height: 32rpx;
+    margin-right: 2rpx;
+  }
+
+  .live-level-badge {
+    position: relative;
+    width: 68rpx;
+    height: 30rpx;
+    margin-right: 8rpx;
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-end;
+  }
+  .live-level-bg {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 68rpx;
+    height: 30rpx;
+  }
+  .live-level-num {
+    position: relative;
+    color: #ffffff;
+    font-size: 18rpx;
+    font-weight: 800;
+    line-height: 30rpx;
+    margin-right: 12rpx;
+    text-align: center;
+    min-width: 24rpx;
+  }
+</style>

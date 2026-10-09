@@ -88,8 +88,8 @@ const calculateMenuPosition = () => {
  * 处理返回按钮点击
  */
 const handleBack = () => {
-	uni.navigateBack({
-		delta: 1
+	uni.redirectTo({
+	  url: '/pages/index/index'
 	})
 }
 

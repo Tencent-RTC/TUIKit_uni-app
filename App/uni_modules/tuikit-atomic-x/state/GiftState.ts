@@ -237,6 +237,9 @@ function removeGiftListener(liveID: string, eventName: string, listener: Listene
 let boundLiveID: string | null = null;
 
 function bindEvent(liveID: string): void {
+  if (!liveID || currentLive.value?.liveID !== liveID) {
+    return;
+  }
   // 已经绑定过该 liveID，无需重复绑定
   if (boundLiveID === liveID) {
     return;
@@ -282,20 +285,31 @@ function unbindEvent(liveID: string): void {
   }
 }
 
-// 监听 currentLive 变化，当 currentLive 为空时自动解绑
+// 监听 currentLive 变化:退房清空 + 进房/切房重绑,防止 listener 停留在过期 roomID
 let stopWatchingCurrentLive: (() => void) | null = null;
+
+// 重置礼物相关状态为初值:退房/切换房间时清空,避免上个房间的礼物列表残留到新房间。
+function resetGiftState(): void {
+  usableGifts.value = [];
+}
 
 function ensureWatchCurrentLive() {
   if (stopWatchingCurrentLive) return;
   stopWatchingCurrentLive = watch(
     () => currentLive.value,
-    (newVal, oldVal) => {
-      if (oldVal && oldVal.liveID !== '') {
-        if (newVal.liveID === '' && boundLiveID) {
+    (newVal: any) => {
+      const newLiveID = newVal?.liveID ?? '';
+      if (newLiveID === '') {
+        if (boundLiveID) {
           unbindEvent(boundLiveID);
         }
+        resetGiftState();
+      } else if (newLiveID !== boundLiveID) {
+        resetGiftState();
+        bindEvent(newLiveID);
       }
-    }
+    },
+    { flush: 'sync' }
   );
 }
 

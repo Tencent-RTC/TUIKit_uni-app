@@ -1,0 +1,355 @@
+<template>
+  <!-- 【常驻挂载·不用 v-if="modelValue"】容器一直挂载，仅靠下方 svga-player 的尺寸（modelValue
+       为 true 时 750×750、否则 0×0）控制显隐。
+       原因：svga-player 是 uts 原生组件，nvue Android 里原生组件按「加入原生视图树的先后」决定层级，
+       后加入者盖在先加入者之上。若容器随 modelValue 反复 v-if 挂/卸，则每次播放 SVGA 都是「最新
+       加入原生树」的组件，会盖住早已常驻的右下角浮动连击按钮（表现为首次送特效按钮被遮）。
+       改为容器常驻后，SVGA 原生 View 从初始化就固定在 DOM 前部（GiftPlayer 在页面较前、浮动按钮在
+       页面末尾），挂载顺序恒为 SVGA 先、按钮后 → 按钮稳定盖在 SVGA 之上。
+       不拦截点击由 userInteractionEnabled="false" 保证。 -->
+  <view class="svg-container" userInteractionEnabled="false">
+    <!-- 透明方形 SVGA：满屏宽、正方形(高=宽)、水平居中、垂直贴屏幕底部。
+         750rpx 恒等于屏幕宽度，故 width=height=750rpx 即「满宽正方形」，无需动态计算。 -->
+    <svga-player ref="playerRef" :url="computedUrl" style="position: absolute; z-index: -1;"
+      @onFinished="handleFinished" :style="modelValue ? {
+      bottom: '0rpx',
+      left: '0rpx',
+      width: '750rpx',
+      height: '750rpx',
+    } : {
+      width: 0 + 'rpx',
+      height: 0 + 'rpx',
+    }"></svga-player>
+  </view>
+</template>
+
+<script setup lang="ts">
+  import { ref, watch, computed, reactive } from 'vue';
+  import { downloadAndSaveToPath } from './giftService';
+
+  interface SafeAreaLike {
+    top ?: number;
+    left ?: number;
+    width ?: number;
+    height ?: number;
+  }
+  interface GiftModel {
+    resourceURL : string;
+    name : string;
+    giftID : string | number;
+    isFromSelf : boolean;
+    timestamp : number;
+    cacheKey ?: string;
+  }
+  const props = defineProps<{
+    modelValue : boolean;
+    url ?: string;
+    safeArea ?: SafeAreaLike;
+    autoHideMs ?: number;
+    maxQueueSize ?: number;
+  }>();
+  const emit = defineEmits<{
+    (e : 'update:modelValue', value : boolean) : void
+    (e : 'finished') : void
+  }>();
+  const playerRef = ref<any>(null);
+  const internalUrl = ref<string>('');
+  const computedUrl = computed(() => internalUrl.value || props.url || '');
+  const MAX_CACHE_SIZE = props.maxQueueSize !== undefined ? props.maxQueueSize : 50;
+  const ABSOLUTE_MAX_SIZE = 1000;
+  const effectiveMaxSize = MAX_CACHE_SIZE === 0 ? ABSOLUTE_MAX_SIZE : Math.min(MAX_CACHE_SIZE, ABSOLUTE_MAX_SIZE);
+  const giftPrepareList = reactive<GiftModel[]>([]);
+  const isPlaying = ref<boolean>(false);
+  const currentPlayingGift = ref<GiftModel | null>(null);
+
+  async function resetPlayer() {
+    if (playerRef.value) {
+      try {
+        playerRef.value.stopPlay && playerRef.value.stopPlay();
+      } catch (e) {
+        // ignore
+      }
+    }
+    internalUrl.value = '';
+    await new Promise(resolve => setTimeout(resolve, 100));
+    if (playerRef.value) {
+      try {
+        playerRef.value.stopPlay && playerRef.value.stopPlay();
+      } catch (e) {
+        // ignore
+      }
+    }
+  }
+
+  async function resolveSvgaLocalPath(resourceURL : string, cacheKey : string) : Promise<string> {
+    let cachedPath = plus.storage.getItem(cacheKey);
+    if (!cachedPath) {
+      try {
+        const filePath = await downloadAndSaveToPath(resourceURL);
+        if (!filePath || filePath.startsWith('http://') || filePath.startsWith('https://')) {
+          throw new Error(`Invalid local path: ${filePath}`);
+        }
+        plus.storage.setItem(cacheKey, filePath as string);
+        return filePath as string;
+      } catch (_) {
+        return resourceURL;
+      }
+    } else {
+      if (cachedPath.startsWith('http://') || cachedPath.startsWith('https://')) {
+        plus.storage.removeItem(cacheKey);
+        try {
+          const filePath = await downloadAndSaveToPath(resourceURL);
+          if (filePath && !filePath.startsWith('http')) {
+            plus.storage.setItem(cacheKey, filePath as string);
+            return filePath as string;
+          } else {
+            throw new Error(`Invalid local path: ${filePath}`);
+          }
+        } catch (_) {
+          return resourceURL;
+        }
+      }
+      return cachedPath;
+    }
+  }
+
+  function addGiftToQueue(giftData : { resourceURL ?: string; name ?: string; giftID ?: string | number }, isFromSelf = false) {
+    if (!giftData || !giftData.resourceURL) return;
+    const giftDataCopy = {
+      resourceURL: String(giftData.resourceURL || ''),
+      name: String(giftData.name || ''),
+      giftID: giftData.giftID || 0,
+    };
+    const buildCacheKey = (resourceURL : string, name : string, giftID : string | number) => {
+      const giftIdStr = String(giftID || '');
+      let urlHash = '';
+      try {
+        const urlObj = new URL(resourceURL);
+        const fileName = (urlObj.pathname.split('/').pop() || '').replace(/\.(svga|SVGA)$/, '');
+        urlHash = fileName;
+      } catch (_) {
+        urlHash = resourceURL.substring(resourceURL.lastIndexOf('/') + 1).replace(/\.(svga|SVGA)$/i, '');
+      }
+      const fallbackName = (name || '').replace(/\s+/g, '').substring(0, 10);
+      return `${giftIdStr}-${(urlHash || fallbackName)}`;
+    };
+    const giftModel : GiftModel = {
+      resourceURL: giftDataCopy.resourceURL,
+      name: giftDataCopy.name,
+      giftID: giftDataCopy.giftID,
+      isFromSelf,
+      timestamp: Date.now(),
+      cacheKey: buildCacheKey(giftDataCopy.resourceURL, giftDataCopy.name, giftDataCopy.giftID),
+    };
+    if (isFromSelf) {
+      let hasNonSelfGift = false;
+      for (let i = 0; i < giftPrepareList.length; i++) {
+        if (!giftPrepareList[i].isFromSelf) {
+          hasNonSelfGift = true;
+          break;
+        }
+      }
+      if (hasNonSelfGift) {
+        let insertIndex = 0;
+        for (let i = giftPrepareList.length - 1; i >= 0; i--) {
+          if (giftPrepareList[i].isFromSelf) {
+            insertIndex = i + 1;
+            break;
+          }
+        }
+        giftPrepareList.splice(insertIndex, 0, giftModel);
+      } else {
+        giftPrepareList.push(giftModel);
+      }
+    } else {
+      giftPrepareList.push(giftModel);
+    }
+    while (giftPrepareList.length > effectiveMaxSize) {
+      let removed = false;
+      for (let i = 0; i < giftPrepareList.length; i++) {
+        if (!giftPrepareList[i].isFromSelf) {
+          giftPrepareList.splice(i, 1);
+          removed = true;
+          break;
+        }
+      }
+      if (!removed && giftPrepareList.length > effectiveMaxSize) {
+        giftPrepareList.shift();
+      }
+    }
+    if (giftPrepareList.length === 1 && !isPlaying.value) {
+      preparePlay();
+    }
+  }
+
+  async function preparePlay() {
+    if (giftPrepareList.length === 0) {
+      isPlaying.value = false;
+      return;
+    }
+    if (isPlaying.value) {
+      return;
+    }
+    await resetPlayer();
+    if (isPlaying.value) {
+      return;
+    }
+    isPlaying.value = true;
+    const queueGift = giftPrepareList[0];
+    const gift : GiftModel = {
+      resourceURL: String(queueGift.resourceURL || ''),
+      name: String(queueGift.name || ''),
+      giftID: queueGift.giftID || 0,
+      isFromSelf: queueGift.isFromSelf,
+      timestamp: queueGift.timestamp,
+      cacheKey: String(queueGift.cacheKey || ''),
+    };
+    currentPlayingGift.value = gift;
+    if (!gift || !gift.resourceURL) {
+      onPlayFinished();
+      return;
+    }
+    try {
+      const giftResourceURL = String(gift.resourceURL || '');
+      const giftCacheKey = String(gift.cacheKey || '');
+      const giftID = gift.giftID || 0;
+      let svgaGiftSourceUrl = await resolveSvgaLocalPath(giftResourceURL, giftCacheKey);
+      await new Promise(resolve => setTimeout(resolve, 50));
+      let newUrl = svgaGiftSourceUrl as string;
+      if (internalUrl.value === newUrl) {
+        internalUrl.value = '';
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
+      if (newUrl.startsWith('http://') || newUrl.startsWith('https://')) {
+        try {
+          const filePath = await downloadAndSaveToPath(giftResourceURL);
+          if (filePath && !filePath.startsWith('http')) {
+            plus.storage.setItem(giftCacheKey, filePath);
+            newUrl = filePath;
+          }
+        } catch (e) {
+        }
+      }
+      internalUrl.value = newUrl;
+      emit('update:modelValue', true);
+      setTimeout(() => {
+        const currentGift = currentPlayingGift.value;
+        if (props.modelValue && computedUrl.value && playerRef.value && isPlaying.value &&
+          currentGift && currentGift.giftID === giftID && currentGift.cacheKey === giftCacheKey) {
+          tryStart();
+        } else {
+          setTimeout(() => {
+            const retryGift = currentPlayingGift.value;
+            if (props.modelValue && computedUrl.value && playerRef.value && isPlaying.value &&
+              retryGift && retryGift.giftID === giftID && retryGift.cacheKey === giftCacheKey) {
+              tryStart();
+            }
+          }, 100);
+        }
+      }, 200);
+    } catch (e) {
+      onPlayFinished();
+    }
+  }
+
+  function onPlayFinished() {
+    isHandlingFinished = false;
+    if (playerRef.value) {
+      try {
+        playerRef.value.stopPlay && playerRef.value.stopPlay();
+      } catch (e) {
+        // ignore
+      }
+    }
+    isPlaying.value = false;
+    if (giftPrepareList.length > 0) {
+      giftPrepareList.shift();
+    }
+    currentPlayingGift.value = null;
+    internalUrl.value = '';
+    if (giftPrepareList.length > 0) {
+      setTimeout(() => {
+        if (playerRef.value) {
+          try {
+            playerRef.value.stopPlay && playerRef.value.stopPlay();
+          } catch (e) {
+            // ignore
+          }
+        }
+        if (!isPlaying.value) {
+          preparePlay();
+        }
+      }, 300);
+    } else {
+      emit('finished');
+      emit('update:modelValue', false);
+    }
+  }
+
+  const tryStart = () => {
+    if (props.modelValue && computedUrl.value && playerRef.value) {
+      const urlToPlay = computedUrl.value;
+      if (urlToPlay.startsWith('http://') || urlToPlay.startsWith('https://')) {
+        return;
+      }
+      try {
+        playerRef.value.startPlay(urlToPlay);
+      } catch (e) {
+        // ignore
+      }
+    }
+  }
+
+  watch(() => computedUrl.value, (newUrl) => {
+    if (!isPlaying.value && newUrl === computedUrl.value) {
+      tryStart();
+    }
+  });
+  let finishedTimer : NodeJS.Timer | null = null;
+  let isHandlingFinished = false;
+
+  const handleFinished = () => {
+    if (isHandlingFinished) {
+      return;
+    }
+    if (finishedTimer) {
+      clearTimeout(finishedTimer);
+    }
+    isHandlingFinished = true;
+    finishedTimer = setTimeout(() => {
+      onPlayFinished();
+      isHandlingFinished = false;
+      finishedTimer = null;
+    }, 50);
+  }
+
+  async function playGift(
+    giftData : { resourceURL ?: string; name ?: string; giftID ?: string | number },
+    isFromSelf = false,
+    count = 1
+  ) {
+    // 按 count 循环入队:连击/一次送多个时,服务端回推为单条 count=N 事件,
+    // 需播放 N 次(上限保护,避免异常大值导致队列爆炸)。
+    const times = Math.max(1, Math.min(Math.floor(Number(count) || 1), 50));
+    for (let i = 0; i < times; i++) {
+      addGiftToQueue(giftData, isFromSelf);
+    }
+  }
+
+  defineExpose({
+    playGift,
+  });
+</script>
+
+<style>
+  /* SVGA 特效层：
+     - z-index 在 nvue 不被支持，层级靠 DOM 顺序控制（GiftLayer 中 GiftPlayer 在 drawer 之前渲染）；
+     - 不拦截点击由组件属性 userInteractionEnabled="false" 保证（nvue 不支持 CSS pointer-events）。 */
+  .svg-container {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    top: 0;
+  }
+</style>

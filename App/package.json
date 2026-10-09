@@ -7,7 +7,10 @@
     "dev": "uni",
     "build": "uni build",
     "build:h5": "uni build:h5",
-    "build:app-plus": "uni build:app-plus"
+    "build:app-plus": "uni build:app-plus",
+    "convert-to-github": "node scripts/convert-to-github-demo.js",
+    "vue2": "node scripts/convert-to-vue2-quickstart.js",
+    "room": "node scripts/convert-to-room-quickstart.js"
   },
   "keywords": [
     "uniapp",

@@ -1,0 +1,14 @@
+{
+  "name": "atomic-x-docs-generator",
+  "version": "1.0.0",
+  "description": "AtomicX API文档生成工具",
+  "main": "generate-typedoc.js",
+  "scripts": {
+    "generate": "node generate-typedoc.js",
+    "update-json": "node update-uni-app-json.js"
+  },
+  "devDependencies": {
+    "typedoc": "^0.22.18",
+    "typescript": "^4.9.5"
+  }
+}

@@ -1,0 +1,227 @@
+<template>
+  <!--
+    Slider component (nvue-only).
+
+    - Custom view-based implementation. Does NOT wrap the native <slider>, so there is NO
+      Material Design ripple/halo around the thumb.
+    - Visual and logical values are decoupled:
+      - rawFloat (float): thumb position follows the finger continuously for smooth dragging.
+      - display (int, rounded): the emitted value, only changes when crossing half-step boundaries.
+    - Coordinate handling:
+      - nvue's e.touches[0].pageX is relative to the target view (not the screen), so all
+        touch handlers are bound to the outermost hit-area only (children do not consume the
+        event, letting it bubble up to keep pageX in a stable coordinate basis).
+      - Multi-touch is filtered by identifier so a second finger/palm cannot hijack the drag.
+
+    Props are declared inside setup via defineProps; the component follows the project
+    convention of exporting nothing at the top-level (single-file component).
+  -->
+  <view class="slider-hit"
+    @touchstart.stop="onTouchStart"
+    @touchmove.stop="onTouchMove"
+    @touchend.stop="onTouchEnd"
+    @touchcancel.stop="onTouchEnd"
+  >
+    <view class="slider-track" :style="trackStyle">
+      <view class="slider-track-fill" :style="fillStyle"></view>
+    </view>
+    <view class="slider-thumb" :style="thumbStyle"></view>
+  </view>
+</template>
+
+<script setup lang="ts">
+  import { ref, computed, watch } from 'vue';
+
+  // ---------- Props ----------
+  const props = defineProps({
+    // Two-way bound integer value (v-model).
+    modelValue: { type: Number, default: 0 },
+    min: { type: Number, default: 0 },
+    max: { type: Number, default: 9 },
+    // Step is fixed at 1 in the current implementation (SDK-facing values are integers).
+    // Kept as a prop for future extensibility; ignored internally.
+    step: { type: Number, default: 1 },
+    // Visual configuration (rpx unless noted).
+    trackWidth: { type: Number, default: 320 },
+    trackHeight: { type: Number, default: 8 },
+    thumbSize: { type: Number, default: 20 },
+    hitHeight: { type: Number, default: 60 },
+    activeColor: { type: String, default: '#4A9EFF' },
+    inactiveColor: { type: String, default: 'rgba(255, 255, 255, 0.14)' },
+    thumbColor: { type: String, default: '#ffffff' },
+    // SDK-side throttle window (ms). @input is throttled at this cadence; @change is fired on release.
+    throttleMs: { type: Number, default: 50 },
+  });
+
+  const emit = defineEmits(['update:modelValue', 'input', 'change']);
+
+  // ---------- Internal state ----------
+  // display: integer value shown / emitted (rounded from rawFloat).
+  // rawFloat: continuous position value used for thumb/fill rendering (never rounded during drag).
+  const display = ref(props.modelValue);
+  const rawFloat = ref(props.modelValue);
+  const dragging = ref(false);
+  // Drag context (per-slider single-drag state; component owns one drag at a time).
+  let startPageX = 0;
+  let startValue = 0;
+  let fingerId = 0;
+  let throttleTimer: any = null;
+  // Last value we emitted to the parent. Used to filter echoed v-model updates
+  // (parent → SDK → parent → us) that could otherwise rewind rawFloat visually.
+  let lastEmittedValue = props.modelValue;
+  // Post-release echo suppression window. When the parent writes back a value
+  // asynchronously after touchend (SDK round-trip), a delayed watcher fire could
+  // rewind the thumb visually. Track the release timestamp and ignore parent
+  // updates that arrive within this window if they match / undercut our last emit.
+  let releaseAt = 0;
+  const ECHO_WINDOW_MS = 600;
+
+  // ---------- External sync ----------
+  // Sync from parent's v-model when the user is not dragging (parent-driven updates, e.g. reset).
+  watch(() => props.modelValue, (v) => {
+    if (dragging.value) return;
+    // Ignore echoes of our own emit within a short window after release: many parents
+    // relay the value through an async SDK call and write back after our dragging flag
+    // has already cleared, which would otherwise cause the thumb to visibly rewind.
+    if (v === lastEmittedValue && (Date.now() - releaseAt) < ECHO_WINDOW_MS) return;
+    display.value = v;
+    rawFloat.value = v;
+  });
+
+  // ---------- Layout helpers ----------
+  const range = computed(() => Math.max(1, props.max - props.min));
+
+  // rawFloat -> fill width (rpx).
+  const fillWidth = computed(() => {
+    const ratio = (rawFloat.value - props.min) / range.value;
+    const clamped = Math.max(0, Math.min(1, ratio));
+    return Math.round(clamped * props.trackWidth);
+  });
+  // rawFloat -> thumb left (rpx), clamped to [0, trackWidth - thumbSize] so the thumb never
+  // overflows the track (which would visually clip against the hit-area edge on nvue).
+  const thumbLeft = computed(() => {
+    const centered = fillWidth.value - props.thumbSize / 2;
+    return Math.max(0, Math.min(props.trackWidth - props.thumbSize, centered));
+  });
+
+  const trackStyle = computed(() => ({
+    width: props.trackWidth + 'rpx',
+    height: props.trackHeight + 'rpx',
+    backgroundColor: props.inactiveColor,
+  }));
+  const fillStyle = computed(() => ({
+    width: fillWidth.value + 'rpx',
+    height: props.trackHeight + 'rpx',
+    backgroundColor: props.activeColor,
+  }));
+  const thumbStyle = computed(() => ({
+    left: thumbLeft.value + 'rpx',
+    width: props.thumbSize + 'rpx',
+    height: props.thumbSize + 'rpx',
+    // top: (hitHeight - thumbSize) / 2 so the thumb is vertically centered in the hit-area.
+    top: Math.round((props.hitHeight - props.thumbSize) / 2) + 'rpx',
+    backgroundColor: props.thumbColor,
+    // NOTE: nvue does not always honour shorthand `border-radius`; explicit four corners are safer.
+    borderTopLeftRadius: (props.thumbSize / 2) + 'rpx',
+    borderTopRightRadius: (props.thumbSize / 2) + 'rpx',
+    borderBottomLeftRadius: (props.thumbSize / 2) + 'rpx',
+    borderBottomRightRadius: (props.thumbSize / 2) + 'rpx',
+  }));
+
+  // ---------- Touch handling ----------
+  // Throttled SDK-facing @input: emits at most once per throttleMs while the value is changing.
+  const emitInputThrottled = (v: number) => {
+    if (throttleTimer != null) return;
+    lastEmittedValue = v;
+    emit('update:modelValue', v);
+    emit('input', v);
+    throttleTimer = setTimeout(() => { throttleTimer = null; }, props.throttleMs);
+  };
+  const emitInputImmediate = (v: number) => {
+    if (throttleTimer != null) { clearTimeout(throttleTimer); throttleTimer = null; }
+    lastEmittedValue = v;
+    emit('update:modelValue', v);
+    emit('input', v);
+  };
+
+  const onTouchStart = (e: any) => {
+    const touch: any = e?.touches?.[0];
+    if (touch == null) return;
+    dragging.value = true;
+    startPageX = touch.pageX ?? 0;
+    startValue = rawFloat.value;
+    fingerId = touch.identifier ?? 0;
+  };
+  const onTouchMove = (e: any) => {
+    if (!dragging.value) return;
+    // Multi-touch: pick the touch matching the initial identifier only; ignore other fingers/palm.
+    const touches: any[] = e?.touches ?? [];
+    let targetTouch: any = null;
+    for (let i = 0; i < touches.length; i++) {
+      if ((touches[i]?.identifier ?? -1) === fingerId) {
+        targetTouch = touches[i];
+        break;
+      }
+    }
+    if (targetTouch == null) return;
+    const pageX: number = targetTouch.pageX ?? 0;
+    // Only pageX delta is used (nvue's pageX basis is not the screen; only relative delta is stable).
+    const deltaPx = pageX - startPageX;
+    const trackWidthPx = uni.upx2px(props.trackWidth);
+    const deltaValue = (deltaPx / trackWidthPx) * range.value;
+    const rawValue = Math.max(props.min, Math.min(props.max, startValue + deltaValue));
+    // 数值取整用四舍五入,thumb/fill 渲染始终用 rawFloat 浮点(自由连续拖动):
+    // thumb 可停在任意位置(如 3.4),显示与设置的值取四舍五入(3.4 -> 3),
+    // 值只在跨过半步(.5)边界时变化一次,拖动全程无任何位置吸附/回弹。
+    const steppedV = Math.round(rawValue);
+    const newV = Math.max(props.min, Math.min(props.max, steppedV));
+    rawFloat.value = rawValue;
+    if (newV !== display.value) {
+      display.value = newV;
+      emitInputThrottled(newV);
+    }
+  };
+  const onTouchEnd = () => {
+    if (!dragging.value) return;
+    // thumb 停在松手时的浮点位置(不吸附整数刻度);显示与设置值已是四舍五入的整数。
+    // Fire final @input synchronously (bypass throttle) and @change once.
+    emitInputImmediate(display.value);
+    emit('change', display.value);
+    // Mark release time for the watch echo-suppression window (see lastEmittedValue logic).
+    releaseAt = Date.now();
+    // Delay clearing the dragging flag so a synchronous parent-driven update (echoing our own
+    // emit) doesn't overwrite the current rawFloat.
+    setTimeout(() => { dragging.value = false; }, 200);
+  };
+</script>
+
+<style scoped>
+  .slider-hit {
+    position: relative;
+    width: 320rpx;
+    height: 60rpx;
+    justify-content: center;
+  }
+  .slider-track {
+    position: relative;
+    /* width/height/background-color are provided via :style so props take effect */
+    border-top-left-radius: 4rpx;
+    border-top-right-radius: 4rpx;
+    border-bottom-left-radius: 4rpx;
+    border-bottom-right-radius: 4rpx;
+    overflow: hidden;
+  }
+  .slider-track-fill {
+    position: absolute;
+    left: 0;
+    top: 0;
+    border-top-left-radius: 4rpx;
+    border-top-right-radius: 4rpx;
+    border-bottom-left-radius: 4rpx;
+    border-bottom-right-radius: 4rpx;
+  }
+  .slider-thumb {
+    position: absolute;
+    /* left / top / size / color / border-radius are all provided via :style */
+  }
+</style>

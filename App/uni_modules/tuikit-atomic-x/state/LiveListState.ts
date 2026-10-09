@@ -86,6 +86,7 @@ export type LiveUserInfoParam = {
   userID?: string;
   userName?: string;
   avatarURL?: string;
+  level?: number;
 };
 
 /**
@@ -306,6 +307,11 @@ function joinLive(params: JoinLiveOptions): void {
  * leaveLive();
  */
 function leaveLive(params?: LeaveLiveOptions): void {
+  // 必须在【发送 API 前】同步清 currentLive,不能放异步 callback:
+  // 若 callback 迟到,会在下次 joinLive 后才触发 watch → 误 unbind 刚建立的新订阅。
+  // 同步清后 watch(flush:'sync') 立即触发 unbindEvent,通知桥接层向 native 反订阅,
+  // 下次 joinLive 时才能重新 subscribe。
+  currentLive.value = null;
   callAPI(JSON.stringify({
     api: "leaveLive",
     params: {},
@@ -335,6 +341,8 @@ function leaveLive(params?: LeaveLiveOptions): void {
  * endLive();
  */
 function endLive(params?: EndLiveOptions): void {
+  // 同步清 currentLive,原因见 leaveLive 注释。
+  currentLive.value = null;
   callAPI(JSON.stringify({
     api: "endLive",
     params: {},

@@ -307,6 +307,7 @@ extension StandardRoomView: UICollectionViewDataSource {
                 guard let cell = cell else { return }
                 guard let self = self else { return }
                 cell.updateUI(with: participant)
+                cell.participantView.setFillMode(fillMode: .fill)
                 cell.participantView.updateParticipant(participant: participant)
                 cell.participantView.updateStreamType(streamType: .camera)
                 if isCellVisible(cell) {
@@ -375,23 +376,31 @@ extension StandardRoomView: UICollectionViewDelegate {
     public func collectionView(_ collectionView: UICollectionView, willDisplay cell: UICollectionViewCell, forItemAt indexPath: IndexPath) {
         guard let videoStreamCell = cell as? RoomViewVideoStreamCell else { return }
         guard let videoParticipant = participantList.1[safe: indexPath.item] else { return }
-        guard let participant = videoStreamCell.participant else { return }
 
-        if videoParticipant.userID != participant.userID {
+        if videoStreamCell.participant?.userID != videoParticipant.userID {
             videoStreamCell.reset()
             videoStreamCell.updateUI(with: videoParticipant)
             bindVideoStreamState(cell: videoStreamCell, with: videoParticipant)
-        } else {
-            if participant.cameraStatus == .on {
-                videoStreamCell.participantView.setActive(isActive: true)
-            } else {
-                videoStreamCell.participantView.setActive(isActive: false)
-            }
         }
+        activateVideoRender(for: videoStreamCell, userID: videoParticipant.userID)
+    }
+
+    private func activateVideoRender(for cell: RoomViewVideoStreamCell, userID: String) {
+        let latest = participantListSubject.value.first { $0.userID == userID }
+            ?? participantList.1.first { $0.userID == userID }
+        guard let participant = latest ?? cell.participant else { return }
+        cell.updateUI(with: participant)
+        cell.participantView.setFillMode(fillMode: .fill)
+        cell.participantView.updateStreamType(streamType: .camera)
+        cell.participantView.updateParticipant(participant: participant)
+        cell.participantView.setActive(isActive: participant.cameraStatus == .on)
     }
     
     public func collectionView(_ collectionView: UICollectionView, didEndDisplaying cell: UICollectionViewCell, forItemAt indexPath: IndexPath) {
         guard let videoStreamCell = cell as? RoomViewVideoStreamCell else { return }
+        if let currentIndexPath = collectionView.indexPath(for: cell), currentIndexPath != indexPath {
+            return
+        }
         videoStreamCell.participantView.setActive(isActive: false)
     }
     
@@ -459,8 +468,11 @@ extension StandardRoomView {
         let oldList = self.participantList.1
         
         let changes = calculateParticipantListChanges(from: oldList, to: newParticipantList)
-    
-        guard changes.hasChanges else {return}
+        guard changes.hasChanges else {
+            participantList.1 = newParticipantList
+            updateVisibleCells()
+            return
+        }
         
         freshCollectionView { [ weak self] in
             guard let self = self else { return }
@@ -477,6 +489,27 @@ extension StandardRoomView {
         }
         
         updateTotalPages()
+    }
+    
+    private func updateVisibleCells() {
+        let participantSection = participantList.0 != nil ? 1 : 0
+        collectionView.visibleCells.forEach { cell in
+            guard let videoCell = cell as? RoomViewVideoStreamCell else { return }
+            guard let indexPath = collectionView.indexPath(for: cell) else { return }
+            guard indexPath.section == participantSection else { return }
+            guard let participant = participantList.1[safe: indexPath.item] else { return }
+
+            if videoCell.participant?.userID == participant.userID {
+                guard videoCell.participant != participant else { return }
+                videoCell.updateUI(with: participant)
+            } else {
+                videoCell.cancellableSet.removeAll()
+                videoCell.updateUI(with: participant)
+                bindVideoStreamState(cell: videoCell, with: participant)
+                let volume = speakingUsers[participant.userID] ?? 0
+                videoCell.updateSpeakingStatus(with: participant, isSpeaking: volume > 0)
+            }
+        }
     }
     
     private func updateScreenShareParticipant(_ newParticipant: RoomParticipant?) {
@@ -514,8 +547,8 @@ extension StandardRoomView {
         if let cell = collectionView.cellForItem(at: IndexPath(item: 0, section: 0)) as? RoomViewScreenStreamCell,
            let participant = newParticipant {
             cell.updateUI(with: participant)
-            bindScreenStreamState(cell: cell, with: participant)
         }
+        updateVisibleCells()
     }
     
     private func updateVisibleCellsSpeakingStatus(_ speakingUsers: [String: Int]) {
@@ -526,10 +559,10 @@ extension StandardRoomView {
                var participantOpt: RoomParticipant?
                if participantList.0 != nil {
                    if indexPath.section != 0 {
-                       participantOpt = participantList.1[indexPath.item]
+                       participantOpt = participantList.1[safe: indexPath.item]
                    }
                } else {
-                   participantOpt = participantList.1[indexPath.item]
+                   participantOpt = participantList.1[safe: indexPath.item]
                }
                
                guard let participant = participantOpt else { return }

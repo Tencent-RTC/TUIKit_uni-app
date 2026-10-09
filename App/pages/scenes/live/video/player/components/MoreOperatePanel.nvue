@@ -1,0 +1,307 @@
+<template>
+  <view>
+    <BaseDrawer
+      v-model="innerVisible"
+      :height="222"
+      :overlayOpacity="0.5"
+      bgImage="/uni_modules/tuikit-atomic-x/static/assets/live/drawer-bg.png"
+      :bgImageHeight="710"
+      padding="0 32rpx 60rpx 32rpx"
+      :useSafeBottom="true"
+    >
+      <view class="setting-list">
+        <view
+          class="cap"
+          v-for="item in capabilities"
+          :key="item.id"
+          @tap="onCapabilityTap(item)"
+        >
+          <view class="cap-icon">
+            <image class="cap-icon-img" :src="item.icon" mode="aspectFit" />
+          </view>
+          <text class="cap-label">{{ item.label }}</text>
+        </view>
+      </view>
+    </BaseDrawer>
+    <BaseDrawer
+      v-model="qualityVisible"
+      :height="qualityDrawerHeight"
+      :overlayOpacity="0.5"
+      bgImage="/uni_modules/tuikit-atomic-x/static/assets/live/drawer-bg.png"
+      :bgImageHeight="710"
+      padding="0 0 60rpx 0"
+      :useSafeBottom="true"
+    >
+      <view class="quality-panel">
+        <text class="quality-title">切换清晰度</text>
+        <view class="quality-list">
+          <view
+            class="quality-item"
+            :class="{ 'quality-item-active': item.quality === currentQuality }"
+            v-for="item in qualityList"
+            :key="item.quality"
+            @tap="onSelectQuality(item)"
+          >
+            <text
+              class="quality-item-label"
+              :class="{ 'quality-item-label-active': item.quality === currentQuality }"
+            >{{ item.label }}</text>
+            <image
+              v-if="item.quality === currentQuality"
+              class="quality-item-check"
+              src="/uni_modules/tuikit-atomic-x/static/icon/checked.png"
+              mode="aspectFit"
+            />
+          </view>
+        </view>
+      </view>
+    </BaseDrawer>
+
+    <LiveToast
+      v-if="tipVisible"
+      :key="tipSeq"
+      v-model="tipVisible"
+      :title="tipTitle"
+      :duration="2000"
+    />
+  </view>
+</template>
+
+<script setup>
+  import { computed, ref, watch, nextTick } from 'vue';
+  import BaseDrawer from '@/components/live/BaseDrawer.nvue';
+  import LiveToast from '@/uni_modules/tuikit-atomic-x/components/LiveToast.nvue';
+  // @ts-ignore
+  import { enableMultiPlaybackQuality, queryPlaybackQualityList, switchPlaybackQuality } from '@/uni_modules/tuikit-atomic-x';
+
+  const props = defineProps({
+    modelValue: {
+      type: Boolean,
+      default: false
+    }
+  });
+
+  const emit = defineEmits(['update:modelValue']);
+
+  const capabilities = [
+    { id: 'quality',         icon: '/static/images/live/cap-quality.png',         label: '清晰度' },
+    { id: 'superResolution', icon: '/static/images/live/cap-superResolution.png', label: '至臻画质' },
+    { id: 'hdr',             icon: '/static/images/live/cap-hdr.png',             label: 'HDR' },
+    { id: 'volumeEqualizer', icon: '/static/images/live/cap-volumeEqualizer.png', label: '音量均衡' },
+    { id: 'sleep',           icon: '/static/images/live/cap-sleep.png',           label: '定时关闭' },
+  ];
+
+  const QUALITY_LABEL_MAP = {
+    4: '超清',
+    3: '高清',
+    2: '标清',
+    1: '流畅'
+  };
+
+  const qualityVisible = ref(false);
+  const qualityList = ref([]);
+  const currentQuality = ref(-1);
+  const tipVisible = ref(false);
+  const tipSeq = ref(0);
+  const tipTitle = ref('该功能暂不支持');
+
+  const innerVisible = computed({
+    get: () => props.modelValue,
+    set: (val) => emit('update:modelValue', val)
+  });
+
+  const qualityDrawerHeight = computed(() => {
+    const rows = Math.max(1, qualityList.value.length);
+    return 224 + rows * 104;
+  });
+
+  watch(qualityVisible, (val, oldVal) => {
+    if (oldVal && !val) {
+      innerVisible.value = false;
+    }
+  });
+
+  const showTip = (title) => {
+    tipTitle.value = title;
+    tipVisible.value = false;
+    nextTick(() => {
+      tipSeq.value++;
+      tipVisible.value = true;
+    });
+  };
+
+  const onCapabilityTap = (item) => {
+    if (item.id === 'quality') {
+      if (uni.$localGuestStatus === 'CONNECTED') {
+        showTip('上麦后无法切换分辨率');
+        return;
+      }
+      openQualityPanel();
+      return;
+    }
+    showTip('该功能暂不支持');
+  };
+
+  const openQualityPanel = () => {
+    const roomId = uni.$liveID;
+    if (!roomId) {
+      console.warn('[MoreOperatePanel] no roomId, skip query quality');
+      return;
+    }
+    try {
+      enableMultiPlaybackQuality(true);
+    } catch (e) {
+      console.warn('[MoreOperatePanel] enableMultiPlaybackQuality failed', e);
+    }
+    queryPlaybackQualityList(roomId, (jsonData) => {
+      applyQualityList(jsonData);
+    });
+  };
+
+  const applyQualityList = (jsonData) => {
+    let arr = [];
+    let parsed = jsonData;
+    if (typeof jsonData === 'string') {
+      try {
+        parsed = JSON.parse(jsonData);
+      } catch (e) {
+        console.error('[MoreOperatePanel] parse quality json fail', jsonData);
+        parsed = null;
+      }
+    }
+    if (Array.isArray(parsed)) {
+      arr = parsed;
+    } else if (parsed && typeof parsed === 'object') {
+      const candidate =
+        parsed.data ?? parsed.result ?? parsed.qualityList ??
+        (parsed.params ? (parsed.params.qualityList ?? parsed.params.list) : null);
+      if (Array.isArray(candidate)) {
+        arr = candidate;
+      } else if (typeof candidate === 'string') {
+        try {
+          const parsedNested = JSON.parse(candidate);
+          if (Array.isArray(parsedNested)) arr = parsedNested;
+        } catch (e) { /* ignore */ }
+      }
+    }
+
+    const list = [];
+    for (let i = 0; i < arr.length; i++) {
+      const q = Number(arr[i]);
+      if (!QUALITY_LABEL_MAP[q]) continue;
+      list.push({ quality: q, label: QUALITY_LABEL_MAP[q] });
+    }
+    list.sort((a, b) => b.quality - a.quality);
+    qualityList.value = list;
+    if (currentQuality.value < 0 && list.length > 0) {
+      currentQuality.value = list[0].quality;
+    }
+    if (list.length > 0) {
+      qualityVisible.value = true;
+    } else {
+      console.warn('[MoreOperatePanel] empty quality list, raw =', jsonData);
+    }
+  };
+
+  const onSelectQuality = (item) => {
+    if (item.quality === currentQuality.value) {
+      qualityVisible.value = false;
+      return;
+    }
+    try {
+      switchPlaybackQuality(item.quality, false);
+    } catch (e) {
+      console.error('[MoreOperatePanel] switchPlaybackQuality failed', e);
+    }
+    currentQuality.value = item.quality;
+    qualityVisible.value = false;
+  };
+</script>
+
+<style>
+  .setting-list {
+    flex-direction: row;
+    justify-content: space-around;
+    width: 686rpx;
+  }
+
+  .cap {
+    flex: 1;
+    flex-direction: column;
+    align-items: center;
+    padding: 8rpx;
+  }
+
+  .cap-icon {
+    width: 88rpx;
+    height: 88rpx;
+    border-radius: 44rpx;
+    background-color: rgba(255, 255, 255, 0.08);
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 16rpx;
+  }
+
+  .cap-icon-img {
+    width: 48rpx;
+    height: 48rpx;
+  }
+
+  .cap-label {
+    color: rgba(255, 255, 255, 0.75);
+    font-size: 22rpx;
+  }
+
+  .quality-panel {
+    width: 750rpx;
+    flex-direction: column;
+  }
+
+  .quality-title {
+    color: rgba(255, 255, 255, 0.94);
+    font-size: 32rpx;
+    font-weight: 700;
+    text-align: center;
+    line-height: 88rpx;
+    height: 88rpx;
+  }
+
+  .quality-list {
+    flex-direction: column;
+    padding: 0 32rpx;
+  }
+
+  .quality-item {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    height: 88rpx;
+    padding: 0 28rpx;
+    margin-bottom: 16rpx;
+    border-radius: 16rpx;
+    border-width: 2rpx;
+    border-color: rgba(255, 255, 255, 0.12);
+    background-color: rgba(255, 255, 255, 0.04);
+  }
+
+  .quality-item-active {
+    border-color: #4A9EFF;
+    background-image: linear-gradient(to bottom, rgba(74, 158, 255, 0.42), rgba(0, 82, 217, 0.26));
+  }
+
+  .quality-item-label {
+    color: rgba(255, 255, 255, 0.72);
+    font-size: 28rpx;
+    font-weight: 500;
+  }
+
+  .quality-item-label-active {
+    color: #ffffff;
+    font-weight: 600;
+  }
+
+  .quality-item-check {
+    width: 32rpx;
+    height: 32rpx;
+  }
+</style>

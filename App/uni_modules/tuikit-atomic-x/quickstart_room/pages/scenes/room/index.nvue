@@ -5,7 +5,9 @@
         <image class="back-icon" src="/static/images/back-black.png" mode="aspectFit" />
       </view>
       <view class="user-info">
-        <image class="user-avatar" :src="loginUserInfo?.avatarURL || defaultAvatarURL" mode="aspectFill" />
+        <view class="user-avatar-wrap">
+          <Avatar :src="loginUserInfo?.avatarURL || ''" :name="loginUserInfo?.nickname || loginUserInfo?.userID || ''" :size="64" :shape="'circle'" defaultAvatarType="user" pureMode />
+        </view>
         <text class="user-name" :numberOfLines="1">{{ loginUserInfo?.nickname || loginUserInfo?.userID || '' }}</text>
       </view>
     </view>
@@ -32,17 +34,13 @@
 </template>
 
 <script setup>
-  import { ref, onMounted, onUnmounted } from 'vue';
-  import { onShow } from '@dcloudio/uni-app';
-  import { useLoginState, useRoomState } from '@/uni_modules/tuikit-atomic-x/state';
+  import { ref, onMounted } from 'vue';
+  import { useLoginState } from '@/uni_modules/tuikit-atomic-x/state';
   import { reportMetrics } from '@/uni_modules/tuikit-atomic-x';
-  import { showErrorToast } from './utils/errorHandler';
-  import RoomScheduleList from './components/RoomScheduleList/index.nvue';
+  import Avatar from '@/uni_modules/tuikit-atomic-x/components/Avatar/Avatar.nvue';
+  import RoomScheduleList from './schedule/components/RoomScheduleList/index.nvue';
 
   const { loginUserInfo } = useLoginState();
-  const roomState = useRoomState();
-
-  const defaultAvatarURL = 'https://web.sdk.qcloud.com/im/assets/all-in-one/user.png';
 
   const safeArea = ref({
     left: 0,
@@ -60,36 +58,10 @@
         safeArea.value = res.safeArea;
       }
     });
-    // 预定 / 修改 / 取消后由对应页面 emit；RoomScheduleList 组件也在监听并自刷新，
-    // 这里再订阅一份以兜底组件 onShow 没命中的时序（比如预定页 → 直接回到首页）
-    uni.$on('scheduledRoomListChanged', fetchScheduledRooms);
   });
-
-  onUnmounted(() => {
-    uni.$off('scheduledRoomListChanged', fetchScheduledRooms);
-  });
-
-  // 从预定页/详情页返回时也刷新一次，避免依赖单一 emit 时序
-  onShow(() => {
-    fetchScheduledRooms();
-  });
-
-  function fetchScheduledRooms() {
-    roomState
-      .getScheduledRoomList({ cursor: '' })
-      .catch((e) => {
-        showErrorToast(e, '获取预定房间失败');
-      });
-  }
 
   const handleBack = () => {
-    uni.navigateBack({
-      fail: () => {
-        uni.switchTab({
-          url: '/pages/scenes/chat/conversationList/conversationList'
-        });
-      }
-    });
+    uni.navigateBack();
   }
 
   const handleJoinRoom = () => {
@@ -100,7 +72,7 @@
 
   const handleCreateRoom = () => {
     uni.navigateTo({
-      url: '/pages/scenes/room/create/index'
+      url: '/pages/scenes/room/quickstart/index'
     });
   }
 
@@ -146,10 +118,7 @@
     margin-left: 44rpx;
   }
 
-  .user-avatar {
-    width: 64rpx;
-    height: 64rpx;
-    border-radius: 32rpx;
+  .user-avatar-wrap {
     margin-right: 24rpx;
   }
 
@@ -158,6 +127,8 @@
     font-weight: 500;
     color: #676C80;
     flex: 1;
+    lines: 1;
+    text-overflow: ellipsis;
   }
 
 

@@ -1,93 +1,170 @@
 <template>
-  <view class="bottom-drawer-container" v-if="modelValue">
-    <view class="drawer-overlay" @tap="close"></view>
-    <view class="bottom-drawer" :class="{ 'drawer-open': modelValue }">
-      <view class="live-audience-list">
-        <view class="audience-header">
-          <text class="audience-title">在线观众</text>
-        </view>
-
-        <scroll-view class="audience-content" scroll-y @scroll="handleScroll" :scroll-top="scrollTop">
-          <view v-if="audienceList.length > 0" class="audience-grid">
-            <view v-for="audience in audienceList" :key="audience.userID" class="audience-item">
-              <view class="audience-info">
-                <view class="audience-avatar-container">
-                  <image class="audience-avatar" :src="audience.avatarURL || defaultAvatarURL" mode="aspectFill" />
-                </view>
-                <view class="audience-item-right">
-                  <view class="audience-detail">
-                    <text class="audience-name" :numberOfLines="1">{{ audience.userName || audience.userID }}</text>
-                    <view v-if="audience.tag" class="audience-tag">
-                      <text class="tag-text">{{ audience.tag }}</text>
-                    </view>
-                  </view>
-                  <view class="audience-more" v-if="loginUserInfo?.userID === currentLive.liveOwner.userID"
-                    @tap="audienceOperator(audience)">
-                    <text class="more-text">···</text>
-                  </view>
-                </view>
+  <BaseDrawer
+    v-model="innerVisible"
+    :height="drawerHeight"
+    :overlayOpacity="0.4"
+    bgImage="/uni_modules/tuikit-atomic-x/static/assets/live/drawer-bg.png"
+    :bgImageHeight="drawerHeight"
+    padding="0 32rpx 0 32rpx"
+    :showHandle="true"
+    :preload="false"
+  >
+    <view class="audience-header">
+      <text class="audience-title">在线观众</text>
+    </view>
+    <scroll-view class="audience-content" :style="{ height: scrollHeightRpx + 'rpx' }" scroll-y :show-scrollbar="false" @scroll="handleScroll" :scroll-top="scrollTop">
+      <view v-if="audienceList.length > 0" class="audience-grid">
+        <view
+          v-for="(audience, index) in audienceList"
+          :key="audience.userID"
+          class="audience-row-wrap"
+        >
+          <view class="audience-item" @tap="onTapAudience(audience)">
+            <text class="audience-marker">{{ index + 1 }}</text>
+            <view class="audience-avatar-container">
+              <image class="audience-avatar" :src="audience.avatarURL || defaultAvatarURL" mode="aspectFill" />
+            </view>
+            <view class="audience-identity">
+              <text class="audience-name" :numberOfLines="1">{{ audience.userName || audience.userID }}</text>
+              <view class="aud-level-badge">
+                <image class="aud-level-bg" :src="audLevelBadge(audience)" mode="scaleToFill" />
+                <text class="aud-level-num">{{ audLevel(audience) }}</text>
               </view>
             </view>
+            <text class="audience-gift-value">{{ audGiftValue(audience) }}</text>
           </view>
-          <view v-if="audienceList.length === 0" class="empty-state">
-            <text class="empty-text">暂无观众</text>
-            <view></view>
+          <!-- 分割线：两端渐隐。nvue 的 linear-gradient 仅支持 2 个颜色停止点、不支持
+               transparent 多停止点，故用【左右两段】拼接：左段 透明→实、右段 实→透明，
+               中间自然最亮，形成两端渐隐效果。
+               最后一项不显示。 -->
+          <view class="audience-divider" v-if="index !== audienceList.length - 1">
+            <view class="audience-divider-left"></view>
+            <view class="audience-divider-right"></view>
           </view>
-          <view v-if="isLoading" class="loading-state">
-            <image src="/static/images/loading.png" mode="aspectFit" class="loading-image" />
-          </view>
-        </scroll-view>
+        </view>
       </view>
-    </view>
+      <view v-if="audienceList.length === 0" class="empty-state">
+        <text class="empty-text">暂无观众</text>
+      </view>
+      <view v-if="isLoading" class="loading-state">
+        <image src="/static/icon/loading.png" mode="aspectFit" class="loading-image" />
+      </view>
+    </scroll-view>
+  </BaseDrawer>
 
-    <AudienceActionPanel v-model="isShowAudienceActionPanel" :userInfo="selectedAudience" :liveID="liveID">
-    </AudienceActionPanel>
-
-  </view>
+  <AudienceActionPanel v-model="isShowAudienceActionPanel" :userInfo="selectedAudience" :liveID="liveID">
+  </AudienceActionPanel>
+  <AudienceProfilePanel v-model="isShowAudienceProfilePanel" :userInfo="selectedAudience" :liveID="liveID">
+  </AudienceProfilePanel>
+  <LiveToast
+    v-if="tipVisible"
+    :key="tipSeq"
+    v-model="tipVisible"
+    :title="tipTitle"
+    :duration="2000"
+  />
 </template>
 
 <script setup>
-  import {
-    ref,
-    onMounted
-  } from 'vue';
+  import { ref, onMounted, onUnmounted, computed, watch } from 'vue';
+  import BaseDrawer from '@/components/live/BaseDrawer.nvue';
   import AudienceActionPanel from '@/uni_modules/tuikit-atomic-x/components/LiveAudienceList/AudienceActionPanel.nvue';
+  import AudienceProfilePanel from '@/uni_modules/tuikit-atomic-x/components/LiveAudienceList/AudienceProfilePanel.nvue';
+  import LiveToast from '@/uni_modules/tuikit-atomic-x/components/LiveToast.nvue';
+  import { getScreenSizeAsync, heightPercentToRpx } from '../../utils/screen';
 
-  import {
-    useLiveAudienceState
-  } from "@/uni_modules/tuikit-atomic-x/state/LiveAudienceState";
-  import {
-    useLoginState
-  } from "@/uni_modules/tuikit-atomic-x/state/LoginState";
-  import {
-    useLiveListState
-  } from "@/uni_modules/tuikit-atomic-x/state/LiveListState";
-  const {
-    currentLive
-  } = useLiveListState();
-  const {
-    loginUserInfo
-  } = useLoginState();
+  import { useLiveAudienceState } from "@/uni_modules/tuikit-atomic-x/state/LiveAudienceState";
+  import { useLoginState } from "@/uni_modules/tuikit-atomic-x/state/LoginState";
+  import { useLiveListState } from "@/uni_modules/tuikit-atomic-x/state/LiveListState";
+  import { useGiftState } from "@/uni_modules/tuikit-atomic-x/state/GiftState";
 
-  const {
-    audienceList,
-    audienceListCursor
-  } = useLiveAudienceState(uni?.$liveID);
+  const { currentLive } = useLiveListState();
+  const { loginUserInfo } = useLoginState();
+  const { audienceList, audienceListCursor } = useLiveAudienceState(uni?.$liveID);
+  const { addGiftListener, removeGiftListener } = useGiftState(uni?.$liveID);
+
+  // 当前登录用户在本场直播已送礼的累计金币数（coins×count 累加）。其他观众显示 0。
+  const myGiftTotal = ref(0);
+  // onReceiveGift 回调：仅当发送者是当前登录用户时累加。
+  // 事件结构对齐 BarrageList.handleReceiveGift：event 是 JSON 字符串，其中 gift/sender
+  // 可能是【再次序列化的 JSON 字符串】，需二次 parse；gift.coins 为单价、count 为数量。
+  const onReceiveGift = (event) => {
+    try {
+      const res = typeof event === 'string' ? JSON.parse(event) : (event || {});
+      const gift = typeof res.gift === 'string' ? JSON.parse(res.gift) : (res.gift || {});
+      const sender = typeof res.sender === 'string' ? JSON.parse(res.sender) : (res.sender || {});
+      const senderID = sender.userID;
+      if (!senderID || senderID !== loginUserInfo.value?.userID) return;
+      const coins = Number(gift.coins) || 0;
+      const count = Number(res.count) || 1;
+      myGiftTotal.value += coins * count;
+    } catch (e) {
+      console.error('onReceiveGift parse error', e);
+    }
+  };
 
   const defaultAvatarURL = 'https://web.sdk.qcloud.com/component/TUIKit/assets/avatar_01.png';
   const isLoading = ref(false);
   const currentCursor = ref(0);
   const scrollTop = ref(0);
   const isShowAudienceActionPanel = ref(false);
+  const isShowAudienceProfilePanel = ref(false);
   const selectedAudience = ref(null);
-  const safeArea = ref({
-    left: 0,
-    right: 0,
-    top: 0,
-    bottom: 0,
-    width: 375,
-    height: 750,
+
+  // 是否主播端（有观众管理权限）
+  const isAnchor = computed(() => {
+    return loginUserInfo.value?.userID === currentLive.value?.liveOwner?.userID;
   });
+
+  // ============ 等级徽章（账号等级,人人展示,含主播） ============
+  // 真实等级:观众列表数据自带 level(原生 LiveUserInfo.level)。
+  // 自己的 level 缺失/为 0 时从登录资料兜底;均无数据为 0。按阈值分四档。
+  const levelTier = (level) => {
+    if (level >= 40) return 'elite';
+    if (level >= 25) return 'premium';
+    if (level >= 10) return 'advanced';
+    return 'basic';
+  };
+  const audLevel = (audience) => {
+    const lv = Number(audience?.level);
+    if (!isNaN(lv) && lv > 0) return lv;
+    if (audience?.userID && audience.userID === uni.$userID) {
+      const myLv = Number(loginUserInfo.value?.level);
+      if (!isNaN(myLv) && myLv > 0) return myLv;
+    }
+    return 0;
+  };
+  const audLevelBadge = (audience) => '/uni_modules/tuikit-atomic-x/static/assets/live/level-badge-' + levelTier(audLevel(audience)) + '.png';
+  // 累计送礼金币数：只统计【当前登录用户自己】送出的礼物，其他观众一律显示 0。
+  // 自己的累计值由 myGiftTotal 维护（监听 onReceiveGift，发送者为自己时累加 coins×count）。
+  const audGiftValue = (audience) => {
+    if (audience?.userID && audience.userID === loginUserInfo.value?.userID) {
+      return myGiftTotal.value;
+    }
+    return 0;
+  };
+
+  // 单个观众行完整高度(rpx):.audience-item 固定 height:168rpx(无 padding,内容垂直居中)
+  // + 分割线 .audience-divider 1rpx = 169rpx。行高固定,整数倍对齐精确。
+  const ROW_H = 169;
+  const DRAWER_HANDLE_H = 76;   // margin-top 4 + 56 + margin-bottom 16
+  const DRAWER_HEADER_H = 80;   // .audience-header height
+  const DRAWER_BOTTOM_PAD = 44; // 底部呼吸留白
+
+  // drawer 高度自适应:以屏幕 60% 为上限,在上限内【尽可能多】地放整数行观众(向下取整
+  // 到行高),保证滚到底最后一项完整显示、且不露出下一项半截(被裁切效果差)。
+  //   目标列表区高 = 屏幕60%(上限) - handle - header - 底部留白
+  //   实际列表区高 = floor(目标 / 行高) × 行高   (至少 1 行兜底)
+  //   drawer 高 = handle + header + 实际列表区高 + 底部留白 (≤ 屏幕60%)
+  const targetDrawerRpx = ref(heightPercentToRpx(0.6));
+  const scrollHeightRpx = computed(() => {
+    const avail = targetDrawerRpx.value - DRAWER_HANDLE_H - DRAWER_HEADER_H - DRAWER_BOTTOM_PAD;
+    const rows = Math.max(1, Math.floor(avail / ROW_H));
+    return rows * ROW_H;
+  });
+  const drawerHeight = computed(() =>
+    DRAWER_HANDLE_H + DRAWER_HEADER_H + scrollHeightRpx.value + DRAWER_BOTTOM_PAD
+  );
 
   const props = defineProps({
     modelValue: {
@@ -103,29 +180,29 @@
     }
   });
 
-  const emit = defineEmits(['update:modelValue']);
-  const close = () => {
-    emit('update:modelValue', false);
-  };
+  const emit = defineEmits(['update:modelValue', 'overlayActiveChange']);
 
-  // 初始化加载
-  onMounted(() => {
-    uni.getSystemInfo({
-      success: (res) => {
-        safeArea.value = res.safeArea;
-      }
-    });
+  const innerVisible = computed({
+    get: () => props.modelValue,
+    set: (val) => emit('update:modelValue', val)
+  });
+
+  // 内部二级面板(观众管理/关注资料)是否有任一打开。onTapAudience 打开二级面板时会
+  // 同时收起本观众列表(innerVisible=false),导致父页面的 isShowAudienceList 变 false。
+  // 若不额外上抛该信号,父页面 anyOverlayVisible 会误判为"无弹层",从而把收起态输入框的
+  // 透明 webview 移回屏幕、盖在二级面板上并拦截触摸(点击穿透到输入框)。故把内部二级面板
+  // 的打开状态透传给父页面,让其继续隐藏 webview。
+  const anyInnerPanelVisible = computed(() =>
+    isShowAudienceActionPanel.value || isShowAudienceProfilePanel.value
+  );
+  watch(anyInnerPanelVisible, (val) => {
+    emit('overlayActiveChange', !!val);
   });
 
   const handleScroll = (e) => {
     if (currentCursor.value === 0) return;
-
-    const {
-      scrollHeight,
-      scrollTop: currentScrollTop
-    } = e.detail;
+    const { scrollHeight, scrollTop: currentScrollTop } = e.detail;
     scrollTop.value = currentScrollTop;
-
     if (scrollHeight - currentScrollTop < 100) {
       // loadAudiences(currentCursor.value);
     }
@@ -135,155 +212,196 @@
     selectedAudience.value = audience;
     isShowAudienceActionPanel.value = true;
   };
+
+  // 点击观众项：点击自己 -> toast 提示(不弹任何面板,对自己无"关注/管理"意义);
+  // 主播端 -> 管理面板（踢人）；普通观众 -> 关注资料面板。
+  // 关注面板弹出时，收起观众列表 drawer（两者不叠加，交互更清晰）。
+  const tipVisible = ref(false);
+  const tipSeq = ref(0);
+  const tipTitle = ref('');
+  const showTip = (title) => {
+    tipTitle.value = title;
+    tipSeq.value++;
+    tipVisible.value = true;
+  };
+  const onTapAudience = (audience) => {
+    if (audience?.userID && audience.userID === uni.$userID) {
+      showTip('无法关注自己');
+      return;
+    }
+    selectedAudience.value = audience;
+    if (isAnchor.value) {
+      isShowAudienceActionPanel.value = true;
+    } else {
+      isShowAudienceProfilePanel.value = true;
+      innerVisible.value = false; // 收起观众列表
+    }
+  };
+
+  // 组件创建时立即初始化屏幕尺寸缓存，确保首次打开前 drawerHeight 已是真实值。
+  onMounted(() => {
+    getScreenSizeAsync().then(() => {
+      targetDrawerRpx.value = heightPercentToRpx(0.6);
+    });
+    // 监听收礼事件，累计当前登录用户送出的礼物金币数（用于列表里“自己”的送礼值展示）。
+    try { addGiftListener(uni?.$liveID, 'onReceiveGift', onReceiveGift); } catch (e) { console.error(e); }
+  });
+
+  onUnmounted(() => {
+    try { removeGiftListener(uni?.$liveID, 'onReceiveGift', onReceiveGift); } catch (e) { console.error(e); }
+  });
 </script>
 
 <style>
-  .bottom-drawer-container {
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    top: 0;
-    z-index: 1000;
-  }
-
-  .drawer-overlay {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background-color: rgba(0, 0, 0, 0.4);
-  }
-
-  .bottom-drawer {
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    background: #1F2024;
-    border-top-left-radius: 32rpx;
-    border-top-right-radius: 32rpx;
-    transform: translateY(100%);
-    transition-property: transform;
-    transition-duration: 0.3s;
-    transition-timing-function: ease;
-    height: 1000rpx;
-  }
-
-  .drawer-open {
-    transform: translateY(0);
-  }
-
-  .live-audience-list {
-    flex: 1;
-  }
-
+  /* 标题栏 */
   .audience-header {
-    padding: 32rpx;
+    padding: 20rpx 0;
     flex-direction: row;
     align-items: center;
-    display: flex;
-    height: 100rpx;
-    position: relative;
-  }
-
-  .empty-state {
-    padding: 64rpx;
     justify-content: center;
-    align-items: center;
-  }
-
-  .empty-text {
-    color: #999999;
-    font-size: 28rpx;
+    height: 80rpx;
   }
 
   .audience-title {
-    font-size: 32rpx;
-    color: #ffffff;
+    font-size: 30rpx;
+    color: rgba(255, 255, 255, 0.9);
     font-weight: 400;
-    flex: 1;
-    text-align: center;
-    line-height: 100rpx;
   }
 
-  .audience-content {
-    flex: 1;
-    padding: 0 32rpx;
-  }
+  /* 列表容器高度由内联 scrollHeightRpx 显式控制(见 script),不用 flex:1
+     (nvue flex:1 自动算高不可靠,会溢出父 padding 裁切或高度不足)。 */
 
   .audience-grid {
     flex-direction: column;
+    width: 686rpx;
   }
 
+  /* 每行外层容器（内容行 + 渐变分割线，竖向排列） */
+  .audience-row-wrap {
+    flex-direction: column;
+    width: 686rpx;
+  }
+
+  /* 单行:固定高 168rpx(明确常量,不含 padding——去掉上下 padding 改用 align-items:center
+     垂直居中,彻底消除 nvue border-box 下"height 是否含 padding"的换算歧义)。
+     内容单行,固定高安全。分割线为下方独立的渐变线 .audience-divider(1rpx)。
+     => 单行完整高度 = 168 + 1 = 169rpx(= script 里 ROW_H)。 */
   .audience-item {
-    padding: 16rpx 0;
-  }
-
-  .audience-info {
     flex-direction: row;
     align-items: center;
+    width: 686rpx;
+    height: 168rpx;
   }
 
+  /* 两端渐隐分割线：左右两段各占一半，颜色都向【中间】加深，拼出中间实两端淡。 */
+  .audience-divider {
+    flex-direction: row;
+    width: 686rpx;
+    height: 1rpx;
+  }
+  .audience-divider-left {
+    flex: 1;
+    height: 1rpx;
+    /* 透明 -> 实（右侧=中间） */
+    background-image: linear-gradient(to right, rgba(255, 255, 255, 0), rgba(255, 255, 255, 0.16));
+  }
+  .audience-divider-right {
+    flex: 1;
+    height: 1rpx;
+    /* 实（左侧=中间） -> 透明 */
+    background-image: linear-gradient(to right, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0));
+  }
+
+  /* 序号 marker（右侧间距 28rpx） */
+  .audience-marker {
+    width: 48rpx;
+    color: rgba(255, 255, 255, 0.38);
+    font-size: 30rpx;
+    text-align: center;
+    margin-right: 28rpx;
+  }
+
+  /* 头像（50px 圆形，对齐参考项目更饱满的头像观感） */
   .audience-avatar-container {
-    width: 80rpx;
-    height: 80rpx;
-    margin-right: 20rpx;
+    width: 100rpx;
+    height: 100rpx;
+    margin-right: 28rpx;
+    overflow: hidden;
+    border-radius: 50rpx;
   }
 
   .audience-avatar {
-    width: 80rpx;
-    height: 80rpx;
-    border-radius: 40rpx;
+    width: 100rpx;
+    height: 100rpx;
+    border-radius: 50rpx;
   }
 
-  .audience-item-right {
+  /* 昵称区 */
+  .audience-identity {
     flex: 1;
     flex-direction: row;
-    justify-content: space-between;
     align-items: center;
   }
 
-  .audience-detail {
-    flex-direction: row;
-    align-items: center;
-  }
-
+  /* 昵称（30rpx 白色）。
+     flex:0 1 auto + 内容宽：名字过长时可被压缩省略，保证右侧徽章始终可见。
+     单行截断用 nvue 标准范式：lines:1 + text-overflow:ellipsis（nvue 不支持
+     white-space / word-break 等 web 文本属性，勿依赖）。 */
   .audience-name {
-    font-size: 28rpx;
-    color: #ffffff;
-    margin-right: 12rpx;
-    max-width: 300rpx;
+    flex: 0 1 auto;
+    font-size: 30rpx;
+    color: rgba(255, 255, 255, 0.88);
+    font-weight: 500;
     lines: 1;
     overflow: hidden;
     text-overflow: ellipsis;
+    min-width: 0;
+    max-width: 300rpx;
   }
 
-  .audience-tag {
-    background-color: #007AFF;
-    border-radius: 6rpx;
-    padding: 4rpx 12rpx;
+  /* 等级徽章（账号等级，PNG 背景 + 数字叠加）：在名字右侧 */
+  .aud-level-badge {
+    position: relative;
+    width: 68rpx;
+    height: 30rpx;
+    margin-left: 12rpx;
+    flex-shrink: 0;
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-end;
   }
-
-  .tag-text {
+  .aud-level-bg {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 68rpx;
+    height: 30rpx;
+  }
+  .aud-level-num {
+    position: relative;
     color: #ffffff;
+    font-size: 18rpx;
+    font-weight: 800;
+    line-height: 30rpx;
+    margin-right: 12rpx;
+    text-align: center;
+    min-width: 24rpx;
+  }
+
+  /* 礼物值（金色 tabular-nums） */
+  .audience-gift-value {
+    color: #ffe29a;
     font-size: 24rpx;
-  }
-
-  .audience-more {
-    padding: 0 20rpx;
-  }
-
-  .more-text {
-    font-size: 40rpx;
-    color: #ffffff;
-    font-weight: bold;
+    font-weight: 700;
+    text-align: right;
+    /* 礼物值固定不压缩:长昵称时应压缩昵称(ellipsis),而非把礼物值挤变形/截断。 */
+    flex-shrink: 0;
+    lines: 1; /* 单行(nvue 用 lines 控制行数,white-space 在 nvue 无效) */
   }
 
   .empty-state,
   .loading-state {
-    padding: 32rpx;
+    padding: 64rpx;
     justify-content: center;
     align-items: center;
   }

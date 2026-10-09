@@ -51,6 +51,14 @@
       </view>
     </view>
   </view>
+
+  <LiveToast
+    v-if="tipVisible"
+    :key="tipSeq"
+    v-model="tipVisible"
+    :title="tipTitle"
+    :duration="2000"
+  />
 </template>
 
 <script setup>
@@ -74,8 +82,18 @@
     DeviceControlPolicy,
     useLiveSeatState
   } from "@/uni_modules/tuikit-atomic-x/state/LiveSeatState";
+  import LiveToast from '@/uni_modules/tuikit-atomic-x/components/LiveToast.nvue';
 
   const defaultAvatarURL = 'https://web.sdk.qcloud.com/component/TUIKit/assets/avatar_01.png';
+
+  const tipVisible = ref(false);
+  const tipSeq = ref(0);
+  const tipTitle = ref('');
+  const showTip = (title) => {
+    tipTitle.value = title;
+    tipSeq.value++;
+    tipVisible.value = true;
+  };
 
   const props = defineProps({
     modelValue: {
@@ -203,10 +221,7 @@
           userID: props.userInfo.userID,
           policy: DeviceControlPolicy.UNLOCK_ONLY
         });
-        uni.showToast({
-          title: `您已将${props.userInfo.userName || props.userInfo.userID} 解除静音`,
-          icon: 'none'
-        })
+        showTip(`您已将${props.userInfo.userName || props.userInfo.userID} 解除静音`)
         close();
         return;
       }
@@ -215,10 +230,7 @@
           liveID: uni.$liveID,
           userID: props.userInfo.userID,
         });
-        uni.showToast({
-          title: `您已将${props.userInfo.userName || props.userInfo.userID} 静音`,
-          icon: 'none'
-        })
+        showTip(`您已将${props.userInfo.userName || props.userInfo.userID} 静音`)
         close();
         return;
       }
@@ -228,10 +240,7 @@
           liveID: uni.$liveID,
           fail: (errorCode) => {
             if (errorCode === -2360) {
-              uni.showToast({
-                title: '你已被静音',
-                icon: 'none'
-              })
+              showTip('你已被静音')
             }
           }
         });
@@ -257,10 +266,7 @@
           userID: props.userInfo.userID,
           policy: DeviceControlPolicy.UNLOCK_ONLY
         });
-        uni.showToast({
-          title: `您已将${props.userInfo.userName || props.userInfo.userID} 解除禁画`,
-          icon: 'none'
-        })
+        showTip(`您已将${props.userInfo.userName || props.userInfo.userID} 解除禁画`)
         close();
         return;
       }
@@ -269,10 +275,7 @@
           liveID: uni.$liveID,
           userID: props.userInfo.userID,
         });
-        uni.showToast({
-          title: `您已将${props.userInfo.userName || props.userInfo.userID} 禁画`,
-          icon: 'none'
-        })
+        showTip(`您已将${props.userInfo.userName || props.userInfo.userID} 禁画`)
         close();
         return;
       }
@@ -282,10 +285,7 @@
           isFront: isFrontCamera.value,
           fail: (errorCode) => {
             if (errorCode === -2370) {
-              uni.showToast({
-                title: '你已被禁画',
-                icon: 'none'
-              })
+              showTip('你已被禁画')
             }
           }
         });
@@ -435,6 +435,15 @@
     color: #C5CCDB;
     font-weight: 500;
     margin-bottom: 8rpx;
+    /* 超长用户名截断:单行 + 省略号。nvue 的 text 无宽度上限时会被长文本撑开、
+       把抽屉头部挤变形(挤压右侧元素/撑破容器),故限宽并 nowrap。
+       抽屉满屏 750 - header padding 96 - 头像 104 ≈ 550rpx。 */
+    max-width: 550rpx;
+    min-width: 0;
+    lines: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .user-id {

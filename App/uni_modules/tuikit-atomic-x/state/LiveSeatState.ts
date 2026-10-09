@@ -775,6 +775,9 @@ const BINDABLE_DATA_NAMES = [
 let boundLiveID: string | null = null;
 
 function bindEvent(liveID: string): void {
+  if (!liveID || currentLive.value?.liveID !== liveID) {
+    return;
+  }
   if (boundLiveID === liveID) {
     return;
   }
@@ -801,6 +804,9 @@ function bindEvent(liveID: string): void {
       }
     });
   });
+  // 注册完成后启动数据看门狗:窗口内 canvas/seatList 未到达则自动重绑自愈
+  // (补救推送被异步注册窗口错过的竞态,见 armSeatDataWatchdog 注释)。
+  armSeatDataWatchdog();
 }
 
 function unbindEvent(liveID: string): void {
@@ -817,21 +823,90 @@ function unbindEvent(liveID: string): void {
   if (boundLiveID === liveID) {
     boundLiveID = null;
   }
+  // 解绑时撤销看门狗并复位重试计数,避免退房后误触发重绑。
+  clearSeatDataWatchdog();
+  seatDataWatchdogRetries = 0;
+}
+
+// 重绑 LiveSeatStore 监听:进房数据(canvas/seatList)错过监听注册窗口时的补救。
+// 竞态:bindEvent 的 addListener 经桥接层异步派发注册,进房期主线程繁忙时,
+// native 的 canvas/seatList 推送可能落在注册完成之前被永久错过(数据未变化
+// 不再重推)——表现为进房画面用 SDK 默认布局(左上角小图)、挂件不渲染,直到
+// 后续某次座位/模板事件重推才就位。unbind→add 走桥接层 isNewListener 路径
+// 重新通知 native 注册,给数据链一次重建机会(注册若带快照回推则立即拿到当前值;
+// 即使不回推,后续变化推送也能被接住,严格优于不重绑)。
+function rebindSeatStore(): void {
+  const id = boundLiveID;
+  if (!id) return;
+  if (currentLive.value?.liveID !== id) return;
+  unbindEvent(id);
+  bindEvent(id);
+}
+
+// 【数据链看门狗·内部自愈】bindEvent 后启动:窗口内 canvas/seatList 仍未到达则
+// 自动重绑(内部调 rebindSeatStore,不暴露对外接口)。到点自查数据是否已到:
+// 已到则复位重试计数;未到则重绑再等一轮,最多重试 2 次后放弃(避免异常场景
+// 无限循环)。退房解绑时撤销。视图层无需感知,数据链自我修复。
+const SEAT_DATA_WATCHDOG_MS = 3000;
+let seatDataWatchdogTimer: ReturnType<typeof setTimeout> | null = null;
+let seatDataWatchdogRetries = 0;
+function clearSeatDataWatchdog(): void {
+  if (seatDataWatchdogTimer) {
+    clearTimeout(seatDataWatchdogTimer);
+    seatDataWatchdogTimer = null;
+  }
+}
+function armSeatDataWatchdog(): void {
+  clearSeatDataWatchdog();
+  seatDataWatchdogTimer = setTimeout(() => {
+    seatDataWatchdogTimer = null;
+    const canvasArrived = !!canvas.value;
+    const seatArrived = (seatList.value || []).length > 0;
+    if (canvasArrived && seatArrived) {
+      seatDataWatchdogRetries = 0; // 数据已到,复位计数(下个房间重新计)
+      return;
+    }
+    if (seatDataWatchdogRetries >= 2) return; // 两轮重绑仍无数据,放弃
+    seatDataWatchdogRetries++;
+    rebindSeatStore();
+    // rebindSeatStore → bindEvent 会重新 arm 看门狗
+  }, SEAT_DATA_WATCHDOG_MS);
 }
 
 let stopWatchingCurrentLive: (() => void) | null = null;
+
+// 重置座位相关状态为初值:退房/切换房间时清空,避免上个房间的 seatList/canvas 残留到新房间。
+function resetSeatState(): void {
+  seatList.value = [];
+  canvas.value = null;
+  speakingUsers.value = null;
+}
 
 function ensureWatchCurrentLive() {
   if (stopWatchingCurrentLive) return;
   stopWatchingCurrentLive = watch(
     () => currentLive.value,
-    (newVal, oldVal) => {
-      if (oldVal && oldVal.liveID !== '') {
-        if (newVal.liveID === '' && boundLiveID) {
+    (newVal: any) => {
+      // currentLive 可能被 native 或本地 leaveLive 推为 null:
+      // - liveID 为空/null → 视为退房,解绑 + 重置状态;
+      // - liveID 变化 → 切房间,重绑;
+      // - liveID 不变(同房内 viewCount 等字段更新)→ 空分支保护,不动订阅避免推送丢失。
+      // flush:'sync' 保证 room→null→room 快速切换时 null 过渡不被合并丢弃。
+      const newLiveID = newVal?.liveID ?? '';
+      if (newLiveID === '') {
+        if (boundLiveID) {
           unbindEvent(boundLiveID);
         }
+        resetSeatState();
+      } else if (newLiveID !== boundLiveID) {
+        resetSeatState();
+        bindEvent(newLiveID);
       }
-    }
+    },
+    // immediate:建立 watch 时 currentLive 可能已就绪(如冷启动 native 先推、
+    // 页面/组件后建 watch)——不回放当前值则永不 bind,数据链断。
+    // 首次建立时 currentLive 为 null 走 '' 分支,reset 对空状态无副作用。
+    { flush: 'sync', immediate: true }
   );
 }
 

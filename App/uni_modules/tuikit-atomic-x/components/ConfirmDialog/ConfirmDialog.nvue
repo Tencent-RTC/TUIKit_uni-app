@@ -1,19 +1,27 @@
 <template>
   <view v-if="visible" class="confirm-dialog">
     <view class="confirm-dialog__mask" @click="handleMaskClick"></view>
-    
+
     <view class="confirm-dialog__content">
       <view class="confirm-dialog__header">
         <text class="confirm-dialog__title">{{ title }}</text>
+        <!-- 两种内容来源：message prop（字符串） 或 默认 slot（任意内容） -->
         <text v-if="message" class="confirm-dialog__message">{{ message }}</text>
+        <view v-else class="confirm-dialog__slot"><slot></slot></view>
       </view>
 
-      <view class="confirm-dialog__buttons">
-        <view class="confirm-dialog__button" @click="handleCancel">
+      <view class="confirm-dialog__buttons" :class="{ 'confirm-dialog__buttons--single': !cancelText }">
+        <view v-if="cancelText" class="confirm-dialog__button" @click="handleCancel">
           <text class="confirm-dialog__button-text confirm-dialog__button-text--cancel">{{ cancelText }}</text>
         </view>
         <view class="confirm-dialog__button" @click="handleConfirm">
-          <text class="confirm-dialog__button-text confirm-dialog__button-text--confirm">{{ confirmText }}</text>
+          <text
+            class="confirm-dialog__button-text"
+            :class="{
+              'confirm-dialog__button-text--confirm': !confirmButtonDanger,
+              'confirm-dialog__button-text--confirm-danger': confirmButtonDanger,
+            }"
+          >{{ confirmText }}</text>
         </view>
       </view>
     </view>
@@ -23,17 +31,26 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 
-/** 组件属性 */
+/**
+ * ConfirmDialog —— 合并自 RoomDialog（支持 slot + confirmButtonDanger + modal）
+ * 与原 ConfirmDialog 行为兼容：modelValue / title / message / cancelText / confirmText / closeOnClickMask
+ * 扩展能力：
+ *  - 默认 slot：message 留空时启用（用于 scroll-view / 富文本）
+ *  - confirmButtonDanger：危险操作时确认按钮变红（false 蓝色，true 红色）
+ */
 interface ConfirmDialogProps {
   modelValue?: boolean
   title?: string
+  /** 简单字符串文案。留空时用 slot 渲染（caller 提供任意内容） */
   message?: string
   cancelText?: string
   confirmText?: string
+  /** 默认 false（蓝色）；true 时确认按钮变红，用于"结束共享"等危险操作 */
+  confirmButtonDanger?: boolean
+  /** 点遮罩是否关闭。默认 true（ConfirmDialog 行为）；Room 端用法：保持默认即可 */
   closeOnClickMask?: boolean
 }
 
-/** 组件事件 */
 interface ConfirmDialogEmits {
   (e: 'update:modelValue', value: boolean): void
   (e: 'confirm'): void
@@ -46,7 +63,8 @@ const props = withDefaults(defineProps<ConfirmDialogProps>(), {
   message: '',
   cancelText: '取消',
   confirmText: '确定',
-  closeOnClickMask: true
+  confirmButtonDanger: false,
+  closeOnClickMask: true,
 })
 
 const emit = defineEmits<ConfirmDialogEmits>()
@@ -84,7 +102,7 @@ defineExpose({
     visible.value = true
     emit('update:modelValue', true)
   },
-  close
+  close,
 })
 </script>
 
@@ -136,11 +154,27 @@ defineExpose({
   text-align: center;
 }
 
+/* slot 容器：让 caller 完全控制内容（ScreenShareButton 用 scroll-view） */
+.confirm-dialog__slot {
+  flex-direction: column;
+  align-items: center;
+}
+
 .confirm-dialog__buttons {
   flex: 1;
   width: 654rpx;
   flex-direction: row;
   border-top: 1rpx solid #E6E9F0;
+}
+
+/* 单按钮模式：确认按钮居中全宽（caller 传 cancelText=""） */
+.confirm-dialog__buttons--single {
+  justify-content: center;
+}
+
+.confirm-dialog__buttons--single .confirm-dialog__button {
+  flex: 1;
+  border-right: none;
 }
 
 .confirm-dialog__button {
@@ -166,6 +200,10 @@ defineExpose({
 }
 
 .confirm-dialog__button-text--confirm {
+  color: #1C66E5;
+}
+
+.confirm-dialog__button-text--confirm-danger {
   color: #E54545;
 }
 </style>

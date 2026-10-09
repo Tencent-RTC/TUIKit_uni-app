@@ -1,0 +1,690 @@
+<template>
+  <view
+    class="live-container"
+    @click="handleHideInput"
+    :style="{
+      height: systemInfo?.windowHeight + 'px',
+      width: (systemInfo?.windowWidth || systemInfo?.screenWidth) ? ((Math.max(systemInfo?.windowWidth || 0, systemInfo?.screenWidth || 0) + 2) + 'px') : undefined,
+    }"
+  >
+    <view class="live-content">
+      <LiveStreamView v-if="liveID && liveID.length > 0" :liveID="liveID" :isAnchor="false" :templateLayout="templateLayout" :currentLoginUserId="currentLoginUserId" :enableClickPanel="true" :isLiving="true">
+      </LiveStreamView>
+      <TopOperateBar @exit="navigateBack" @audienceTap="showAudienceList" />
+      <BarrageList mode="audience" :topPx="barrageTopPx" @receiveGift="onBarrageReceiveGift" ref="barrageListRef" />
+      <AudienceEntryBanner ref="audienceEntryBannerRef" :topPx="audienceEntryTopPx" />
+      <view class="footer" :style="{ opacity: isBarrageInputActive ? 0 : 1 }">
+        <BarrageInput v-if="!isCoGuestControlBarOpen"></BarrageInput>
+        <!-- 显隐用 opacity+userInteractionEnabled 而非 v-if:v-if 从 false→true 重挂载时,原生 view 会被追加到父容器【末尾】、排到 drawer 之后,导致连麦后底部操作栏盖在面板上。常驻挂载,原生 view 顺序固定在 drawer 之前。 -->
+        <view
+          class="action-buttons"
+          :style="{ opacity: (isCoGuestControlBarOpen || isBarrageInputActive) ? 0 : 1 }"
+          :userInteractionEnabled="!isCoGuestControlBarOpen && !isBarrageInputActive"
+        >
+          <BottomOperateBar
+            :micEnabled="templateLayout !== 200"
+            :micConnected="uni.$localGuestStatus === 'CONNECTED'"
+            :micDisabled="shouldDisableCoGuestButton"
+            @coGuestTap="handleCoGuestButtonClick"
+            @micConnectedTap="expandCoGuestControlBar"
+            @giftTap="showGiftPicker"
+            @moreTap="showMorePanel = true"
+          />
+        </view>
+      </view>
+      <view
+        class="co-mic-control-bar-wrap"
+        :style="{ opacity: (templateLayout !== 200 && uni.$localGuestStatus === 'CONNECTED' && isCoGuestControlBarOpen && !anyOverlayVisible) ? 1 : 0 }"
+        :userInteractionEnabled="templateLayout !== 200 && uni.$localGuestStatus === 'CONNECTED' && isCoGuestControlBarOpen && !anyOverlayVisible"
+      >
+        <CoGuestControlBar
+          v-if="templateLayout !== 200 && uni.$localGuestStatus === 'CONNECTED' && isCoGuestControlBarOpen"
+          v-model="isCoGuestControlBarOpen"
+          :liveID="currentLive.liveID"
+          :userID="currentLoginUserId"
+          :freezeCamera="isFreezeCamera"
+          @openDetail="onCoGuestControlBarOpenDetail"
+          @end="onCoGuestControlBarEnd"
+        />
+      </view>
+
+      <LiveAudienceList v-model="isShowAudienceList" @overlayActiveChange="onAudienceInnerPanelChange"></LiveAudienceList>
+      <CoGuestRequestPanel
+        v-model="isShowCoGuestRequestPanel"
+        :liveID="currentLive.liveID"
+        :userID="currentLoginUserId"
+        :seatIndex="seatIndex"
+        :initialDetailOpen="requestPanelInitialDetail"
+        @accepted="onCoGuestAccepted"
+      ></CoGuestRequestPanel>
+      <MoreOperatePanel v-model="showMorePanel" />
+      <GiftPicker
+        v-model="isShowGiftPicker"
+        @giftSent="onSelfGiftSent"
+        @advancedComboStart="onAdvancedComboStart"
+      />
+      <GiftEntryBanner ref="entryBannerRef" :bottomPx="giftEntryBottomPx" :elevated="isShowGiftPicker" :hidden="nonGiftOverlayVisible" />
+      <GiftPlayer
+        ref="giftPlayerRef"
+        v-model="isLargeSizeGiftPlayer"
+        :url="latestGift?.resourceURL"
+        :safeArea="safeArea"
+        @finished="onGiftPlayerFinished"
+      />
+    </view>
+  </view>
+  <ActionSheet v-model="isShowCoGuestSheet" :title="coGuestSheetTitle" :itemList="coGuestSheetItems" @select="onCoGuestSheetSelect" />
+  <FloatingGiftCombo
+    ref="floatingComboRef"
+    @comboSend="onSelfGiftSent"
+  />
+
+  <LiveDialog
+    v-model="isShowExitConfirmToast"
+    title="退出直播间"
+    message="当前处于连麦中，退出后将断开连麦"
+    confirmText="退出"
+    cancelText="取消"
+    @confirm="confirmExitLive"
+    @cancel="closeExitConfirmToast"
+  />
+
+  <LiveToast
+    v-if="tipVisible"
+    :key="tipSeq"
+    v-model="tipVisible"
+    :title="tipTitle"
+    :position="tipPosition"
+    :duration="2000"
+  />
+</template>
+
+<script setup lang="ts">
+  import { onLoad, onBackPress } from '@dcloudio/uni-app';
+  import { ref, onMounted, computed, onUnmounted, watch, nextTick } from 'vue';
+  import LiveStreamView from '@/uni_modules/tuikit-atomic-x/components/LiveStreamView/LiveStreamView.nvue';
+  import LiveAudienceList from '@/uni_modules/tuikit-atomic-x/components/LiveAudienceList/LiveAudienceList.nvue';
+  import CoGuestRequestPanel from '@/uni_modules/tuikit-atomic-x/components/CoGuestPanel/CoGuestRequestPanel.nvue';
+  import CoGuestControlBar from '@/uni_modules/tuikit-atomic-x/components/CoGuestPanel/CoGuestControlBar.nvue';
+  import LiveToast from '@/uni_modules/tuikit-atomic-x/components/LiveToast.nvue';
+  import LiveDialog from '@/uni_modules/tuikit-atomic-x/components/LiveDialog.nvue';
+  import BarrageInput from '@/uni_modules/tuikit-atomic-x/components/BarrageInput/BarrageInput.vue';
+  import BarrageList from '@/uni_modules/tuikit-atomic-x/components/BarrageList/BarrageList.nvue';
+  import Like from '@/uni_modules/tuikit-atomic-x/components/Like.nvue';
+  import GiftPicker from '@/uni_modules/tuikit-atomic-x/components/Gift/GiftPicker.nvue';
+  import GiftEntryBanner from '@/uni_modules/tuikit-atomic-x/components/Gift/GiftEntryBanner.nvue';
+  import GiftPlayer from '@/uni_modules/tuikit-atomic-x/components/Gift/GiftPlayer.nvue';
+  import FloatingGiftCombo from '@/uni_modules/tuikit-atomic-x/components/Gift/FloatingGiftCombo.nvue';
+  import { giftService } from '@/uni_modules/tuikit-atomic-x/components/Gift/giftService'
+  import { isUserFollowed, toggleUserFollowed } from '@/uni_modules/tuikit-atomic-x/utils/followStore';
+  import { heightPercentToRpx } from '@/uni_modules/tuikit-atomic-x/utils/screen';
+  import { setSdkLanguageFromSystem } from '@/uni_modules/tuikit-atomic-x/utils/setSdkLanguageFromSystem';
+  import { safeJsonParse } from '@/uni_modules/tuikit-atomic-x/utils/utsUtils';
+  import { useLiveListState } from "@/uni_modules/tuikit-atomic-x/state/LiveListState";
+  import { useLiveSeatState } from "@/uni_modules/tuikit-atomic-x/state/LiveSeatState";
+  import { useLiveAudienceState } from '@/uni_modules/tuikit-atomic-x/state/LiveAudienceState';
+  import { useCoGuestState } from '@/uni_modules/tuikit-atomic-x/state/CoGuestState';
+  import { DeviceStatus } from '@/uni_modules/tuikit-atomic-x/state/DeviceState';
+  import { useLoginState } from "@/uni_modules/tuikit-atomic-x/state/LoginState";
+  import { useCoHostState } from "@/uni_modules/tuikit-atomic-x/state/CoHostState";
+  import ActionSheet from '@/components/ActionSheet.nvue';
+  import TopOperateBar from './components/TopOperateBar.nvue';
+  import BottomOperateBar from './components/BottomOperateBar.nvue';
+  import AudienceEntryBanner from './components/AudienceEntryBanner.nvue';
+  import MoreOperatePanel from './components/MoreOperatePanel.nvue';
+
+  uni.$localGuestStatus = 'IDLE';
+
+  const { loginUserInfo } = useLoginState()
+  const { joinLive, liveList, leaveLive, currentLive, addLiveListListener, removeLiveListListener } = useLiveListState(uni?.$liveID);
+  const { seatList, addLiveSeatEventListener, removeLiveSeatEventListener } = useLiveSeatState(uni?.$liveID);
+  const { audienceList, messageBannedUserList, addAudienceListener, removeAudienceListener } = useLiveAudienceState(uni?.$liveID);
+  const { disconnect, connected, cancelApplication } = useCoGuestState(uni?.$liveID)
+  const { connected: hostConnected } = useCoHostState(uni?.$liveID)
+
+  let isExitingLive = false;
+  const systemInfo = ref({});
+  const isShowAudienceList = ref(false);
+  const isShowCoGuestRequestPanel = ref(false);
+  const tipSeq = ref(0);
+  const tipTitle = ref('');
+  const tipVisible = ref(false);
+  const tipPosition = ref('center');
+  const isShowExitConfirmToast = ref(false);
+  const isCoGuestControlBarOpen = ref(false);
+  const isBarrageInputActive = ref(false);
+  const requestPanelInitialDetail = ref(false);
+  const showMorePanel = ref(false)
+  const safeArea = ref({
+    left: 0, right: 0, top: 0, bottom: 0, width: 375, height: 750,
+  });
+  const isShowGiftPicker = ref(false);
+  const isLargeSizeGiftPlayer = ref(false);
+  const latestGift = ref({});
+  const entryBannerRef = ref(null);
+  const giftPlayerRef = ref(null);
+  const giftPlayerHolder = { current: null };
+  const floatingComboRef = ref<any>(null);
+  const liveID = ref('');
+  const currentLoginUserId = ref();
+  const templateLayout = ref(600);
+  const seatIndex = ref(-1);
+  const barrageListRef = ref();
+  const barrageInputShift = ref(0);
+  const BARRAGE_LIST_H_PX = uni.upx2px(380);
+  const SYNC_WIN_H = (() => { try { return uni.getSystemInfoSync().windowHeight || 0; } catch (e) { return 0; } })();
+  const CO_GUEST_BAR_GAP_PX = uni.upx2px(216);
+  const isFreezeCamera = ref(false);
+  let freezeReleaseTimer: any = null;
+  const isShowCoGuestSheet = ref(false)
+  const coGuestSheetItems = ref(['取消连麦申请'])
+  const coGuestSheetTitle = ref('')
+  const audienceInnerPanelVisible = ref(false);
+
+  const { showGift, onGiftFinished } = giftService({
+    roomId: uni?.$liveID,
+    giftPlayerRef: giftPlayerHolder,
+  });
+
+  const showTip = (title: string, position: string = 'center') => {
+    tipTitle.value = title;
+    tipPosition.value = position;
+    tipVisible.value = false;
+    nextTick(() => {
+      tipSeq.value++;
+      tipVisible.value = true;
+    });
+  };
+  const onBarrageInputShift = (px: number) => {
+    barrageInputShift.value = Math.max(0, Math.round(Number(px) || 0));
+  };
+  const onBarrageInputToast = (msg: string) => {
+    if (msg) showTip(msg, 'top');
+  };
+  const onAudienceInnerPanelChange = (visible) => {
+    audienceInnerPanelVisible.value = !!visible;
+  };
+  const handleHideInput = () => {
+    uni.hideKeyboard();
+  };
+  const showAudienceList = () => {
+    isShowAudienceList.value = true;
+  };
+
+  const audienceEntryBannerRef = ref(null);
+  const pushAudienceEntry = (user: { userID: string; userName: string; level: number }) => {
+    audienceEntryBannerRef.value?.push?.(user);
+  };
+
+  const parseAudienceEventUser = (eventData: string): { userID: string; userName: string; level: number } => {
+    const parsed = safeJsonParse<any>(eventData, null);
+    let user = parsed?.audience ?? parsed?.userInfo ?? parsed;
+    if (typeof user === 'string') {
+      user = safeJsonParse<any>(user, null);
+    }
+    user = user ?? {};
+    return {
+      userID: user?.userID || user?.userId || '',
+      userName: user?.userName || user?.nameCard || user?.userID || user?.userId || '',
+      level: Number(user?.level) || 0,
+    };
+  };
+
+  const onAudienceJoined = (eventData: string) => {
+    pushAudienceEntry(parseAudienceEventUser(eventData));
+  };
+
+  const joinLiveRoom = (onSuccess: () => void) => {
+    joinLive({
+      liveID: liveID.value,
+      success: onSuccess,
+      fail: () => {
+        showTip('直播已结束');
+        setTimeout(() => uni.redirectTo({ url: `/pages/scenes/live/video/liveList/index` }), 500);
+      },
+    });
+  };
+
+  const handlePageLoad = (options: any) => {
+    console.warn('Live page onLoad = ', options);
+    liveID.value = options?.liveID || uni.$liveID || '';
+
+    if (liveID.value) {
+      joinLiveRoom(() => {
+        templateLayout.value = currentLive.value?.seatLayoutTemplateID || templateLayout.value;
+        console.log('joinLive success templateLayout: ', templateLayout.value);
+      });
+      return;
+    }
+    showTip('liveID 为空');
+  };
+
+  const handleCallEndedBackToLive = () => {
+    console.warn('[Audience] callEndedBackToLive: rejoining live room');
+    if (liveID.value) {
+      joinLiveRoom(() => {
+        templateLayout.value = currentLive.value?.seatLayoutTemplateID || templateLayout.value;
+        console.log('[Audience] rejoinLive success after call ended');
+      });
+    }
+  };
+
+  const handleBarrageInputShow = () => {
+    isBarrageInputActive.value = true;
+  };
+  const handleBarrageInputHide = () => {
+    isBarrageInputActive.value = false;
+  };
+
+  const handleLocalCameraOpenedByAdmin = (event) => {
+    showTip(`您已被解除禁画`);
+  };
+  const handleLocalCameraClosedByAdmin = (event) => {
+    showTip(`您已被禁画`);
+  };
+  const handleLocalMicrophoneOpenedByAdmin = (event) => {
+    showTip(`您已被解除静音`);
+  };
+  const handleLocalMicrophoneClosedByAdmin = (event) => {
+    showTip(`您已被静音`);
+  };
+  const exitLiveWithTip = (tip: string) => {
+    isExitingLive = true;
+    removeAllLiveListeners();
+    showTip(tip);
+    uni.$liveID = '';
+    setTimeout(() => {
+      uni.redirectTo({
+        url: `/pages/scenes/live/video/liveList/index`,
+        delta: 1,
+        success: () => {
+          console.log('返回成功');
+        },
+        fail: (err) => {
+          console.error('返回失败', err);
+        }
+      });
+    }, 1500);
+  };
+  const handleLiveEnded = (event) => {
+    exitLiveWithTip('直播已结束');
+  };
+  const handleKickedOutOfLive = (event) => {
+    exitLiveWithTip('被踢出直播间');
+  };
+
+  const removeAllLiveListeners = () => {
+    removeLiveListListener('onLiveEnded', handleLiveEnded)
+    removeLiveListListener('onKickedOutOfLive', handleKickedOutOfLive)
+    removeLiveSeatEventListener(uni?.$liveID, 'onLocalCameraOpenedByAdmin', handleLocalCameraOpenedByAdmin)
+    removeLiveSeatEventListener(uni?.$liveID, 'onLocalCameraClosedByAdmin', handleLocalCameraClosedByAdmin)
+    removeLiveSeatEventListener(uni?.$liveID, 'onLocalMicrophoneOpenedByAdmin', handleLocalMicrophoneOpenedByAdmin)
+    removeLiveSeatEventListener(uni?.$liveID, 'onLocalMicrophoneClosedByAdmin', handleLocalMicrophoneClosedByAdmin)
+  };
+
+  const onBarrageReceiveGift = (giftData: any) => {
+    if (!giftData) return;
+    latestGift.value = giftData;
+    const senderId = giftData?.sender?.userID || '';
+    const isSelf = !!senderId && senderId === loginUserInfo.value?.userID;
+    const count = Math.max(1, Math.round(Number(giftData.count) || 1));
+    console.log('======onReceiveGift senderId=', senderId, 'isSelf=', isSelf, 'count=', count, 'giftID=', giftData?.gift?.giftID);
+    if (!isSelf) {
+      const anchor = currentLive.value?.liveOwner || null;
+      entryBannerRef.value?.push?.({
+        gift: giftData.gift,
+        sender: giftData.sender,
+        recipient: anchor ? {
+          userID: anchor.userID || '',
+          userName: anchor.userName || anchor.userID || '',
+        } : null,
+        count: count,
+      });
+    }
+    showGift(giftData, { count });
+  };
+
+  const onSelfGiftSent = (payload: any) => {
+    const gift = payload?.gift;
+    if (!gift) return;
+    const anchor = currentLive.value?.liveOwner || null;
+    entryBannerRef.value?.push?.({
+      gift: {
+        giftID: gift.giftID,
+        name: gift.name,
+        iconURL: gift.iconURL,
+      },
+      sender: {
+        userID: loginUserInfo.value?.userID || 'self',
+        userName: loginUserInfo.value?.nickname || loginUserInfo.value?.userID || '',
+        avatarURL: loginUserInfo.value?.avatarURL || '',
+      },
+      recipient: anchor ? {
+        userID: anchor.userID || '',
+        userName: anchor.userName || anchor.userID || '',
+      } : null,
+    });
+  };
+
+  const onAdvancedComboStart = (payload: any) => {
+    const gift = payload?.gift;
+    const count = payload?.count || 1;
+    isShowGiftPicker.value = false;
+    floatingComboRef.value?.activate?.(gift, count);
+  };
+
+  const onGiftPlayerFinished = () => {
+    isLargeSizeGiftPlayer.value = false;
+    onGiftFinished();
+  };
+
+  const showGiftPicker = () => {
+    isShowGiftPicker.value = true;
+  };
+
+  const navigateBack = () => {
+    if (uni.$localGuestStatus === 'CONNECTED') {
+      isShowExitConfirmToast.value = true;
+      return;
+    }
+    doExitLive();
+  };
+  const closeExitConfirmToast = () => {
+    isShowExitConfirmToast.value = false;
+  };
+  const confirmExitLive = () => {
+    isShowExitConfirmToast.value = false;
+    doExitLive();
+  };
+  const doExitLive = () => {
+    isExitingLive = true;
+    if (uni.$localGuestStatus === 'CONNECTED') {
+      disconnect({
+        liveID: uni?.$liveID,
+      })
+      uni.$localGuestStatus = 'IDLE'
+    }
+    leaveLive({
+      success: () => {
+        uni.$liveID = ''
+
+        uni.redirectTo({
+          url: `/pages/scenes/live/video/liveList/index`,
+          delta: 1,
+          animationType: 'pop-out',
+          animationDuration: 300,
+          success: () => {
+            console.log('返回成功');
+          },
+          fail: (err) => {
+            console.error('返回失败', err);
+          }
+        });
+      }
+    });
+  };
+
+  const handleCoGuestButtonClick = () => {
+    if (shouldDisableCoGuestButton.value) {
+      return;
+    }
+    showCoGuestRequestPanel();
+  };
+
+  const expandCoGuestControlBar = () => {
+    isCoGuestControlBarOpen.value = true;
+  };
+  const onCoGuestAccepted = () => {
+    isCoGuestControlBarOpen.value = true;
+  };
+  const onCoGuestControlBarOpenDetail = () => {
+    const list: any[] = Array.isArray(seatList.value) ? seatList.value : [];
+    const selfSeat = list.find(s => s?.userInfo?.userID === currentLoginUserId.value);
+    const cameraOff = selfSeat?.userInfo?.cameraStatus === DeviceStatus.OFF;
+    if (cameraOff) {
+      showTip('请先打开摄像头');
+      return;
+    }
+    requestPanelInitialDetail.value = true;
+    isFreezeCamera.value = true;
+    isShowCoGuestRequestPanel.value = true;
+  };
+  const onCoGuestControlBarEnd = () => {
+    uni.$localGuestStatus = 'IDLE';
+    isCoGuestControlBarOpen.value = false;
+  };
+
+  const showCoGuestRequestPanel = () => {
+    if (uni.$localGuestStatus === 'CONNECTED') {
+      coGuestSheetItems.value = ['断开连麦']
+      isShowCoGuestSheet.value = true
+    } else {
+      isShowCoGuestRequestPanel.value = true;
+    }
+  };
+
+  const onCoGuestSheetSelect = (res: { tapIndex: number }) => {
+    if (uni.$localGuestStatus === 'CONNECTED') {
+      if (res.tapIndex === 0) {
+        disconnect({
+          liveID: uni?.$liveID,
+        })
+        uni.$localGuestStatus = 'IDLE'
+      }
+      return
+    }
+    if (uni.$localGuestStatus === 'USER_APPLYING') {
+      if (res.tapIndex === 0) {
+        cancelApplication({
+          liveID: uni?.$liveID,
+        })
+        uni.$localGuestStatus = 'IDLE'
+      }
+    }
+  }
+
+  const shouldDisableCoGuestButton = computed(() => {
+    return Array.isArray(hostConnected.value) && hostConnected.value.length > 0;
+  });
+  const giftEntryBottomPx = computed(() => {
+    if (isShowGiftPicker.value) {
+      return uni.upx2px(heightPercentToRpx(0.5) + 80 + 16);
+    }
+    return safeArea.value.height / 8 + uni.upx2px(380 + 16);
+  });
+  const isSelfCoGuestConnected = computed(() => {
+    const list = Array.isArray(connected.value) ? connected.value : [];
+    return list.some((item: any) => item?.userID === uni.$userID);
+  });
+  const barrageTopPx = computed(() => {
+    const winH = (systemInfo.value && systemInfo.value.windowHeight) || SYNC_WIN_H;
+    if (winH <= 0) return -9999;
+    const baseBottom = isSelfCoGuestConnected.value ? CO_GUEST_BAR_GAP_PX : 84;
+    const bottomGap = baseBottom + barrageInputShift.value;
+    return Math.max(0, Math.round(winH - bottomGap - BARRAGE_LIST_H_PX));
+  });
+  const audienceEntryTopPx = computed(() => barrageTopPx.value - uni.upx2px(64));
+  const anyOverlayVisible = computed(() =>
+    isShowCoGuestSheet.value ||
+    isShowGiftPicker.value ||
+    showMorePanel.value ||
+    isShowAudienceList.value ||
+    audienceInnerPanelVisible.value ||
+    isShowExitConfirmToast.value ||
+    isShowCoGuestRequestPanel.value
+  );
+
+  const nonGiftOverlayVisible = computed(() =>
+    isShowCoGuestSheet.value ||
+    showMorePanel.value ||
+    isShowAudienceList.value ||
+    isShowCoGuestRequestPanel.value
+  );
+
+  watch(messageBannedUserList, (newValue, oldValue) => {
+    if (isExitingLive) return;
+    const isBanned = (newValue || []).some((obj: any) => obj?.userID === uni.$userID);
+    const wasBanned = (oldValue || []).some((obj: any) => obj?.userID === uni.$userID);
+    if (isBanned && !wasBanned) showTip('您已被禁言');
+    if (!isBanned && wasBanned) showTip('您已被解除禁言');
+  });
+
+  let seenAudienceIDs = new Set<string>();
+  let audienceListInitialized = false;
+  watch(audienceList, (list) => {
+    const arr = Array.isArray(list) ? list : [];
+    const ids = new Set(arr.map((u: any) => u?.userID).filter(Boolean));
+    if (ids.size === 0) {
+      seenAudienceIDs.clear();
+      audienceListInitialized = false;
+      return;
+    }
+    if (!audienceListInitialized) {
+      seenAudienceIDs = ids;
+      audienceListInitialized = true;
+      return;
+    }
+    ids.forEach(id => {
+      if (!seenAudienceIDs.has(id)) {
+        const user = arr.find((u: any) => u?.userID === id);
+        pushAudienceEntry({ userID: id, userName: user?.userName || id, level: Number(user?.level) || 0 });
+      }
+    });
+    seenAudienceIDs = ids;
+  });
+  watch(giftPlayerRef, (val) => { giftPlayerHolder.current = val; });
+  watch(connected, (newList, oldList) => {
+    const list = Array.isArray(newList) ? newList : [];
+    const hasSelfInConnected = list.some(item => item?.userID === uni.$userID);
+    if (!hasSelfInConnected) {
+      uni.$localGuestStatus = 'IDLE'
+      isCoGuestControlBarOpen.value = false
+    }
+  }, { deep: true, immediate: true })
+  watch(() => loginUserInfo.value?.userID, (newUserId, oldUserId) => {
+    if (newUserId) {
+      currentLoginUserId.value = newUserId;
+    }
+  }, { immediate: true, deep: true });
+  watch(currentLive, (newVal, oldVal) => {
+    if (newVal) {
+      templateLayout.value = newVal.seatLayoutTemplateID || templateLayout.value;
+      console.log(`currentLive change: ${JSON.stringify(newVal)}`);
+    }
+  });
+  watch(liveList, (newValue, oldValue) => {
+    for (let i = 0; i < (oldValue || []).length; i++) {
+      const liveNewInfo = (newValue || [])[i];
+      const liveOldInfo = (oldValue || [])[i];
+      if (!liveNewInfo || !liveOldInfo) continue;
+
+      if (!liveOldInfo?.isMessageDisable && liveNewInfo?.isMessageDisable) {
+        showTip(`${liveNewInfo?.liveOwner?.userName}被禁言`);
+      }
+    }
+  }, { immediate: true, deep: true });
+  watch(anyOverlayVisible, (visible) => {
+    uni.$emit('barrageInput:setHidden', !!visible);
+    uni.$emit('barrageList:setPillHidden', !!visible);
+  });
+  watch(isShowCoGuestRequestPanel, (val) => {
+    if (!val) {
+      requestPanelInitialDetail.value = false;
+      clearTimeout(freezeReleaseTimer);
+      freezeReleaseTimer = setTimeout(() => { isFreezeCamera.value = false; }, 800);
+    }
+  });
+  watch(
+    () => seatList.value?.find((s) => s.userInfo?.userID === currentLoginUserId.value)?.userInfo?.cameraStatus,
+    (status) => {
+      if (!isShowCoGuestRequestPanel.value && status === DeviceStatus.ON) {
+        isFreezeCamera.value = false;
+      }
+    },
+  );
+
+  onBackPress((option) => {
+    if (option.from === 'backbutton')
+      return true;
+  });
+  onLoad(handlePageLoad);
+  onMounted(() => {
+    setSdkLanguageFromSystem()
+    uni.setKeepScreenOn({
+      keepScreenOn: true,
+    });
+    uni.getSystemInfo({
+      success: (res) => {
+        systemInfo.value = res;
+        safeArea.value = res.safeArea;
+      }
+    });
+    addLiveListListener('onLiveEnded', handleLiveEnded)
+    addLiveListListener('onKickedOutOfLive', handleKickedOutOfLive)
+    addLiveSeatEventListener(uni?.$liveID, 'onLocalCameraOpenedByAdmin', handleLocalCameraOpenedByAdmin)
+    addLiveSeatEventListener(uni?.$liveID, 'onLocalCameraClosedByAdmin', handleLocalCameraClosedByAdmin)
+    addLiveSeatEventListener(uni?.$liveID, 'onLocalMicrophoneOpenedByAdmin', handleLocalMicrophoneOpenedByAdmin)
+    addLiveSeatEventListener(uni?.$liveID, 'onLocalMicrophoneClosedByAdmin', handleLocalMicrophoneClosedByAdmin)
+    addAudienceListener(uni?.$liveID, 'onAudienceJoined', onAudienceJoined)
+    uni.$on('callEndedBackToLive', handleCallEndedBackToLive);
+    uni.$on('barrageInput:show', handleBarrageInputShow);
+    uni.$on('barrageInput:hide', handleBarrageInputHide);
+    uni.$on('barrageInput:shift', onBarrageInputShift);
+    uni.$on('barrageInput:toast', onBarrageInputToast);
+  });
+  onUnmounted(() => {
+    removeAllLiveListeners();
+    removeAudienceListener(uni?.$liveID, 'onAudienceJoined', onAudienceJoined)
+    uni.$off('callEndedBackToLive', handleCallEndedBackToLive);
+    uni.$off('barrageInput:show', handleBarrageInputShow);
+    uni.$off('barrageInput:hide', handleBarrageInputHide);
+    uni.$off('barrageInput:shift', onBarrageInputShift);
+    uni.$off('barrageInput:toast', onBarrageInputToast);
+  });
+</script>
+
+<style>
+  .live-container {
+    flex: 1;
+    position: relative;
+    width: 750rpx;
+    background: rgba(15, 16, 20, 1);
+  }
+
+  .live-content {
+    flex: 1;
+    position: relative;
+    width: 750rpx;
+  }
+
+  .footer {
+    flex: 1;
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 80rpx;
+    padding-left: 32rpx;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    width: 686rpx;
+    z-index: 10;
+  }
+
+  .action-buttons {
+    position: fixed;
+    right: 40rpx;
+    bottom: 80rpx;
+    flex-direction: row;
+    align-items: center;
+    z-index: 10;
+  }
+
+  .co-mic-control-bar-wrap {
+    position: fixed;
+    left: 32rpx;
+    bottom: 36rpx;
+    width: 686rpx;
+    z-index: 10;
+  }
+</style>

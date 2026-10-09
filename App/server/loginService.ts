@@ -1,6 +1,12 @@
 import { useLoginState } from "@/uni_modules/tuikit-atomic-x/state/LoginState";
 import { genTestUserSig } from "@/debug/GenerateTestUserSig.js";
+import { useCallState } from "@/uni_modules/tuikit-atomic-x/state/CallState";
+// #ifdef APP-PLUS
+import { initCallEngine } from "@/uni_modules/tuikit-atomic-x";
+// #endif
+import { pushService } from "./pushService";
 import { DEFAULT_USER_NAMES, DEFAULT_AVATAR } from "./constants";
+import { PUSH_APP_KEY } from "./inner-constants";
 import { ref } from "vue";
 
 import type { LoginInfo, StorageUserInfo } from "./types";
@@ -11,7 +17,7 @@ const {
   logout: logoutAtomicx,
   setSelfInfo
 } = useLoginState();
-
+const { enableCallMultiDeviceAbility } = useCallState()
 const loginUserInfo = ref<StorageUserInfo | null>(null);
 
 // 初始化时从 storage 读取用户信息
@@ -46,12 +52,13 @@ const loginAtomicx = (loginInfo: LoginInfo): Promise<Record<string, never>> => {
       userID: loginInfo.userId,
       userSig: loginInfo.userSig,
       success: () => {
+        enableCallMultiDeviceAbility(true)
         if (!loginAtomicxUserInfo?.value?.nickname) {
           setSelfInfo({
             userProfile: {
               userID: loginInfo.userId,
               nickname: DEFAULT_USER_NAMES[Math.floor(Math.random() * DEFAULT_USER_NAMES.length)],
-              avatarURL: DEFAULT_AVATAR,
+              avatarURL: loginInfo.avatar || DEFAULT_AVATAR,
             },
           });
         }
@@ -88,6 +95,17 @@ export const loginKit = async (params: { userId: string }): Promise<void> => {
 
   try {
     await loginAtomicx(loginInfo);
+
+    // #ifdef APP-PLUS
+    // 登录成功后初始化 TUICallEngine
+    initCallEngine(SDKAppID, userId, userSig);
+    // #endif
+
+    // 保留 pushService 登录
+    pushService.login({
+      ...loginInfo,
+      appKey: PUSH_APP_KEY,
+    });
 
     loginUserInfo.value = {
       apaasUserId: userId,

@@ -1,0 +1,128 @@
+<template>
+  <view class="container" :style="{ height: safeArea.height + 'px'}">
+    <image @tap="handleToLive" class="back-btn" src="/static/images/close.png" mode="aspectFit" />
+    <view class="header">
+      <text class="title">直播已结束</text>
+    </view>
+  </view>
+</template>
+
+<script setup>
+  import {
+    ref,
+    onMounted,
+    computed
+  } from 'vue';
+  import {
+    useLiveSummaryState
+  } from '@/uni_modules/tuikit-atomic-x/state/LiveSummaryState'
+  const safeArea = ref({
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    width: 375,
+    height: 750,
+  });
+
+  onMounted(() => {
+    uni.getSystemInfo({
+      success: (res) => {
+        safeArea.value = res.safeArea;
+      }
+    });
+  });
+
+  const handleToLive = () => {
+    uni.redirectTo({
+      url: '/pages/scenes/live/video/liveList/index',
+      success() {
+        console.log('跳转成功');
+      },
+      fail(err) {
+        console.error('跳转失败:', err);
+      }
+    });
+  }
+</script>
+
+<style scoped>
+  .container {
+    flex: 1;
+    background-color: rgba(19, 20, 23, 1);
+    align-items: center;
+    justify-content: flex-start;
+    position: relative;
+    flex-direction: column;
+  }
+
+  .header {
+    margin-top: 300rpx;
+  }
+
+  .back-btn {
+    width: 48rpx;
+    height: 48rpx;
+    position: absolute;
+    top: 100rpx;
+    right: 80rpx;
+    z-index: 99;
+  }
+
+  .title {
+    color: #fff;
+    font-size: 36rpx;
+    font-weight: bold;
+  }
+
+  .time {
+    color: #bdbdbd;
+    font-size: 26rpx;
+    margin-bottom: 40rpx;
+    margin-left: 32rpx;
+    width: 100%;
+  }
+
+  .stats-card {
+    left: 0;
+    right: 0;
+    background-color: rgba(43, 44, 48, 1);
+    border-radius: 24rpx;
+    padding: 40rpx 0;
+    width: 700rpx;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4rpx 24rpx rgba(0, 0, 0, 0.2);
+    margin-top: 80rpx;
+  }
+
+  .stats-row {
+    width: 700rpx;
+    flex-direction: row;
+    justify-content: space-around;
+    margin: 24rpx;
+  }
+
+  .stats-row:last-child {
+    margin-bottom: 0;
+  }
+
+  .stats-item {
+    flex: 1;
+    align-items: center;
+  }
+
+  .stats-value {
+    color: #fff;
+    font-size: 36rpx;
+    font-weight: bold;
+    text-align: center;
+  }
+
+  .stats-label {
+    color: #bdbdbd;
+    font-size: 22rpx;
+    margin-top: 8rpx;
+    text-align: center;
+  }
+</style>
