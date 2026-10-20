@@ -9,24 +9,33 @@
       @touchstart.stop
       @touchend.stop
     >
-      <view
-        v-for="(row, rowIndex) in actionRows"
-        :key="rowIndex"
-        class="msg-actions__row-wrap"
-      >
-        <view class="msg-actions__row">
-          <view
-            v-for="item in row"
-            :key="item.key"
-            class="msg-actions__item"
-            @touchstart.stop
-            @touchend.stop="handleActionTap(item)"
-          >
-            <image class="msg-actions__icon" :src="item.icon" mode="aspectFit"></image>
-            <text class="msg-actions__text">{{ item.label }}</text>
+      <ReactionPicker
+        v-if="reactionMode"
+        :message="message"
+        @collapse="handleReactionCollapse"
+        @showAll="handleReactionShowAll"
+        @close="safeClose"
+      />
+      <view v-else class="msg-actions__rows">
+        <view
+          v-for="(row, rowIndex) in actionRows"
+          :key="rowIndex"
+          class="msg-actions__row-wrap"
+        >
+          <view class="msg-actions__row">
+            <view
+              v-for="item in row"
+              :key="item.key"
+              class="msg-actions__item"
+              @touchstart.stop
+              @touchend.stop="handleActionTap(item)"
+            >
+              <image class="msg-actions__icon" :src="item.icon" mode="aspectFit"></image>
+              <text class="msg-actions__text">{{ item.label }}</text>
+            </view>
           </view>
+          <view v-if="rowIndex < actionRows.length - 1" class="msg-actions__divider"></view>
         </view>
-        <view v-if="rowIndex < actionRows.length - 1" class="msg-actions__divider"></view>
       </view>
     </view>
     
@@ -40,6 +49,8 @@ import type { MessageInfo } from '../../../types/message'
 import { useMessageActionState } from '../../../state/MessageActionState'
 import { throttle } from '../../../utils/lodash'
 import { isCallMessage } from '../../../utils/callMessageUtils'
+import ReactionPicker from './MessageReaction/ReactionPicker.uvue'
+import { listAllReactionEmojis } from '../../../utils/reactionEmoji'
 import { getAudioConvertVisibleMap } from '@/uni_modules/tuikit-atomic-x/utils/audioConvertVisibleMapStore.uts'
 import { isMessageTranslateVisible } from '@/uni_modules/tuikit-atomic-x/utils/messageTranslateVisibleMapStore.uts'
 
@@ -48,6 +59,7 @@ import deleteIcon from '../assets/msg_delete.png'
 import forwardIcon from '../assets/msg_forward.png'
 import hideIcon from '../assets/msg_hide.png'
 import quoteIcon from '../assets/msg_quote.png'
+import reactionIcon from '../../../static/assets/message-list/msg_reaction.png'
 import recallIcon from '../assets/msg_recall.png'
 import translateIcon from '../assets/msg_translate.png'
 import voiceToTextIcon from '../assets/msg_voice_to_text.png'
@@ -95,8 +107,11 @@ const MSG_TYPE_TEXT = 1
 const MSG_TYPE_AUDIO = 4
 const MSG_TYPE_TIPS = 7
 const MSG_TYPE_CUSTOM = 8
+const MSG_STATUS_SEND_SUCCESS = 2
 const MSG_STATUS_REVOKED = 4
 const MSG_STATUS_DELETED = 5
+
+// 表情选择器宽 512rpx + 左右各 24rpx；操作项宽 500rpx，需整体右移 30rpx 才与选择器居中对齐
 
 // 箭头几何参数（rpx，与 .msg-actions__arrow width/height 保持一致）
 const ARROW_SIZE = 24
@@ -118,7 +133,7 @@ const props = withDefaults(defineProps<Props>(), {
   actions: () => []
 })
 
-const emit = defineEmits(['close', 'action'])
+const emit = defineEmits(['close', 'action', 'showAll'])
 
 const panelRef = ref<any | null>(null)
 type TriggerPosition = {
@@ -147,6 +162,8 @@ const isCentered = ref(false)
 // 测量得到的真实面板尺寸（rpx）
 const panelWidthRpx = ref(0)
 const panelHeightRpx = ref(0)
+// 表情回应选择器是否展开为完整网格（展开时隐藏下方操作项）
+const reactionMode = ref<boolean>(false)
 
 onMounted(() => {
   const obj = useMessageActionState({ message: toUTSJSONObject(props.message) })
@@ -226,6 +243,17 @@ const canQuote = computed((): boolean => {
   if (mt == MSG_TYPE_TIPS) return false
   return true
 })
+
+// 与 native 一致：仅发送成功且已有 msgID、且存在可用表情时才提供「贴表情」入口
+const showReactionPicker = computed((): boolean => {
+  const messageObj: UTSJSONObject = toUTSJSONObject(props.message)
+  const st: any | null = messageObj['status']
+  if (st != MSG_STATUS_SEND_SUCCESS) return false
+  const idVal: any | null = messageObj['msgID']
+  if (!(typeof idVal == 'string') || (idVal as string).length == 0) return false
+  return listAllReactionEmojis().length > 0
+})
+
 
 /**
  * 语音转文字按钮的 label 与是否处于"隐藏文字"模式
@@ -696,6 +724,7 @@ const actionConfig = computed((): ActionItem[] => {
   list.push({ key: 'voiceToText', label: voiceActionLabel.value, icon: voiceToTextIcon, visible: canConvertVoice.value } as ActionItem)
   list.push({ key: 'recall', label: '撤回', icon: recallIcon, visible: canRecall.value } as ActionItem)
   list.push({ key: 'forward', label: '转发', icon: forwardIcon, visible: canForward.value } as ActionItem)
+  list.push({ key: 'reaction', label: '贴表情', icon: reactionIcon, visible: showReactionPicker.value } as ActionItem)
   list.push({ key: 'quote', label: '引用', icon: quoteIcon, visible: QUOTE_ENTRY_ENABLED && canQuote.value } as ActionItem)
   list.push({
     key: 'translate',
@@ -755,6 +784,8 @@ const handleActionTap = (item: ActionItem): void => {
     handleQuote(null)
   } else if (key == 'translate') {
     handleTranslate(null)
+  } else if (key == 'reaction') {
+    handleReactionEntry()
   }
 }
 
@@ -808,6 +839,34 @@ const measureAndPosition = () => {
     console.error('[MessageActions] measureAndPosition failed:', e)
   }
   phase.value = 'ready'
+}
+
+/** 点「贴表情」→ 切换到表情面板：内容高度变了，需回到 measure 阶段重新测量定位 */
+const handleReactionEntry = (): void => {
+  reactionMode.value = true
+  phase.value = 'measure'
+  nextTick((): void => {
+    setTimeout((): void => {
+      measureAndPosition()
+    }, 30)
+  })
+}
+
+/** 收起表情面板 → 返回操作菜单（重新测量定位） */
+const handleReactionCollapse = (): void => {
+  reactionMode.value = false
+  phase.value = 'measure'
+  nextTick((): void => {
+    setTimeout((): void => {
+      measureAndPosition()
+    }, 30)
+  })
+}
+
+/** 点「更多」→ 关闭菜单，唤起全量表情选择器（底部弹层） */
+const handleReactionShowAll = (): void => {
+  emit('showAll')
+  safeClose()
 }
 
 const setTriggerPosition = (position: any) => {
@@ -877,14 +936,20 @@ watch((): any | null => props.triggerPosition ?? null, (position: any | null): v
   background-color: #FFFFFF;
   border-radius: 12rpx;
   box-shadow: 0 8rpx 24rpx rgba(0, 0, 0, 0.25);
-  padding: 33rpx 0 22rpx;
-  /* 与文本气泡 max-width 保持一致，4 个 item 正好占满一行 */
-  max-width: 500rpx;
+  padding-top: 11rpx;
+  /* 表情选择器 512 + 左右 margin 各 24 = 560；操作项区 500，4 个 item 正好占满一行 */
+  max-width: 560rpx;
   z-index: 1001;
   justify-content: center;
   align-items: flex-start;
   left: auto;
   right: auto;
+}
+
+.msg-actions__rows {
+  padding: 22rpx 0 22rpx;
+  flex-direction: column;
+  align-items: flex-start;
 }
 
 .msg-actions__row-wrap {

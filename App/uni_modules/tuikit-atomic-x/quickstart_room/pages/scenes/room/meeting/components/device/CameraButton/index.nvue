@@ -1,0 +1,106 @@
+<template>
+  <view class="bottom-btn" @tap="handleTap" :style="dimStyle">
+    <view class="bottom-icon-box">
+      <image
+        class="bottom-icon"
+        :src="cameraIconSrc"
+        mode="aspectFit"
+      />
+      <text class="bottom-text">{{ cameraText }}</text>
+    </view>
+  </view>
+</template>
+
+<script setup lang="ts">
+  import { computed, ref, watch, onUnmounted } from 'vue';
+  import {
+    useRoomState,
+    useRoomParticipantState,
+    useDeviceState,
+    RoomParticipantRole,
+    DeviceStatus,
+  } from '@/uni_modules/tuikit-atomic-x/state';
+  import { showToast } from '@/uni_modules/tuikit-atomic-x/utils/toast';
+  import { t } from '../../../../locales';
+  import { useIsLocalParticipantReady, canOpenCamera } from '../devicePermission';
+  import { showDeviceFailure, resetDeviceStartFailCount, assertSystemPermissionGranted } from '../deviceFailure';
+
+  const CAMERA_DEFAULT_FACING_FRONT = true;
+
+  const props = defineProps({
+    autoEnableCamera: { type: Boolean, default: false },
+  });
+
+  const { currentRoom } = useRoomState();
+  const { localParticipant } = useRoomParticipantState();
+  const { openLocalCamera, closeLocalCamera, switchCamera, isFrontCamera } = useDeviceState();
+  const isLocalParticipantReady = useIsLocalParticipantReady();
+
+  const cameraOn = computed(() => localParticipant.value?.cameraStatus === DeviceStatus.ON);
+
+  const isDimmed = computed(() => {
+    return (
+      currentRoom.value?.isAllCameraDisabled === true &&
+      localParticipant.value?.role === RoomParticipantRole.GeneralUser &&
+      localParticipant.value?.cameraStatus === DeviceStatus.OFF
+    );
+  });
+
+  const dimStyle = computed(() => ({ opacity: isDimmed.value ? 0.5 : 1 }));
+
+  const cameraIconSrc = computed(() =>
+    cameraOn.value
+      ? '/static/images/room/room_camera_on.png'
+      : '/static/images/room/room_camera_off.png',
+  );
+
+  const cameraText = computed(() => (cameraOn.value ? t('device.closeVideo') : t('device.openVideo')));
+
+  const hasAutoEnabled = ref(false);
+
+  async function startCamera(isFront: boolean): Promise<void> {
+    await assertSystemPermissionGranted('camera');
+    await openLocalCamera({ isFront });
+    resetDeviceStartFailCount('camera');
+  }
+
+  function openCameraWithReport(isFront: boolean): void {
+    startCamera(isFront).catch((e: any) => {
+      showDeviceFailure(e, 'camera', () => startCamera(isFrontCamera.value), t('Device.ToggleCameraFailed'));
+    });
+  }
+
+  watch(
+    () => [props.autoEnableCamera, isLocalParticipantReady.value] as const,
+    ([autoEnable, isReady]) => {
+      if (!autoEnable || !isReady || hasAutoEnabled.value) return;
+      if (!canOpenCamera()) return;
+      hasAutoEnabled.value = true;
+      openCameraWithReport(CAMERA_DEFAULT_FACING_FRONT);
+    },
+    { immediate: true }
+  );
+
+  onUnmounted(() => {
+    if (!isFrontCamera.value) {
+      switchCamera({ isFront: CAMERA_DEFAULT_FACING_FRONT });
+    }
+    closeLocalCamera();
+  });
+
+  function handleTap() {
+    if (isDimmed.value) {
+      showToast(t('Device.AllCamDisabled'));
+      return;
+    }
+    if (cameraOn.value) {
+      closeLocalCamera();
+    } else {
+      openCameraWithReport(isFrontCamera.value);
+    }
+  }
+</script>
+
+<style lang="scss">
+  @import './CameraButton.scss';
+</style>

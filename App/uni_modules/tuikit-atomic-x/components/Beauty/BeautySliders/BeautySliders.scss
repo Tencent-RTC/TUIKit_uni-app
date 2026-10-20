@@ -1,0 +1,27 @@
+.beauty-rows {
+  flex-direction: column;
+}
+
+.beauty-row {
+  flex-direction: row;
+  align-items: center;
+  margin-bottom: 12rpx;
+  height: 60rpx;
+}
+
+.beauty-row-label {
+  width: 88rpx;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 26rpx;
+}
+
+.beauty-slider {
+  margin: 0 20rpx;
+}
+
+.beauty-row-value {
+  width: 40rpx;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 24rpx;
+  text-align: right;
+}

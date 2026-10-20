@@ -9,7 +9,7 @@
       </view>
 
       <view class="confirm-dialog__buttons">
-        <view class="confirm-dialog__button" @tap="handleCancel">
+        <view v-if="cancelText" class="confirm-dialog__button" @tap="handleCancel">
           <text class="confirm-dialog__button-text confirm-dialog__button-text--cancel">{{ cancelText }}</text>
         </view>
         <view class="confirm-dialog__button" @tap="handleConfirm">

@@ -22,11 +22,12 @@
           <text class="msg__read-text msg__text--no-select">{{ readStatusText }}</text>
         </view>
       </view>
+      <MessageReactionBar v-if="showStandaloneReaction" :message="message" @showDetail="handleShowReactionDetail" />
       <view v-if="showTime" class="msg__time" @tap.stop="handleMessageContentTap" style="background-color: black;">
         <text class="msg__time-text msg__text--no-select">{{ formatMessageTime(messageTimestamp) }}</text>
       </view>
     </view>
-    <MessageActions v-if="showActions" :message="message" :actions="messageActionList" :triggerPosition="longPressPosition" @close="handleActionsClose" @action="handleAction" />
+    <MessageActions v-if="showActions" :message="message" :actions="messageActionList" :triggerPosition="longPressPosition" @close="handleActionsClose" @action="handleAction" @showAll="handleReactionShowAll" />
 
     <!-- 转发目标选择器：组件内部自洽，选中后直接调 forwardMessages，不抛给业务层 -->
     <ForwardPicker
@@ -34,6 +35,20 @@
       :excludeConversationID="conversationID"
       @select="handleForwardSelect"
       @close="handleForwardPickerClose"
+    />
+
+    <!-- 表情回应详情选择器：底部弹出，展示当前 reaction 的用户列表，支持点击移除自己的回应 -->
+    <ReactionDetailPicker
+      v-if="showReactionDetail"
+      :visible="showReactionDetail"
+      :message="message"
+      :selectedReactionID="reactionDetailReactionID"
+      @close="handleReactionDetailClose"
+    />
+    <ReactionFullPicker
+      :visible="showReactionFullPicker"
+      :message="message"
+      @close="handleReactionFullPickerClose"
     />
   </view>
 </template>
@@ -53,6 +68,10 @@
   import MergerMessage from './MergerMessage/MergerMessage.uvue'
   import MessageActions from './MessageActions.uvue'
   import ForwardPicker from './ForwardPicker.uvue'
+  import MessageReactionBar from './MessageReaction/MessageReactionBar.uvue'
+  import ReactionDetailPicker from './MessageReaction/ReactionDetailPicker.uvue'
+  import ReactionFullPicker from './MessageReaction/ReactionFullPicker.uvue'
+  import { getReactionList } from '../../../utils/messageReaction'
   import { useMessageListState } from '../../../state/MessageListState'
   import { formatTime } from '../../../utils/timeUtils'
   import { isGroupCallMessage, isCallMessage, isVideoCall, parseCallMessageData } from '../../../utils/callMessageUtils'
@@ -165,6 +184,11 @@ const props = withDefaults(defineProps<Props>(), {
   const showActions = ref(false)
   // 转发目标选择器可见性（组件内部状态，不外泄）
   const showForwardPicker = ref(false)
+  // 表情回应详情选择器
+  const showReactionDetail = ref(false)
+  const reactionDetailReactionID = ref('')
+  // 全量表情选择器（贴表情面板「更多」唤起）
+  const showReactionFullPicker = ref(false)
   const messageContentRef = ref(null)
   const loadingIconRef = ref(null)
   const flashOverlayRef = ref<UniElement | null>(null)  // 独立 DOM 覆盖在 messageContentRef 上做 backgroundColor 渐变
@@ -417,6 +441,11 @@ const triggerFlash = (): void => {
     return isSelf.value &&
       messageStatus.value == 2 &&
       messageNeedReadReceipt.value
+  })
+
+  // 所有消息类型的 reaction 条统一渲染在气泡下方（不再在 TextMessage 内嵌）
+  const showStandaloneReaction = computed((): boolean => {
+    return getReactionList(props.message).length > 0
   })
 
   // 已读状态文本
@@ -862,6 +891,25 @@ watch(
 
   const handleForwardPickerClose = (): void => {
     showForwardPicker.value = false
+  }
+
+  const handleReactionShowAll = (): void => {
+    showReactionFullPicker.value = true
+  }
+
+  const handleReactionFullPickerClose = (): void => {
+    showReactionFullPicker.value = false
+  }
+
+  const handleShowReactionDetail = (reactionID: string): void => {
+    if (reactionID.length == 0) return
+    reactionDetailReactionID.value = reactionID
+    showReactionDetail.value = true
+  }
+
+  const handleReactionDetailClose = (): void => {
+    showReactionDetail.value = false
+    reactionDetailReactionID.value = ''
   }
 
   const handleForwardSelect = (targetConversationID: string): void => {

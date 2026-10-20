@@ -235,7 +235,7 @@ const extractMsgID = (msg: any): string | null => {
 const checkAndDownloadSnapshot = async () => {
   // 确保 message 有数据且 videoSnapshotUrl 为空时才下载
   const msgID = extractMsgID(props.message as any)
-  if (msgID != null && videoSnapshotUrl.value == null && isDownloadingSnapshot.value == false) {
+  if (msgID != null && videoSnapshotUrl.value.length == 0 && isDownloadingSnapshot.value == false) {
     isDownloadingSnapshot.value = true
     try {
       const msgForAction: UTSJSONObject = props.message as UTSJSONObject
@@ -254,20 +254,18 @@ watch(
   (): string | null => extractMsgID(props.message as any),
   (newMsgID: string | null): void => {
     if (newMsgID == null || newMsgID.length == 0 || newMsgID.startsWith(PLACEHOLDER_PREFIX)) return
-    if (videoSnapshotUrl.value == null) {
+    // ponytail: 仅自动下载封面；视频本体点击播放时再下载（handlePlayTap）
+    if (videoSnapshotUrl.value.length == 0) {
       checkAndDownloadSnapshot()
-    }
-    if (videoUrl.value == null) {
-      checkAndDownloadVideo()
     }
   },
   { immediate: true }
 )
 
 watch(
-  (): string | null => videoSnapshotUrl.value,
-  (newUrl: string | null, oldUrl: string | null): void => {
-    if (newUrl != null && oldUrl == null && coverError.value) {
+  (): string => videoSnapshotUrl.value,
+  (newUrl: string): void => {
+    if (newUrl.length > 0 && coverError.value) {
       coverError.value = false
     }
   }

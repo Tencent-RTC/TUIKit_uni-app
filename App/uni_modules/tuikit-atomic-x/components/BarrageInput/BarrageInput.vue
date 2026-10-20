@@ -12,6 +12,7 @@
   import { useBarrageState } from "@/uni_modules/tuikit-atomic-x/state/BarrageState";
   import { useLiveAudienceState } from '@/uni_modules/tuikit-atomic-x/state/LiveAudienceState';
   import { transformEmojiNameToKey } from '@/uni_modules/tuikit-atomic-x/utils/emojiUtils';
+  import { t, getSystemLanguage } from '../locales';
 
   const placeholderRef = ref<any>(null);
 
@@ -19,7 +20,7 @@
   const { messageBannedUserList } = useLiveAudienceState(uni?.$liveID);
 
   const isDisableSendMessage = ref(false);
-  const entryPlaceholder = computed(() => isDisableSendMessage.value ? '您已被禁言' : '说点什么....');
+  const entryPlaceholder = computed(() => isDisableSendMessage.value ? t('bi.bannedPlaceholder') : t('bi.placeholder'));
   const syncBannedToH5 = () => {
     // #ifdef APP-PLUS
     try {
@@ -182,7 +183,8 @@
       setTimeout(() => {
         try {
           const plat = (uni.getSystemInfoSync().platform || '').toLowerCase();
-          inputWebview?.evalJS('window.__setPlatform && window.__setPlatform("' + plat + '");window.__enterActive && window.__enterActive();');
+          const lang = getSystemLanguage();
+          inputWebview?.evalJS('window.__setPlatform && window.__setPlatform("' + plat + '");window.__setLanguage && window.__setLanguage("' + lang + '");window.__enterActive && window.__enterActive();');
         } catch (err) { /* ignore */ }
       }, 16);
     } catch (e) {
@@ -326,9 +328,11 @@
         inputWebview.show();
         // 注入平台标志给 H5:iOS 与 Android 键盘行为不同(iOS 全屏 webview 键盘会自动
         // 顶起 fixed 元素，不能再用注入高度二次补偿），H5 据此走不同的定位分支。
+        // 同时注入系统语言,H5 键盘的 placeholder/发送按钮据此切词。
         try {
           const plat = (uni.getSystemInfoSync().platform || '').toLowerCase();
-          inputWebview.evalJS('window.__setPlatform && window.__setPlatform("' + plat + '");');
+          const lang = getSystemLanguage();
+          inputWebview.evalJS('window.__setPlatform && window.__setPlatform("' + plat + '");window.__setLanguage && window.__setLanguage("' + lang + '");');
         } catch (err) { /* ignore */ }
         // 创建完成后补同步一次禁言状态:进房时若已被禁言,上面的 immediate 监听
         // 执行时 inputWebview 还不存在,同步被跳过,这里补上。

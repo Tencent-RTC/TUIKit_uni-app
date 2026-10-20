@@ -1,0 +1,221 @@
+<template>
+  <BaseDrawer
+    v-model="innerVisible"
+    :height="drawerHeight"
+    :overlayOpacity="0.4"
+    bgImage="/uni_modules/tuikit-atomic-x/static/assets/live/drawer-bg.png"
+    :bgImageHeight="drawerHeight"
+    padding="0 32rpx 0 32rpx"
+    :showHandle="true"
+    :preload="false"
+  >
+    <view class="audience-header">
+      <text class="audience-title">{{ t('al.title') }}</text>
+    </view>
+    <scroll-view class="audience-content" :style="{ height: scrollHeightRpx + 'rpx' }" scroll-y :show-scrollbar="false" @scroll="handleScroll" :scroll-top="scrollTop">
+      <view v-if="audienceList.length > 0" class="audience-grid">
+        <view
+          v-for="(audience, index) in audienceList"
+          :key="audience.userID"
+          class="audience-row-wrap"
+        >
+          <view class="audience-item" @tap="onTapAudience(audience)">
+            <text class="audience-marker">{{ index + 1 }}</text>
+            <view class="audience-avatar-container">
+              <image
+                class="audience-avatar"
+                :src="avatarOf(audience)"
+                mode="aspectFill"
+                @error="onAvatarError(audience)"
+              />
+            </view>
+            <view class="audience-identity">
+              <text class="audience-name" :numberOfLines="1">{{ audience.userName || audience.userID }}</text>
+              <view class="aud-level-badge">
+                <image class="aud-level-bg" :src="audLevelBadge(audience)" mode="scaleToFill" />
+                <text class="aud-level-num">{{ audLevel(audience) }}</text>
+              </view>
+            </view>
+            <text class="audience-gift-value">{{ audGiftValue(audience) }}</text>
+          </view>
+          <view class="audience-divider" v-if="index !== audienceList.length - 1">
+            <view class="audience-divider-left"></view>
+            <view class="audience-divider-right"></view>
+          </view>
+        </view>
+      </view>
+      <view v-if="audienceList.length === 0" class="empty-state">
+        <text class="empty-text">{{ t('al.empty') }}</text>
+      </view>
+      <view v-if="isLoading" class="loading-state">
+        <image src="/static/icon/loading.png" mode="aspectFit" class="loading-image" />
+      </view>
+    </scroll-view>
+  </BaseDrawer>
+
+  <AudienceActionPanel v-model="isShowAudienceActionPanel" :userInfo="selectedAudience" :liveID="liveID">
+  </AudienceActionPanel>
+  <AudienceProfilePanel v-model="isShowAudienceProfilePanel" :userInfo="selectedAudience" :liveID="liveID">
+  </AudienceProfilePanel>
+  <LiveToast
+    v-if="tipVisible"
+    :key="tipSeq"
+    v-model="tipVisible"
+    :title="tipTitle"
+    :duration="2000"
+  />
+</template>
+
+<script setup>
+  import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
+  import BaseDrawer from '@/components/live/BaseDrawer/index.nvue';
+  import AudienceActionPanel from '@/uni_modules/tuikit-atomic-x/components/LiveAudienceList/AudienceActionPanel/index.nvue';
+  import AudienceProfilePanel from '@/uni_modules/tuikit-atomic-x/components/LiveAudienceList/AudienceProfilePanel/index.nvue';
+  import LiveToast from '@/uni_modules/tuikit-atomic-x/components/LiveToast.nvue';
+  import { getScreenSizeAsync, heightPercentToRpx } from '../../../utils/screen';
+  import { t } from '../../locales';
+  import { useLiveListState } from '@/uni_modules/tuikit-atomic-x/state/LiveListState';
+  import { useLoginState } from '@/uni_modules/tuikit-atomic-x/state/LoginState';
+  import { useLiveAudienceState } from '@/uni_modules/tuikit-atomic-x/state/LiveAudienceState';
+  import { useGiftState } from '@/uni_modules/tuikit-atomic-x/state/GiftState';
+
+  const props = defineProps({
+    modelValue: { type: Boolean, default: false },
+    liveID: { type: String },
+  });
+  const emit = defineEmits(['update:modelValue', 'overlayActiveChange']);
+
+  const { currentLive } = useLiveListState();
+  const { loginUserInfo } = useLoginState();
+  const { audienceList } = useLiveAudienceState(uni?.$liveID);
+  const { addGiftListener, removeGiftListener } = useGiftState(uni?.$liveID);
+
+  const defaultAvatarURL = '/uni_modules/tuikit-atomic-x/static/assets/live/default-avatar.png';
+  const ROW_H = 169;
+  const DRAWER_HANDLE_H = 76;
+  const DRAWER_HEADER_H = 80;
+  const DRAWER_BOTTOM_PAD = 44;
+
+  const myGiftTotal = ref(0);
+  const failedAvatarIDs = ref({});
+  const isLoading = ref(false);
+  const scrollTop = ref(0);
+  const isShowAudienceActionPanel = ref(false);
+  const isShowAudienceProfilePanel = ref(false);
+  const selectedAudience = ref(null);
+  const targetDrawerRpx = ref(heightPercentToRpx(0.6));
+  const tipVisible = ref(false);
+  const tipSeq = ref(0);
+  const tipTitle = ref('');
+
+  const isAnchor = computed(() => {
+    return loginUserInfo.value?.userID === currentLive.value?.liveOwner?.userID;
+  });
+
+  const innerVisible = computed({
+    get: () => props.modelValue,
+    set: (val) => emit('update:modelValue', val)
+  });
+
+  const scrollHeightRpx = computed(() => {
+    const avail = targetDrawerRpx.value - DRAWER_HANDLE_H - DRAWER_HEADER_H - DRAWER_BOTTOM_PAD;
+    const rows = Math.max(1, Math.floor(avail / ROW_H));
+    return rows * ROW_H;
+  });
+  const drawerHeight = computed(() =>
+    DRAWER_HANDLE_H + DRAWER_HEADER_H + scrollHeightRpx.value + DRAWER_BOTTOM_PAD
+  );
+
+  const anyInnerPanelVisible = computed(() =>
+    isShowAudienceActionPanel.value || isShowAudienceProfilePanel.value
+  );
+  watch(anyInnerPanelVisible, (val) => {
+    emit('overlayActiveChange', !!val);
+  });
+
+  const avatarOf = (audience) => {
+    if (audience?.userID && failedAvatarIDs.value[audience.userID]) return defaultAvatarURL;
+    return audience?.avatarURL || defaultAvatarURL;
+  };
+  const onAvatarError = (audience) => {
+    const id = audience?.userID;
+    if (!id || failedAvatarIDs.value[id]) return;
+    failedAvatarIDs.value = { ...failedAvatarIDs.value, [id]: true };
+  };
+
+  const levelTier = (level) => {
+    if (level >= 40) return 'elite';
+    if (level >= 25) return 'premium';
+    if (level >= 10) return 'advanced';
+    return 'basic';
+  };
+  const audLevel = (audience) => {
+    const lv = Number(audience?.level);
+    if (!isNaN(lv) && lv > 0) return lv;
+    if (audience?.userID && audience.userID === uni.$userID) {
+      const myLv = Number(loginUserInfo.value?.level);
+      if (!isNaN(myLv) && myLv > 0) return myLv;
+    }
+    return 0;
+  };
+  const audLevelBadge = (audience) => '/uni_modules/tuikit-atomic-x/static/assets/live/level-badge-' + levelTier(audLevel(audience)) + '.png';
+  const audGiftValue = (audience) => {
+    if (audience?.userID && audience.userID === loginUserInfo.value?.userID) {
+      return myGiftTotal.value;
+    }
+    return 0;
+  };
+
+  const onReceiveGift = (event) => {
+    try {
+      const res = typeof event === 'string' ? JSON.parse(event) : (event || {});
+      const gift = typeof res.gift === 'string' ? JSON.parse(res.gift) : (res.gift || {});
+      const sender = typeof res.sender === 'string' ? JSON.parse(res.sender) : (res.sender || {});
+      const senderID = sender.userID;
+      if (!senderID || senderID !== loginUserInfo.value?.userID) return;
+      const coins = Number(gift.coins) || 0;
+      const count = Number(res.count) || 1;
+      myGiftTotal.value += coins * count;
+    } catch (e) {
+      console.error('onReceiveGift parse error', e);
+    }
+  };
+
+  const handleScroll = (e) => {
+    scrollTop.value = e.detail.scrollTop;
+  };
+
+  const showTip = (title) => {
+    tipTitle.value = title;
+    tipSeq.value++;
+    tipVisible.value = true;
+  };
+  const onTapAudience = (audience) => {
+    if (audience?.userID && audience.userID === uni.$userID) {
+      showTip(t('al.cannotFollowSelf'));
+      return;
+    }
+    selectedAudience.value = audience;
+    innerVisible.value = false;
+    if (isAnchor.value) {
+      isShowAudienceActionPanel.value = true;
+    } else {
+      isShowAudienceProfilePanel.value = true;
+    }
+  };
+
+  onMounted(() => {
+    getScreenSizeAsync().then(() => {
+      targetDrawerRpx.value = heightPercentToRpx(0.6);
+    });
+    try { addGiftListener(uni?.$liveID, 'onReceiveGift', onReceiveGift); } catch (e) { console.error(e); }
+  });
+
+  onUnmounted(() => {
+    try { removeGiftListener(uni?.$liveID, 'onReceiveGift', onReceiveGift); } catch (e) { console.error(e); }
+  });
+</script>
+
+<style lang="scss">
+  @import './LiveAudienceList.scss';
+</style>

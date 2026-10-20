@@ -1,0 +1,148 @@
+@import '../../../../styles/tokens.scss';
+
+  .bottom-drawer-container {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    top: 0;
+    z-index: 1000;
+  }
+
+  .drawer-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: $live-mask;
+  }
+
+  .bottom-drawer {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: $live-dark-bg-elevated;
+    border-top-left-radius: 32rpx;
+    border-top-right-radius: 32rpx;
+    transform: translateY(100%);
+    transition-property: transform;
+    transition-duration: 0.3s;
+    transition-timing-function: ease;
+    flex-direction: column;
+  }
+
+  .drawer-open {
+    transform: translateY(0);
+  }
+
+  .drawer-header {
+    padding: 48rpx;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .drawer-header-left-container {
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .drawer-header-avatar-container {
+    width: 80rpx;
+    height: 80rpx;
+    border-radius: 40rpx;
+    margin-right: 24rpx;
+  }
+
+  .title {
+    color: $live-dark-text-primary;
+    font-size: 32rpx;
+    font-weight: 500;
+    text-align: center;
+    padding-top: 20rpx
+  }
+
+  .drawer-header-avatar {
+    width: 80rpx;
+    height: 80rpx;
+    border-radius: 40rpx;
+  }
+
+  .drawer-header-content-container {
+    flex-direction: column;
+  }
+
+  .drawer-name {
+    font-size: 32rpx;
+    color: $live-dark-text-90;
+    margin-bottom: 12rpx;
+  }
+
+  .drawer-id {
+    font-size: 24rpx;
+    color: $live-dark-text-55;
+  }
+
+  .drawer-content {
+    flex: 1;
+    padding: 0 48rpx;
+    margin-bottom: 40rpx;
+  }
+
+  .drawer-actions {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    justify-content: space-between;
+    align-items: center;
+    padding: 24rpx 0;
+  }
+
+  .action-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    flex: 1;
+  }
+
+  .action-btn-image-container {
+    width: 100rpx;
+    height: 100rpx;
+    background-color: $live-dark-bg-surface;
+    margin-bottom: 12rpx;
+    border-radius: 25rpx;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .action-btn-image {
+    width: 60rpx;
+    height: 60rpx;
+  }
+
+  .action-btn-content {
+    font-size: 24rpx;
+    color: $live-dark-text-90;
+  }
+
+  .divider-line-container {
+    height: 68rpx;
+    justify-content: center;
+    position: relative;
+  }
+
+  .divider-line {
+    width: 268rpx;
+    height: 10rpx;
+    border-radius: 200rpx;
+    background-color: $live-surface-white;
+    position: absolute;
+    bottom: 16rpx;
+  }
+
+  .camera-mic-setting {
+    flex: 1;
+    background-color: $live-dark-bg-purple-deep;
+  }

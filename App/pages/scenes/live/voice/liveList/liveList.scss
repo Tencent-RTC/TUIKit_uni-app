@@ -1,0 +1,142 @@
+@import '../../styles/tokens.scss';
+
+  .home-container {
+    flex: 1;
+    background-color: $live-light-bg-page;
+    position: relative;
+  }
+
+  .header {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    padding: 20rpx 32rpx;
+    background-color: $live-surface-white;
+    border-bottom-width: 1rpx;
+    border-bottom-color: $live-light-border;
+    position: relative;
+    height: 120rpx;
+  }
+
+  .header-left {
+    width: 80rpx;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+  }
+
+  .back-icon {
+    width: 40rpx;
+    height: 40rpx;
+    opacity: 0.8;
+  }
+
+  .header-center {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    position: relative;
+  }
+
+  .header-title {
+    font-size: 36rpx;
+    font-weight: 600;
+    color: $live-light-text-primary;
+    margin-bottom: 8rpx;
+  }
+
+  .title-underline {
+    width: 60rpx;
+    height: 4rpx;
+    background-color: $live-color-brand-ios;
+    border-radius: 2rpx;
+  }
+
+  .header-right {
+    width: 80rpx;
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+  }
+
+  .help-icon {
+    width: 40rpx;
+    height: 40rpx;
+    opacity: 0.8;
+  }
+
+  .user-bar {
+    flex-direction: row;
+    align-items: center;
+    padding-top: 32rpx;
+    padding-bottom: 16rpx;
+    padding-left: 32rpx;
+    padding-right: 32rpx;
+    background-color: $live-surface-white;
+  }
+
+  .avatar {
+    width: 64rpx;
+    height: 64rpx;
+    border-radius: 32rpx;
+    margin-right: 16rpx;
+  }
+
+  .user-info {
+    flex: 1;
+    flex-direction: column;
+    justify-content: center;
+  }
+
+  .user-name {
+    font-size: 28rpx;
+    color: $live-light-text-heading;
+    font-weight: 700;
+  }
+
+  .user-id {
+    font-size: 22rpx;
+    color: $live-light-text-placeholder;
+    margin-top: 4rpx;
+  }
+
+  .user-icon {
+    width: 40rpx;
+    height: 40rpx;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .icon-help {
+    width: 40rpx;
+    height: 40rpx;
+  }
+
+  .home-footer {
+    position: absolute;
+    bottom: 60rpx;
+    width: 750rpx;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .create-btn {
+    background-color: $live-color-brand;
+    border-radius: 999px;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    padding: 25rpx 60rpx;
+  }
+
+  .btn-text {
+    color: $live-dark-text-primary;
+    font-size: 32rpx;
+    font-weight: 700;
+  }

@@ -7,7 +7,7 @@
     "androidx.constraintlayout:constraintlayout:2.1.4",
     "com.google.android.material:material:1.11.0",
     "com.tencent.liteav:LiteAVSDK_Professional:13.1+",
-    "com.tencent.imsdk:imsdk-plus:9.0.+",
+    "com.tencent.imsdk:imsdk-plus:9.1.+",
     "com.tencent.liteav.tuikit:tuicore:8.7.+",
     "io.trtc.uikit:common:3.3.+",
     "io.trtc.uikit:rtc_room_engine:4.3.+",

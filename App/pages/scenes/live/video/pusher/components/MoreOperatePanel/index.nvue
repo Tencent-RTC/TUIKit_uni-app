@@ -1,0 +1,96 @@
+<template>
+  <view class="bottom-drawer-container" v-if="modelValue">
+    <view class="drawer-overlay" @tap="close"></view>
+    <view class="bottom-drawer" :class="{ 'drawer-open': modelValue }">
+      <text class="title">{{ t('morePanel.title') }}</text>
+      <view class="drawer-content">
+        <view class="drawer-actions">
+          <view class="action-btn" @tap="handleBeauty">
+            <view class="action-btn-image-container">
+              <image class="action-btn-image" src="/static/images/live-beauty.png" mode="aspectFit" />
+            </view>
+            <text class="action-btn-content">{{ t('morePanel.beauty') }}</text>
+          </view>
+          <view class="action-btn" @tap="handleAudioEffect">
+            <view class="action-btn-image-container">
+              <image class="action-btn-image" src="/static/images/live-effects.png" mode="aspectFit" />
+            </view>
+            <text class="action-btn-content">{{ t('morePanel.soundEffect') }}</text>
+          </view>
+          <view class="action-btn" @tap="handleCamera">
+            <view class="action-btn-image-container">
+              <image class="action-btn-image" src="/static/images/live-flip.png" mode="aspectFit" />
+            </view>
+            <text class="action-btn-content">{{ t('morePanel.flip') }}</text>
+          </view>
+          <view class="action-btn" @tap="handleSwitchMirror">
+            <view class="action-btn-image-container">
+              <image class="action-btn-image" src="/static/images/mirror.png" mode="aspectFit" />
+            </view>
+            <text class="action-btn-content">{{ t('morePanel.mirror') }}</text>
+          </view>
+        </view>
+      </view>
+    </view>
+    <BeautyPanel v-model="isShowBeautyPanel"></BeautyPanel>
+    <AudioEffectPanel v-model="isShowAudioEffect"></AudioEffectPanel>
+  </view>
+</template>
+
+<script setup>
+  import { ref, computed } from 'vue';
+  import { BeautyPanel } from '@/uni_modules/tuikit-atomic-x/components/Beauty';
+  import { MirrorType, useDeviceState } from '@/uni_modules/tuikit-atomic-x/state/DeviceState';
+  import { t } from '../../../../locales';
+  import AudioEffectPanel from '@/uni_modules/tuikit-atomic-x/components/AudioEffectPanel';
+
+  const props = defineProps({
+    modelValue: {
+      type: Boolean,
+      default: false
+    },
+  });
+
+  const emit = defineEmits(['update:modelValue', 'tip']);
+
+  const { isFrontCamera, switchCamera, switchMirror, localMirrorType } = useDeviceState();
+
+  const isShowBeautyPanel = ref(false);
+  const isShowAudioEffect = ref(false);
+
+  const mirrorEnabled = computed(() =>
+    localMirrorType.value === MirrorType.AUTO || localMirrorType.value === MirrorType.ENABLE
+  );
+
+  const handleBeauty = () => {
+    isShowBeautyPanel.value = true;
+  };
+
+  const handleAudioEffect = () => {
+    isShowAudioEffect.value = true;
+  };
+
+  const handleCamera = () => {
+    switchCamera({
+      isFront: !isFrontCamera.value
+    })
+  };
+  const handleSwitchMirror = () => {
+    if (!isFrontCamera.value) {
+      emit('tip', t('morePanel.frontOnly'))
+      return
+    }
+
+    switchMirror({
+      mirrorType: mirrorEnabled.value ? MirrorType.DISABLE : MirrorType.ENABLE
+    })
+  }
+
+  const close = () => {
+    emit('update:modelValue', false);
+  };
+</script>
+
+<style lang="scss">
+  @import './MoreOperatePanel.scss';
+</style>

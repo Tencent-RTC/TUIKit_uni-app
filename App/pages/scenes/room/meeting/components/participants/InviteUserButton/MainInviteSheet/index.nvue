@@ -1,0 +1,182 @@
+<template>
+  <Drawer :visible="visible" :title="title || t('inviteSheet.defaultTitle')" :theme="theme" @close="handleClose">
+    <view class="invite-root">
+      <view class="invite-row">
+        <text class="invite-label">{{ t('inviteSheet.roomName') }}</text>
+        <text class="invite-value" :numberOfLines="1">{{ truncateRoomNameDisplay(displayRoomName, 6) }}</text>
+      </view>
+
+      <view v-if="showTime" class="invite-row">
+        <text class="invite-label">{{ t('inviteSheet.roomTime') }}</text>
+        <text class="invite-value" :numberOfLines="1">{{ roomTimeText }}</text>
+      </view>
+
+      <view class="invite-row">
+        <text class="invite-label">{{ t('inviteSheet.roomId') }}</text>
+        <text class="invite-value" :numberOfLines="1">{{ roomIDDisplay }}</text>
+        <view class="invite-copy-btn" @tap.stop="handleCopyRoomID">
+          <image
+            class="invite-copy-icon"
+            :src="theme === 'dark' ? '/static/images/room/room_copy.png' : '/static/images/room/room_copy_dark.png'"
+            mode="aspectFit"
+          />
+        </view>
+      </view>
+
+      <view v-if="hasPassword" class="invite-row">
+        <text class="invite-label">{{ t('inviteSheet.roomPassword') }}</text>
+        <text class="invite-value" :numberOfLines="1">{{ roomPassword }}</text>
+        <view class="invite-copy-btn" @tap.stop="handleCopyPassword">
+          <image
+            class="invite-copy-icon"
+            :src="theme === 'dark' ? '/static/images/room/room_copy.png' : '/static/images/room/room_copy_dark.png'"
+            mode="aspectFit"
+          />
+        </view>
+      </view>
+
+      <view class="invite-actions">
+        <view class="invite-copy-all" @tap="handleCopyAll">
+          <text class="invite-copy-all-text">{{ t('inviteSheet.copyAll') }}</text>
+        </view>
+      </view>
+
+      <view class="bottom-extra-space" />
+    </view>
+  </Drawer>
+</template>
+
+<script setup lang="ts">
+  import { computed, ref, watch } from 'vue';
+  import type { PropType } from 'vue';
+  import { useRoomState } from '@/uni_modules/tuikit-atomic-x/state';
+  import type { RoomInfo } from '@/uni_modules/tuikit-atomic-x/types';
+  import Drawer from '@/uni_modules/tuikit-atomic-x/components/Drawer/index.nvue';
+  import {
+    formatFullDateTime,
+    formatRoomIDDisplay,
+    truncateRoomNameDisplay,
+  } from '@/uni_modules/tuikit-atomic-x/utils/roomScheduleUtils';
+  import { showToast } from '@/uni_modules/tuikit-atomic-x/utils/toast';
+  import { t } from '../../../../../locales';
+
+  const MS_PER_SECOND = 1000;
+  const COPY_FEEDBACK_DELAY_MS = 200;
+
+  const props = defineProps({
+    visible: { type: Boolean, default: false },
+    title: { type: String, default: undefined },
+    roomID: { type: String, required: true },
+    showTime: { type: Boolean, default: true },
+    theme: { type: String as PropType<'light' | 'dark'>, default: 'light' },
+  });
+  const emit = defineEmits<{ (e: 'close'): void }>();
+
+  const roomState = useRoomState();
+
+  const roomInfo = ref<RoomInfo | null>(null);
+  let fetchSequence = 0;
+
+  watch(
+    () => props.visible,
+    (v) => {
+      if (v && props.roomID.length > 0) {
+        const requestSequence = ++fetchSequence;
+        roomState
+          .getRoomInfo({ roomID: props.roomID })
+          .then((info: RoomInfo) => {
+            if (requestSequence !== fetchSequence) return;
+            roomInfo.value = info;
+          })
+          .catch((e: any) => {
+            console.warn('[MainInviteSheet] getRoomInfo failed:', e);
+          });
+      } else {
+        roomInfo.value = null;
+      }
+    },
+    { immediate: true },
+  );
+
+  const displayRoomName = computed(() => {
+    const n = roomInfo.value?.roomName?.trim() ?? '';
+    if (n.length > 0) return n;
+    if (props.roomID.length > 0) return t('inviteSheet.meetingNo', { roomId: props.roomID });
+    return t('inviteSheet.meetingInvite');
+  });
+
+  const roomIDDisplay = computed(() => formatRoomIDDisplay(props.roomID));
+
+  const roomPassword = computed(() => roomInfo.value?.password ?? '');
+  const hasPassword = computed(() => roomPassword.value.length > 0);
+
+  const roomTimeText = computed(() => {
+    const info = roomInfo.value;
+    if (!info) return '';
+    const startSec = info.scheduledStartTime;
+    const endSec = info.scheduledEndTime;
+    if (startSec && endSec && startSec > 0 && endSec > 0) {
+      return `${formatFullDateTime(startSec * MS_PER_SECOND)}-${formatFullDateTime(endSec * MS_PER_SECOND).slice(-5)}`;
+    }
+    if (info.createTime && info.createTime > 0) {
+      return formatFullDateTime(info.createTime);
+    }
+    return '';
+  });
+
+  const displayText = computed(() => {
+    const lines: string[] = [];
+    lines.push(t('inviteSheet.lineRoomName', { value: displayRoomName.value }));
+    if (props.showTime && roomTimeText.value.length > 0) {
+      lines.push(t('inviteSheet.lineRoomTime', { value: roomTimeText.value }));
+    }
+    lines.push(t('inviteSheet.lineRoomId', { value: roomIDDisplay.value }));
+    if (hasPassword.value) {
+      lines.push(t('inviteSheet.lineRoomPassword', { value: roomPassword.value }));
+    }
+    return lines.join('\n');
+  });
+
+  function copyText(data: string, successText: string): void {
+    if (data.length === 0) return;
+    uni.setClipboardData({
+      data,
+      success: () => {
+        showToast(successText);
+      },
+      complete: () => {
+        uni.hideToast();
+      },
+    });
+  }
+
+  function handleCopyRoomID(): void {
+    copyText(props.roomID, t('inviteSheet.roomIdCopied'));
+  }
+
+  function handleCopyPassword(): void {
+    copyText(roomPassword.value, t('inviteSheet.passwordCopied'));
+  }
+
+  function handleCopyAll(): void {
+    if (!roomInfo.value) {
+      setTimeout(() => {
+        if (roomInfo.value) {
+          copyText(displayText.value, t('inviteSheet.infoCopied'));
+        } else {
+          copyText(props.roomID, t('inviteSheet.roomIdCopied'));
+        }
+      }, COPY_FEEDBACK_DELAY_MS);
+      return;
+    }
+    copyText(displayText.value, t('inviteSheet.infoCopied'));
+  }
+
+  function handleClose(): void {
+    emit('close');
+  }
+</script>
+
+<style lang="scss" scoped>
+  @import './MainInviteSheet.scss';
+</style>

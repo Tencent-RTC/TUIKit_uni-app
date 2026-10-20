@@ -12,12 +12,12 @@
         <view class="cover-section" @tap="onEditCover">
           <image class="cover-image" :src="coverURL" mode="aspectFill" @error="handleCoverError" />
           <view class="cover-label">
-            <text class="cover-label-text">修改封面</text>
+            <text class="cover-label-text">{{ t('voice.editCover') }}</text>
           </view>
         </view>
         <view class="info-section">
           <view class="title-row">
-            <input class="live-title" v-model="liveTitle" @input="onInputTitle" @blur="onInputBlur" :focus="isInputFocused" placeholder="请输入直播标题" placeholder-style="color: rgba(255, 255, 255, 0.5);" />
+            <input class="live-title" v-model="liveTitle" @input="onInputTitle" @blur="onInputBlur" :focus="isInputFocused" :placeholder="t('voice.titlePlaceholder')" :placeholder-style="placeholderStyle" />
             <view class="edit-icon-container" @tap="onEditTitle">
               <image class="edit-icon" src="/static/images/edit.png" />
             </view>
@@ -38,7 +38,7 @@
 
       <view class="bottom-actions">
         <view class="start-live-button" @tap="handleStartLive">
-          <text class="start-live-text">开始直播</text>
+          <text class="start-live-text">{{ t('voice.startLive') }}</text>
         </view>
       </view>
     </view>
@@ -77,7 +77,7 @@
                 <text class="badge-text">{{ applicantCount > 99 ? '99+' : applicantCount }}</text>
               </view>
             </view>
-            <text class="live-action-text">连麦</text>
+            <text class="live-action-text">{{ t('voice.coGuest') }}</text>
           </view>
         </view>
       </view>
@@ -86,7 +86,7 @@
         <view class="coguest-drawer-overlay" @tap="closeCoGuestPanel"></view>
         <view class="coguest-drawer">
           <view class="coguest-header">
-            <text class="coguest-header-title">连麦管理</text>
+            <text class="coguest-header-title">{{ t('voice.coGuestManage') }}</text>
           </view>
           <scroll-view class="coguest-content" scroll-y>
             <view v-if="(applicants || []).length > 0" class="coguest-list">
@@ -97,10 +97,10 @@
                     <text class="coguest-name" :lines="1">{{ audience?.userName || audience?.userID }}</text>
                     <view class="coguest-actions">
                       <view class="coguest-btn coguest-btn-accept" @tap="handleAcceptApplication(audience)">
-                        <text class="coguest-btn-text">同意</text>
+                        <text class="coguest-btn-text">{{ t('voice.agree') }}</text>
                       </view>
                       <view class="coguest-btn coguest-btn-reject" @tap="handleRejectApplication(audience)">
-                        <text class="coguest-btn-text">拒绝</text>
+                        <text class="coguest-btn-text">{{ t('voice.reject') }}</text>
                       </view>
                     </view>
                   </view>
@@ -116,7 +116,7 @@
     <view class="bottom-drawer-container" v-if="isShowCoverDialog">
       <view class="drawer-overlay" @tap="closeCoverDialog"></view>
       <view class="bottom-drawer">
-        <text class="list-title">封面</text>
+        <text class="list-title">{{ t('voice.cover') }}</text>
         <scroll-view scroll-y class="cover-scroll">
           <view class="cover-row" v-for="(rowItems, rIdx) in coverRows" :key="rIdx">
             <view v-for="(url, idx) in rowItems" :key="url" class="cover-dialog-item" @tap="selectAvatar(rIdx * 3 + idx)">
@@ -126,14 +126,14 @@
         </scroll-view>
         <view class="cover-footer">
           <view class="cover-confirm-btn" @tap="setCover">
-            <text class="btn-text">设为封面</text>
+            <text class="btn-text">{{ t('voice.setCover') }}</text>
           </view>
         </view>
       </view>
     </view>
 
-    <ActionSheet v-model="isShowEndSheet" :itemList="endSheetItems" @select="onEndSheetSelect" />
-    <ActionSheet v-model="isShowSeatActionSheet" :itemList="seatActionItems" @select="onSeatActionSelect" />
+    <OptionSheet v-model="isShowEndSheet" :itemList="endSheetItems" @select="onEndSheetSelect" />
+    <OptionSheet v-model="isShowSeatActionSheet" :itemList="seatActionItems" @select="onSeatActionSelect" />
 
     <LiveToast
       v-if="tipVisible"
@@ -148,11 +148,18 @@
 <script setup lang="ts">
   import { ref, onMounted, onUnmounted, computed, watch, nextTick } from 'vue';
   import { onBackPress } from '@dcloudio/uni-app';
-  import ActionSheet from '@/components/ActionSheet.nvue';
+  import OptionSheet from '@/components/live/OptionSheet/index.nvue';
   import LiveToast from '@/uni_modules/tuikit-atomic-x/components/LiveToast.nvue';
+  import VoiceSeatGrid from '../components/VoiceSeatGrid.nvue';
+  import { LIVE_TOKENS, livePlaceholderStyle } from '../../styles/tokens.js';
+  import { t } from '../../locales';
+  import { useLoginState } from "@/uni_modules/tuikit-atomic-x/state/LoginState";
+  import { useLiveListState, TakeSeatMode } from "@/uni_modules/tuikit-atomic-x/state/LiveListState";
+  import { useDeviceState, DeviceStatus } from "@/uni_modules/tuikit-atomic-x/state/DeviceState";
+  import { useLiveSeatState } from "@/uni_modules/tuikit-atomic-x/state/LiveSeatState";
+  import { useCoGuestState } from "@/uni_modules/tuikit-atomic-x/state/CoGuestState";
 
-  // 轻提示(LiveToast)状态:tipSeq 递增强制重建(重复触发时 v-model 同值不触发 watch)。
-  const tipVisible = ref(false);
+    const tipVisible = ref(false);
   const tipSeq = ref(0);
   const tipTitle = ref('');
   const showTip = (title: string) => {
@@ -163,12 +170,6 @@
       tipVisible.value = true;
     });
   };
-  import VoiceSeatGrid from '../components/VoiceSeatGrid.nvue';
-  import { useLoginState } from "@/uni_modules/tuikit-atomic-x/state/LoginState";
-  import { useLiveListState, TakeSeatMode } from "@/uni_modules/tuikit-atomic-x/state/LiveListState";
-  import { useDeviceState, DeviceStatus } from "@/uni_modules/tuikit-atomic-x/state/DeviceState";
-  import { useLiveSeatState } from "@/uni_modules/tuikit-atomic-x/state/LiveSeatState";
-  import { useCoGuestState } from "@/uni_modules/tuikit-atomic-x/state/CoGuestState";
 
   onBackPress((option) => {
     if (option.from === 'backbutton') return true;
@@ -183,7 +184,9 @@
 
   const systemInfo = ref<any>({});
   const safeArea = ref({ left: 0, right: 0, top: 0, bottom: 0, width: 375, height: 750 });
-  const defaultAvatarURL = 'https://web.sdk.qcloud.com/component/TUIKit/assets/avatar_01.png';
+  const placeholderStyle = livePlaceholderStyle(LIVE_TOKENS.darkText50);
+
+  const defaultAvatarURL = '/uni_modules/tuikit-atomic-x/static/assets/live/default-avatar.png';
 
   const isStartLive = ref(false);
 
@@ -200,7 +203,7 @@
   const isShowCoGuestPanel = ref(false);
   const isShowEndSheet = ref(false);
   const isShowSeatActionSheet = ref(false);
-  const endSheetItems = ref(['关闭直播间']);
+  const endSheetItems = ref([t('anchor.closeLive')]);
   const selectedAvatarIndex = ref(0);
 
   const staticSeatRows = ref([
@@ -281,7 +284,7 @@
       setTimeout(() => {
         liveTitle.value = lastValidTitle.value || loginUserInfo.value?.nickname;
       }, 0);
-      showTip('标题最多100字节，已恢复到上次有效内容');
+      showTip(t('voice.titleLimit'));
     }
   };
 
@@ -331,7 +334,7 @@
 
   const isSpeaking = (userID: string) => speakingUserIDs.value.has(userID);
 
-  const seatActionItems = computed(() => [isMicOn.value ? '关闭麦克风' : '打开麦克风']);
+  const seatActionItems = computed(() => [isMicOn.value ? t('voice.closeMic') : t('voice.openMic')]);
 
   const handleOwnerSeatTap = (seat: any) => {
     const ownerID = uni.$userID;
@@ -411,7 +414,7 @@
       },
       fail: (errCode: any, errMsg: any) => {
         console.log('创建语聊房失败', errCode, errMsg);
-        showTip('创建语聊房失败');
+        showTip(t('voice.createFailed'));
       },
     });
   };
@@ -447,510 +450,6 @@
   });
 </script>
 
-<style>
-  .voice-anchor-container {
-    width: 750rpx;
-    position: relative;
-    flex-direction: column;
-  }
-
-  .voice-bg {
-    position: absolute;
-    left: 0;
-    top: 0;
-  }
-
-  .voice-bg-mask {
-    position: absolute;
-    left: 0;
-    top: 0;
-    background-color: rgba(0, 0, 0, 0.7);
-  }
-
-  .pre-live-wrapper {
-    flex: 1;
-    flex-direction: column;
-  }
-
-  .living-wrapper {
-    flex: 1;
-    flex-direction: column;
-  }
-
-  .navigate-back-arrow {
-    position: absolute;
-    top: 100rpx;
-    left: 40rpx;
-    z-index: 10;
-    width: 60rpx;
-    height: 60rpx;
-    justify-content: center;
-    align-items: center;
-  }
-
-  .navigate-back-arrow-image {
-    width: 20rpx;
-    height: 35rpx;
-  }
-
-  .live-info-card {
-    position: relative;
-    z-index: 5;
-    flex-direction: row;
-    align-items: flex-start;
-    background-color: rgba(0, 0, 0, 0.25);
-    border-radius: 24rpx;
-    margin-top: 180rpx;
-    margin-left: 32rpx;
-    margin-right: 32rpx;
-    padding: 16rpx;
-  }
-
-  .cover-section {
-    position: relative;
-    border-radius: 24rpx;
-  }
-
-  .cover-image {
-    width: 140rpx;
-    height: 188rpx;
-    border-radius: 24rpx;
-  }
-
-  .cover-label {
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
-    width: 140rpx;
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    padding-top: 5rpx;
-    padding-bottom: 5rpx;
-    background-color: rgba(0, 0, 0, 0.5);
-    border-bottom-left-radius: 24rpx;
-    border-bottom-right-radius: 24rpx;
-  }
-
-  .cover-label-text {
-    color: #fff;
-    font-size: 22rpx;
-  }
-
-  .info-section {
-    flex: 1;
-    margin-left: 24rpx;
-    padding-top: 20rpx;
-  }
-
-  .title-row {
-    flex-direction: row;
-    align-items: center;
-  }
-
-  .live-title {
-    color: #fff;
-    font-size: 32rpx;
-    font-weight: 500;
-    flex: 1;
-  }
-
-  .edit-icon-container {
-    width: 80rpx;
-    height: 40rpx;
-    justify-content: center;
-    align-items: center;
-  }
-
-  .edit-icon {
-    width: 32rpx;
-    height: 32rpx;
-    margin-left: 8rpx;
-  }
-
-  .underline {
-    height: 2rpx;
-    background-color: rgba(255, 255, 255, 0.2);
-    margin-top: 10rpx;
-  }
-
-
-  .bottom-actions {
-    position: absolute;
-    bottom: 60rpx;
-    left: 0;
-    right: 0;
-    padding-left: 60rpx;
-    padding-right: 60rpx;
-    z-index: 5;
-    flex-direction: column;
-  }
-
-  .start-live-button {
-    height: 100rpx;
-    background-color: #2B65FB;
-    border-radius: 200rpx;
-    justify-content: center;
-    align-items: center;
-  }
-
-  .start-live-text {
-    font-size: 32rpx;
-    color: #FFFFFF;
-    font-weight: bold;
-  }
-
-  .live-header {
-    position: relative;
-    z-index: 10;
-    flex-direction: row;
-    justify-content: space-between;
-    align-items: center;
-    padding-left: 32rpx;
-    padding-right: 32rpx;
-    padding-top: 20rpx;
-    padding-bottom: 20rpx;
-    margin-top: 80rpx;
-  }
-
-  .header-left {
-    flex-direction: row;
-    align-items: center;
-    flex: 1;
-  }
-
-  .stream-info {
-    flex-direction: row;
-    align-items: center;
-    background-color: rgba(0, 0, 0, 0.3);
-    padding-top: 6rpx;
-    padding-bottom: 6rpx;
-    padding-left: 6rpx;
-    padding-right: 16rpx;
-    border-radius: 40rpx;
-  }
-
-  .header-avatar {
-    width: 56rpx;
-    height: 56rpx;
-    border-radius: 28rpx;
-    border-width: 2rpx;
-    border-style: solid;
-    border-color: #ffffff;
-    margin-right: 12rpx;
-  }
-
-  .stream-details {
-    flex-direction: column;
-  }
-
-  .stream-title {
-    color: #ffffff;
-    font-size: 26rpx;
-    font-weight: 500;
-    width: 200rpx;
-    lines: 1;
-  }
-
-  .header-right {
-    flex-direction: row;
-    align-items: center;
-  }
-
-  .control-icon {
-    width: 36rpx;
-    height: 36rpx;
-    margin-left: 16rpx;
-  }
-
-  .live-bottom-panel {
-    position: fixed;
-    bottom: 40rpx;
-    right: 60rpx;
-    z-index: 10;
-    flex-direction: row;
-    align-items: center;
-  }
-
-  .live-action-buttons {
-    flex-direction: row;
-    align-items: center;
-    padding-right: 20rpx;
-  }
-
-  .live-action-item {
-    width: 100rpx;
-    height: 100rpx;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
-  }
-
-  .action-icon-wrapper {
-    position: relative;
-    width: 100rpx;
-    height: 70rpx;
-    margin-bottom: 4rpx;
-    align-items: center;
-    justify-content: center;
-  }
-
-  .live-action-icon {
-    width: 56rpx;
-    height: 56rpx;
-  }
-
-  .co-mic-btn {
-    background-color: rgba(20, 20, 22, 0.54);
-    border-radius: 50%;
-    border: 2rpx solid rgba(255, 255, 255, 0.055);
-  }
-
-  .badge {
-    position: absolute;
-    top: 0;
-    right: 0;
-    width: 32rpx;
-    height: 32rpx;
-    background-color: #FF3B30;
-    border-radius: 16rpx;
-    justify-content: center;
-    align-items: center;
-  }
-
-  .badge-text {
-    color: #ffffff;
-    font-size: 18rpx;
-    font-weight: 600;
-    text-align: center;
-  }
-
-  .live-action-text {
-    color: #fff;
-    font-size: 20rpx;
-  }
-
-  .bottom-drawer-container {
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    top: 0;
-    z-index: 1000;
-  }
-
-  .drawer-overlay {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background-color: rgba(0, 0, 0, 0.4);
-  }
-
-  .bottom-drawer {
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    background-color: rgba(34, 38, 46, 1);
-    border-top-left-radius: 32rpx;
-    border-top-right-radius: 32rpx;
-    flex-direction: column;
-    align-items: center;
-    height: 900rpx;
-  }
-
-  .list-title {
-    color: #fff;
-    font-size: 32rpx;
-    font-weight: 500;
-    padding: 40rpx;
-  }
-
-  .cover-scroll {
-    flex: 1;
-    width: 750rpx;
-    padding-left: 15rpx;
-    padding-right: 15rpx;
-  }
-
-  .cover-row {
-    flex-direction: row;
-    justify-content: flex-start;
-    padding-left: 15rpx;
-    padding-right: 15rpx;
-  }
-
-  .cover-dialog-item {
-    width: 200rpx;
-    height: 230rpx;
-    border-radius: 24rpx;
-    margin-bottom: 32rpx;
-    margin-right: 20rpx;
-    background-color: #23242a;
-    align-items: center;
-    justify-content: center;
-  }
-
-  .cover-dialog-img {
-    width: 200rpx;
-    height: 230rpx;
-    border-radius: 24rpx;
-  }
-
-  .cover-dialog-img.selected {
-    border-width: 6rpx;
-    border-style: solid;
-    border-color: #238CFE;
-  }
-
-  .cover-footer {
-    width: 750rpx;
-    flex-direction: row;
-    align-items: center;
-    justify-content: center;
-    padding-top: 30rpx;
-    padding-bottom: 60rpx;
-  }
-
-  .cover-confirm-btn {
-    background-color: #0468FC;
-    border-radius: 50rpx;
-    flex-direction: row;
-    align-items: center;
-    justify-content: center;
-    padding-top: 25rpx;
-    padding-bottom: 25rpx;
-    padding-left: 80rpx;
-    padding-right: 80rpx;
-  }
-
-  .btn-text {
-    color: #fff;
-    font-size: 32rpx;
-    font-weight: 700;
-  }
-
-  .coguest-drawer-container {
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    top: 0;
-    z-index: 1000;
-  }
-
-  .coguest-drawer-overlay {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background-color: rgba(0, 0, 0, 0.4);
-  }
-
-  .coguest-drawer {
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    background-color: rgba(34, 38, 46, 1);
-    border-top-left-radius: 32rpx;
-    border-top-right-radius: 32rpx;
-    flex-direction: column;
-    height: 1000rpx;
-  }
-
-  .coguest-header {
-    padding-top: 40rpx;
-    padding-bottom: 40rpx;
-    flex-direction: column;
-    align-items: center;
-  }
-
-  .coguest-header-title {
-    color: rgba(255, 255, 255, 0.9);
-    font-size: 32rpx;
-    font-weight: 500;
-  }
-
-  .coguest-content {
-    flex: 1;
-    padding-left: 20rpx;
-    padding-right: 20rpx;
-  }
-
-  .coguest-list {
-    flex-direction: column;
-  }
-
-  .coguest-item {
-    padding-top: 24rpx;
-    padding-bottom: 24rpx;
-    position: relative;
-  }
-
-  .coguest-info {
-    flex-direction: row;
-    align-items: center;
-  }
-
-  .coguest-avatar {
-    width: 80rpx;
-    height: 80rpx;
-    border-radius: 40rpx;
-    margin-right: 24rpx;
-  }
-
-  .coguest-item-right {
-    flex: 1;
-    flex-direction: row;
-    justify-content: space-between;
-    align-items: center;
-  }
-
-  .coguest-name {
-    font-size: 28rpx;
-    color: #ffffff;
-    flex: 1;
-    margin-right: 16rpx;
-    lines: 1;
-  }
-
-  .coguest-actions {
-    flex-direction: row;
-    padding-right: 40rpx;
-  }
-
-  .coguest-btn {
-    padding-top: 10rpx;
-    padding-bottom: 10rpx;
-    padding-left: 24rpx;
-    padding-right: 24rpx;
-    border-radius: 100rpx;
-    margin-left: 12rpx;
-  }
-
-  .coguest-btn-accept {
-    background-color: rgba(43, 106, 214, 1);
-  }
-
-  .coguest-btn-reject {
-    background-color: rgba(58, 60, 66, 1);
-  }
-
-  .coguest-btn-text {
-    color: #ffffff;
-    font-size: 28rpx;
-  }
-
-  .coguest-item-divider {
-    position: absolute;
-    bottom: 0;
-    right: 0;
-    width: 550rpx;
-    height: 2rpx;
-    background-color: rgba(79, 88, 107, 0.3);
-  }
+<style lang="scss">
+  @import './pusher.scss';
 </style>

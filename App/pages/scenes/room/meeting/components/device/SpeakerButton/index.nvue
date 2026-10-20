@@ -1,0 +1,59 @@
+<template>
+  <view class="speaker-btn" @tap="handleTap">
+    <image
+      class="speaker-icon"
+      :src="speakerIconSrc"
+      mode="aspectFit"
+    />
+  </view>
+</template>
+
+<script setup lang="ts">
+  import { computed, ref, watch } from 'vue';
+  import { useDeviceState, AudioOutput } from '@/uni_modules/tuikit-atomic-x/state';
+  import { useIsLocalParticipantReady } from '../devicePermission';
+
+  const props = defineProps({
+    /** 进房后是否默认走扬声器（声明式偏好，由页面传入，组件自己执行） */
+    autoEnableSpeaker: { type: Boolean, default: true },
+  });
+
+  const { setAudioRoute, currentAudioRoute } = useDeviceState();
+  const isLocalParticipantReady = useIsLocalParticipantReady();
+
+  const audioRoute = currentAudioRoute;
+
+  const speakerIconSrc = computed(() =>
+    audioRoute.value === AudioOutput.SPEAKERPHONE
+      ? '/static/images/room/room_speakerphone.png'
+      : '/static/images/room/room_earpiece.png',
+  );
+
+  /** 默认路由只应用一次：之后完全由用户点击决定 */
+  const hasAppliedDefaultRoute = ref(false);
+
+  // 音频路由属于本组件的领域，进房成功后自行落默认偏好
+  watch(
+    () => [props.autoEnableSpeaker, isLocalParticipantReady.value] as const,
+    ([autoEnableSpeaker, isReady]) => {
+      if (!isReady || hasAppliedDefaultRoute.value) return;
+      hasAppliedDefaultRoute.value = true;
+      setAudioRoute({
+        audioRoute: autoEnableSpeaker ? AudioOutput.SPEAKERPHONE : AudioOutput.EARPIECE,
+      });
+    },
+    { immediate: true }
+  );
+
+  function handleTap() {
+    setAudioRoute({
+      audioRoute: currentAudioRoute.value === AudioOutput.SPEAKERPHONE
+        ? AudioOutput.EARPIECE
+        : AudioOutput.SPEAKERPHONE,
+    });
+  }
+</script>
+
+<style lang="scss">
+  @import './SpeakerButton.scss';
+</style>

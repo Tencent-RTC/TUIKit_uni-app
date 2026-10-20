@@ -328,7 +328,7 @@ class MessageActionState {
       callAPI(JSON.stringify(options), (data: string) => {
         try {
           const result = safeJsonParse(data, {}) as any;
-          if (result.code === 0) resolve();
+          if (result.code === 0 || result.code === 23007) resolve();
           else reject(new Error(result.message || 'addReaction failed'));
         } catch (error) { reject(error); }
       });

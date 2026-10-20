@@ -16,7 +16,7 @@
           </view> -->
           <view class="tab-item" :class="activeTab === 'requests' ? 'active' : 'inactive'"
             @tap="activeTab = 'requests'">
-            <text :class="activeTab === 'requests' ? 'active-text' : 'inactive-text'">连麦管理</text>
+            <text :class="activeTab === 'requests' ? 'active-text' : 'inactive-text'">{{ t('manage_tab') }}</text>
             <!-- 						<view class="active-line-container" v-if="activeTab === 'requests'">
 							<view class="active-line"></view>
 						</view> -->
@@ -40,10 +40,10 @@
                   </view>
                   <view class="request-actions">
                     <view class="action-btn accept" @tap="handleRequest(audience, 'accept')">
-                      <text class="btn-text">同意</text>
+                      <text class="btn-text">{{ t('agree') }}</text>
                     </view>
                     <view class="action-btn reject" @tap="handleRequest(audience, 'reject')">
-                      <text class="btn-text">拒绝</text>
+                      <text class="btn-text">{{ t('reject') }}</text>
                     </view>
                   </view>
                 </view>
@@ -130,6 +130,7 @@
   import {
     useCoGuestState
   } from "@/uni_modules/tuikit-atomic-x/state/CoGuestState";
+  import { t } from '../locales';
   const {
     applicants,
     invitableGuests,
@@ -138,7 +139,7 @@
     rejectApplication
   } = useCoGuestState(uni?.$liveID);
 
-  const defaultAvatarURL = 'https://web.sdk.qcloud.com/component/TUIKit/assets/avatar_01.png';
+  const defaultAvatarURL = '/uni_modules/tuikit-atomic-x/static/assets/live/default-avatar.png';
 
   // nvue 原生 animation / dom 模块
   const animation = uni.requireNativePlugin('animation');

@@ -6,7 +6,14 @@
       </view>
       <view class="user-info">
         <view class="user-avatar-wrap">
-          <Avatar :src="loginUserInfo?.avatarURL || ''" :name="loginUserInfo?.nickname || loginUserInfo?.userID || ''" :size="64" :shape="'circle'" defaultAvatarType="user" pureMode />
+          <Avatar
+            :src="loginUserInfo?.avatarURL || ''"
+            :name="loginUserInfo?.nickname || loginUserInfo?.userID || ''"
+            :size="AVATAR_SIZE_PX"
+            :shape="'circle'"
+            defaultAvatarType="user"
+            pureMode
+          />
         </view>
         <text class="user-name" :numberOfLines="1">{{ loginUserInfo?.nickname || loginUserInfo?.userID || '' }}</text>
       </view>
@@ -15,17 +22,17 @@
     <view class="actions">
       <view class="action-btn" @tap="handleJoinRoom">
         <image class="action-btn-icon" src="/static/images/room/room_join.png" mode="aspectFit" />
-        <text class="action-btn-text">加入房间</text>
+        <text class="action-btn-text">{{ t('room.entry.join') }}</text>
       </view>
       <view class="action-btn-gap"></view>
       <view class="action-btn" @tap="handleCreateRoom">
         <image class="action-btn-icon" src="/static/images/room/room_create.png" mode="aspectFit" />
-        <text class="action-btn-text">新建房间</text>
+        <text class="action-btn-text">{{ t('room.entry.create') }}</text>
       </view>
       <view class="action-btn-gap"></view>
       <view class="action-btn" @tap="handleScheduleRoom">
         <image class="action-btn-icon" src="/static/images/room/room_schedule_room.png" mode="aspectFit" />
-        <text class="action-btn-text">预定房间</text>
+        <text class="action-btn-text">{{ t('room.entry.schedule') }}</text>
       </view>
     </view>
 
@@ -39,16 +46,21 @@
   import { reportMetrics } from '@/uni_modules/tuikit-atomic-x';
   import Avatar from '@/uni_modules/tuikit-atomic-x/components/Avatar/Avatar.nvue';
   import RoomScheduleList from './schedule/components/RoomScheduleList/index.nvue';
+  import { t } from './locales';
 
   const { loginUserInfo } = useLoginState();
+
+  const FALLBACK_SAFE_AREA_WIDTH_PX = 375;
+  const FALLBACK_SAFE_AREA_HEIGHT_PX = 750;
+  const AVATAR_SIZE_PX = 64;
 
   const safeArea = ref({
     left: 0,
     right: 0,
     top: 0,
     bottom: 0,
-    width: 375,
-    height: 750,
+    width: FALLBACK_SAFE_AREA_WIDTH_PX,
+    height: FALLBACK_SAFE_AREA_HEIGHT_PX,
   });
 
   onMounted(() => {
@@ -83,89 +95,6 @@
   }
 </script>
 
-<style>
-  .page {
-    flex: 1;
-    background-color: #F8F9FB;
-    flex-direction: column;
-  }
-
-  .header {
-    flex-direction: row;
-    align-items: center;
-    padding-top: 96rpx;
-    padding-bottom: 26rpx;
-    padding-left: 40rpx;
-    padding-right: 40rpx;
-  }
-
-  .back-btn {
-    width: 44rpx;
-    height: 44rpx;
-    justify-content: center;
-    align-items: center;
-  }
-
-  .back-icon {
-    width: 32rpx;
-    height: 32rpx;
-  }
-
-  .user-info {
-    flex: 1;
-    flex-direction: row;
-    align-items: center;
-    margin-left: 44rpx;
-  }
-
-  .user-avatar-wrap {
-    margin-right: 24rpx;
-  }
-
-  .user-name {
-    font-size: 32rpx;
-    font-weight: 500;
-    color: #676C80;
-    flex: 1;
-    lines: 1;
-    text-overflow: ellipsis;
-  }
-
-
-  /* 三个入口横排（设计图：加入 / 创建 / 预定） */
-  .actions {
-    flex-direction: row;
-    margin: 0 40rpx;
-    padding-left: 24rpx;
-    padding-right: 24rpx;
-    padding-top: 26rpx;
-    padding-bottom: 40rpx;
-    border-bottom: 1rpx solid #E7ECF6;
-  }
-
-  .action-btn {
-    flex: 1;
-    height: 160rpx;
-    border-radius: 16rpx;
-    background-color: #0468FC;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
-  }
-
-  .action-btn-gap {
-    width: 40rpx;
-  }
-
-  .action-btn-icon {
-    width: 48rpx;
-    height: 48rpx;
-    margin-bottom: 18rpx;
-  }
-
-  .action-btn-text {
-    color: #FFFFFF;
-    font-size: 28rpx;
-    font-weight: 500;
-  }
+<style lang="scss">
+  @import './room.scss';
 </style>

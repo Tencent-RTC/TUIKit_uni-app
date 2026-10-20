@@ -1,0 +1,60 @@
+  @import '../../../../../styles/tokens.scss';
+
+  .exit-mask {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: $room-mask;
+    flex-direction: column;
+    justify-content: flex-end;
+  }
+
+  .exit-sheet {
+    background-color: $room-dark-bg-sheet;
+    border-top-left-radius: 24rpx;
+    border-top-right-radius: 24rpx;
+    padding-bottom: 34rpx;
+  }
+
+  .drop-bar {
+    height: 70rpx;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .drop-line {
+    width: 48rpx;
+    height: 48rpx;
+  }
+
+  .exit-sheet-tip {
+    color: $room-dark-text-tertiary;
+    font-size: $room-font-size-sm;
+    text-align: center;
+    padding-left: 32rpx;
+    padding-right: 32rpx;
+    padding-bottom: 32rpx;
+  }
+
+  .exit-sheet-divider {
+    height: 1rpx;
+    background-color: $room-dark-bg-control-soft;
+  }
+
+  .exit-sheet-btn {
+    height: 116rpx;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .exit-sheet-btn-text-leave {
+    color: $room-color-brand-deep;
+    font-size: $room-font-size-2xl;
+  }
+
+  .exit-sheet-btn-text-end {
+    color: $room-color-danger-deep;
+    font-size: $room-font-size-2xl;
+  }

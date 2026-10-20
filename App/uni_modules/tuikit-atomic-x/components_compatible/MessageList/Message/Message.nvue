@@ -26,11 +26,12 @@
              无手势绑定，不拦截气泡的 tap / longpress -->
         <view v-if="highlight" ref="highlightOverlayRef" class="msg__highlight-overlay"></view>
       </view>
+      <MessageReactionBar v-if="showStandaloneReaction" :message="message" @showDetail="handleShowReactionDetail" />
       <view v-if="showTime" class="msg__time" @tap.stop="handleMessageContentTap" style="background-color: black;">
         <text class="msg__time-text msg__text--no-select">{{ formatMessageTime(message.timestamp) }}</text>
       </view>
     </view>
-    <MessageActions v-if="showActions" ref="messageActionsRef" :message="message" :actions="messageActionList" @close="handleActionsClose" @action="handleAction" />
+    <MessageActions v-if="showActions" ref="messageActionsRef" :message="message" :actions="messageActionList" @close="handleActionsClose" @action="handleAction" @showAll="handleReactionShowAll" />
 
     <!-- 转发目标选择器：组件内部自洽，选中后直接调 forwardMessages，不抛给业务层 -->
     <ForwardPicker
@@ -38,6 +39,20 @@
       :excludeConversationID="conversationID"
       @select="handleForwardSelect"
       @close="handleForwardPickerClose"
+    />
+
+    <!-- 表情回应详情选择器：底部弹出，展示当前 reaction 的用户列表，支持点击移除自己的回应 -->
+    <ReactionDetailPicker
+      v-if="showReactionDetail"
+      :visible="showReactionDetail"
+      :message="message"
+      :selectedReactionID="reactionDetailReactionID"
+      @close="handleReactionDetailClose"
+    />
+    <ReactionFullPicker
+      :visible="showReactionFullPicker"
+      :message="message"
+      @close="handleReactionFullPickerClose"
     />
   </view>
 </template>
@@ -55,6 +70,9 @@ import FaceMessage from './FaceMessage/FaceMessage.nvue'
 import CustomMessage from './CustomMessage/CustomMessage.nvue'
 import MergerMessage from './MergerMessage/MergerMessage.nvue'
 import MessageActions from './MessageActions.nvue'
+import MessageReactionBar from './MessageReaction/MessageReactionBar.nvue'
+import ReactionDetailPicker from './MessageReaction/ReactionDetailPicker.nvue'
+import ReactionFullPicker from './MessageReaction/ReactionFullPicker.nvue'
 import ForwardPicker from './ForwardPicker.nvue'
 import { MessageType, MessageStatus, MessageForwardType } from '../../../types/message'
 import { useMessageListState } from '../../../state/MessageListState'
@@ -80,6 +98,9 @@ export default {
     CustomMessage,
     MergerMessage,
     MessageActions,
+    MessageReactionBar,
+    ReactionDetailPicker,
+    ReactionFullPicker,
     ForwardPicker
   },
   props: {
@@ -103,6 +124,9 @@ export default {
       showActions: false,
       // 转发目标选择器可见性（组件内部状态，不外泄）
       showForwardPicker: false,
+      // 表情回应详情选择器
+      showReactionDetail: false,
+      reactionDetailReactionID: '',
       longPressPosition: { x: 0, y: 0 },
       lastTouchPosition: { x: 0, y: 0 },
       isLongPressing: false,
@@ -156,6 +180,10 @@ export default {
       return this.message.isSentBySelf &&
         this.message.status === MessageStatus.SEND_SUCCESS &&
         this.message.needReadReceipt
+    },
+    // 非文本消息的 reaction 条独立渲染在气泡下方；文本消息的 reaction 条在 TextMessage 气泡内
+    showStandaloneReaction() {
+      return (this.message.reactionList || []).length > 0
     },
     readStatusText() {
       if (!this.message.receipt) return '未读'
@@ -492,6 +520,21 @@ export default {
     },
     handleForwardPickerClose: function() {
       this.showForwardPicker = false
+    },
+    handleReactionShowAll: function() {
+      this.showReactionFullPicker = true
+    },
+    handleReactionFullPickerClose: function() {
+      this.showReactionFullPicker = false
+    },
+    handleShowReactionDetail: function(reactionID) {
+      if (!reactionID) return
+      this.reactionDetailReactionID = reactionID
+      this.showReactionDetail = true
+    },
+    handleReactionDetailClose: function() {
+      this.showReactionDetail = false
+      this.reactionDetailReactionID = ''
     },
     /**
      * 执行单条转发

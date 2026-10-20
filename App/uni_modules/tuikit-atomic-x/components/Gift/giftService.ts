@@ -1,5 +1,6 @@
 import { ref } from 'vue'
 import { useGiftState } from '@/uni_modules/tuikit-atomic-x/state/GiftState'
+import { t } from '../locales'
 
 type GiftData = {
   giftID ?: string
@@ -55,7 +56,7 @@ export function downloadAndSaveToPath(url : string) {
       url: url,
       success: (res) => {
         if (res.statusCode !== 200) {
-          reject(new Error('下载失败'))
+          reject(new Error(t('gift.downloadFailed')))
           return
         }
         let imageFilePath = ''
@@ -71,7 +72,7 @@ export function downloadAndSaveToPath(url : string) {
             resolve(imageFilePath)
           },
           fail: (err) => {
-            reject(new Error('保存文件失败'))
+            reject(new Error(t('gift.saveFailed')))
           },
         })
       },

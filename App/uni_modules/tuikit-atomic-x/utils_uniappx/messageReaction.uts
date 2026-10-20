@@ -1,0 +1,175 @@
+import { useMessageActionState } from '../state/MessageActionState'
+import { buildReactionEmojiSrc, pushRecentReactionEmoji } from './reactionEmoji'
+import { emitPremiumRequired } from './premiumRequired'
+
+export type ReactionBrief = {
+  reactionID: string
+  src: string
+  totalUserCount: number
+  reactedByMyself: boolean
+  topNames: string[]
+}
+
+const pendingReactionKeys: Map<string, boolean> = new Map<string, boolean>()
+
+function roundTripToJSONObject(value: any): UTSJSONObject {
+  return JSON.parse<UTSJSONObject>(JSON.stringify(value)) ?? new UTSJSONObject()
+}
+
+export function asJSONObject(value: any | null): UTSJSONObject {
+  if (value == null) return new UTSJSONObject()
+  try {
+    return value as UTSJSONObject
+  } catch (e: any) {
+    return roundTripToJSONObject(value)
+  }
+}
+
+export function readJSONString(obj: UTSJSONObject, key: string): string {
+  const v: any | null = obj[key]
+  return typeof v == 'string' ? (v as string) : ''
+}
+
+export const resolveReactionUserName = (user: any | null): string => {
+  if (user == null) return ''
+  const u: UTSJSONObject = asJSONObject(user)
+  const nickname: string = readJSONString(u, 'nickname')
+  if (nickname.length > 0) return nickname
+  return readJSONString(u, 'userID')
+}
+
+export const isMessageSentBySelf = (message: any | null): boolean => {
+  if (message == null) return false
+  const obj: UTSJSONObject = asJSONObject(message)
+  const v: any | null = obj['isSentBySelf']
+  return v == true
+}
+
+export const getReactionList = (message: any | null): ReactionBrief[] => {
+  const result: ReactionBrief[] = []
+  if (message == null) return result
+  const msgObj: UTSJSONObject = asJSONObject(message)
+  const listRaw: any | null = msgObj['reactionList']
+  if (listRaw == null || !Array.isArray(listRaw)) return result
+  const list: any[] = listRaw as any[]
+
+  for (let i: number = 0; i < list.length; i++) {
+    const r: UTSJSONObject = asJSONObject(list[i])
+    const reactionID: string = readJSONString(r, 'reactionID')
+    if (reactionID.length == 0) continue
+
+    const totalRaw: any | null = r['totalUserCount']
+    const total: number = typeof totalRaw == 'number' ? (totalRaw as number) : 0
+    if (total <= 0) continue
+
+    const names: string[] = []
+    const usersRaw: any | null = r['partialUserList']
+    if (usersRaw != null && Array.isArray(usersRaw)) {
+      const users: any[] = usersRaw as any[]
+      // 展示前 3 个回应者（顿号拼接，拼接 >= 20 字符时追加「等N人」）
+      const limit: number = Math.min(3, users.length)
+      for (let j: number = 0; j < limit; j++) {
+        const name: string = resolveReactionUserName(users[j])
+        if (name.length > 0) {
+          names.push(name)
+        }
+      }
+    }
+
+    const mineRaw: any | null = r['reactedByMyself']
+    result.push({
+      reactionID: reactionID,
+      src: buildReactionEmojiSrc(reactionID),
+      totalUserCount: total,
+      reactedByMyself: mineRaw == true,
+      topNames: names
+    } as ReactionBrief)
+  }
+  return result
+}
+
+export type ReactionChipText = {
+  name: string
+  suffix: string
+}
+
+// 展示前 3 个回应者（顿号拼接）；拼接 >= 20 字符时追加 suffix「等N人」
+export const buildReactionChipText = (reaction: ReactionBrief): ReactionChipText => {
+  const names: string[] = []
+  reaction.topNames.forEach((n: string) => {
+    if (n.length > 0) names.push(n)
+  })
+  const name: string = names.join('、')
+  // 有未列出的回应者时一定显示「等N人」；名字拼接过长（被截断）时也显示
+  const suffix: string = reaction.totalUserCount > names.length || name.length >= 20 ? `等${reaction.totalUserCount}人` : ''
+  return { name: name, suffix: suffix } as ReactionChipText
+}
+
+export const isReactedByMyself = (message: any | null, reactionID: string): boolean => {
+  const list: ReactionBrief[] = getReactionList(message)
+  for (let i: number = 0; i < list.length; i++) {
+    if (list[i].reactionID == reactionID && list[i].reactedByMyself) {
+      return true
+    }
+  }
+  return false
+}
+
+const isPremiumRequired = (error: any | null): boolean => {
+  if (error == null) return false
+  const msg: string = error instanceof Error ? (error as Error).message : `${error}`
+  return msg.toLowerCase().indexOf('premium edition') >= 0
+}
+
+export const resolveReactionError = (error: any | null): string => {
+  if (error == null) return '操作失败'
+  const msg: string = error instanceof Error ? (error as Error).message : `${error}`
+  const lower: string = msg.toLowerCase()
+  if (isPremiumRequired(error)) return '消息表情回应功能仅旗舰版支持，请升级后使用'
+  if (lower.indexOf('does not exist') >= 0) return '该回应不存在或已被删除'
+  if (lower.indexOf('max reaction limit') >= 0) return '回应数量已达上限'
+  return msg.length > 0 ? msg : '操作失败'
+}
+
+const runReaction = async (message: any, reactionID: string, remove: boolean, keepStore: boolean): Promise<boolean> => {
+  const msgObj: UTSJSONObject = asJSONObject(message)
+  const msgID: string = readJSONString(msgObj, 'msgID')
+  const pendingKey: string = `${msgID}:${reactionID}`
+  if (pendingReactionKeys.has(pendingKey)) return false
+  pendingReactionKeys.set(pendingKey, true)
+
+  const actionState = useMessageActionState({ message: msgObj })
+  let ok: boolean = false
+  try {
+    if (remove || isReactedByMyself(message, reactionID)) {
+      await actionState.removeReaction(reactionID)
+    } else {
+      await actionState.addReaction(reactionID)
+      pushRecentReactionEmoji(reactionID)
+    }
+    ok = true
+  } catch (e: any) {
+    console.error('[messageReaction] reaction failed:', `${e}`)
+    if (isPremiumRequired(e)) {
+      emitPremiumRequired(resolveReactionError(e))
+    } else {
+      uni.showToast({ title: resolveReactionError(e), icon: 'none', duration: 2000 })
+    }
+  } finally {
+    pendingReactionKeys.delete(pendingKey)
+    if (!keepStore) {
+      actionState.destroyStore()
+    }
+  }
+  return ok
+}
+
+export const toggleMessageReaction = (message: any | null, reactionID: string, keepStore: boolean): Promise<boolean> => {
+  if (message == null) return Promise.resolve(false)
+  return runReaction(message, reactionID, false, keepStore)
+}
+
+export const removeMessageReaction = (message: any | null, reactionID: string): Promise<boolean> => {
+  if (message == null) return Promise.resolve(false)
+  return runReaction(message, reactionID, true, true)
+}

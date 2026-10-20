@@ -136,6 +136,7 @@
   import { useContactState } from '@/uni_modules/tuikit-atomic-x/state/ContactState';
   import CustomNavbar from '@/uni_modules/tuikit-atomic-x/components/CustomNavbar/CustomNavbar.nvue';
   import { showErrorToast } from '@/uni_modules/tuikit-atomic-x/utils/roomErrorHandler';
+  import { t } from '@/uni_modules/tuikit-atomic-x/components/locales';
   import { showToast } from '@/uni_modules/tuikit-atomic-x/utils/toast';
 
   const MAX_SELECT_COUNT = 300;
@@ -343,7 +344,7 @@
       })
       .catch((e: any) => {
         isSubmitting.value = false;
-        showErrorToast(e, '呼叫失败');
+        showErrorToast(e, t('Participants.CallFailed'));
       });
   }
 

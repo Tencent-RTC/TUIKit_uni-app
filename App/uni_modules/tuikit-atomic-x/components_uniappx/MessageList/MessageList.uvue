@@ -68,6 +68,14 @@
       />
       <text class="msg-list__scroll-btn-text">新消息</text>
     </view>
+
+    <ConfirmDialog
+      v-model="premiumDialogVisible"
+      title="提示"
+      :message="premiumDialogMessage"
+      confirmText="我知道了"
+      cancelText=""
+    />
   </view>
 </template>
 
@@ -75,6 +83,8 @@
 import { ref, computed, watch, onMounted, onBeforeMount, onBeforeUnmount, nextTick, getCurrentInstance, toRaw } from 'vue'
 import Message from './Message/Message.uvue'
 import MessageTimeDivider from './MessageTimeDivider/MessageTimeDivider.uvue'
+import ConfirmDialog from '../ConfirmDialog/ConfirmDialog.uvue'
+import { PREMIUM_REQUIRED_EVENT } from '../../utils/premiumRequired'
 import { useMessageListState } from '../../state/MessageListState'
 import { useConversationListState } from '../../state/ConversationListState'
 import { useListTransform } from './useListTransform'
@@ -93,13 +103,9 @@ type Props = {
   messageActionList?: string[]
   filter?: ((message: any) => boolean) | null
   locateMessage?: any | null
-  // 输入框工具栏高度（px）
   inputToolbarHeight?: number
-  // 键盘/Emoji面板高度（px）
   inputPanelHeight?: number
   customCenterChecker?: ((message: any, conversationID: string) => boolean) | null
-  // 自定义消息渲染：(message, conversationID) => Component | null
-  // 返回组件 → 接管 CUSTOM 消息渲染；返回 null/undefined → 走内置 CustomMessage 默认渲染
   customMessageRender?: any}
 
 type MessageListExpose = {
@@ -107,7 +113,6 @@ type MessageListExpose = {
   scrollToMessage: (message: any, animated: boolean | null) => Promise<void>
 }
 
-/** audioConvertStreamGrow 事件 payload（v20 起 AudioMessage 不再带 boxRef，uvue 走 scroll-into-view 简化路径） */
 type AudioConvertStreamGrowData = {
   msgID: string
 }
@@ -179,7 +184,11 @@ let _handleAudioConvertStreamGrow: ((data: any) => void) | null = null
 
 let _handleScrollToMessageEvent: ((data: any) => void) | null = null
 
-/** 正在定位中的 msgID：同一目标重复触发时直接跳过，避免 loadMessages 被并发调用多次 */
+let _handleReactionPremiumRequired: ((data: any) => void) | null = null
+
+const premiumDialogVisible = ref<boolean>(false)
+const premiumDialogMessage = ref<string>('')
+
 let _locatingMessageID: string = ''
 
 let _isLocatingMessage: boolean = false
@@ -203,7 +212,6 @@ const clearAllTimers = () => {
 
 const setCellRef = (el: any, index: number) => {
   if (el == null || index < 0) return
-  // UTS 数组不支持稀疏写入：index 超出长度时先用 null 补位，否则 cellRefs[index] 读写都会抛越界
   while (cellRefs.length <= index) {
     cellRefs.push(null)
   }
@@ -744,38 +752,38 @@ onBeforeMount(() => {
 });
 
 onMounted(() => {
-  // mount 时 messageList 已有缓存数据：watch immediate=false 不会触发，需手动启动收尾流程
   if (messageList.value != null && messageList.value.length > 0) {
     nextTick((): void => {
       finalizeFirstLoad(true)
     })
   }
-  // 监听 AudioMessage "转写文本入场"事件：当本条是最后一条且用户未在浏览历史时，
-  // 跟随滚动到底部，防止幕布展开后底部被输入框遮挡
   const handler: ((data: any) => void) | null = _handleAudioConvertStreamGrow
   if (handler != null) {
     uni.$on('audioConvertStreamGrow', handler)
-    // 译文展开同样会把气泡撑高，复用同一套跟随滚动逻辑
     uni.$on('messageBoxGrow', handler)
   }
-  // UTS 下 const 箭头函数不 hoist，统一走模块级 let 引用（与 _handleAudioConvertStreamGrow 同一范式）
   const scrollHandler: ((data: any) => void) | null = _handleScrollToMessageEvent
   if (scrollHandler != null) {
     uni.$on('scrollToMessage', scrollHandler)
   }
+  const premiumHandler: ((data: any) => void) | null = _handleReactionPremiumRequired
+  if (premiumHandler != null) {
+    uni.$on(PREMIUM_REQUIRED_EVENT, premiumHandler)
+  }
 })
 
-/**
- * 引用块点击 → 定位到原消息
- * payload: { msgID: string, message?: any }（uvue 的 uni.$on 回调只接受单个参数）
- * 原消息不在当前列表时，scrollToMessage 内部会先 locateToMessage 拉取上下文
- */
+const handleReactionPremiumRequired = (data: any): void => {
+  premiumDialogMessage.value = `${data}`
+  premiumDialogVisible.value = true
+}
+
+_handleReactionPremiumRequired = handleReactionPremiumRequired
+
 const handleScrollToMessageEvent = (data: any): void => {
   const dataObj: UTSJSONObject = toUTSJSONObject(data ?? new UTSJSONObject())
   const msgIDRaw: any | null = dataObj['msgID']
   const msgID: string = msgIDRaw != null ? `${msgIDRaw}` : ''
   if (msgID.length == 0) return
-  // 同一目标重复点击时跳过，避免 loadMessages 被并发调用多次
   if (_locatingMessageID == msgID) return
   _locatingMessageID = msgID
 
@@ -806,7 +814,6 @@ const handleAudioConvertStreamGrow = (data: any): void => {
   )
   if (targetIndex < 0) return
 
-  // 只处理「最后一条」—— 之前位置的消息文本框在列表中部，不会被 input 遮挡
   const lastIndex = messageItems.value.length - 1
   if (targetIndex !== lastIndex) return
 
@@ -841,23 +848,16 @@ onBeforeUnmount(() => {
   if (scrollHandler != null) {
     uni.$off('scrollToMessage', scrollHandler)
   }
+  const premiumHandler: ((data: any) => void) | null = _handleReactionPremiumRequired
+  if (premiumHandler != null) {
+    uni.$off(PREMIUM_REQUIRED_EVENT, premiumHandler)
+  }
   destroyStore()
 })
 
-/**
- * 获取最后一条消息底部到屏幕顶部的 px 值
- * - uvue 用 UniElement.getBoundingClientRect() 同步获取（4.0+ 全平台支持）
- * - 文档：https://doc.dcloud.net.cn/uni-app-x/api/dom/unielement.html#getboundingclientrect
- * - 返回 DOMRect { x, y, left, top, right, bottom, width, height }（单位 px）
- * - 找不到 cell / 测量失败时返回 9999 作为 fallback（远大于屏幕高，calcTranslateY 直接返回 0）
- */
 const getLastMessageCellPosition = async (): Promise<number> => {
-  // cellRefs 只增不减，cellRefs.length 是历史最大值；用当前列表长度取末尾 cell，
-  // 避免切会话/列表变短后命中已销毁的旧 cell 导致测量失真。
   const lastIndex: number = messageItems.value.length - 1
   if (lastIndex < 0) return 9999
-  // UTS/Kotlin 下数组越界会抛 IndexOutOfBoundsException（不像 JS 返回 undefined）：
-  // cell 尚未挂载时 cellRefs 可能比 messageItems 短，必须先比长度
   if (lastIndex >= cellRefs.length) return 9999
   const lastCell = cellRefs[lastIndex]
   if (lastCell == null) return 9999
@@ -884,11 +884,9 @@ const listTransform = useListTransform(listTransformOptions)
 
 _listTransformOnNewMessage = listTransform.onNewMessage
 
-// 监听面板高度变化
 watch((): number | null => props.inputPanelHeight as number | null, async (newHeight: number | null, oldHeight: number | null): Promise<void> => {
   const isOpening = (oldHeight == null || oldHeight == 0) && newHeight != null && newHeight > 0;
 
-  // 面板打开时先滚动到底部
   if (newHeight != null && newHeight > 0) {
     scrollToBottom(null);
     await nextTick();

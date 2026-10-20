@@ -1,0 +1,41 @@
+@import '../../../../styles/tokens.scss';
+
+  .operate-buttons {
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .btn-bg {
+    width: 72rpx;
+    height: 72rpx;
+    background-color: $live-dark-bg-float;
+    border-radius: 50%;
+    border: 2rpx solid $live-dark-surface-055;
+    margin-left: 16rpx;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .btn-icon {
+    width: 72rpx;
+    height: 72rpx;
+  }
+
+  .more-icon {
+    width: 56rpx;
+    height: 56rpx;
+  }
+
+  .co-mic-connected-icon {
+    width: 72rpx;
+    height: 72rpx;
+    transform: scale(1);
+    transition-property: transform;
+    transition-duration: 800ms;
+    transition-timing-function: ease-in-out;
+  }
+
+  .co-mic-connected-icon.is-breathing {
+    transform: scale(1.12);
+  }

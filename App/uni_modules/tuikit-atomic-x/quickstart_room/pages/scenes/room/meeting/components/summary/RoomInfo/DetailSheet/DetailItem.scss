@@ -1,0 +1,28 @@
+  @import '../../../../../styles/tokens.scss';
+
+  .info-row {
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .info-prefix {
+    width: 146rpx;
+    font-size: $room-font-size-base;
+    color: $room-dark-text-tertiary;
+  }
+
+  .info-gap {
+    width: 40rpx;
+  }
+
+  .info-text {
+    flex: 1;
+    font-size: $room-font-size-base;
+    color: $room-dark-text-primary;
+    lines: 1;
+    text-overflow: ellipsis;
+  }
+
+  .info-slot {
+    margin-left: 8rpx;
+  }

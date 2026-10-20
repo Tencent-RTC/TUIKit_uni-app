@@ -15,7 +15,6 @@
       <AudienceEntryBanner ref="audienceEntryBannerRef" :topPx="audienceEntryTopPx" />
       <view class="footer" :style="{ opacity: isBarrageInputActive ? 0 : 1 }">
         <BarrageInput v-if="!isCoGuestControlBarOpen"></BarrageInput>
-        <!-- 显隐用 opacity+userInteractionEnabled 而非 v-if:v-if 从 false→true 重挂载时,原生 view 会被追加到父容器【末尾】、排到 drawer 之后,导致连麦后底部操作栏盖在面板上。常驻挂载,原生 view 顺序固定在 drawer 之前。 -->
         <view
           class="action-buttons"
           :style="{ opacity: (isCoGuestControlBarOpen || isBarrageInputActive) ? 0 : 1 }"
@@ -48,7 +47,7 @@
         />
       </view>
 
-      <LiveAudienceList v-model="isShowAudienceList" @overlayActiveChange="onAudienceInnerPanelChange"></LiveAudienceList>
+      <LiveAudienceList v-model="isShowAudienceList" :liveID="liveID" @overlayActiveChange="onAudienceInnerPanelChange"></LiveAudienceList>
       <CoGuestRequestPanel
         v-model="isShowCoGuestRequestPanel"
         :liveID="currentLive.liveID"
@@ -73,7 +72,7 @@
       />
     </view>
   </view>
-  <ActionSheet v-model="isShowCoGuestSheet" :title="coGuestSheetTitle" :itemList="coGuestSheetItems" @select="onCoGuestSheetSelect" />
+  <OptionSheet v-model="isShowCoGuestSheet" :title="coGuestSheetTitle" :itemList="coGuestSheetItems" @select="onCoGuestSheetSelect" />
   <FloatingGiftCombo
     ref="floatingComboRef"
     @comboSend="onSelfGiftSent"
@@ -81,10 +80,10 @@
 
   <LiveDialog
     v-model="isShowExitConfirmToast"
-    title="退出直播间"
-    message="当前处于连麦中，退出后将断开连麦"
-    confirmText="退出"
-    cancelText="取消"
+    :title="t('audience.exitTitle')"
+    :message="t('audience.exitConfirmMsg')"
+    :confirmText="t('audience.exitConfirm')"
+    :cancelText="t('common.cancel')"
     @confirm="confirmExitLive"
     @cancel="closeExitConfirmToast"
   />
@@ -102,20 +101,16 @@
 <script setup lang="ts">
   import { onLoad, onBackPress } from '@dcloudio/uni-app';
   import { ref, onMounted, computed, onUnmounted, watch, nextTick } from 'vue';
-  import LiveStreamView from '@/uni_modules/tuikit-atomic-x/components/LiveStreamView/LiveStreamView.nvue';
-  import LiveAudienceList from '@/uni_modules/tuikit-atomic-x/components/LiveAudienceList/LiveAudienceList.nvue';
-  import CoGuestRequestPanel from '@/uni_modules/tuikit-atomic-x/components/CoGuestPanel/CoGuestRequestPanel.nvue';
-  import CoGuestControlBar from '@/uni_modules/tuikit-atomic-x/components/CoGuestPanel/CoGuestControlBar.nvue';
+  import LiveStreamView from '@/uni_modules/tuikit-atomic-x/components/LiveStreamView';
+  import LiveAudienceList from '@/uni_modules/tuikit-atomic-x/components/LiveAudienceList';
+  import { CoGuestRequestPanel, CoGuestControlBar } from '@/uni_modules/tuikit-atomic-x/components/CoGuestPanel';
   import LiveToast from '@/uni_modules/tuikit-atomic-x/components/LiveToast.nvue';
   import LiveDialog from '@/uni_modules/tuikit-atomic-x/components/LiveDialog.nvue';
-  import BarrageInput from '@/uni_modules/tuikit-atomic-x/components/BarrageInput/BarrageInput.vue';
-  import BarrageList from '@/uni_modules/tuikit-atomic-x/components/BarrageList/BarrageList.nvue';
+  import BarrageInput from '@/uni_modules/tuikit-atomic-x/components/BarrageInput';
+  import BarrageList from '@/uni_modules/tuikit-atomic-x/components/BarrageList';
   import Like from '@/uni_modules/tuikit-atomic-x/components/Like.nvue';
-  import GiftPicker from '@/uni_modules/tuikit-atomic-x/components/Gift/GiftPicker.nvue';
-  import GiftEntryBanner from '@/uni_modules/tuikit-atomic-x/components/Gift/GiftEntryBanner.nvue';
-  import GiftPlayer from '@/uni_modules/tuikit-atomic-x/components/Gift/GiftPlayer.nvue';
-  import FloatingGiftCombo from '@/uni_modules/tuikit-atomic-x/components/Gift/FloatingGiftCombo.nvue';
-  import { giftService } from '@/uni_modules/tuikit-atomic-x/components/Gift/giftService'
+  import { GiftPicker, GiftEntryBanner, GiftPlayer, FloatingGiftCombo } from '@/uni_modules/tuikit-atomic-x/components/Gift';
+  import { giftService } from '@/uni_modules/tuikit-atomic-x/components/Gift'
   import { isUserFollowed, toggleUserFollowed } from '@/uni_modules/tuikit-atomic-x/utils/followStore';
   import { heightPercentToRpx } from '@/uni_modules/tuikit-atomic-x/utils/screen';
   import { setSdkLanguageFromSystem } from '@/uni_modules/tuikit-atomic-x/utils/setSdkLanguageFromSystem';
@@ -127,11 +122,12 @@
   import { DeviceStatus } from '@/uni_modules/tuikit-atomic-x/state/DeviceState';
   import { useLoginState } from "@/uni_modules/tuikit-atomic-x/state/LoginState";
   import { useCoHostState } from "@/uni_modules/tuikit-atomic-x/state/CoHostState";
-  import ActionSheet from '@/components/ActionSheet.nvue';
-  import TopOperateBar from './components/TopOperateBar.nvue';
-  import BottomOperateBar from './components/BottomOperateBar.nvue';
-  import AudienceEntryBanner from './components/AudienceEntryBanner.nvue';
-  import MoreOperatePanel from './components/MoreOperatePanel.nvue';
+  import OptionSheet from '@/components/live/OptionSheet/index.nvue';
+  import { t } from '../../locales';
+  import TopOperateBar from './components/TopOperateBar/index.nvue';
+  import BottomOperateBar from './components/BottomOperateBar/index.nvue';
+  import AudienceEntryBanner from './components/AudienceEntryBanner/index.nvue';
+  import MoreOperatePanel from './components/MoreOperatePanel/index.nvue';
 
   uni.$localGuestStatus = 'IDLE';
 
@@ -174,10 +170,13 @@
   const BARRAGE_LIST_H_PX = uni.upx2px(380);
   const SYNC_WIN_H = (() => { try { return uni.getSystemInfoSync().windowHeight || 0; } catch (e) { return 0; } })();
   const CO_GUEST_BAR_GAP_PX = uni.upx2px(216);
+  const JOIN_FAIL_REDIRECT_MS = 500;
+  const EXIT_REDIRECT_DELAY_MS = 1500;
+  const FREEZE_RELEASE_MS = 800;
   const isFreezeCamera = ref(false);
   let freezeReleaseTimer: any = null;
   const isShowCoGuestSheet = ref(false)
-  const coGuestSheetItems = ref(['取消连麦申请'])
+  const coGuestSheetItems = ref([t('audience.cancelCoGuestRequest')])
   const coGuestSheetTitle = ref('')
   const audienceInnerPanelVisible = ref(false);
 
@@ -239,8 +238,8 @@
       liveID: liveID.value,
       success: onSuccess,
       fail: () => {
-        showTip('直播已结束');
-        setTimeout(() => uni.redirectTo({ url: `/pages/scenes/live/video/liveList/index` }), 500);
+        showTip(t('audience.liveEnded'));
+        setTimeout(() => uni.redirectTo({ url: `/pages/scenes/live/video/liveList/index` }), JOIN_FAIL_REDIRECT_MS);
       },
     });
   };
@@ -256,7 +255,7 @@
       });
       return;
     }
-    showTip('liveID 为空');
+    showTip(t('audience.emptyLiveID'));
   };
 
   const handleCallEndedBackToLive = () => {
@@ -277,16 +276,16 @@
   };
 
   const handleLocalCameraOpenedByAdmin = (event) => {
-    showTip(`您已被解除禁画`);
+    showTip(t('audience.cameraUnmutedByAdmin'));
   };
   const handleLocalCameraClosedByAdmin = (event) => {
-    showTip(`您已被禁画`);
+    showTip(t('audience.cameraMutedByAdmin'));
   };
   const handleLocalMicrophoneOpenedByAdmin = (event) => {
-    showTip(`您已被解除静音`);
+    showTip(t('audience.micUnmutedByAdmin'));
   };
   const handleLocalMicrophoneClosedByAdmin = (event) => {
-    showTip(`您已被静音`);
+    showTip(t('audience.micMutedByAdmin'));
   };
   const exitLiveWithTip = (tip: string) => {
     isExitingLive = true;
@@ -304,13 +303,13 @@
           console.error('返回失败', err);
         }
       });
-    }, 1500);
+    }, EXIT_REDIRECT_DELAY_MS);
   };
   const handleLiveEnded = (event) => {
-    exitLiveWithTip('直播已结束');
+    exitLiveWithTip(t('audience.liveEnded'));
   };
   const handleKickedOutOfLive = (event) => {
-    exitLiveWithTip('被踢出直播间');
+    exitLiveWithTip(t('audience.kickedOut'));
   };
 
   const removeAllLiveListeners = () => {
@@ -442,7 +441,7 @@
     const selfSeat = list.find(s => s?.userInfo?.userID === currentLoginUserId.value);
     const cameraOff = selfSeat?.userInfo?.cameraStatus === DeviceStatus.OFF;
     if (cameraOff) {
-      showTip('请先打开摄像头');
+      showTip(t('audience.openCameraFirst'));
       return;
     }
     requestPanelInitialDetail.value = true;
@@ -456,7 +455,7 @@
 
   const showCoGuestRequestPanel = () => {
     if (uni.$localGuestStatus === 'CONNECTED') {
-      coGuestSheetItems.value = ['断开连麦']
+      coGuestSheetItems.value = [t('audience.disconnectCoGuest')]
       isShowCoGuestSheet.value = true
     } else {
       isShowCoGuestRequestPanel.value = true;
@@ -525,8 +524,8 @@
     if (isExitingLive) return;
     const isBanned = (newValue || []).some((obj: any) => obj?.userID === uni.$userID);
     const wasBanned = (oldValue || []).some((obj: any) => obj?.userID === uni.$userID);
-    if (isBanned && !wasBanned) showTip('您已被禁言');
-    if (!isBanned && wasBanned) showTip('您已被解除禁言');
+    if (isBanned && !wasBanned) showTip(t('audience.banned'));
+    if (!isBanned && wasBanned) showTip(t('audience.unbanned'));
   });
 
   let seenAudienceIDs = new Set<string>();
@@ -579,7 +578,7 @@
       if (!liveNewInfo || !liveOldInfo) continue;
 
       if (!liveOldInfo?.isMessageDisable && liveNewInfo?.isMessageDisable) {
-        showTip(`${liveNewInfo?.liveOwner?.userName}被禁言`);
+        showTip(t('audience.hostBanned', { name: liveNewInfo?.liveOwner?.userName || '' }));
       }
     }
   }, { immediate: true, deep: true });
@@ -591,7 +590,7 @@
     if (!val) {
       requestPanelInitialDetail.value = false;
       clearTimeout(freezeReleaseTimer);
-      freezeReleaseTimer = setTimeout(() => { isFreezeCamera.value = false; }, 800);
+      freezeReleaseTimer = setTimeout(() => { isFreezeCamera.value = false; }, FREEZE_RELEASE_MS);
     }
   });
   watch(
@@ -643,48 +642,6 @@
   });
 </script>
 
-<style>
-  .live-container {
-    flex: 1;
-    position: relative;
-    width: 750rpx;
-    background: rgba(15, 16, 20, 1);
-  }
-
-  .live-content {
-    flex: 1;
-    position: relative;
-    width: 750rpx;
-  }
-
-  .footer {
-    flex: 1;
-    position: fixed;
-    left: 0;
-    right: 0;
-    bottom: 80rpx;
-    padding-left: 32rpx;
-    flex-direction: row;
-    align-items: center;
-    justify-content: space-between;
-    width: 686rpx;
-    z-index: 10;
-  }
-
-  .action-buttons {
-    position: fixed;
-    right: 40rpx;
-    bottom: 80rpx;
-    flex-direction: row;
-    align-items: center;
-    z-index: 10;
-  }
-
-  .co-mic-control-bar-wrap {
-    position: fixed;
-    left: 32rpx;
-    bottom: 36rpx;
-    width: 686rpx;
-    z-index: 10;
-  }
+<style lang="scss">
+  @import './player.scss';
 </style>

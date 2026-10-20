@@ -1,0 +1,111 @@
+<template>
+  <!--
+    根节点不挂 @tap：ChatPanel 是它的子节点，事件会冒泡回来再次触发 handleTap
+    （nvue 的 .stop 不可靠，不能依赖它拦截）。点击区域收在图标盒上。
+  -->
+  <view class="bottom-btn">
+    <view class="bottom-icon-box" @tap="handleTap">
+      <image
+        class="bottom-icon"
+        :src="iconSrc"
+        mode="aspectFit"
+      />
+      <text class="bottom-text">{{ t('chat.title') }}</text>
+    </view>
+    <view v-if="displayUnreadCount.length > 0" class="unread-badge">
+      <text class="unread-badge-text">{{ displayUnreadCount }}</text>
+    </view>
+
+    <!-- 聊天面板由本组件自己持有：开合、未读清零、订阅重建都在这里闭环 -->
+    <ChatPanel
+      :visible="isPanelOpen"
+      :roomID="props.roomID"
+      @close="closePanel"
+    />
+  </view>
+</template>
+
+<script setup lang="ts">
+  import { ref, computed, watch, nextTick } from 'vue';
+  import {
+    getUnreadCount,
+    ensureChatUnreadSubscription,
+    setChatPanelOpen,
+    disposeChatUnread,
+    chatConversationIDOf,
+  } from './chatUnreadStore';
+  import ChatPanel from '../ChatPanel/index.nvue';
+  import { t } from '../../../../locales';
+
+  const MAX_UNREAD_COUNT_DISPLAY = 99;
+
+  const props = withDefaults(defineProps<{
+    roomID?: string;
+  }>(), {
+    roomID: '',
+  });
+
+  const iconSrc = '/static/images/room/room_chat.png';
+
+  /** 面板开关由本组件持有；外部（页面返回键 / 退房）通过 defineExpose 的方法驱动 */
+  const isPanelOpen = ref<boolean>(false);
+
+  const conversationID = computed<string>(() => chatConversationIDOf(props.roomID));
+
+  watch(
+    conversationID,
+    (newID: string, oldID: string | undefined) => {
+      if (oldID != null && oldID.length > 0 && oldID !== newID) {
+        disposeChatUnread(oldID);
+      }
+      ensureChatUnreadSubscription(newID);
+    },
+    { immediate: true }
+  );
+
+  const displayUnreadCount = computed<string>(() => {
+    const count = getUnreadCount(conversationID.value);
+    if (count <= 0) return '';
+    if (count > MAX_UNREAD_COUNT_DISPLAY) return `${MAX_UNREAD_COUNT_DISPLAY}+`;
+    return String(count);
+  });
+
+  function openPanel(): void {
+    if (props.roomID.length === 0) return;
+    isPanelOpen.value = true;
+    setChatPanelOpen(conversationID.value, true);
+  }
+
+  /**
+   * 关闭面板。关闭后要重新确保订阅存在 ——
+   * 面板内的 MessageList 卸载可能带走底层订阅，不重建的话角标从此不再累计。
+   */
+  function closePanel(): void {
+    if (!isPanelOpen.value) return;
+    isPanelOpen.value = false;
+    const id = conversationID.value;
+    if (id.length === 0) return;
+    setChatPanelOpen(id, false);
+    nextTick(() => ensureChatUnreadSubscription(id));
+  }
+
+  function handleTap(): void {
+    if (props.roomID.length === 0) return;
+    openPanel();
+  }
+
+  /*
+   * 暴露给外部（经 ToolPanel 转发到会议页）：
+   * isPanelOpen 用函数而非直接暴露 ref —— nvue 下 defineExpose 的 ref 解包不保证，
+   * 函数形式取值更可靠。
+   */
+  defineExpose({
+    isChatPanelOpen: (): boolean => isPanelOpen.value,
+    openPanel,
+    closePanel,
+  });
+</script>
+
+<style lang="scss">
+  @import './ChatButton.scss';
+</style>

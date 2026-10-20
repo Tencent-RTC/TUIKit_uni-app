@@ -1,0 +1,48 @@
+  @import '../styles/tokens.scss';
+
+  .room-page {
+    flex: 1;
+    background-color: $room-dark-bg-base;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .room-view {
+    flex: 1;
+    margin-bottom: 192rpx;
+  }
+
+  .top-bar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    padding-left: 32rpx;
+    padding-right: 32rpx;
+    flex-direction: row;
+    align-items: center;
+    background-color: $room-dark-bg-base;
+  }
+
+  .top-bar-left {
+    flex: 1;
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-start;
+  }
+
+  .top-bar-right {
+    flex: 1;
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-end;
+  }
+
+  .top-icon-gap {
+    width: 32rpx;
+  }
+
+  .recording-floating {
+    position: absolute;
+    left: 32rpx;
+  }

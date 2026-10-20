@@ -1,0 +1,187 @@
+<template>
+  <view v-if="visible" class="mask">
+    <view class="container">
+      <text class="title">{{ titleText }}</text>
+
+      <view class="input-row">
+        <input
+          class="input"
+          :value="password"
+          :password="true"
+          type="number"
+          :maxlength="PASSWORD_MAX_LENGTH"
+          :placeholder="placeholderText"
+          :placeholder-style="placeholderStyle"
+          @input="onInput"
+        />
+        <view v-if="password.length > 0" class="clear-btn" @tap="onClear">
+          <image class="clear-icon" src="/static/images/room/room_password_close.png" mode="aspectFit" />
+        </view>
+      </view>
+      <text v-if="errorText.length > 0" class="error-text">{{ errorText }}</text>
+
+      <view class="divider-h"></view>
+
+      <view class="button-row">
+        <view class="btn btn-cancel" @tap="onCancel">
+          <text class="btn-text-cancel">{{ cancelText }}</text>
+        </view>
+        <view class="divider-v"></view>
+        <view class="btn btn-join" @tap="onJoin">
+          <text class="btn-text-join">{{ joinText }}</text>
+        </view>
+      </view>
+    </view>
+  </view>
+</template>
+
+<script setup lang="ts">
+  import { ref } from 'vue';
+  import { useRoomState, useRoomParticipantState, RoomType } from '@/uni_modules/tuikit-atomic-x/state';
+  import { parseErrorCode } from '@/uni_modules/tuikit-atomic-x/utils/roomErrorHandler';
+  import { showToast } from '@/uni_modules/tuikit-atomic-x/utils/toast';
+  import { ROOM_TOKENS, roomPlaceholderStyle } from '../../../../styles/tokens.js';
+  import { t } from '../../../../locales';
+
+  const placeholderStyle = roomPlaceholderStyle(ROOM_TOKENS.lightTextPlaceholder, ROOM_TOKENS.fontSizeXl);
+
+  const titleText = t('password.title');
+  const placeholderText = t('password.placeholder');
+  const cancelText = t('common.cancel');
+  const joinText = t('password.join');
+
+  // 本组件自有的常量：密码进房的错误码与长度限制属于"密码进房"这个领域
+  /** 进房需要密码（触发密码弹窗） */
+  const ROOM_PASSWORD_REQUIRED_ERROR_CODE = 100018;
+  /** 房间密码错误（重新弹出密码框并提示） */
+  const ROOM_PASSWORD_INCORRECT_ERROR_CODE = 100019;
+  /** 房间密码最大长度（位） */
+  const PASSWORD_MAX_LENGTH = 6;
+
+  const props = defineProps({
+    roomID: { type: String, default: '' },
+    roomType: { type: Number, default: RoomType.Standard },
+  });
+
+  const emit = defineEmits<{
+    /** 进房成功（已含密码重试过程） */
+    (e: 'joined'): void
+    /** 用户在密码弹窗点了取消：应退出页面 */
+    (e: 'cancelled'): void
+    /** 非密码类错误，进房彻底失败：应提示并退出页面 */
+    (e: 'failed', message: string): void
+  }>();
+
+  const roomState = useRoomState();
+  const roomParticipantState = useRoomParticipantState();
+
+  /** 弹窗显隐由本组件自己持有：父级不需要知道"什么时候需要密码" */
+  const visible = ref<boolean>(false);
+  const password = ref<string>('');
+  /** 密码框下方的红字提示（密码错误），输入或清空后消失 */
+  const errorText = ref<string>('');
+
+  /** 等待用户输入密码的 resolver；用户提交或取消时唤醒 */
+  let pendingPasswordResolver: ((value: string | null) => void) | null = null;
+  /** 防止并发进入密码流程 */
+  let isEntering = false;
+
+  /** 打开弹窗并等待用户提交；返回 null 表示用户取消 */
+  function waitForPasswordInput(errorMessage: string = ''): Promise<string | null> {
+    password.value = '';
+    errorText.value = errorMessage;
+    visible.value = true;
+    return new Promise((resolve) => {
+      pendingPasswordResolver = resolve;
+    });
+  }
+
+  function closeSheet(): void {
+    visible.value = false;
+  }
+
+  function onInput(e: any) {
+    const v = (e?.detail?.value ?? e?.target?.value ?? '') as string;
+    password.value = v.length > PASSWORD_MAX_LENGTH ? v.slice(0, PASSWORD_MAX_LENGTH) : v;
+    errorText.value = '';
+  }
+
+  function onClear() {
+    password.value = '';
+    errorText.value = '';
+  }
+
+  function onCancel() {
+    uni.hideKeyboard();
+    closeSheet();
+    const resolver = pendingPasswordResolver;
+    pendingPasswordResolver = null;
+    if (resolver) resolver(null);
+    emit('cancelled');
+  }
+
+  function onJoin() {
+    const input = password.value;
+    if (input.trim().length === 0) {
+      showToast(t('RoomEntry.Failure.PasswordRequired'));
+      return;
+    }
+    uni.hideKeyboard();
+    const resolver = pendingPasswordResolver;
+    pendingPasswordResolver = null;
+    if (resolver) resolver(input.trim());
+  }
+
+  /**
+   * 密码进房主流程（本组件闭环）
+   *
+   * 首次尝试不弹窗；仅当返回"需要密码 / 密码错误"时才弹窗重试，
+   * 直到成功、用户取消、或出现非密码类致命错误。
+   * 父级只需调用本方法并监听 joined / cancelled / failed。
+   */
+  async function enterWithPassword(): Promise<void> {
+    if (isEntering || props.roomID.length === 0) return;
+    isEntering = true;
+    try {
+      let input: string | null = null;
+      for (;;) {
+        try {
+          await roomState.joinRoom({
+            roomID: props.roomID,
+            roomType: props.roomType,
+            password: input ?? undefined,
+          });
+          closeSheet();
+          // 进房成功后立即拉一次成员列表：属于"进房"这一闭环，父级无需关心
+          await roomParticipantState.getParticipantList({ cursor: '' }).catch(() => {});
+          emit('joined');
+          return;
+        } catch (e) {
+          const code = parseErrorCode(e);
+          if (code === ROOM_PASSWORD_REQUIRED_ERROR_CODE) {
+            input = await waitForPasswordInput();
+            if (input === null) return;
+            continue;
+          }
+          if (code === ROOM_PASSWORD_INCORRECT_ERROR_CODE) {
+            console.error('[room error] wrong room password | code:', code);
+            input = await waitForPasswordInput(t('RoomEntry.Failure.WrongPassword'));
+            if (input === null) return;
+            continue;
+          }
+          closeSheet();
+          emit('failed', e);
+          return;
+        }
+      }
+    } finally {
+      isEntering = false;
+    }
+  }
+
+  defineExpose({ enterWithPassword });
+</script>
+
+<style lang="scss">
+  @import './RoomEnterPasswordSheet.scss';
+</style>

@@ -8,7 +8,7 @@
       <cell class="top-spacer-cell" :style="{ height: topSpacerPx + 'px' }"></cell>
       <cell class="welcome-cell" ref="welcomeCellRef">
         <view class="welcome-content-wrapper" :style="{ maxWidth: barWidthRpx }">
-          <text class="welcome-text">欢迎来到直播间！严禁未成年人直播。严禁出现违法违规、低俗色情、吸烟酗酒、人身伤害等直播内容。如主播在直播中以不当方式诱导消费，请谨慎辨别，理性消费。切勿私下交易，以防人身财产损失，谨防网络诈骗。</text>
+          <text class="welcome-text">{{ welcomeText }}</text>
         </view>
       </cell>
       <!-- 勿加 render-whole:会阻断 JS 对 cell 内子元素的 getComponentRect 实测 -->
@@ -21,7 +21,7 @@
             </view>
             <text class="chat-nickname" numberOfLines="1">{{ message?.sender?.userName || message?.sender?.userID }}</text>
             <view class="gift-row">
-              <text class="gift-prefix">送出</text>
+              <text class="gift-prefix">{{ t('bl.giftPrefix') }}</text>
               <text class="gift-name">{{ message?.textContent || '' }}</text>
               <image class="gift-icon" :src="message?.gift?.iconURL || ''" alt="" />
               <text class="gift-count">×{{ message?.count || '1' }}</text>
@@ -38,7 +38,7 @@
                 <view class="message-right" v-if="isOwner(message)">
                   <view class="message-role">
                     <view class="message-role-inner">
-                      <text class="message-role-text">主播</text>
+                      <text class="message-role-text">{{ t('bl.anchor') }}</text>
                     </view>
                   </view>
                 </view>
@@ -57,7 +57,7 @@
 
     <view class="new-message-pill" v-if="unreadCount > 0 && !pillHiddenByOverlay" :style="{ top: pillTopPx + 'px' }" @tap="onNewMessagePillTap">
       <text class="new-message-pill-count">{{ unreadCount }}</text>
-      <text class="new-message-pill-text">条新消息</text>
+      <text class="new-message-pill-text">{{ t('bl.newMessages') }}</text>
     </view>
   </view>
 </template>
@@ -72,25 +72,26 @@
   import { resolveMsgLevel, levelBadgeUrl } from './levelBadge';
   import { createCharRuler } from './textMeasurer';
   import { wrapSegmentsIntoLines } from './lineBreaker';
+  import { t } from '../locales';
 
   const props = defineProps<{
     mode?: 'anchor' | 'audience',
     bottomPx?: number,
     topPx?: number,
     liveID?: string,
-    width?: number, // 消息列表宽度(rpx),接入方可配;默认 500 与旧版一致
+    width?: number,
   }>();
 
   const emit = defineEmits(['itemTap', 'receiveGift']);
 
   const mode = computed(() => props.mode || 'audience');
+  const welcomeText = computed(() => t(mode.value === 'anchor' ? 'bl.welcomeHost' : 'bl.welcome'));
   const bottomPx = computed(() => props.bottomPx ?? 0);
   const topPx = computed(() => props.topPx ?? 0);
   const LIST_H_PX = uni.upx2px(380);
   const PILL_H_PX = uni.upx2px(52);
   const pillTopPx = computed(() => Math.max(0, topPx.value + LIST_H_PX - PILL_H_PX));
 
-  // 宽度可配:由 width prop 驱动折行,CSS 里的 500rpx 仅作默认兜底。
   const barWidth = computed(() => props.width ?? 500);
   const barWidthRpx = computed(() => barWidth.value + 'rpx');
 
@@ -109,26 +110,21 @@
     !!(message?.sender?.userID && currentLive.value?.liveOwner?.userID
       && message.sender.userID === currentLive.value.liveOwner.userID);
 
-  // BarrageList 只负责渲染内置可识别的消息(文本/礼物本地合成消息);自定义消息
-  // (BarrageType.CUSTOM)不参与内置渲染,业务侧可自行订阅 messageList 做自定义 UI。
-  // 注意:messageList 本身保持完整不动,过滤仅作用于 mixMessageList 这条渲染链。
   const isRenderableBarrage = (m: any): boolean => m?.messageType !== BarrageType.CUSTOM;
 
   const mixMessageList = ref<any[]>((messageList.value || []).filter(isRenderableBarrage));
 
-  // 折行用的布局宽度常量(px):
   const FONT_PX = uni.upx2px(26);            // 内容字号
   const EMOJI_PX = uni.upx2px(34);           // 单表情占宽(32 图 + 2 右边距)
   const NICK_MAX_PX = uni.upx2px(100);       // 昵称最大宽(与 .chat-nickname max-width 一致)
   const NICK_MARGIN_PX = uni.upx2px(8);      // 昵称右边距
   const BADGE_PX = uni.upx2px(68 + 8);       // 等级徽章宽 + 右边距
   const ANCHOR_PX = uni.upx2px(66);          // 主播标签整体占宽(略偏大,偏安全)
-  // 气泡内容宽 = 列表宽 - 气泡水平内边距(12rpx*2)。随 width 响应式变化。
   const contentWidthPx = computed(() => uni.upx2px(barWidth.value - 24));
 
   let rulerCtx: any = null;
   const rulerReady = ref(false);
-  const rulerVersion = ref(0); // 尺子从「估算」切到「精确」时自增,触发布局缓存重算
+  const rulerVersion = ref(0);
 
   const rawMeasure = (ch: string): number | null => {
     if (!rulerReady.value || !rulerCtx) return null;
@@ -159,7 +155,6 @@
     } catch (e) { /* ignore: 尺子不可用时全程走估算,CJK 仍精确 */ }
   };
 
-  // 布局缓存:key 含 消息键 + 内容宽 + 尺子版本 + 是否房主。命中即复用,避免每帧重算。
   const layoutCache = new Map<string, any>();
   const msgLines = (message: any): any[] => {
     const key = msgKey(message) + '|' + contentWidthPx.value + '|' + rulerVersion.value + '|' + (isOwner(message) ? '1' : '0');
@@ -184,14 +179,37 @@
   const dom = uni.requireNativePlugin('dom');
   const ListBottom = ref('ListBottom');
 
+  // nvue 的 dom / animation 是「向页面实例派发任务」:页面(如关闭直播后 redirectTo)已销毁还调用,
+  // 原生侧会报 [JS Framework] Failed to receiveTasks, instance (N) is not available。
+  // 这里统一登记延时任务,卸载时清空 + 置 isDestroyed,卸载后不再派发。
+  const pendingTimers = new Set<any>();
+  let isDestroyed = false;
+  const later = (fn: () => void, ms: number): any => {
+    if (isDestroyed) return null;
+    const id = setTimeout(() => {
+      pendingTimers.delete(id);
+      if (isDestroyed) return;
+      fn();
+    }, ms);
+    pendingTimers.add(id);
+    return id;
+  };
+  const clearPendingTimers = () => {
+    pendingTimers.forEach((id) => clearTimeout(id));
+    pendingTimers.clear();
+  };
+
   // 延迟 100ms 等 weex 的 list 布局稳定后再滚,否则定位失败、新消息停在视口外。
   const scrollToBottom = () => {
     nextTick(() => {
-      setTimeout(() => {
-        dom.scrollToElement(ListBottom.value, {
-          offset: 0,
-          animated: true
-        });
+      later(() => {
+        if (isDestroyed) return;
+        try {
+          dom.scrollToElement(ListBottom.value, {
+            offset: 0,
+            animated: true
+          });
+        } catch (e) { /* ignore */ }
       }, 100);
     });
   };
@@ -288,7 +306,7 @@
     following.value = true;
     unreadCount.value = 0;
     scrollToBottom();
-    setTimeout(() => {
+    later(() => {
       try {
         if (following.value) {
           dom.scrollToElement(ListBottom.value, { offset: 0, animated: false });
@@ -331,7 +349,7 @@
     firstAppendDone = true;
     if (animate) {
       nextTick(() => {
-        setTimeout(() => {
+        later(() => {
           msgs.forEach((m: any) => {
             const seq = msgKey(m);
             const el = cellRefs.get(seq);
@@ -351,7 +369,7 @@
               dismissEntering([seq]);
             }
           });
-          setTimeout(() => {
+          later(() => {
             dismissEntering(newSeqs);
           }, 600);
         }, 50);
@@ -434,19 +452,21 @@
     nextTick(() => {
       measureWelcomeHeight();
       recomputeTopSpacer();
-      setTimeout(() => {
+      later(() => {
         measureWelcomeHeight();
         recomputeTopSpacer();
         listReady.value = true;
       }, 60);
     });
-    setTimeout(() => {
+    later(() => {
       measureListHeight();
     }, 300);
-    setTimeout(() => { listReady.value = true; }, 600);
+    later(() => { listReady.value = true; }, 600);
     addGiftListener(uni.$liveID, 'onReceiveGift', handleReceiveGift)
   });
   onUnmounted(() => {
+    isDestroyed = true;
+    clearPendingTimers();
     uni.$off('barrageList:setPillHidden', onPillHidden);
     removeGiftListener(uni.$liveID, 'onReceiveGift', handleReceiveGift)
     pendingGiftMessages.forEach(p => clearTimeout(p.timer));

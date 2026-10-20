@@ -1,0 +1,144 @@
+<template>
+  <view class="top-operate-bar">
+    <view class="top-bar-left">
+      <view class="anchor-info">
+        <image class="avatar" :src="anchorAvatar" mode="aspectFill" @error="onAvatarError" />
+        <view class="anchor-copy">
+          <text class="anchor-name" :numberOfLines="1">{{ anchorRoomName }}</text>
+          <text class="anchor-meta" :numberOfLines="1">{{ anchorMetaText }}</text>
+        </view>
+        <view class="fan-club-button" @tap.stop="emit('fanClubTap')">
+          <image class="fan-club-icon" src="/static/images/live/fan-club-button.png" mode="scaleToFill" />
+        </view>
+      </view>
+    </view>
+    <view class="top-bar-right">
+      <view class="participants" @tap="emit('audienceTap')">
+        <view class="participant-avatars">
+          <view
+            class="participant-avatar-wrap"
+            :class="`rank-${index + 1}`"
+            v-for="(item, index) in rankedAudienceList"
+            :key="item?.user?.userID || index"
+          >
+            <image
+              class="participant-avatar"
+              :src="avatarOf(item?.user)"
+              mode="aspectFill"
+              @error="onParticipantAvatarError(item?.user)"
+            />
+            <view class="participant-score">
+              <text class="participant-score-text">{{ formatCountValue(item?.value) }}</text>
+            </view>
+          </view>
+        </view>
+        <view class="participant-count">
+          <text class="count-text">{{ viewerCountText }}</text>
+        </view>
+      </view>
+      <view class="control-icons" @tap="emit('endTap')">
+        <image class="control-icon" src="/static/images/close.png" mode="aspectFill" />
+      </view>
+    </view>
+  </view>
+</template>
+
+<script setup lang="ts">
+  import { ref, computed, onMounted, onUnmounted } from 'vue';
+  import { useGiftState } from '@/uni_modules/tuikit-atomic-x/state/GiftState';
+  import { useLiveAudienceState } from '@/uni_modules/tuikit-atomic-x/state/LiveAudienceState';
+  import { useLikeState } from '@/uni_modules/tuikit-atomic-x/state/LikeState';
+  import { useLoginState } from '@/uni_modules/tuikit-atomic-x/state/LoginState';
+  import { t } from '../../../../locales';
+
+  const emit = defineEmits(['audienceTap', 'endTap', 'fanClubTap']);
+
+  const { loginUserInfo } = useLoginState();
+  const { audienceList, audienceCount } = useLiveAudienceState(uni?.$liveID);
+  const { totalLikeCount } = useLikeState(uni?.$liveID);
+  const { addGiftListener, removeGiftListener } = useGiftState(uni?.$liveID);
+
+  const defaultAvatarURL = '/uni_modules/tuikit-atomic-x/static/assets/live/default-avatar.png';
+  const RANKED_AVATAR_COUNT = 3;
+
+  const anchorAvatarSrc = ref('');
+  const failedAvatarIDs = ref<Record<string, boolean>>({});
+  const giftTotals = ref<Record<string, number>>({});
+
+  const normalizeAvatar = (url: string) => {
+    const s = (url == null ? '' : String(url)).trim();
+    if (!s || s === 'null' || s === 'undefined') return defaultAvatarURL;
+    return s;
+  };
+  const avatarOf = (user: any): string => {
+    if (user?.userID && failedAvatarIDs.value[user.userID]) return defaultAvatarURL;
+    return normalizeAvatar(user?.avatarURL);
+  };
+  const onAvatarError = () => {
+    if (anchorAvatarSrc.value !== defaultAvatarURL) anchorAvatarSrc.value = defaultAvatarURL;
+  };
+  const onParticipantAvatarError = (user: any) => {
+    const id = user?.userID;
+    if (!id || failedAvatarIDs.value[id]) return;
+    failedAvatarIDs.value = { ...failedAvatarIDs.value, [id]: true };
+  };
+  const onReceiveGift = (event: any) => {
+    try {
+      const res = typeof event === 'string' ? JSON.parse(event) : (event || {});
+      const gift = typeof res.gift === 'string' ? JSON.parse(res.gift) : (res.gift || {});
+      const sender = typeof res.sender === 'string' ? JSON.parse(res.sender) : (res.sender || {});
+      const senderID = sender?.userID;
+      if (!senderID) return;
+      const coins = Number(gift?.coins) || 0;
+      const count = Number(res.count) || 1;
+      const next = { ...giftTotals.value };
+      next[senderID] = (next[senderID] || 0) + coins * count;
+      giftTotals.value = next;
+    } catch (e) { /* ignore */ }
+  };
+
+  const formatCountValue = (value: number): string => {
+    const v = Math.max(0, Math.floor(Number(value) || 0));
+    if (v >= 100000) return `10${t('common.wanUnit')}+`;
+    if (v >= 10000) return `${Math.floor(v / 10000)}${t('common.wanUnit')}+`;
+    return String(v);
+  };
+  const formatViewCount = (value: number): string => {
+    const v = Math.max(0, Math.floor(Number(value) || 0));
+    if (v >= 100000) return `${Math.floor(v / 10000)}${t('common.wanUnit')}+`;
+    if (v >= 10000) {
+      const w = v / 10000;
+      return `${w >= 10 ? Math.floor(w) : Math.round(w * 10) / 10}${t('common.wanUnit')}`;
+    }
+    return String(v);
+  };
+
+  const anchorAvatar = computed(() => normalizeAvatar(anchorAvatarSrc.value || loginUserInfo.value?.avatarURL));
+  const anchorRoomName = computed(() => t('anchor.hostLive', {
+    name: loginUserInfo.value?.nickname || loginUserInfo.value?.userID || '',
+  }));
+  const anchorMetaText = computed(() => t('anchor.likeCount', {
+    count: formatViewCount(totalLikeCount.value),
+  }));
+
+  const currentAudienceCount = computed(() =>
+    audienceList.value.length > 100 ? audienceCount.value : audienceList.value.length
+  );
+  const rankedAudienceList = computed(() => {
+    const scored = (audienceList.value || []).map((user: any, order: number) => ({
+      user,
+      value: Number(giftTotals.value[user?.userID] || 0),
+      order,
+    }));
+    scored.sort((a, b) => (b.value - a.value) || (a.order - b.order));
+    return scored.slice(0, RANKED_AVATAR_COUNT);
+  });
+  const viewerCountText = computed(() => formatCountValue(currentAudienceCount.value));
+
+  onMounted(() => { addGiftListener(uni?.$liveID, 'onReceiveGift', onReceiveGift); });
+  onUnmounted(() => { removeGiftListener(uni?.$liveID, 'onReceiveGift', onReceiveGift); });
+</script>
+
+<style lang="scss">
+  @import './TopOperateBar.scss';
+</style>

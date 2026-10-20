@@ -125,7 +125,7 @@
                     'border-right': !isAnchor && templateLayout === 800 ? '1rpx solid #000' : '',
                   }">
           <text class="participant-join-content">{{ isAnchor ? colIndex : participant?.index }}</text>
-          <text class="participant-join-content">加入连麦</text>
+          <text class="participant-join-content">{{ t('sv.joinCoGuest') }}</text>
         </view>
       </view>
       <LiveStreamActionPanel v-if="enableClickPanel" v-model="isShowClickPanel" :liveID="liveID || ''"
@@ -142,6 +142,7 @@
     computed,
     watch
   } from 'vue';
+  import { t } from '../locales';
   import {
     useLiveSeatState
   } from "@/uni_modules/tuikit-atomic-x/state/LiveSeatState";
@@ -231,7 +232,7 @@
     lockSeat,
   } = props?.liveID && useLiveSeatState(props?.liveID);
   const platform = ref('android');
-  const defaultAvatarURL = 'https://web.sdk.qcloud.com/component/TUIKit/assets/avatar_01.png';
+  const defaultAvatarURL = '/uni_modules/tuikit-atomic-x/static/assets/live/default-avatar.png';
 
   const scale = ref({
     scaleX: 1,

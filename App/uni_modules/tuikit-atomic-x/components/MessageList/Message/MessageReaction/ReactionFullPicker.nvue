@@ -1,0 +1,121 @@
+<template>
+  <Drawer :visible="visible" @close="handleClose">
+    <list class="rfp__list" :style="listStyle" :show-scrollbar="false">
+      <cell v-for="(item, itemIndex) in gridItems" :key="itemIndex">
+        <view v-if="item.title" class="rfp__header">
+          <text class="rfp__header-text">{{ item.title }}</text>
+        </view>
+        <view v-else class="rfp__row">
+          <view
+            v-for="emoji in item.emojis"
+            :key="emoji.key"
+            class="rfp__cell"
+            @tap.stop="handleEmojiTap(emoji.key)"
+          >
+            <image class="rfp__emoji" :src="emoji.src" mode="aspectFit" />
+          </view>
+        </view>
+      </cell>
+    </list>
+  </Drawer>
+</template>
+
+<script setup lang="ts">
+import { computed, ref, watch } from 'vue'
+import Drawer from '../../../Drawer/index.nvue'
+import { listAllReactionEmojis, listRecentReactionEmojis } from '../../../../utils/reactionEmoji'
+import type { ReactionEmoji } from '../../../../utils/reactionEmoji'
+import { toggleMessageReaction } from '../../../../utils/messageReaction'
+import type { MessageInfo } from '../../../../types/message'
+
+const GRID_COLUMNS = 8
+
+interface Props {
+  visible: boolean
+  message: MessageInfo
+}
+
+interface GridItem {
+  title?: string
+  emojis: ReactionEmoji[]
+}
+
+const props = defineProps<Props>()
+
+const emit = defineEmits<{
+  close: []
+}>()
+
+const listStyle = computed(() => {
+  const si = uni.getSystemInfoSync()
+  const heightRpx = ((si.windowHeight || 667) / (si.windowWidth || 375)) * 750
+  const h = Math.min(Math.max(heightRpx * 0.6, 800), 1040)
+  return { height: `${Math.round(h)}rpx` }
+})
+
+const gridItems = ref<GridItem[]>([])
+
+const refreshGridItems = () => {
+  const items: GridItem[] = []
+  const appendSection = (title: string, emojis: ReactionEmoji[]) => {
+    if (emojis.length === 0) return
+    items.push({ title, emojis: [] })
+    for (let i = 0; i < emojis.length; i += GRID_COLUMNS) {
+      items.push({ emojis: emojis.slice(i, i + GRID_COLUMNS) })
+    }
+  }
+  appendSection('最近使用', listRecentReactionEmojis())
+  appendSection('全部', listAllReactionEmojis())
+  gridItems.value = items
+}
+
+watch(
+  () => props.visible,
+  (v) => { if (v) refreshGridItems() },
+  { immediate: true }
+)
+
+const handleEmojiTap = async (reactionID: string) => {
+  await toggleMessageReaction(props.message, reactionID)
+  handleClose()
+}
+
+const handleClose = () => {
+  emit('close')
+}
+</script>
+
+<style>
+.rfp__list {
+  padding: 0 32rpx;
+}
+
+.rfp__header {
+  padding: 16rpx 0;
+}
+
+.rfp__header-text {
+  font-size: 24rpx;
+  color: rgba(0, 0, 0, 0.55);
+}
+
+.rfp__row {
+  flex-direction: row;
+}
+
+.rfp__cell {
+  width: 85rpx;
+  height: 88rpx;
+  align-items: center;
+  justify-content: center;
+}
+
+.rfp__cell:active {
+  opacity: 0.6;
+}
+
+.rfp__emoji {
+  width: 64rpx;
+  height: 64rpx;
+}
+</style>

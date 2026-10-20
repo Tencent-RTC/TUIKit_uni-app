@@ -14,6 +14,7 @@ import {
 } from '@/uni_modules/tuikit-atomic-x/types';
 import { showToast } from '@/uni_modules/tuikit-atomic-x/utils/toast';
 import { showErrorToast } from '@/uni_modules/tuikit-atomic-x/utils/roomErrorHandler';
+import { t } from '@/uni_modules/tuikit-atomic-x/components/locales';
 
 export interface UseRoomTipsOptions {
   onExitConfirmed?: () => void;
@@ -30,11 +31,6 @@ export interface RoomDialogState {
   onConfirm: () => void;
   onCancel: () => void;
   key: string;
-  /**
-   * 是否允许点击遮罩关闭。默认 true。
-   * 「房间已销毁」「被移出房间」这类必须退房的通知要设为 false，
-   * 否则用户点遮罩只关掉弹窗、人还留在已失效的房间里。
-   */
   closeOnClickMask: boolean;
 }
 
@@ -53,7 +49,7 @@ export function useRoomTips(options?: UseRoomTipsOptions) {
     visible: false,
     title: '',
     content: '',
-    confirmButton: '确定',
+    confirmButton: t('RoomCommon.GotIt'),
     cancelButton: '',
     onConfirm: () => {},
     onCancel: () => {},
@@ -78,7 +74,7 @@ export function useRoomTips(options?: UseRoomTipsOptions) {
       visible: true,
       title: opts.title,
       content: opts.content || '',
-      confirmButton: opts.confirmButton || '确定',
+      confirmButton: opts.confirmButton || t('RoomCommon.GotIt'),
       cancelButton: opts.cancelButton || '',
       key: opts.key,
       closeOnClickMask: opts.closeOnClickMask !== false,
@@ -101,54 +97,38 @@ export function useRoomTips(options?: UseRoomTipsOptions) {
   function onRoomEnded() {
     showDialog({
       key: DIALOG_KEY_ROOM_ENDED,
-      title: '房间已被销毁',
-      // 房间已不存在，无论点确定还是被动关闭都必须退出
+      title: t('RoomNotifications.Title'),
+      content: t('Room.RoomEnded'),
       closeOnClickMask: false,
       onConfirm: () => { options?.onExitConfirmed?.(); },
       onCancel: () => { options?.onExitConfirmed?.(); },
     });
   }
 
-  function resolveKickedTip(reason: KickedOutOfRoomReason): { title: string } {
+  function resolveKickedMessage(reason: KickedOutOfRoomReason): string {
     switch (reason) {
       case KickedOutOfRoomReason.KickedByAdmin:
-        return {
-          title: '您已被主持人移出房间',
-        };
+        return t('RoomNotifications.KickedByAdmin');
       case KickedOutOfRoomReason.ReplacedByAnotherDevice:
-        return {
-          title: '您的账号已在其他设备登录',
-        };
+        return t('RoomNotifications.ReplacedByAnotherDevice');
       case KickedOutOfRoomReason.KickedByServer:
-        return {
-          title: '您已被服务器移出房间',
-        };
+        return t('RoomNotifications.KickedByServer');
       case KickedOutOfRoomReason.ConnectionTimeout:
-        return {
-          title: '网络连接超时，正在退出房间',
-        };
+        return t('RoomNotifications.ConnectionTimeout');
       case KickedOutOfRoomReason.InvalidStatusOnReconnect:
-        return {
-          title: '房间已解散或您在离线期间已被移出',
-        };
+        return t('RoomNotifications.InvalidStatusOnReconnect');
       case KickedOutOfRoomReason.RoomLimitExceeded:
-        return {
-          title: '房间人数已达上限，无法加入',
-        };
+        return t('RoomNotifications.RoomLimitExceeded');
       default:
-        return {
-          title: '您已被移出房间',
-        };
+        return t('RoomNotifications.DefaultKickedOut');
     }
   }
 
   function onKickedFromRoom(data: { reason: KickedOutOfRoomReason; message: string }) {
-    const { title } = resolveKickedTip(data.reason);
     showDialog({
       key: DIALOG_KEY_KICKED_FROM_ROOM,
-      title: title || data.message,
-      // 已被移出房间，无论点确定还是被动关闭都必须退出，
-      // 否则用户点遮罩后会停留在一个已经不在其中的房间页面
+      title: t('RoomNotifications.Title'),
+      content: resolveKickedMessage(data.reason),
       closeOnClickMask: false,
       onConfirm: () => { options?.onExitConfirmed?.(); },
       onCancel: () => { options?.onExitConfirmed?.(); },
@@ -178,14 +158,14 @@ export function useRoomTips(options?: UseRoomTipsOptions) {
   function presentInvite(invitation: DeviceRequestInfo) {
     const isMic = invitation.device === DeviceType.Microphone;
     const name = invitation.senderNameCard || invitation.senderUserName || invitation.senderUserID;
-    const title = isMic ? `${name}邀请您开启语音` : `${name}邀请您开启视频画面`;
+    const title = t(isMic ? 'RoomTips.DeviceInvite.Microphone' : 'RoomTips.DeviceInvite.Camera', { name });
     const key = dialogKeyDeviceInvite(invitation.device);
 
     showDialog({
       key,
       title,
-      confirmButton: '同意',
-      cancelButton: '拒绝',
+      confirmButton: t('RoomTips.DeviceInvite.AcceptButton'),
+      cancelButton: t('RoomTips.DeviceInvite.DeclineButton'),
       onConfirm: async () => {
         removeNotice(key);
         try {
@@ -194,7 +174,7 @@ export function useRoomTips(options?: UseRoomTipsOptions) {
             device: invitation.device,
           });
         } catch (e) {
-          showErrorToast(e);
+          showErrorToast(e, t(isMic ? 'Device.ToggleMicFailed' : 'Device.ToggleCameraFailed'));
           presentNextNotice();
           return;
         }
@@ -219,10 +199,10 @@ export function useRoomTips(options?: UseRoomTipsOptions) {
     const name = operator.userName || operator.userID || '';
     showDialog({
       key: DIALOG_KEY_RECORDING_STARTED,
-      title: '云端录制中',
-      content: `${name}开启了云端录制，房间中的音视频画面、共享屏幕内容将会被录制。如果留在房间中，表示您同意录制。`,
-      confirmButton: '我知道了',
-      cancelButton: '离开房间',
+      title: t('RoomTips.Recording.StartedTitle'),
+      content: t('RoomTips.Recording.StartedMessage', { name }),
+      confirmButton: t('RoomCommon.GotIt'),
+      cancelButton: t('RoomTips.Recording.LeaveRoom'),
       onConfirm: () => {
         removeNotice(DIALOG_KEY_RECORDING_STARTED);
         presentNextNotice();
@@ -262,13 +242,13 @@ export function useRoomTips(options?: UseRoomTipsOptions) {
   }
 
   function onParticipantDeviceClosed(payload: { device: DeviceType; operator: { userName?: string } }) {
-    const opName = payload?.operator?.userName || '管理员';
+    const opName = payload?.operator?.userName || t('RoomTips.DefaultOperatorName');
     switch (payload?.device) {
       case DeviceType.Microphone:
-        showToast(`${opName}已关闭您的麦克风`);
+        showToast(t('RoomTips.DeviceClosedByHost.Microphone', { name: opName }));
         break;
       case DeviceType.Camera:
-        showToast(`${opName}已关闭您的摄像头`);
+        showToast(t('RoomTips.DeviceClosedByHost.Camera', { name: opName }));
         break;
       default:
         break;
@@ -277,47 +257,39 @@ export function useRoomTips(options?: UseRoomTipsOptions) {
 
   function onAllDevicesDisabled(payload: { device: DeviceType; disable: boolean }) {
     if (payload.device === DeviceType.Microphone) {
-      if (payload.disable) {
-        showToast('已静音所有成员，麦克风已禁用');
-      } else {
-        showToast('已允许成员开启麦克风');
-      }
+      showToast(t(payload.disable ? 'RoomTips.AllMicrophoneDisabled' : 'RoomTips.AllMicrophoneEnabled'));
     } else if (payload.device === DeviceType.Camera) {
-      if (payload.disable) {
-        showToast('已关闭所有成员视频，摄像头已禁用');
-      } else {
-        showToast('已允许成员开启视频');
-      }
+      showToast(t(payload.disable ? 'RoomTips.AllCameraDisabled' : 'RoomTips.AllCameraEnabled'));
     }
   }
 
   function onOwnerChanged(payload: { newOwner: any; oldOwner: any }) {
     if (isSelf(payload?.newOwner)) {
-      showToast('您已成为房主');
+      showToast(t('RoomTips.BecameOwner'));
     }
     options?.onOwnerChanged?.();
   }
 
   function onAdminSet(payload: { userInfo: any }) {
-    if (isSelf(payload?.userInfo)) showToast('您已成为管理员');
+    if (isSelf(payload?.userInfo)) showToast(t('RoomTips.BecameAdmin'));
   }
 
   function onAdminRevoked(payload: { userInfo: any }) {
-    if (isSelf(payload?.userInfo)) showToast('您的管理员身份被收回');
+    if (isSelf(payload?.userInfo)) showToast(t('RoomTips.AdminRevoked'));
   }
 
   function onUserMessageDisabled(payload: { disable: boolean; operator: any }) {
-    showToast(payload?.disable ? '您已被禁止文字聊天' : '您已被允许文字聊天');
+    showToast(t(payload?.disable ? 'RoomTips.MessageDisabled' : 'RoomTips.MessageEnabled'));
   }
 
   function onAudiencePromotedToParticipant(payload: { userInfo: any }) {
     const u = payload?.userInfo;
     if (!u) return;
     if (isSelf(u)) {
-      showToast('您已被设为嘉宾');
+      showToast(t('RoomTips.SelfPromotedToParticipant'));
     } else {
       const name = u.userName || u.userID || '';
-      showToast(`${name}已被设为嘉宾`);
+      showToast(t('RoomTips.OtherPromotedToParticipant', { name }));
     }
   }
 
@@ -331,11 +303,11 @@ export function useRoomTips(options?: UseRoomTipsOptions) {
     removeNotice(DIALOG_KEY_RECORDING_STARTED);
     dismissIfCurrent(DIALOG_KEY_RECORDING_STARTED);
     if (payload?.reason === RecordingStopReason.RecorderLeftRoom) {
-      showToast('云端录制异常中断');
+      showToast(t('RoomTips.Recording.Interrupted'));
       return;
     }
     if (payload?.reason === RecordingStopReason.StoppedByUser && isSelf(payload?.operator)) return;
-    showToast('云端录制已结束');
+    showToast(t('RoomTips.Recording.Stopped'));
   }
 
   function onRecordingStarted(payload: { operator: RoomUser }) {
@@ -382,5 +354,5 @@ export function useRoomTips(options?: UseRoomTipsOptions) {
     roomParticipantState.unsubscribeEvent(RoomParticipantEvent.onParticipantDemotedToAudience, onParticipantDemotedToAudience as any);
   });
 
-  return { dialogState };
+  return { dialogState, showDialog };
 }

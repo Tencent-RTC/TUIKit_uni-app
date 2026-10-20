@@ -1,0 +1,84 @@
+@import '../../../../styles/tokens.scss';
+
+.end-live-confirm-text {
+  margin-top: 40rpx;
+  margin-bottom: 80rpx;
+  padding-left: 8rpx;
+  padding-right: 8rpx;
+  align-items: center;
+}
+
+.end-live-viewers {
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+}
+
+.end-live-viewers-text {
+  color: $live-dark-text-76;
+  font-size: 28rpx;
+  line-height: 44rpx;
+  font-weight: 400;
+}
+
+.end-live-viewers-count {
+  margin-left: 4rpx;
+  margin-right: 4rpx;
+  color: $live-color-brand-text-strong;
+  font-size: 46rpx;
+  line-height: 46rpx;
+  font-weight: 700;
+  text-align: center;
+}
+
+.end-live-question {
+  margin-top: 20rpx;
+  color: $live-dark-text-94;
+  font-size: 30rpx;
+  line-height: 46rpx;
+  font-weight: 600;
+}
+
+.end-live-empty {
+  color: $live-dark-text-85;
+  font-size: 28rpx;
+  line-height: 44rpx;
+  font-weight: 400;
+}
+
+.end-live-confirm-actions {
+  flex-direction: row;
+  justify-content: center;
+  padding-left: 8rpx;
+  padding-right: 8rpx;
+}
+
+.end-live-btn {
+  width: 216rpx;
+  height: 88rpx;
+  border-radius: 20rpx;
+  align-items: center;
+  justify-content: center;
+}
+
+.end-live-btn-secondary {
+  margin-right: 48rpx;
+  background-color: $live-dark-surface-10;
+}
+
+.end-live-btn-danger {
+  background-color: $live-color-danger-deep;
+}
+
+.end-live-btn-text {
+  font-size: 30rpx;
+  font-weight: 500;
+}
+
+.end-live-btn-secondary .end-live-btn-text {
+  color: $live-dark-text-92;
+}
+
+.end-live-btn-danger .end-live-btn-text {
+  color: $live-dark-text-94;
+}

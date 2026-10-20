@@ -1,0 +1,105 @@
+<template>
+  <view v-if="visible">
+    <view class="bottom-btn" @tap="handleTap">
+      <view class="bottom-icon-box">
+        <image class="bottom-icon" :src="iconSrc" mode="aspectFit" />
+        <text class="bottom-text">{{ isRecording ? t('recording.recording') : t('recording.record') }}</text>
+      </view>
+    </view>
+
+    <ConfirmDialog
+      :modelValue="confirmState.visible"
+      :title="confirmTitle"
+      :confirmText="confirmButtonText"
+      :cancelText="t('common.cancel')"
+      :message="confirmMessage"
+      @confirm="handleConfirm"
+      @cancel="closeRecordingConfirm"
+      @update:modelValue="(val: boolean) => { if (!val) closeRecordingConfirm(); }"
+    />
+  </view>
+</template>
+
+<script setup lang="ts">
+  import { computed, watch } from 'vue';
+  import {
+    useRoomState,
+    useRoomParticipantState,
+    RoomParticipantRole,
+    RecordingStatus,
+  } from '@/uni_modules/tuikit-atomic-x/state';
+  import { showErrorToast } from '@/uni_modules/tuikit-atomic-x/utils/roomErrorHandler';
+  import ConfirmDialog from '@/uni_modules/tuikit-atomic-x/components/ConfirmDialog/ConfirmDialog.nvue';
+  import { t } from '../../../../locales';
+  import {
+    recordingConfirmState,
+    closeRecordingConfirm,
+    requestStartRecording,
+    requestStopRecording,
+  } from '../recordingConfirmDialog';
+
+  const roomState = useRoomState();
+  const { localParticipant } = useRoomParticipantState();
+
+  const role = computed(() => localParticipant.value?.role);
+  const visible = computed(
+    () => role.value === RoomParticipantRole.Owner || role.value === RoomParticipantRole.Admin
+  );
+  const isRecording = computed(
+    () => roomState.currentRoom.value?.recordingInfo?.status === RecordingStatus.Recording
+  );
+  const iconSrc = computed(() =>
+    isRecording.value
+      ? '/static/images/room/room_recording_on.png'
+      : '/static/images/room/room_recording.png'
+  );
+
+  const confirmState = recordingConfirmState;
+
+  const confirmTitle = computed(() =>
+    confirmState.mode === 'start' ? t('meeting.recordStartTitle') : t('meeting.recordStopTitle')
+  );
+  const confirmMessage = computed(() =>
+    confirmState.mode === 'start' ? t('meeting.recordStartMessage') : t('meeting.recordStopMessage')
+  );
+  const confirmButtonText = computed(() =>
+    confirmState.mode === 'start' ? t('meeting.recordStartConfirm') : t('meeting.recordStopConfirm')
+  );
+
+  function handleTap() {
+    if (isRecording.value) {
+      requestStopRecording();
+    } else {
+      requestStartRecording();
+    }
+  }
+
+  async function handleConfirm(): Promise<void> {
+    const mode = confirmState.mode;
+    closeRecordingConfirm();
+    try {
+      if (mode === 'start') {
+        await roomState.startRecording();
+      } else {
+        await roomState.stopRecording();
+      }
+    } catch (e) {
+      showErrorToast(e, t('CloudRecording.ToggleFailed'));
+    }
+  }
+
+  watch(visible, (v) => {
+    if (!v) closeRecordingConfirm();
+  });
+
+  watch(
+    () => roomState.currentRoom.value?.recordingInfo?.status,
+    () => {
+      closeRecordingConfirm();
+    }
+  );
+</script>
+
+<style lang="scss">
+  @import './RecordingButton.scss';
+</style>

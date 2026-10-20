@@ -223,10 +223,10 @@
            spellcheck=false 关拼写检查(红色波浪线);autocorrect=off 关 iOS 自动纠错;
            autocapitalize=off 关自动首字母大写;autocomplete=off 关自动补全;
            translate=no 禁止翻译改写。避免弹幕输入被系统改写/标红。 -->
-      <div id="editor" contenteditable="true" data-ph="说点什么...."
+      <div id="editor" contenteditable="true" data-ph=""
         spellcheck="false" autocorrect="off" autocapitalize="off" autocomplete="off" translate="no"></div>
       <div id="toggle"><span class="ico face"></span></div>
-      <div id="send">发送</div>
+      <div id="send"></div>
     </div>
     <div id="slot">
       <div id="panel">
@@ -241,6 +241,27 @@
       var __lastSignalAt = 0;
       var SIGNAL_GUARD_MS = 350;
 
+      // ===== i18n(webview 内独立词条表,不经 uni t()) =====
+      // 语言来源优先级:原生 __setLanguage 注入(与宿主 UI 词条同源) > navigator.language
+      // (webview UA 语言恒为系统语言,可独立兜底)。中文系全部回落 zh,其余回落 en。
+      var I18N = {
+        zh: { placeholder: '说点什么....', send: '发送', banned: '您已被禁言', lengthLimit: '输入内容超出长度限制' },
+        en: { placeholder: 'Say something...', send: 'Send', banned: 'You have been muted', lengthLimit: 'Input exceeds the length limit' }
+      };
+      var lang = 'zh';
+      function detectLang(l) {
+        return (l || '').toLowerCase().indexOf('zh') === 0 ? 'zh' : 'en';
+      }
+      function applyI18n() {
+        var dict = I18N[lang] || I18N.zh;
+        editor.setAttribute('data-ph', dict.placeholder);
+        sendBtn.textContent = dict.send;
+      }
+      window.__setLanguage = function (l) {
+        lang = detectLang(l);
+        applyI18n();
+      };
+
       var EMOJI_BASE = 'https://web.sdk.qcloud.com/im/assets/emoji-plugin/';
       // key -> 图片文件名（与项目 emoji.ts emojiUrlMap 完全一致，按面板展示顺序）
       var EMOJI_URL = {
@@ -252,6 +273,10 @@
       var toggle = document.getElementById('toggle');
       var sendBtn = document.getElementById('send');
       var mask = document.getElementById('mask');
+      // 启动自检:navigator.language 在 App 内嵌 webview 中跟随系统语言,
+      // 原生 __setLanguage 注入到达前先按它渲染,注入到达后覆盖(两值几乎恒一致)。
+      lang = detectLang(navigator.language);
+      applyI18n();
       var dock = document.getElementById('dock');
       var slot = document.getElementById('slot');
 
@@ -353,7 +378,7 @@
         var addLen = (e.data ? e.data.length : 1);
         if (visibleLength() + addLen > MAX_INPUT_LEN) {
           e.preventDefault();
-          showToast('输入内容超出长度限制');
+          showToast((I18N[lang] || I18N.zh).lengthLimit);
         }
       });
       // 粘贴超限:beforeinput 兜底外,paste 再精确校验一次(按剩余可容纳长度截断)。
@@ -365,7 +390,7 @@
           if (remain > 0) {
             document.execCommand('insertText', false, pasteText.substring(0, remain));
           }
-          showToast('输入内容超出长度限制');
+          showToast((I18N[lang] || I18N.zh).lengthLimit);
           updateSendState();
         }
       });
@@ -582,7 +607,7 @@
       function insertEmoji(key) {
         // 表情算 1 个可见字符,超限则拦截并提示,不插入。
         if (visibleLength() + 1 > MAX_INPUT_LEN) {
-          showToast('输入内容超出长度限制');
+          showToast((I18N[lang] || I18N.zh).lengthLimit);
           return;
         }
         var img = document.createElement('img');
@@ -712,7 +737,7 @@
         if (!text.trim()) return;
         // 兜底校验(防 beforeinput 在部分 WebView 内核不生效):超限则不发送、提示。
         if (visibleLength() > MAX_INPUT_LEN) {
-          showToast('输入内容超出长度限制');
+          showToast((I18N[lang] || I18N.zh).lengthLimit);
           return;
         }
         postToNative('send', text);
@@ -811,7 +836,7 @@
       window.__setBanned = function (banned) {
         if (banned) {
           editor.setAttribute('contenteditable', 'false');
-          editor.setAttribute('data-ph', '您已被禁言');
+          editor.setAttribute('data-ph', (I18N[lang] || I18N.zh).banned);
           var activeNow = document.body.classList.contains('active');
           var expandingNow = document.body.classList.contains('expanding');
           // active(已展开)或 expanding(展开过渡中,禁言在展开途中到达)都要收起,
@@ -821,7 +846,7 @@
           }
         } else {
           editor.setAttribute('contenteditable', 'true');
-          editor.setAttribute('data-ph', '说点什么....');
+          applyI18n();
         }
       };
 

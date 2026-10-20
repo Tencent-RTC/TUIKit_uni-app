@@ -375,7 +375,8 @@ class MessageActionState {
       callAPI(JSON.stringify(options), (data: string) => {
         try {
           const result = JSON.parse<HybridResponse>(data) ?? DEFAULT_HYBRID_RESPONSE;
-          if (result.code == 0) resolve();
+          // 23007 视为成功，与 state/MessageActionState.ts 保持一致
+          if (result.code == 0 || result.code == 23007) resolve();
           else {
             const msg = result.message ?? 'addReaction failed';
             reject(new Error(msg));

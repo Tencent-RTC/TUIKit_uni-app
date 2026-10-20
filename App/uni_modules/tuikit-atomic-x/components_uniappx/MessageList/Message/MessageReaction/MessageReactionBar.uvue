@@ -1,0 +1,145 @@
+<template>
+  <view v-if="chipList.length > 0" class="rb" :class="isSelf ? 'rb--out' : ''">
+    <view
+      v-for="chip in chipList"
+      :key="chip.reactionID"
+      class="rb__chip"
+      :class="chipThemeClass"
+    >
+      <image class="rb__emoji" :src="chip.src" mode="aspectFit" @tap.stop="handleEmojiTap(chip.reactionID)" />
+      <view class="rb__texts" @tap.stop="handleChipTap(chip.reactionID)">
+        <view v-if="chip.name.length > 0" class="rb__line"></view>
+        <text v-if="chip.name.length > 0" class="rb__name" :lines="1">{{ chip.name }}</text>
+        <text v-if="chip.suffix.length > 0" class="rb__suffix">{{ chip.suffix }}</text>
+      </view>
+    </view>
+  </view>
+</template>
+
+<script setup lang="uts">
+import { computed } from 'vue'
+import {
+  buildReactionChipText,
+  getReactionList,
+  isMessageSentBySelf,
+  toggleMessageReaction,
+  type ReactionBrief
+} from '../../../../utils/messageReaction'
+
+type Props = {
+  message: any | null
+}
+
+type ReactionChip = {
+  reactionID: string
+  src: string
+  name: string
+  suffix: string
+}
+
+const props = defineProps<Props>()
+
+// 事件名用 camelCase，与同目录组件（onMessageListTap 等）保持一致
+const emit = defineEmits<{
+  showDetail: [reactionID: string]
+}>()
+
+const isSelf = computed((): boolean => isMessageSentBySelf(props.message))
+
+const chipThemeClass = computed((): string => {
+  return isSelf.value ? 'rb__chip--out' : 'rb__chip--in'
+})
+
+const chipList = computed((): ReactionChip[] => {
+  const chips: ReactionChip[] = []
+  const list: ReactionBrief[] = getReactionList(props.message)
+  list.forEach((reaction: ReactionBrief) => {
+    if (reaction.src.length == 0) return
+    const text = buildReactionChipText(reaction)
+    chips.push({
+      reactionID: reaction.reactionID,
+      src: reaction.src,
+      name: text.name,
+      suffix: text.suffix
+    } as ReactionChip)
+  })
+  return chips
+})
+
+// 点表情 → 快速 toggle（添加/移除），失败提示由 toggleMessageReaction 统一处理
+const handleEmojiTap = (reactionID: string): void => {
+  ;(async (): Promise<void> => {
+    await toggleMessageReaction(props.message, reactionID, false)
+  })()
+}
+
+// 点名字区域 → 唤起回应详情
+const handleChipTap = (reactionID: string): void => {
+  emit('showDetail', reactionID)
+}
+</script>
+
+<style>
+.rb {
+  flex: 1;
+  flex-direction: row;
+  flex-wrap: wrap;
+}
+
+.rb--out {
+  justify-content: flex-end;
+  align-self: flex-end;
+}
+
+.rb__chip {
+  flex-direction: row;
+  align-items: center;
+  max-width: 360rpx;
+  margin-top: 12rpx;
+  padding: 8rpx 16rpx;
+  border-radius: 24rpx;
+  background-color: #E4E7EF;
+}
+
+.rb__chip--in {
+  margin-right: 16rpx;
+}
+
+.rb__chip--out {
+  margin-left: 16rpx;
+}
+
+.rb__emoji {
+  width: 32rpx;
+  height: 32rpx;
+}
+
+.rb__texts {
+  flex-direction: row;
+  align-items: center;
+  flex-shrink: 1;
+}
+
+.rb__line {
+  width: 2rpx;
+  height: 28rpx;
+  margin: 0 8rpx;
+  background-color: rgba(0, 0, 0, 0.12);
+}
+
+.rb__suffix {
+  font-size: 24rpx;
+  line-height: 32rpx;
+  color: rgba(0, 0, 0, 0.55);
+}
+
+.rb__name {
+  max-width: 200rpx;
+  flex-shrink: 1;
+  lines: 1;
+  font-size: 24rpx;
+  line-height: 32rpx;
+  color: rgba(0, 0, 0, 0.55);
+  text-overflow: ellipsis;
+}
+</style>

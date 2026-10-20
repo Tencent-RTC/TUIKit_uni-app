@@ -24,7 +24,7 @@
 </template>
 
 <script setup lang="ts">
-  import { ref, watch, computed, reactive } from 'vue';
+  import { ref, watch, computed, reactive, onUnmounted } from 'vue';
   import { downloadAndSaveToPath } from './giftService';
 
   interface SafeAreaLike {
@@ -62,23 +62,44 @@
   const isPlaying = ref<boolean>(false);
   const currentPlayingGift = ref<GiftModel | null>(null);
 
+  // 播放链路里有多个 setTimeout(300/200/100/50ms 重试)与 svga-player 原生调用。
+  // 页面(如关闭直播后 redirectTo)销毁后这些任务仍会向已销毁的实例派发,原生侧报
+  // [JS Framework] Failed to receiveTasks, instance (N) is not available。
+  // 统一登记延时任务,卸载时清空并置 isDestroyed,卸载后不再调用原生播放器。
+  const pendingTimers = new Set<any>();
+  let isDestroyed = false;
+  const later = (fn: () => void, ms: number): any => {
+    if (isDestroyed) return null;
+    const id = setTimeout(() => {
+      pendingTimers.delete(id);
+      if (isDestroyed) return;
+      fn();
+    }, ms);
+    pendingTimers.add(id);
+    return id;
+  };
+  const delay = (ms: number): Promise<void> => {
+    return new Promise(resolve => { later(() => resolve(), ms); });
+  };
+  const clearPendingTimers = () => {
+    pendingTimers.forEach((id) => clearTimeout(id));
+    pendingTimers.clear();
+  };
+  const safePlayerCall = (method: 'startPlay' | 'stopPlay', arg ?: string) => {
+    if (isDestroyed || !playerRef.value) return;
+    try {
+      if (method === 'startPlay') playerRef.value.startPlay && playerRef.value.startPlay(arg);
+      else playerRef.value.stopPlay && playerRef.value.stopPlay();
+    } catch (e) {
+      // ignore
+    }
+  };
+
   async function resetPlayer() {
-    if (playerRef.value) {
-      try {
-        playerRef.value.stopPlay && playerRef.value.stopPlay();
-      } catch (e) {
-        // ignore
-      }
-    }
+    safePlayerCall('stopPlay');
     internalUrl.value = '';
-    await new Promise(resolve => setTimeout(resolve, 100));
-    if (playerRef.value) {
-      try {
-        playerRef.value.stopPlay && playerRef.value.stopPlay();
-      } catch (e) {
-        // ignore
-      }
-    }
+    await delay(100);
+    safePlayerCall('stopPlay');
   }
 
   async function resolveSvgaLocalPath(resourceURL : string, cacheKey : string) : Promise<string> {
@@ -214,11 +235,11 @@
       const giftCacheKey = String(gift.cacheKey || '');
       const giftID = gift.giftID || 0;
       let svgaGiftSourceUrl = await resolveSvgaLocalPath(giftResourceURL, giftCacheKey);
-      await new Promise(resolve => setTimeout(resolve, 50));
+      await delay(50);
       let newUrl = svgaGiftSourceUrl as string;
       if (internalUrl.value === newUrl) {
         internalUrl.value = '';
-        await new Promise(resolve => setTimeout(resolve, 50));
+        await delay(50);
       }
       if (newUrl.startsWith('http://') || newUrl.startsWith('https://')) {
         try {
@@ -232,13 +253,13 @@
       }
       internalUrl.value = newUrl;
       emit('update:modelValue', true);
-      setTimeout(() => {
+      later(() => {
         const currentGift = currentPlayingGift.value;
         if (props.modelValue && computedUrl.value && playerRef.value && isPlaying.value &&
           currentGift && currentGift.giftID === giftID && currentGift.cacheKey === giftCacheKey) {
           tryStart();
         } else {
-          setTimeout(() => {
+          later(() => {
             const retryGift = currentPlayingGift.value;
             if (props.modelValue && computedUrl.value && playerRef.value && isPlaying.value &&
               retryGift && retryGift.giftID === giftID && retryGift.cacheKey === giftCacheKey) {
@@ -254,13 +275,7 @@
 
   function onPlayFinished() {
     isHandlingFinished = false;
-    if (playerRef.value) {
-      try {
-        playerRef.value.stopPlay && playerRef.value.stopPlay();
-      } catch (e) {
-        // ignore
-      }
-    }
+    safePlayerCall('stopPlay');
     isPlaying.value = false;
     if (giftPrepareList.length > 0) {
       giftPrepareList.shift();
@@ -268,14 +283,8 @@
     currentPlayingGift.value = null;
     internalUrl.value = '';
     if (giftPrepareList.length > 0) {
-      setTimeout(() => {
-        if (playerRef.value) {
-          try {
-            playerRef.value.stopPlay && playerRef.value.stopPlay();
-          } catch (e) {
-            // ignore
-          }
-        }
+      later(() => {
+        safePlayerCall('stopPlay');
         if (!isPlaying.value) {
           preparePlay();
         }
@@ -287,16 +296,13 @@
   }
 
   const tryStart = () => {
+    if (isDestroyed) return;
     if (props.modelValue && computedUrl.value && playerRef.value) {
       const urlToPlay = computedUrl.value;
       if (urlToPlay.startsWith('http://') || urlToPlay.startsWith('https://')) {
         return;
       }
-      try {
-        playerRef.value.startPlay(urlToPlay);
-      } catch (e) {
-        // ignore
-      }
+      safePlayerCall('startPlay', urlToPlay);
     }
   }
 
@@ -316,12 +322,23 @@
       clearTimeout(finishedTimer);
     }
     isHandlingFinished = true;
-    finishedTimer = setTimeout(() => {
+    finishedTimer = later(() => {
       onPlayFinished();
       isHandlingFinished = false;
       finishedTimer = null;
     }, 50);
   }
+
+  onUnmounted(() => {
+    if (finishedTimer) { clearTimeout(finishedTimer); finishedTimer = null; }
+    clearPendingTimers();
+    // 先停原生播放器(此时实例还活着),再置销毁标记:之后不再向该实例派发任何任务。
+    safePlayerCall('stopPlay');
+    isDestroyed = true;
+    giftPrepareList.splice(0, giftPrepareList.length);
+    isPlaying.value = false;
+    currentPlayingGift.value = null;
+  });
 
   async function playGift(
     giftData : { resourceURL ?: string; name ?: string; giftID ?: string | number },

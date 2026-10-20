@@ -17,6 +17,7 @@
     convention of exporting nothing at the top-level (single-file component).
   -->
   <view class="slider-hit"
+    :style="hitStyle"
     @touchstart.stop="onTouchStart"
     @touchmove.stop="onTouchMove"
     @touchend.stop="onTouchEnd"
@@ -108,6 +109,9 @@
     width: props.trackWidth + 'rpx',
     height: props.trackHeight + 'rpx',
     backgroundColor: props.inactiveColor,
+  }));
+  const hitStyle = computed(() => ({
+    width: props.trackWidth + 'rpx',
   }));
   const fillStyle = computed(() => ({
     width: fillWidth.value + 'rpx',

@@ -1,0 +1,16 @@
+export const en : Record<string, string> = {
+	'al.title': 'Audience',
+	'al.empty': 'No audience yet',
+	'al.cannotFollowSelf': 'You cannot follow yourself',
+	'al.kickOut': 'Remove',
+	'al.confirmKickOut': 'Remove {name} from the room?',
+	'al.follow': 'Follow',
+	'al.followed': 'Following',
+	'al.roomManagement': 'Room management',
+	'al.mute': 'Mute',
+	'al.unmute': 'Unmute',
+	'al.muteCopy': 'Disable live comments',
+	'al.block': 'Block',
+	'al.blockCopy': 'Remove from this room',
+	'al.giftValue': 'Gift value {value}',
+}

@@ -1,0 +1,119 @@
+  @import '../styles/tokens.scss';
+
+  .root {
+    flex: 1;
+    background-color: $room-light-bg-page;
+    flex-direction: column;
+  }
+  .page {
+    flex: 1;
+    flex-direction: column;
+    padding-bottom: 32rpx;
+  }
+
+  .card {
+    margin: 40rpx 32rpx 0;
+    padding: 20rpx 40rpx;
+    background-color: $room-light-bg-surface;
+    border-radius: 12rpx;
+    flex-direction: column;
+  }
+
+  .form-item {
+    flex-direction: row;
+    align-items: center;
+    padding: 20rpx 0;
+  }
+
+  .switch-item {
+    justify-content: space-between;
+  }
+
+  .form-label {
+    width: 176rpx;
+    font-size: $room-font-size-xl;
+    color: $room-light-text-primary;
+  }
+
+  .form-input {
+    flex: 1;
+    font-size: $room-font-size-xl;
+    font-weight: 500;
+    color: $room-light-text-muted;
+    lines: 1;
+    padding: 0;
+    text-align: right;
+  }
+
+  .form-value {
+    flex: 1;
+    font-size: $room-font-size-xl;
+    font-weight: 500;
+    color: $room-light-text-muted;
+    text-align: right;
+    lines: 1;
+    text-overflow: ellipsis;
+  }
+
+  .form-arrow {
+    width: 28rpx;
+    height: 28rpx;
+    margin-left: 8rpx;
+  }
+
+  .form-arrow-right {
+    transform: rotate(-90deg);
+  }
+
+  .attendee-box {
+    flex: 1;
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-end;
+  }
+
+  .attendee-avatar-wrap {
+    margin-left: 8rpx;
+  }
+
+  .attendee-text {
+    font-size: $room-font-size-xl;
+    font-weight: 500;
+    color: $room-light-text-muted;
+    margin-left: 12rpx;
+  }
+
+  .form-hint-wrap {
+    padding-top: 8rpx;
+    padding-bottom: 8rpx;
+    padding-left: 4rpx;
+    padding-right: 32rpx;
+    flex-direction: row;
+  }
+
+  .form-hint-text {
+    flex: 1;
+    color: $room-light-text-muted;
+    font-size: $room-font-size-sm;
+    line-height: 36rpx;
+  }
+
+  .footer {
+    margin-top: 40rpx;
+    padding: 0 32rpx;
+  }
+
+  .submit-btn {
+    border-radius: 16rpx;
+    background-image: linear-gradient(to right, $room-color-brand-gradient-start, $room-color-brand-gradient-end);
+    flex-direction: row;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .submit-btn-text {
+    color: $room-color-text-inverse;
+    font-size: $room-font-size-xl;
+    font-weight: 500;
+    padding: 22rpx 0;
+  }

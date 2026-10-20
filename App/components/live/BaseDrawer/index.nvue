@@ -1,0 +1,350 @@
+<template>
+  <view v-if="everMounted">
+    <view class="base-drawer-container" :userInteractionEnabled="visible" :style="[containerStyle, zIndexStyle]">
+      <view class="base-drawer-mask" ref="overlayRef" @tap="onOverlayTap"></view>
+      <view class="base-drawer-wrapper" ref="wrapperRef" :style="wrapperStyle" @tap.stop>
+        <view class="base-drawer-shift-wrapper" ref="shiftWrapperRef" :style="wrapperStyle">
+          <image
+            v-if="showGlow"
+            class="base-drawer-glow"
+            src="/uni_modules/tuikit-atomic-x/static/assets/live/drawer-glow.png"
+            mode="scaleToFill"
+            :style="glowStyle"
+          />
+          <view class="base-drawer" :style="drawerStyle">
+            <image
+              v-if="bgImage"
+              class="base-drawer-bg-image"
+              :src="bgImage"
+              mode="scaleToFill"
+              :style="bgImageStyle"
+            />
+            <view class="base-drawer-content" :style="contentStyle">
+              <view
+                v-if="showHandle"
+                class="base-drawer-handle"
+                @touchstart="onHandleTouchStart"
+                @touchmove="onHandleTouchMove"
+                @touchend="onHandleTouchEnd"
+                @touchcancel="onHandleTouchEnd"
+              >
+                <view class="base-drawer-handle-bar"></view>
+              </view>
+              <slot></slot>
+            </view>
+          </view>
+        </view>
+      </view>
+    </view>
+  </view>
+</template>
+
+<script setup lang="ts">
+  import { ref, watch, nextTick, computed, onMounted, onUnmounted } from 'vue';
+
+  const emit = defineEmits(['update:modelValue', 'overlayTap']);
+
+  const props = defineProps({
+    modelValue: {
+      type: Boolean,
+      default: false
+    },
+    height: {
+      type: Number,
+      default: 500
+    },
+    borderRadius: {
+      type: Number,
+      default: 52
+    },
+    overlayOpacity: {
+      type: Number,
+      default: 0.4
+    },
+    bgImage: {
+      type: String,
+      default: ''
+    },
+    showHandle: {
+      type: Boolean,
+      default: true
+    },
+    bgImageHeight: {
+      type: Number,
+      default: 0
+    },
+    padding: {
+      type: String,
+      default: '0 32rpx 44rpx 32rpx'
+    },
+    showGlow: {
+      type: Boolean,
+      default: true
+    },
+    glowHeight: {
+      type: Number,
+      default: 160
+    },
+    preload: {
+      type: Boolean,
+      default: true
+    },
+    useSafeBottom: {
+      type: Boolean,
+      default: false
+    },
+    preloadDelay: {
+      type: Number,
+      default: 800
+    },
+    zIndex: {
+      type: Number,
+      default: 2600
+    }
+  });
+
+  defineExpose({ animateShift, preloadNow });
+
+  const animation = (uni as any).requireNativePlugin('animation');
+
+  const ANIM_DURATION = 320;
+  const ANIM_TIMING = 'cubic-bezier(0.32, 0.72, 0, 1)';
+  const SHIFT_DURATION = 340;
+  const SHIFT_TIMING = 'cubic-bezier(0.32, 0.72, 0, 1)';
+  const OPEN_GUARD_MS = 400;
+  const SAFE_BOTTOM_MIN_RPX = 60;
+  const DISMISS_THRESHOLD_PX = 88;
+  const DRAG_ACTIVATE_PX = 16;
+
+  const everMounted = ref(false);
+  const visible = ref(false);
+  const wrapperRef = ref<any>(null);
+  const overlayRef = ref<any>(null);
+  const shiftWrapperRef = ref<any>(null);
+  const safeBottomRpx = ref(0);
+
+  let closeTimer: any = null;
+  let preloadTimer: any = null;
+  let openedAt = 0;
+  let dragStartY = 0;
+  let dragOffsetY = 0;
+  let dragActive = false;
+  let dragAppliedY = 0;
+
+  const touchScreenY = (t: any): number => t?.screenY ?? t?.pageY ?? 0;
+
+  const totalHeightRpx = computed(() => props.height + safeBottomRpx.value);
+
+  const containerStyle = computed(() => {
+    return visible.value
+      ? { visibility: 'visible' }
+      : { visibility: 'hidden' };
+  });
+
+  const zIndexStyle = computed(() => {
+    return visible.value ? { zIndex: props.zIndex + 80 } : { zIndex: props.zIndex };
+  });
+
+  const wrapperStyle = computed(() => {
+    const glow = props.showGlow ? props.glowHeight / 2 : 0;
+    return {
+      height: (totalHeightRpx.value + glow) + 'rpx'
+    };
+  });
+
+  const drawerStyle = computed(() => {
+    return {
+      height: totalHeightRpx.value + 'rpx',
+      borderTopLeftRadius: props.borderRadius + 'rpx',
+      borderTopRightRadius: props.borderRadius + 'rpx'
+    };
+  });
+
+  const contentStyle = computed(() => ({
+    padding: props.padding
+  }));
+
+  const glowStyle = computed(() => {
+    return {
+      left: '0',
+      width: '750rpx',
+      bottom: (props.height - props.glowHeight / 2) + 'rpx',
+      height: props.glowHeight + 'rpx'
+    };
+  });
+
+  const bgImageStyle = computed(() => {
+    const imgHeight = props.bgImageHeight > 0 ? props.bgImageHeight : props.height;
+    return {
+      top: '0',
+      height: imgHeight + 'rpx',
+      borderTopLeftRadius: props.borderRadius + 'rpx',
+      borderTopRightRadius: props.borderRadius + 'rpx'
+    };
+  });
+
+  const dismissThresholdPx = () =>
+    Math.min(DISMISS_THRESHOLD_PX, Math.round(uni.upx2px(totalHeightRpx.value) / 3));
+
+  function animateShift(shifted: boolean) {
+    const el = shiftWrapperRef.value;
+    if (!el) return;
+    animation.transition(el, {
+      styles: { transform: shifted ? 'translateX(-100%)' : 'translateX(0)' },
+      duration: SHIFT_DURATION,
+      timingFunction: SHIFT_TIMING
+    });
+  }
+
+  function tryOpenAnimation(retries = 0) {
+    const wrapper = wrapperRef.value;
+    if (!wrapper) {
+      if (retries < 10) setTimeout(() => tryOpenAnimation(retries + 1), 16);
+      return;
+    }
+    runOpenAnimation(wrapper);
+  }
+
+  function runOpenAnimation(wrapper: any) {
+    animation.transition(wrapper, {
+      styles: { transform: 'translateY(100%)' },
+      duration: 0,
+      timingFunction: 'linear'
+    });
+    animation.transition(wrapper, {
+      styles: { transform: 'translateY(0)' },
+      duration: ANIM_DURATION,
+      timingFunction: ANIM_TIMING
+    });
+    const overlay = overlayRef.value;
+    if (overlay) {
+      animation.transition(overlay, {
+        styles: { backgroundColor: `rgba(0, 0, 0, ${props.overlayOpacity})` },
+        duration: ANIM_DURATION,
+        timingFunction: 'ease'
+      });
+    }
+  }
+
+  function preloadNow() {
+    if (everMounted.value) return;
+    everMounted.value = true;
+  }
+
+  function onOverlayTap() {
+    if (Date.now() - openedAt < OPEN_GUARD_MS) {
+      return;
+    }
+    emit('overlayTap');
+    emit('update:modelValue', false);
+  }
+
+  function onHandleTouchStart(e: any) {
+    if (!visible.value) return;
+    const t = e?.touches?.[0];
+    if (t == null) return;
+    dragStartY = touchScreenY(t);
+    dragOffsetY = 0;
+    dragActive = false;
+    dragAppliedY = 0;
+  }
+
+  function onHandleTouchMove(e: any) {
+    if (!visible.value) return;
+    const t = e?.touches?.[0];
+    if (t == null) return;
+    const fingerDelta = touchScreenY(t) - dragStartY;
+    if (!dragActive) {
+      if (fingerDelta < DRAG_ACTIVATE_PX) return;
+      dragActive = true;
+    }
+    dragOffsetY = Math.max(0, fingerDelta);
+    const applyY = Math.round(dragOffsetY);
+    if (Math.abs(applyY - dragAppliedY) < 2) return;
+    dragAppliedY = applyY;
+    animation.transition(wrapperRef.value, {
+      styles: { transform: `translateY(${applyY}px)` },
+      duration: 0,
+      timingFunction: 'linear'
+    });
+  }
+
+  function onHandleTouchEnd() {
+    if (!dragActive) {
+      dragActive = false;
+      return;
+    }
+    dragActive = false;
+    const dismiss = dragOffsetY >= dismissThresholdPx();
+    dragOffsetY = 0;
+    dragAppliedY = -1;
+    if (dismiss) {
+      emit('update:modelValue', false);
+    } else {
+      animation.transition(wrapperRef.value, {
+        styles: { transform: 'translateY(0)' },
+        duration: 200,
+        timingFunction: 'ease-out'
+      });
+    }
+  }
+
+  watch(() => props.modelValue, (val) => {
+    clearTimeout(closeTimer);
+    if (val) {
+      openedAt = Date.now();
+      visible.value = true;
+      everMounted.value = true;
+      nextTick(() => {
+        tryOpenAnimation();
+      });
+      return;
+    }
+    const wrapper = wrapperRef.value;
+    const overlay = overlayRef.value;
+    if (wrapper) {
+      animation.transition(wrapper, {
+        styles: { transform: 'translateY(100%)' },
+        duration: ANIM_DURATION,
+        timingFunction: ANIM_TIMING
+      });
+    }
+    if (overlay) {
+      animation.transition(overlay, {
+        styles: { backgroundColor: 'rgba(0, 0, 0, 0)' },
+        duration: ANIM_DURATION,
+        timingFunction: 'ease'
+      });
+    }
+    closeTimer = setTimeout(() => {
+      visible.value = false;
+    }, ANIM_DURATION);
+  });
+
+  onMounted(() => {
+    if (props.useSafeBottom) {
+      try {
+        const sys: any = uni.getSystemInfoSync();
+        const insetBottom = sys?.safeAreaInsets?.bottom || 0;
+        const insetRpx = (insetBottom > 0 && sys?.windowWidth > 0)
+          ? Math.round(insetBottom * 750 / sys.windowWidth)
+          : 0;
+        safeBottomRpx.value = Math.max(insetRpx, SAFE_BOTTOM_MIN_RPX);
+      } catch (e) { /* ignore */ }
+    }
+    if (!props.preload) return;
+    preloadTimer = setTimeout(() => {
+      preloadTimer = null;
+      preloadNow();
+    }, props.preloadDelay);
+  });
+
+  onUnmounted(() => {
+    if (closeTimer != null) { clearTimeout(closeTimer); closeTimer = null; }
+    if (preloadTimer != null) { clearTimeout(preloadTimer); preloadTimer = null; }
+  });
+</script>
+
+<style lang="scss">
+  @import './BaseDrawer.scss';
+</style>

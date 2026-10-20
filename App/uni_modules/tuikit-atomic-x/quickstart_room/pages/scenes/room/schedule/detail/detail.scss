@@ -1,0 +1,160 @@
+  @import '../../styles/tokens.scss';
+
+  .page {
+    flex: 1;
+    background-color: $room-light-bg-page-alt;
+    flex-direction: column;
+  }
+
+  .edit-btn {
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-end;
+  }
+
+  .edit-btn-text {
+    font-size: $room-font-size-xl;
+    font-weight: 500;
+    color: $room-color-brand-deep;
+  }
+
+  .card {
+    margin: 0 32rpx;
+    background-color: $room-light-bg-surface;
+    border-radius: 12rpx;
+    flex-direction: column;
+  }
+
+  .card-info {
+    padding: 20rpx 40rpx;
+  }
+
+  .card-actions {
+    background-color: transparent;
+  }
+
+  .card-gap {
+    height: 8rpx;
+  }
+
+  .form-value-roomid {
+    flex: 1;
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-end;
+  }
+  .form-value-roomid .form-value {
+    text-align: right;
+    margin-right: 12rpx;
+  }
+  .copy-icon {
+    width: 32rpx;
+    height: 32rpx;
+  }
+
+  .form-value-owner {
+    flex: 1;
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-end;
+  }
+  .owner-avatar-wrap {
+    margin-right: 12rpx;
+  }
+
+  .form-value-members {
+    flex: 1;
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-end;
+  }
+  .members-avatar {
+    width: 56rpx;
+    height: 56rpx;
+    border-radius: 28rpx;
+    margin-right: 12rpx;
+  }
+  .members-arrow {
+    font-size: $room-font-size-2xl;
+    color: $room-light-text-tertiary;
+    margin-left: 12rpx;
+    line-height: 40rpx;
+  }
+
+  .members-sheet-list {
+    max-height: 600rpx;
+  }
+  .sheet-member-item {
+    flex-direction: row;
+    align-items: center;
+    margin: 0 32rpx;
+    padding: 20rpx 0;
+    border-bottom: 1rpx solid $room-light-border;
+  }
+  .sheet-member-item .member-avatar-wrap {
+    margin-right: 20rpx;
+  }
+
+  .form-item {
+    flex-direction: row;
+    align-items: center;
+    padding: 20rpx 0;
+  }
+
+  .form-label {
+    width: 176rpx;
+    font-size: $room-font-size-xl;
+    font-weight: 400;
+    color: $room-light-text-primary;
+  }
+
+  .form-value {
+    flex: 1;
+    font-size: $room-font-size-xl;
+    font-weight: 500;
+    color: $room-light-text-muted;
+    text-align: right;
+    lines: 1;
+    text-overflow: ellipsis;
+  }
+
+  .form-value-line {
+    max-width: 360rpx;
+    font-size: $room-font-size-xl;
+    font-weight: 500;
+    color: $room-light-text-muted;
+    text-align: right;
+    lines: 1;
+    text-overflow: ellipsis;
+  }
+
+  .action-item {
+    flex-direction: row;
+    justify-content: center;
+    align-items: center;
+    padding: 22rpx 0 30rpx;
+    background-color: $room-light-bg-subtle;
+    border-radius: 16rpx;
+    margin-top: 32rpx;
+  }
+
+  .action-text-primary {
+    font-size: $room-font-size-xl;
+    line-height: 36rpx;
+    font-weight: 500;
+    color: $room-color-brand-deep;
+  }
+
+  .action-text-danger {
+    font-size: $room-font-size-xl;
+    line-height: 36rpx;
+    font-weight: 500;
+    color: $room-color-danger-deep;
+  }
+
+  .dialog-message {
+    font-size: $room-font-size-base;
+    line-height: 44rpx;
+    color: $room-light-text-secondary;
+    text-align: center;
+  }

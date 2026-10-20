@@ -1,0 +1,73 @@
+<template>
+  <BaseDrawer
+    v-model="innerVisible"
+    :height="300"
+    :overlayOpacity="0.4"
+    bgImage="/uni_modules/tuikit-atomic-x/static/assets/live/drawer-bg.png"
+    :bgImageHeight="710"
+    padding="0 40rpx 23rpx 40rpx"
+    :useSafeBottom="true"
+  >
+    <text class="title">{{ t('anchor.changeCover') }}</text>
+    <view class="cover-list">
+      <view
+        v-for="url in presetCoverURLs"
+        :key="url"
+        class="cover-option"
+        :style="{ backgroundColor: url === innerSelectedURL ? LIVE_TOKENS.colorBrandLight : LIVE_TOKENS.darkSurface14 }"
+        @tap="onSelect(url)"
+      >
+        <image
+          class="cover-img"
+          :src="url"
+          mode="aspectFill"
+          :style="{ opacity: loadedMap[url] ? 1 : 0.55 }"
+          @load="loadedMap[url] = true"
+          @error="loadedMap[url] = true"
+        />
+      </view>
+    </view>
+  </BaseDrawer>
+</template>
+
+<script setup lang="ts">
+  import { computed, reactive } from 'vue';
+  import { LIVE_TOKENS } from '../../../../styles/tokens.js';
+  import { t } from '../../../../locales';
+  import BaseDrawer from '@/components/live/BaseDrawer/index.nvue';
+
+  const props = defineProps({
+    modelValue: {
+      type: Boolean,
+      default: false,
+    },
+    selectedURL: {
+      type: String,
+      default: '',
+    },
+  });
+
+  const emit = defineEmits(['update:modelValue', 'select']);
+
+  const presetCoverURLs = [1, 2, 3, 4, 5].map(
+    (i) => `https://liteav-test-1252463788.cos.ap-guangzhou.myqcloud.com/live/live_cover${i}.png`
+  );
+
+  const loadedMap = reactive<Record<string, boolean>>({});
+
+  const innerVisible = computed({
+    get: () => props.modelValue,
+    set: (val) => emit('update:modelValue', val),
+  });
+
+  const innerSelectedURL = computed(() => props.selectedURL || presetCoverURLs[0]);
+
+  const onSelect = (url: string) => {
+    emit('select', url);
+    innerVisible.value = false;
+  };
+</script>
+
+<style lang="scss">
+  @import './CoverPickerPanel.scss';
+</style>

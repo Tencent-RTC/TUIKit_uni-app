@@ -1,0 +1,98 @@
+<template>
+  <view v-if="internalVisible" class="as-mask" @click="onMaskClick">
+    <view
+      class="as-container"
+      :style="{ width: systemInfo?.safeArea?.width + 'px' }"
+      @click.stop
+    >
+      <view class="as-panel">
+        <view v-if="title" class="as-header">
+          <text class="as-header-text">{{ title }}</text>
+        </view>
+        <scroll-view class="as-list" scroll-y>
+          <view
+            v-for="(item, index) in itemList"
+            :key="index"
+            :class="['as-item', index !== itemList.length - 1 ? 'as-item--divider' : '']"
+            @click="onSelect(index)"
+          >
+            <text class="as-item-text">{{ item }}</text>
+          </view>
+        </scroll-view>
+      </view>
+      <view v-if="showCancel" class="as-cancel" @click="onCancel">
+        <text class="as-cancel-text">{{ cancelText }}</text>
+      </view>
+    </view>
+  </view>
+  <view v-else />
+</template>
+
+<script setup lang="ts">
+  import { ref, watch, onMounted } from 'vue';
+  import { t } from '@/pages/scenes/live/locales';
+
+  const props = defineProps({
+    modelValue: { type: Boolean, default: false },
+    itemList: { type: Array as () => string[], default: () => [] },
+    title: { type: String, default: '' },
+    cancelText: { type: String, default: t('common.cancel') },
+    closeOnMask: { type: Boolean, default: true },
+    showCancel: { type: Boolean, default: true },
+  });
+
+  const emit = defineEmits(['update:modelValue', 'select', 'cancel', 'close']);
+
+  defineExpose({ open, close });
+
+  const systemInfo = ref({});
+  const internalVisible = ref<boolean>(props.modelValue);
+
+  function open() {
+    if (!internalVisible.value) {
+      internalVisible.value = true;
+      emit('update:modelValue', true);
+    }
+  }
+
+  function close() {
+    if (internalVisible.value) {
+      internalVisible.value = false;
+      emit('update:modelValue', false);
+      emit('close');
+    }
+  }
+
+  function onMaskClick() {
+    if (props.closeOnMask) {
+      emit('cancel');
+      close();
+    }
+  }
+
+  function onSelect(index: number) {
+    emit('select', { tapIndex: index });
+    close();
+  }
+
+  function onCancel() {
+    emit('cancel');
+    close();
+  }
+
+  watch(() => props.modelValue, (val) => {
+    internalVisible.value = val;
+  });
+
+  onMounted(() => {
+    uni.getSystemInfo({
+      success: (res) => {
+        systemInfo.value = res;
+      },
+    });
+  });
+</script>
+
+<style lang="scss">
+  @import './OptionSheet.scss';
+</style>

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- 内部存储日志目录: filesDir/log/ （对应 iOS Documents/log/） -->
+    <files-path
+        name="log_internal"
+        path="log/" />
+
+    <!-- 外部存储日志目录: getExternalFilesDir(null)/log/ -->
+    <external-files-path
+        name="log_external"
+        path="log/" />
+
+    <!-- IM SDK 日志目录（内部缓存）: cacheDir/com_tencent_imsdk_log/ -->
+    <cache-path
+        name="imsdk_log_internal"
+        path="com_tencent_imsdk_log/" />
+
+    <!-- IM SDK 日志目录（外部缓存）: externalCacheDir/com_tencent_imsdk_log/ -->
+    <external-cache-path
+        name="imsdk_log_external"
+        path="com_tencent_imsdk_log/" />
+</paths>

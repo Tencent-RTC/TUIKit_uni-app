@@ -1,0 +1,53 @@
+<template>
+  <view v-if="visible" class="mask" @tap="handleClose">
+    <view class="sheet" @tap.stop>
+      <view class="drop-bar" @tap="handleClose">
+        <image class="drop-line" src="/static/images/room/room_lineImage.png" mode="aspectFit" />
+      </view>
+
+      <view class="action-item" @tap="handleSelectMember">
+        <image class="action-icon" src="/static/images/room/room_invate_add.png" mode="aspectFit" />
+        <text class="action-label">{{ t('participants.addMember') }}</text>
+      </view>
+      <view class="action-divider"></view>
+
+      <view class="action-item" @tap="handleInviteInfo">
+        <image class="action-icon" src="/static/images/room/room_invate_info.png" mode="aspectFit" />
+        <text class="action-label">{{ t('participants.inviteJoin') }}</text>
+      </view>
+    </view>
+  </view>
+</template>
+
+<script setup lang="ts">
+  import { t } from '../../../../../locales';
+
+  defineProps({
+    visible: { type: Boolean, default: false },
+    roomID: { type: String, default: '' },
+  });
+
+  const emit = defineEmits<{
+    (e: 'close'): void
+    (e: 'addMember'): void
+    (e: 'invite'): void
+  }>();
+
+  function handleClose(): void {
+    emit('close');
+  }
+
+  function handleSelectMember(): void {
+    emit('close');
+    emit('addMember');
+  }
+
+  function handleInviteInfo(): void {
+    emit('close');
+    emit('invite');
+  }
+</script>
+
+<style lang="scss">
+  @import './InviteUserSheet.scss';
+</style>

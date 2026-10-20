@@ -221,19 +221,40 @@ function judgeIosPermission(permissionID: string) {
   return false;
 }
 
+// iOS 原生兜底：openURL: 自 iOS 10 起废弃、iOS 18 上不再生效，优先用 openURL:options:completionHandler:
+function openIosAppSettingByNative() {
+  const UIApplication = plus.ios.import('UIApplication');
+  const application = UIApplication.sharedApplication();
+  const NSURL = plus.ios.import('NSURL');
+  const settingURL = NSURL.URLWithString('app-settings:');
+  if (application.respondsToSelector('openURL:options:completionHandler:')) {
+    const NSDictionary = plus.ios.import('NSDictionary');
+    const emptyOptions = new NSDictionary();
+    application.openURL_options_completionHandler(settingURL, emptyOptions, null);
+    plus.ios.deleteObject(emptyOptions);
+    plus.ios.deleteObject(NSDictionary);
+  } else {
+    application.openURL(settingURL);
+  }
+  plus.ios.deleteObject(settingURL);
+  plus.ios.deleteObject(NSURL);
+  plus.ios.deleteObject(application);
+}
+
 // 跳转到**应用**的权限页面
 function gotoAppPermissionSetting() {
   if (isIos) {
-    const UIApplication = plus.ios.import('UIApplication');
-    const application2 = UIApplication.sharedApplication();
-    const NSURL2 = plus.ios.import('NSURL');
-    // var setting2 = NSURL2.URLWithString("prefs:root=LOCATION_SERVICES");
-    const setting2 = NSURL2.URLWithString('app-settings:');
-    application2.openURL(setting2);
-
-    plus.ios.deleteObject(setting2);
-    plus.ios.deleteObject(NSURL2);
-    plus.ios.deleteObject(application2);
+    // 优先用官方 API（HBuilderX 3.5.3+），失败再走原生兜底
+    uni.openAppAuthorizeSetting({
+      fail: (err: any) => {
+        console.warn('[permission] openAppAuthorizeSetting failed, fallback to native:', err);
+        try {
+          openIosAppSettingByNative();
+        } catch (e) {
+          console.error('[permission] openIosAppSettingByNative failed:', e);
+        }
+      },
+    });
   } else {
     // console.log(plus.device.vendor);
     const Intent = plus.android.importClass('android.content.Intent');

@@ -2,12 +2,10 @@
   import { loginFromStorage } from './server/loginService';
   import { initCallService } from '@/uni_modules/tuikit-atomic-x/server/callService';
   import { initRoomCallService } from '@/uni_modules/tuikit-atomic-x/server/roomCallService';
-  import { pushService } from './server/pushService';
   let firstBackTime = 0
   export default {
     onLaunch: function () {
       console.log('App Launch')
-      pushService.init();
       loginFromStorage();
       initCallService();
       initRoomCallService();

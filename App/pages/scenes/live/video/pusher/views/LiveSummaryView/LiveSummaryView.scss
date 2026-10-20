@@ -1,0 +1,77 @@
+@import '../../../../styles/tokens.scss';
+
+.live-summary-view {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: $live-dark-bg-base;
+  align-items: center;
+  justify-content: flex-start;
+  flex-direction: column;
+}
+
+.live-summary-header {
+  margin-top: 220rpx;
+  align-items: center;
+}
+
+.live-summary-back-btn {
+  width: 48rpx;
+  height: 48rpx;
+  position: absolute;
+  top: 100rpx;
+  right: 80rpx;
+  z-index: 99;
+}
+
+.live-summary-title {
+  color: $live-dark-text-primary;
+  font-size: 36rpx;
+  font-weight: bold;
+}
+
+.live-summary-duration {
+  color: $live-light-text-muted;
+  font-size: 26rpx;
+  margin-top: 16rpx;
+}
+
+.live-summary-stats-card {
+  width: 700rpx;
+  background-color: $live-dark-bg-surface;
+  border-radius: 24rpx;
+  padding: 40rpx 0;
+  margin-top: 80rpx;
+}
+
+.live-summary-stats-row {
+  width: 700rpx;
+  flex-direction: row;
+  justify-content: space-around;
+  margin: 24rpx;
+}
+
+.live-summary-stats-row:last-child {
+  margin-bottom: 0;
+}
+
+.live-summary-stats-item {
+  flex: 1;
+  align-items: center;
+}
+
+.live-summary-stats-value {
+  color: $live-dark-text-primary;
+  font-size: 36rpx;
+  font-weight: bold;
+  text-align: center;
+}
+
+.live-summary-stats-label {
+  color: $live-light-text-muted;
+  font-size: 22rpx;
+  margin-top: 8rpx;
+  text-align: center;
+}

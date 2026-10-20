@@ -1,0 +1,106 @@
+  @import '../../../styles/tokens.scss';
+
+  .invite-root {
+    flex-direction: column;
+  }
+
+  .invite-row {
+    flex-direction: row;
+    align-items: center;
+    padding: 20rpx 32rpx;
+  }
+
+  .invite-row + .invite-row {
+    border-top-width: 1rpx;
+    border-top-style: solid;
+  }
+
+  /* ==================== light 主题（默认）==================== */
+  .theme-light .invite-label {
+    color: $room-light-text-tertiary;
+  }
+
+  .theme-light .invite-value {
+    color: $room-light-text-primary;
+  }
+
+  .theme-light .invite-row + .invite-row {
+    border-top-color: $room-light-border;
+  }
+
+  .theme-light .invite-copy-all {
+    background-color: $room-color-brand-bg-soft;
+    border-color: $room-color-brand-border;
+  }
+
+  .theme-light .invite-copy-all-text {
+    color: $room-color-brand;
+  }
+
+  .theme-dark .invite-label {
+    color: $room-dark-text-secondary;
+  }
+
+  .theme-dark .invite-value {
+    color: $room-color-text-inverse;
+  }
+
+  .theme-dark .invite-row + .invite-row {
+    border-top-color: $room-dark-border;
+  }
+
+  .theme-dark .invite-copy-all {
+    background-color: $room-dark-bg-raised;
+    border-color: $room-dark-bg-raised;
+  }
+
+  .theme-dark .invite-copy-all-text {
+    color: $room-color-text-inverse;
+  }
+
+  .invite-label {
+    font-size: $room-font-size-base;
+    width: 144rpx;
+  }
+
+  .invite-value {
+    max-width: 500rpx;
+    font-size: $room-font-size-lg;
+    margin-right: 16rpx;
+    lines: 1;
+    text-overflow: ellipsis;
+  }
+
+  .invite-copy-btn {
+    width: 40rpx;
+    height: 40rpx;
+    justify-content: center;
+    align-items: center;
+    padding: 0;
+  }
+
+  .invite-copy-icon {
+    width: 32rpx;
+    height: 32rpx;
+  }
+
+  .invite-actions {
+    padding: 20rpx 32rpx;
+  }
+
+  .invite-copy-all {
+    padding: 20rpx 0;
+    border-width: 2rpx;
+    border-style: solid;
+    border-radius: 16rpx;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .invite-copy-all-text {
+    font-size: $room-font-size-xl;
+  }
+
+  .bottom-extra-space {
+    height: 24rpx;
+  }

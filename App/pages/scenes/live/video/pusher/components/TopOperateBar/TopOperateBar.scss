@@ -1,0 +1,217 @@
+@import '../../../../styles/tokens.scss';
+
+  .top-operate-bar {
+    display: flex;
+    position: absolute;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20rpx 32rpx;
+    margin-top: 80rpx;
+    width: 750rpx;
+    top: 40rpx;
+  }
+
+  .top-bar-left {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .anchor-info {
+    position: relative;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    max-width: 440rpx;
+    height: 72rpx;
+    padding-left: 4rpx;
+    padding-right: 16rpx;
+    border-radius: 36rpx;
+    /* nvue 只可靠支持两色标渐变(多色标会解析失败),故用「深色 → 粉」两色标逼近设计稿
+       的 深→紫→粉;background-color 作为渐变不被支持时的兜底底色。 */
+    background-color: $live-dark-bg-overlay-30;
+    background-image: linear-gradient(to right, $live-dark-bg-overlay-30, $live-color-danger-light-soft);
+  }
+
+  .avatar {
+    width: 64rpx;
+    height: 64rpx;
+    border-radius: 32rpx;
+    border-width: 2rpx;
+    border-color: $live-dark-border-solid;
+    margin-left: 4rpx;
+    margin-right: 12rpx;
+    flex-shrink: 0;
+  }
+
+  .anchor-copy {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    flex-shrink: 1;
+    min-width: 0;
+  }
+
+  .anchor-name {
+    color: $live-dark-text-primary;
+    font-size: 28rpx;
+    font-weight: 500;
+    margin-bottom: 4rpx;
+    max-width: 180rpx;
+    height: 38rpx;
+    lines: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .anchor-meta {
+    color: $live-dark-text-68;
+    font-size: 16rpx;
+    font-weight: 400;
+    max-width: 180rpx;
+    height: 20rpx;
+    lines: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .fan-club-button {
+    width: 84rpx;
+    height: 56rpx;
+    margin-left: 12rpx;
+    flex-shrink: 0;
+  }
+
+  .fan-club-icon {
+    width: 84rpx;
+    height: 56rpx;
+  }
+
+  .top-bar-right {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-end;
+  }
+
+  .participants {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+  }
+
+  /* 主播端:头像独立排列 gap 2px(4rpx),不重叠(观众端才是 -9px 重叠)。 */
+  .participant-avatars {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 4rpx;
+  }
+
+  /* 32px×26px 的槽位里放居中 26px 圆形头像,底部再叠礼物值胶囊。 */
+  .participant-avatar-wrap {
+    position: relative;
+    width: 64rpx;
+    height: 52rpx;
+  }
+
+  .participant-avatar {
+    width: 52rpx;
+    height: 52rpx;
+    margin-left: 6rpx;
+    border-radius: 26rpx;
+  }
+
+  /* 金 / 银 / 铜礼物值胶囊:叠在头像下半部,水平居中。 */
+  .participant-score {
+    position: absolute;
+    left: 2rpx;
+    bottom: 0;
+    width: 60rpx;
+    height: 22rpx;
+    border-radius: 12rpx;
+    border-width: 2rpx;
+    border-color: $live-dark-border-24;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    padding-left: 8rpx;
+    padding-right: 8rpx;
+    background-color: $live-color-warning-soft;
+  }
+
+  .participant-score-text {
+    color: $live-color-tint-ivory;
+    font-size: 14rpx;
+    font-weight: 700;
+    lines: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .rank-1 .participant-score {
+    background-color: $live-color-warning-soft;
+  }
+
+  .rank-2 .participant-score {
+    background-color: $live-dark-bg-control-strong;
+  }
+
+  .rank-2 .participant-score-text {
+    color: $live-color-tint-frost;
+  }
+
+  .rank-3 .participant-score {
+    background-color: $live-color-brown-soft;
+  }
+
+  .rank-3 .participant-score-text {
+    color: $live-color-tint-peach;
+  }
+
+  .participant-count {
+    height: 52rpx;
+    min-width: 52rpx;
+    border-radius: 26rpx;
+    background-color: $live-dark-bg-overlay-35;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    padding-left: 16rpx;
+    padding-right: 16rpx;
+    margin-left: 8rpx;
+  }
+
+  .count-text {
+    color: $live-dark-text-primary;
+    font-size: 24rpx;
+    font-weight: 500;
+  }
+
+  /* 对齐设计稿 .host-viewer-close:26px(52rpx)玻璃圆底,内为白色 X。
+     close.png 自带圆底,故容器不再画底色;nvue 不支持 backdrop-filter/box-shadow,
+     设计稿的 blur 与投影省略。按下态对齐设计稿 :active scale(0.9) + opacity 0.7
+     (nvue 的 :active 可能不渲染,无副作用)。 */
+  .control-icons {
+    width: 52rpx;
+    height: 52rpx;
+    margin-left: 8rpx;
+    border-radius: 26rpx;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .control-icon {
+    width: 52rpx;
+    height: 52rpx;
+  }
+
+  .control-icons:active {
+    transform: scale(0.9);
+    opacity: 0.7;
+  }

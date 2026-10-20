@@ -1,0 +1,36 @@
+  @import '../../../../styles/tokens.scss';
+
+  .bottom-btn {
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .bottom-icon-box {
+    width: 104rpx;
+    height: 104rpx;
+    border-radius: 20rpx;
+    background-color: $room-dark-bg-surface;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .bottom-icon-box-webinar {
+    width: 80rpx;
+    height: 80rpx;
+    border-radius: 16rpx;
+  }
+
+  .bottom-icon {
+    width: 48rpx;
+    height: 48rpx;
+  }
+
+  .bottom-text {
+    color: $room-color-text-inverse;
+    font-size: $room-font-size-xs;
+    margin-top: 6rpx;
+    lines: 1;
+    text-overflow: ellipsis;
+  }

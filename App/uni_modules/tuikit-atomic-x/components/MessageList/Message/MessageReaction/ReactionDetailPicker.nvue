@@ -1,0 +1,324 @@
+<template>
+  <Drawer :visible="visible" @close="handleClose">
+    <view class="rdp__title-wrap">
+      <text class="rdp__title">表情回应</text>
+    </view>
+    <view v-if="summaryList.length > 0" class="rdp__summary-wrap">
+      <scroll-view
+        v-if="summaryList.length > 1"
+        class="rdp__summary"
+        scroll-x="true"
+        :show-scrollbar="false"
+        :scroll-into-view="summaryScrollInto"
+      >
+        <view
+          v-for="(summary, idx) in summaryList"
+          :key="summary.reactionID"
+          :id="'rdp-sum-' + idx"
+          class="rdp__summary-chip"
+          :class="{ 'rdp__summary-chip--active': summary.reactionID === currentReactionID }"
+          @tap.stop="handleSummaryTap(summary.reactionID)"
+        >
+          <image class="rdp__summary-emoji" :src="summary.src" mode="aspectFit" />
+          <text class="rdp__summary-count" :class="{ 'rdp__summary-count--active': summary.reactionID === currentReactionID }">{{ summary.totalCount }}</text>
+        </view>
+      </scroll-view>
+      <view v-else class="rdp__summary">
+        <view class="rdp__summary-chip rdp__summary-chip--active">
+          <image class="rdp__summary-emoji" :src="summaryList[0].src" mode="aspectFit" />
+          <text class="rdp__summary-count rdp__summary-count--active">{{ summaryList[0].totalCount }}</text>
+        </view>
+      </view>
+    </view>
+
+    <list
+      class="rdp__list"
+      :show-scrollbar="false"
+      :loadmoreoffset="100"
+      @loadmore="handleScrollToLower"
+    >
+      <cell v-for="(user, idx) in userList" :key="user.userID + '_' + idx">
+        <view class="rdp__row" @tap.stop="handleRowTap(user)">
+          <Avatar
+            :src="user.avatarURL || ''"
+            :name="user.nickname || user.userID"
+            :size="80"
+            defaultAvatarType="user"
+            class="rdp__avatar"
+          />
+          <view class="rdp__info">
+            <text class="rdp__name">{{ user.nickname || user.userID }}</text>
+            <text v-if="isSelfUser(user)" class="rdp__hint">点击删除</text>
+          </view>
+        </view>
+      </cell>
+      <cell v-if="loading">
+        <view class="rdp__loading">
+          <text class="rdp__loading-text">加载中…</text>
+        </view>
+      </cell>
+      <cell v-if="!loading && userList.length === 0">
+        <view class="rdp__loading">
+          <text class="rdp__loading-text">暂无回应</text>
+        </view>
+      </cell>
+    </list>
+  </Drawer>
+</template>
+
+<script setup lang="ts">
+import { computed, ref, watch } from 'vue'
+import Avatar from '../../../Avatar/Avatar.nvue'
+import Drawer from '../../../Drawer/index.nvue'
+import type { MessageInfo } from '../../../../types/message'
+import { useMessageActionState } from '../../../../state/MessageActionState'
+import { useLoginState } from '../../../../state/LoginState'
+import { buildReactionEmojiSrc } from '../../../../utils/reactionEmoji'
+import { removeMessageReaction } from '../../../../utils/messageReaction'
+import type { UserProfile } from '../../../../types/userProfile'
+
+interface Props {
+  visible: boolean
+  message: MessageInfo
+  selectedReactionID: string
+}
+
+const props = defineProps<Props>()
+const emit = defineEmits<{
+  'update:visible': [v: boolean]
+  close: []
+}>()
+
+// 与 MessageActions.nvue 一致：每个 message 对应一个 store 实例
+const obj = useMessageActionState({ message: props.message })
+const reactionUserList = obj.reactionUserList
+const hasMoreReactionUsers = obj.hasMoreReactionUsers
+const loadReactionUsers = obj.loadReactionUsers
+const loadMoreReactionUsers = obj.loadMoreReactionUsers
+const destroyStore = obj.destroyStore
+
+const currentReactionID = ref<string>(props.selectedReactionID)
+const loading = ref<boolean>(false)
+const loadedReactionID = ref<string>('')
+let fetchToken = 0
+
+const summaryList = computed(() => {
+  return (props.message.reactionList || [])
+    .filter((r: any) => (r.totalUserCount || 0) > 0)
+    .map((r: any) => ({
+      reactionID: r.reactionID,
+      totalCount: r.totalUserCount || 0,
+      src: buildReactionEmojiSrc(r.reactionID) || ''
+    }))
+})
+
+// reactionID 形如 "[TUIEmoji_Haha]"，含方括号，不适合直接当元素 id；用下标
+// 用 ref 而非 computed：首次渲染时 scroll-view 尚未布局，需延迟赋值才生效
+const summaryScrollInto = ref<string>('')
+
+function scrollSummaryToCurrent() {
+  const idx = summaryList.value.findIndex((s) => s.reactionID === currentReactionID.value)
+  if (idx < 0) return
+  summaryScrollInto.value = ''
+  setTimeout(() => {
+    summaryScrollInto.value = 'rdp-sum-' + idx
+  }, 120)
+}
+
+const { loginUserInfo } = useLoginState()
+
+const isSelfUser = (user: UserProfile): boolean =>
+  !!user && user.userID === loginUserInfo.value?.userID
+
+// 与 Android ReactionDetailDialog.sortUsers 一致：我已回应时，把自己排到首位
+const userList = computed<UserProfile[]>(() => {
+  if (loadedReactionID.value !== currentReactionID.value) return []
+  const users = reactionUserList.value || []
+  const reactedByMyself = (props.message.reactionList || []).some(
+    (r: any) => r.reactionID === currentReactionID.value && r.reactedByMyself
+  )
+  const selfIndex = users.findIndex(isSelfUser)
+  if (!reactedByMyself || selfIndex <= 0) return users
+  return [users[selfIndex], ...users.slice(0, selfIndex), ...users.slice(selfIndex + 1)]
+})
+
+watch(
+  () => props.visible,
+  (v) => {
+    if (v) {
+      currentReactionID.value = props.selectedReactionID
+      refresh()
+      scrollSummaryToCurrent()
+    }
+  },
+  { immediate: true }
+)
+
+watch(
+  () => props.selectedReactionID,
+  (id) => {
+    if (!props.visible) return
+    currentReactionID.value = id
+    refresh()
+    scrollSummaryToCurrent()
+  }
+)
+
+function refresh() {
+  if (!currentReactionID.value) return
+  const reactionID = currentReactionID.value
+  const token = ++fetchToken
+  loading.value = true
+  loadReactionUsers(reactionID, 30)
+    .then(() => {
+      if (token === fetchToken) loadedReactionID.value = reactionID
+    })
+    .catch((e) => console.error('[ReactionDetailPicker] loadReactionUsers failed:', e))
+    .finally(() => { if (token === fetchToken) loading.value = false })
+}
+
+const handleScrollToLower = async () => {
+  if (!hasMoreReactionUsers.value || loading.value) return
+  loading.value = true
+  try {
+    await loadMoreReactionUsers()
+  } catch (e) {
+    console.error('[ReactionDetailPicker] loadMoreReactionUsers failed:', e)
+  } finally {
+    loading.value = false
+  }
+}
+
+const handleSummaryTap = (reactionID: string) => {
+  if (reactionID === currentReactionID.value) return
+  currentReactionID.value = reactionID
+  refresh()
+}
+
+watch(summaryList, (list) => {
+  if (!props.visible) return
+  if (list.length === 0) {
+    handleClose()
+    return
+  }
+  if (!list.some((s) => s.reactionID === currentReactionID.value)) {
+    currentReactionID.value = list[0].reactionID
+    refresh()
+  }
+})
+
+const handleRowTap = async (user: UserProfile) => {
+  if (!isSelfUser(user)) return
+  const stillExistsAfterRemove = (summaryList.value.find((s) => s.reactionID === currentReactionID.value)?.totalCount || 0) > 1
+  const ok = await removeMessageReaction(props.message, currentReactionID.value)
+  if (ok && stillExistsAfterRemove) refresh()
+}
+
+const handleClose = () => {
+  emit('update:visible', false)
+  emit('close')
+}
+</script>
+
+<style>
+.rdp__summary {
+  flex-direction: row;
+  align-items: center;
+  height: 64rpx;
+}
+
+.rdp__title-wrap {
+  align-items: center;
+  padding: 24rpx 24rpx 0;
+}
+
+.rdp__title {
+  font-size: 32rpx;
+  font-weight: bold;
+  line-height: 44rpx;
+  color: rgba(0, 0, 0, 0.9);
+}
+
+.rdp__summary-wrap {
+  padding: 24rpx 24rpx 16rpx;
+}
+
+.rdp__summary-chip {
+  flex-direction: row;
+  align-items: center;
+  padding: 4rpx 16rpx;
+  margin-right: 12rpx;
+  background-color: #F0F2F7;
+  border-radius: 24rpx;
+}
+
+.rdp__summary-chip--active {
+  background-color: #1C66E5;
+}
+
+.rdp__summary-emoji {
+  width: 40rpx;
+  height: 40rpx;
+  margin-right: 6rpx;
+}
+
+.rdp__summary-count {
+  font-size: 22rpx;
+  color: rgba(0, 0, 0, 0.85);
+  line-height: 28rpx;
+}
+
+.rdp__summary-count--active {
+  color: #FFFFFF;
+}
+
+.rdp__list {
+  height: 600rpx;
+}
+
+.rdp__row {
+  flex-direction: row;
+  align-items: center;
+  height: 112rpx;
+  padding: 0 24rpx;
+}
+
+.rdp__row:active {
+  background-color: rgba(0, 0, 0, 0.04);
+}
+
+.rdp__avatar {
+  width: 80rpx;
+  height: 80rpx;
+}
+
+.rdp__info {
+  flex: 1;
+  flex-direction: column;
+  margin-left: 16rpx;
+}
+
+.rdp__name {
+  font-size: 28rpx;
+  line-height: 36rpx;
+  color: rgba(0, 0, 0, 0.85);
+  lines: 1;
+  text-overflow: ellipsis;
+}
+
+.rdp__hint {
+  margin-top: 4rpx;
+  font-size: 22rpx;
+  color: rgba(0, 0, 0, 0.45);
+}
+
+.rdp__loading {
+  align-items: center;
+  padding: 24rpx 0;
+}
+
+.rdp__loading-text {
+  font-size: 22rpx;
+  color: rgba(0, 0, 0, 0.45);
+}
+</style>

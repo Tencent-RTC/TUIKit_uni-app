@@ -43,8 +43,8 @@
              使蓝色进度只露外侧一窄圈，并与中心盘之间拉开黑色间距。 -->
         <view class="combo-core-ring"></view>
         <view class="combo-face" :class="{ 'is-pressing': pressing }">
-          <text class="combo-label">长按</text>
-          <text class="combo-label">连击</text>
+          <text class="combo-label">{{ t('gift.comboPress') }}</text>
+          <text class="combo-label">{{ t('gift.comboLabel') }}</text>
         </view>
       </view>
       <!-- 计数气泡 -->
@@ -58,6 +58,7 @@
 <script setup>
   import { ref, computed } from 'vue';
   import { useGiftState } from '@/uni_modules/tuikit-atomic-x/state/GiftState';
+  import { t } from '../locales';
 
   const emit = defineEmits(['comboSend', 'closed']);
 

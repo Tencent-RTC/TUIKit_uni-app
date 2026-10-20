@@ -1,0 +1,340 @@
+<template>
+  <Drawer :visible="visible" @close="handleClose">
+    <view class="rdp__title-wrap">
+      <text class="rdp__title">表情回应</text>
+    </view>
+    <view v-if="summaryList.length > 0" class="rdp__summary-wrap">
+      <scroll-view
+        v-if="summaryList.length > 1"
+        class="rdp__summary"
+        scroll-x="true"
+        :show-scrollbar="false"
+        :scroll-into-view="summaryScrollInto"
+      >
+        <view
+          v-for="(summary, idx) in summaryList"
+          :key="summary.reactionID"
+          :id="'rdp-sum-' + idx"
+          class="rdp__summary-chip"
+          :class="{ 'rdp__summary-chip--active': summary.reactionID === currentReactionID }"
+          @tap.stop="handleSummaryTap(summary.reactionID)"
+        >
+          <image class="rdp__summary-emoji" :src="summary.src" mode="aspectFit" />
+          <text class="rdp__summary-count" :class="{ 'rdp__summary-count--active': summary.reactionID === currentReactionID }">{{ summary.totalCount }}</text>
+        </view>
+      </scroll-view>
+      <view v-else class="rdp__summary">
+        <view class="rdp__summary-chip rdp__summary-chip--active">
+          <image class="rdp__summary-emoji" :src="summaryList[0].src" mode="aspectFit" />
+          <text class="rdp__summary-count rdp__summary-count--active">{{ summaryList[0].totalCount }}</text>
+        </view>
+      </view>
+    </view>
+
+    <list
+      class="rdp__list"
+      :show-scrollbar="false"
+      :loadmoreoffset="100"
+      @loadmore="handleScrollToLower"
+    >
+      <cell v-for="(user, idx) in userList" :key="user.userID + '_' + idx">
+        <view class="rdp__row" @tap.stop="handleRowTap(user)">
+          <Avatar
+            :src="user.avatarURL || ''"
+            :name="user.nickname || user.userID"
+            :size="80"
+            defaultAvatarType="user"
+            class="rdp__avatar"
+          />
+          <view class="rdp__info">
+            <text class="rdp__name">{{ user.nickname || user.userID }}</text>
+            <text v-if="isSelfUser(user)" class="rdp__hint">点击删除</text>
+          </view>
+        </view>
+      </cell>
+      <cell v-if="loading">
+        <view class="rdp__loading">
+          <text class="rdp__loading-text">加载中…</text>
+        </view>
+      </cell>
+      <cell v-if="!loading && userList.length === 0">
+        <view class="rdp__loading">
+          <text class="rdp__loading-text">暂无回应</text>
+        </view>
+      </cell>
+    </list>
+  </Drawer>
+</template>
+
+<script>
+
+import Avatar from '../../../Avatar/Avatar.nvue'
+import Drawer from '../../../Drawer/index.nvue'
+import { useMessageActionState } from '../../../../state_compatible/MessageActionState'
+import { useLoginState } from '../../../../state_compatible/LoginState'
+import { buildReactionEmojiSrc } from '../../../../utils/reactionEmoji'
+import { removeMessageReaction } from '../../../../utils/messageReaction'
+
+export default {
+  name: 'ReactionDetailPicker',
+  components: { Avatar, Drawer },
+  props: {
+    visible: { type: Boolean, default: false },
+    message: { type: Object, required: true },
+    selectedReactionID: { type: String, default: '' }
+  },
+  data() {
+    return {
+      currentReactionID: this.selectedReactionID,
+      loading: false,
+      // reactionID 形如 "[TUIEmoji_Haha]"，含方括号，不适合直接当元素 id；用下标
+      // 首次渲染时 scroll-view 尚未布局，需延迟赋值才生效
+      summaryScrollInto: '',
+      // 与 native ReactionDetailFetchResultPolicy 一致：切 tab 后旧请求的结果不再展示
+      loadedReactionID: '',
+      fetchToken: 0
+    }
+  },
+  computed: {
+    summaryList() {
+      var list = this.message.reactionList || []
+      var result = []
+      for (var i = 0; i < list.length; i++) {
+        var r = list[i]
+        if ((r.totalUserCount || 0) > 0) {
+          result.push({
+            reactionID: r.reactionID,
+            totalCount: r.totalUserCount || 0,
+            src: buildReactionEmojiSrc(r.reactionID) || ''
+          })
+        }
+      }
+      return result
+    },
+    // 与 native ReactionDetailDialog.sortUsers 一致：我已回应时，把自己排到首位
+    userList() {
+      if (this.loadedReactionID !== this.currentReactionID) return []
+      var users = this.actionState.reactionUserList.value || []
+      var reactedByMyself = false
+      var reactions = this.message.reactionList || []
+      for (var i = 0; i < reactions.length; i++) {
+        if (reactions[i].reactionID === this.currentReactionID && reactions[i].reactedByMyself) {
+          reactedByMyself = true
+          break
+        }
+      }
+      if (!reactedByMyself) return users
+      var me = useLoginState().getLoginUserInfo()
+      if (!me) return users
+      for (var j = 0; j < users.length; j++) {
+        if (users[j].userID === me.userID) {
+          if (j === 0) return users
+          return [users[j]].concat(users.slice(0, j), users.slice(j + 1))
+        }
+      }
+      return users
+    }
+  },
+  watch: {
+    visible(v) {
+      if (v) this.reloadForSelected()
+    },
+    selectedReactionID() {
+      if (!this.visible) return
+      this.reloadForSelected()
+    },
+    summaryList(list) {
+      if (!this.visible) return
+      if (list.length === 0) {
+        this.handleClose()
+        return
+      }
+      if (this.findSummaryIndex(this.currentReactionID) < 0) {
+        this.currentReactionID = list[0].reactionID
+        this.refresh()
+      }
+    }
+  },
+  created() {
+    // 与 MessageActions 一致：每个 message 对应一个 store 实例。
+    // 不放进 data()：避免 Vue2 深度遍历 class 实例；reactionUserList 自身已是响应式对象，computed 依赖照常追踪。
+    // 初始加载放在 created 而非 watch immediate：Vue2 的 immediate watcher 先于 created 执行，此时 actionState 还不存在。
+    this.actionState = useMessageActionState({ message: this.message })
+    this.reloadForSelected()
+  },
+  methods: {
+    findSummaryIndex(reactionID) {
+      for (var i = 0; i < this.summaryList.length; i++) {
+        if (this.summaryList[i].reactionID === reactionID) return i
+      }
+      return -1
+    },
+    isSelfUser(user) {
+      var me = useLoginState().getLoginUserInfo()
+      return !!user && !!me && user.userID === me.userID
+    },
+    reloadForSelected() {
+      this.currentReactionID = this.selectedReactionID
+      this.refresh()
+      this.scrollSummaryToCurrent()
+    },
+    scrollSummaryToCurrent() {
+      var idx = this.findSummaryIndex(this.currentReactionID)
+      if (idx < 0) return
+      var self = this
+      this.summaryScrollInto = ''
+      setTimeout(function() {
+        self.summaryScrollInto = 'rdp-sum-' + idx
+      }, 120)
+    },
+    refresh() {
+      if (!this.currentReactionID) return
+      var self = this
+      var reactionID = this.currentReactionID
+      var token = ++this.fetchToken
+      this.loading = true
+      this.actionState.loadReactionUsers(reactionID, 30)
+        .then(function() {
+          if (token !== self.fetchToken) return
+          self.loadedReactionID = reactionID
+        })
+        .catch(function(e) { console.error('[ReactionDetailPicker] loadReactionUsers failed:', e) })
+        .then(function() {
+          if (token === self.fetchToken) self.loading = false
+        })
+    },
+    handleScrollToLower() {
+      if (!this.actionState.hasMoreReactionUsers.value || this.loading) return
+      var self = this
+      this.loading = true
+      this.actionState.loadMoreReactionUsers()
+        .catch(function(e) { console.error('[ReactionDetailPicker] loadMoreReactionUsers failed:', e) })
+        .then(function() { self.loading = false })
+    },
+    handleSummaryTap(reactionID) {
+      if (reactionID === this.currentReactionID) return
+      this.currentReactionID = reactionID
+      this.refresh()
+    },
+    handleRowTap(user) {
+      // 只能删除自己的回应，点击他人无效果
+      if (!this.isSelfUser(user)) return
+      var self = this
+      var idx = this.findSummaryIndex(this.currentReactionID)
+      // 删除前读取：该 reaction 还有其他人时，删除后仍存在，需要手动刷新用户列表（store 不会主动推送）
+      var stillExistsAfterRemove = idx >= 0 && this.summaryList[idx].totalCount > 1
+      removeMessageReaction(this.message, this.currentReactionID).then(function(ok) {
+        // 完全删光的情况由 watch.summaryList 负责：切到下一个 reaction 或关闭
+        if (ok && stillExistsAfterRemove) self.refresh()
+      })
+    },
+    handleClose() {
+      this.$emit('update:visible', false)
+      this.$emit('close')
+    }
+  }
+}
+</script>
+
+<style>
+.rdp__title-wrap {
+  align-items: center;
+  padding: 24rpx 24rpx 0;
+}
+
+.rdp__title {
+  font-size: 32rpx;
+  font-weight: bold;
+  line-height: 44rpx;
+  color: rgba(0, 0, 0, 0.9);
+}
+
+.rdp__summary {
+  flex-direction: row;
+  align-items: center;
+  height: 64rpx;
+}
+
+.rdp__summary-wrap {
+  padding: 24rpx 24rpx 16rpx;
+}
+
+.rdp__summary-chip {
+  flex-direction: row;
+  align-items: center;
+  padding: 4rpx 16rpx;
+  margin-right: 12rpx;
+  background-color: #F0F2F7;
+  border-radius: 24rpx;
+}
+
+.rdp__summary-chip--active {
+  background-color: #1C66E5;
+}
+
+.rdp__summary-emoji {
+  width: 40rpx;
+  height: 40rpx;
+  margin-right: 6rpx;
+}
+
+.rdp__summary-count {
+  font-size: 22rpx;
+  color: rgba(0, 0, 0, 0.85);
+  line-height: 28rpx;
+}
+
+.rdp__summary-count--active {
+  color: #FFFFFF;
+}
+
+.rdp__list {
+  height: 600rpx;
+}
+
+.rdp__row {
+  flex-direction: row;
+  align-items: center;
+  height: 112rpx;
+  padding: 0 24rpx;
+}
+
+.rdp__row:active {
+  background-color: rgba(0, 0, 0, 0.04);
+}
+
+.rdp__avatar {
+  width: 80rpx;
+  height: 80rpx;
+}
+
+.rdp__info {
+  flex: 1;
+  flex-direction: column;
+  margin-left: 16rpx;
+}
+
+.rdp__name {
+  font-size: 28rpx;
+  line-height: 36rpx;
+  color: rgba(0, 0, 0, 0.85);
+  lines: 1;
+  text-overflow: ellipsis;
+}
+
+.rdp__hint {
+  margin-top: 4rpx;
+  font-size: 22rpx;
+  color: rgba(0, 0, 0, 0.45);
+}
+
+.rdp__loading {
+  align-items: center;
+  padding: 24rpx 0;
+}
+
+.rdp__loading-text {
+  font-size: 22rpx;
+  color: rgba(0, 0, 0, 0.45);
+}
+</style>

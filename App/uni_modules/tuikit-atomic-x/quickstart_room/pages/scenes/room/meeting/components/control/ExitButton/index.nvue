@@ -1,0 +1,68 @@
+<template>
+  <view class="exit-btn" @tap="handleTap">
+    <image class="exit-icon" src="/static/images/room/room_exit.png" mode="aspectFit" />
+    <text class="exit-text">{{ t('common.end') }}</text>
+
+    <ExitSheet
+      :visible="isExitVisible"
+      :isOwner="isOwner"
+      @leave="handleLeave"
+      @end="handleEnd"
+      @cancel="handleCancel"
+    />
+  </view>
+</template>
+
+<script setup lang="ts">
+  import { ref } from 'vue';
+  import { useRoomState } from '@/uni_modules/tuikit-atomic-x/state';
+  import ExitSheet from './ExitSheet/index.nvue';
+  import { t } from '../../../../locales';
+
+  defineProps({
+    isOwner: { type: Boolean, default: false },
+  });
+
+  const emit = defineEmits<{
+    /** 退房 / 结束房间已完成，交回页面做页面级收尾（导航） */
+    (e: 'exit'): void
+  }>();
+
+  const roomState = useRoomState();
+  const isExitVisible = ref(false);
+
+  function handleTap() { isExitVisible.value = true; }
+  function handleCancel() { isExitVisible.value = false; }
+
+  /**
+   * 退房：房间操作由本组件执行（页面不再调用 leaveRoom），
+   * 完成后只通知页面"可以退出了"，页面级导航仍归页面。
+   */
+  async function handleLeave(): Promise<void> {
+    isExitVisible.value = false;
+    try {
+      await roomState.leaveRoom();
+    } catch (e) {
+      console.warn('[room] leaveRoom fail:', e);
+    }
+    emit('exit');
+  }
+
+  /** 结束房间（房主）：同上，房间操作在本组件内闭环 */
+  async function handleEnd(): Promise<void> {
+    isExitVisible.value = false;
+    try {
+      await roomState.endRoom();
+    } catch (e) {
+      console.warn('[room] endRoom fail:', e);
+    }
+    emit('exit');
+  }
+
+  function showExit() { isExitVisible.value = true; }
+  defineExpose({ showExit });
+</script>
+
+<style lang="scss">
+  @import './ExitButton.scss';
+</style>

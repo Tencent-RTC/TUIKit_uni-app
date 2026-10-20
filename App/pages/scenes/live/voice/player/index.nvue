@@ -35,9 +35,9 @@
       <image class="action-btn action-btn-bg" v-if="uni.$localGuestStatus === 'CONNECTED'" @tap="ShowCoGuestRequestPanel()" src="/static/images/live-disconnect.png" />
     </view>
 
-    <ActionSheet v-model="isShowExitSheet" :title="exitSheetTitle" :itemList="exitSheetItems" @select="onExitSheetSelect" />
-    <ActionSheet v-model="isShowCoGuestSheet" :title="coGuestSheetTitle" :itemList="coGuestSheetItems" @select="onCoGuestSheetSelect" />
-    <ActionSheet v-model="isShowSeatActionSheet" :itemList="seatActionItems" @select="onSeatActionSelect" />
+    <OptionSheet v-model="isShowExitSheet" :title="exitSheetTitle" :itemList="exitSheetItems" @select="onExitSheetSelect" />
+    <OptionSheet v-model="isShowCoGuestSheet" :title="coGuestSheetTitle" :itemList="coGuestSheetItems" @select="onCoGuestSheetSelect" />
+    <OptionSheet v-model="isShowSeatActionSheet" :itemList="seatActionItems" @select="onSeatActionSelect" />
 
     <!-- 轻提示(替代 uni.showToast):直播结束/被踢出/静音/连麦申请等。
          放模板末尾——nvue 后写在上;纯提示不拦截触摸。 -->
@@ -54,13 +54,14 @@
 <script setup lang="ts">
   import { onLoad, onBackPress } from '@dcloudio/uni-app';
   import { ref, onMounted, computed, onUnmounted, watch, nextTick } from 'vue';
-  import ActionSheet from '@/components/ActionSheet.nvue';
+  import OptionSheet from '@/components/live/OptionSheet/index.nvue';
   import LiveToast from '@/uni_modules/tuikit-atomic-x/components/LiveToast.nvue';
   import VoiceSeatGrid from '../components/VoiceSeatGrid.nvue';
   import { useLiveListState } from "@/uni_modules/tuikit-atomic-x/state/LiveListState";
   import { useLiveSeatState } from "@/uni_modules/tuikit-atomic-x/state/LiveSeatState";
   import { useDeviceState, DeviceStatus } from "@/uni_modules/tuikit-atomic-x/state/DeviceState";
   import { useCoGuestState, NoResponseReason } from '@/uni_modules/tuikit-atomic-x/state/CoGuestState';
+  import { t } from '../../locales';
   import { useLoginState } from "@/uni_modules/tuikit-atomic-x/state/LoginState";
 
   uni.$localGuestStatus = 'IDLE';
@@ -76,9 +77,11 @@
   const { applyForSeat, disconnect, cancelApplication, connected, addCoGuestGuestListener, removeCoGuestGuestListener } = useCoGuestState(uni?.$liveID);
 
   const systemInfo = ref<any>({});
-  const defaultAvatarURL = 'https://web.sdk.qcloud.com/component/TUIKit/assets/avatar_01.png';
+  const defaultAvatarURL = '/uni_modules/tuikit-atomic-x/static/assets/live/default-avatar.png';
 
   const liveID = ref('');
+  const JOIN_FAIL_REDIRECT_MS = 500;
+  const EXIT_REDIRECT_DELAY_MS = 1500;
 
   const isShowSeatActionSheet = ref(false);
 
@@ -102,13 +105,13 @@
 
   const isSpeaking = (userID: string) => speakingUserIDs.value.has(userID);
 
-  const seatActionItems = computed(() => [isMicOn.value ? '关闭麦克风' : '打开麦克风']);
+  const seatActionItems = computed(() => [isMicOn.value ? t('voice.closeMic') : t('voice.openMic')]);
 
   const isShowExitSheet = ref(false);
   const isShowCoGuestSheet = ref(false);
   const exitSheetTitle = ref('');
-  const exitSheetItems = ref(['退出直播间']);
-  const coGuestSheetItems = ref(['取消连麦申请']);
+  const exitSheetItems = ref([t('voice.exitRoom')]);
+  const coGuestSheetItems = ref([t('voice.cancelCoGuestRequest')]);
   const coGuestSheetTitle = ref('');
 
   const liveSeatRows = computed(() => {
@@ -161,13 +164,13 @@
           console.log('VoiceAudience joinLive success');
         },
         fail: () => {
-          showTip('直播已结束');
-          setTimeout(() => uni.redirectTo({ url: '/pages/scenes/live/voice/liveList/index' }), 500);
+          showTip(t('audience.liveEnded'));
+          setTimeout(() => uni.redirectTo({ url: '/pages/scenes/live/voice/liveList/index' }), JOIN_FAIL_REDIRECT_MS);
         },
       });
       return;
     }
-    showTip('liveID 为空');
+    showTip(t('audience.emptyLiveID'));
   });
 
   onMounted(() => {
@@ -195,11 +198,11 @@
   });
 
   const handleLocalMicrophoneOpenedByAdmin = () => {
-    showTip('您已被解除静音');
+    showTip(t('audience.micUnmutedByAdmin'));
   };
 
   const handleLocalMicrophoneClosedByAdmin = () => {
-    showTip('您已被静音');
+    showTip(t('audience.micMutedByAdmin'));
   };
 
   const handleLiveEnded = () => {
@@ -207,12 +210,12 @@
     removeLiveListListener('onKickedOutOfLive', handleKickedOutOfLive);
     removeLiveSeatEventListener(uni?.$liveID, 'onLocalMicrophoneOpenedByAdmin', handleLocalMicrophoneOpenedByAdmin);
     removeLiveSeatEventListener(uni?.$liveID, 'onLocalMicrophoneClosedByAdmin', handleLocalMicrophoneClosedByAdmin);
-    showTip('直播已结束');
+    showTip(t('audience.liveEnded'));
     uni.$liveID = '';
     // 同"被踢出":延迟跳转,让 toast 先显示再跳回列表页(否则页面秒销毁看不到提示)。
     setTimeout(() => {
       uni.redirectTo({ url: '/pages/scenes/live/voice/liveList/index' });
-    }, 1500);
+    }, EXIT_REDIRECT_DELAY_MS);
   };
 
   const handleKickedOutOfLive = () => {
@@ -220,21 +223,21 @@
     removeLiveListListener('onKickedOutOfLive', handleKickedOutOfLive);
     removeLiveSeatEventListener(uni?.$liveID, 'onLocalMicrophoneOpenedByAdmin', handleLocalMicrophoneOpenedByAdmin);
     removeLiveSeatEventListener(uni?.$liveID, 'onLocalMicrophoneClosedByAdmin', handleLocalMicrophoneClosedByAdmin);
-    showTip('被踢出直播间');
+    showTip(t('audience.kickedOut'));
     uni.$liveID = '';
     // showTip 的 toast 挂在当前页面,同步 redirectTo 会秒销毁页面导致 toast 看不到,
     // 延迟跳转让提示先显示一会儿(≈1.5s)再跳回列表页。
     setTimeout(() => {
       uni.redirectTo({ url: '/pages/scenes/live/voice/liveList/index' });
-    }, 1500);
+    }, EXIT_REDIRECT_DELAY_MS);
   };
 
   const navigateBack = () => {
     if (uni.$localGuestStatus === 'CONNECTED') {
-      exitSheetItems.value = ['断开连麦', '退出直播间'];
-      exitSheetTitle.value = '当前处于连麦状态，是否需要「断开连麦」或「退出直播间」';
+      exitSheetItems.value = [t('voice.disconnectCoGuest'), t('voice.exitRoom')];
+      exitSheetTitle.value = t('voice.exitWhileLinkingTip');
     } else {
-      exitSheetItems.value = ['退出直播间'];
+      exitSheetItems.value = [t('voice.exitRoom')];
       exitSheetTitle.value = '';
     }
     isShowExitSheet.value = true;
@@ -275,7 +278,7 @@
 
   const handleCoGuestButtonClick = () => {
     if (uni.$localGuestStatus === 'IDLE') {
-      showTip('你提交了连麦申请 请等待主播同意');
+      showTip(t('voice.requestSubmitted'));
       applyForSeat({
         liveID: uni.$liveID,
         seatIndex: -1,
@@ -285,7 +288,7 @@
         },
         fail: (errorCode: number) => {
           if (errorCode === 100006) {
-            showTip('您当前无法执行此操作');
+            showTip(t('voice.cannotDoNow'));
           }
           uni.$localGuestStatus = 'IDLE';
         },
@@ -296,10 +299,10 @@
 
   const ShowCoGuestRequestPanel = () => {
     if (uni.$localGuestStatus === 'USER_APPLYING') {
-      coGuestSheetItems.value = ['取消连麦申请'];
+      coGuestSheetItems.value = [t('voice.cancelCoGuestRequest')];
       isShowCoGuestSheet.value = true;
     } else if (uni.$localGuestStatus === 'CONNECTED') {
-      coGuestSheetItems.value = ['断开连麦'];
+      coGuestSheetItems.value = [t('voice.disconnectCoGuest')];
       isShowCoGuestSheet.value = true;
     }
   };
@@ -318,7 +321,7 @@
       });
     } else {
       uni.$localGuestStatus = 'IDLE';
-      showTip('上麦申请被拒绝');
+      showTip(t('voice.requestRejected'));
     }
   };
 
@@ -326,7 +329,7 @@
     const res = JSON.parse(event);
     if (res.reason === NoResponseReason.TIMEOUT) {
       uni.$localGuestStatus = 'IDLE';
-      showTip('上麦申请超时');
+      showTip(t('voice.requestTimeout'));
     }
   };
 
@@ -366,113 +369,6 @@
   };
 </script>
 
-<style>
-  .voice-audience-container {
-    width: 750rpx;
-    position: relative;
-    flex-direction: column;
-  }
-
-  .voice-bg {
-    position: absolute;
-    left: 0;
-    top: 0;
-  }
-
-  .voice-bg-mask {
-    position: absolute;
-    left: 0;
-    top: 0;
-    background-color: rgba(0, 0, 0, 0.7);
-  }
-
-  .live-header {
-    position: relative;
-    z-index: 10;
-    flex-direction: row;
-    justify-content: space-between;
-    align-items: center;
-    padding-left: 32rpx;
-    padding-right: 32rpx;
-    padding-top: 20rpx;
-    padding-bottom: 20rpx;
-    margin-top: 80rpx;
-  }
-
-  .header-left {
-    flex-direction: row;
-    align-items: center;
-    flex: 1;
-  }
-
-  .stream-info {
-    flex-direction: row;
-    align-items: center;
-    background-color: rgba(0, 0, 0, 0.3);
-    padding-top: 6rpx;
-    padding-bottom: 6rpx;
-    padding-left: 10rpx;
-    padding-right: 10rpx;
-    border-radius: 40rpx;
-  }
-
-  .header-avatar {
-    width: 56rpx;
-    height: 56rpx;
-    border-radius: 28rpx;
-    border-width: 2rpx;
-    border-style: solid;
-    border-color: #ffffff;
-    margin-right: 12rpx;
-  }
-
-  .stream-details {
-    flex-direction: column;
-  }
-
-  .stream-title {
-    color: #ffffff;
-    font-size: 26rpx;
-    font-weight: 500;
-    width: 120rpx;
-    lines: 1;
-  }
-
-  .header-right {
-    flex-direction: row;
-    align-items: center;
-    justify-content: flex-end;
-  }
-
-  .control-icons {
-    flex-direction: row;
-    align-items: center;
-  }
-
-  .control-icon {
-    width: 48rpx;
-    height: 48rpx;
-    margin-left: 16rpx;
-  }
-
-
-  .action-buttons {
-    position: fixed;
-    right: 40rpx;
-    bottom: 80rpx;
-    flex-direction: row;
-    align-items: center;
-  }
-
-  .action-btn {
-    width: 64rpx;
-    height: 64rpx;
-    margin-left: 16rpx;
-  }
-
-  .action-btn-bg {
-    background-color: rgba(20, 20, 22, 0.54);
-    border-radius: 50%;
-    border: 2rpx solid rgba(255, 255, 255, 0.055);
-  }
+<style lang="scss">
+  @import './player.scss';
 </style>

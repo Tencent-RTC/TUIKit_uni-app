@@ -1,0 +1,74 @@
+.as-mask {
+  position: fixed;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.4);
+  justify-content: flex-end;
+  align-items: center;
+  display: flex;
+  z-index: 5000;
+}
+
+.as-container {
+  margin-bottom: 40rpx;
+}
+
+.as-panel {
+  background-color: #ffffff;
+  border-radius: 48rpx;
+  overflow: hidden;
+}
+
+.as-header {
+  padding: 28rpx 32rpx;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  border-bottom-width: 1rpx;
+  border-bottom-color: #eef0f3;
+  flex: 1;
+}
+
+.as-header-text {
+  color: rgba(124, 133, 166, 1);
+  font-size: 24rpx;
+  text-align: center;
+}
+
+.as-list {
+  max-height: 600rpx;
+}
+
+.as-item {
+  padding: 32rpx;
+  align-items: center;
+  justify-content: center;
+  display: flex;
+}
+
+.as-item--divider {
+  border-bottom-width: 1rpx;
+  border-bottom-color: #eef0f3;
+}
+
+.as-item-text {
+  color: #111826;
+  font-size: 34rpx;
+}
+
+.as-cancel {
+  margin-top: 16rpx;
+  background-color: #ffffff;
+  border-radius: 48rpx;
+  padding: 28rpx 32rpx;
+  align-items: center;
+  justify-content: center;
+  display: flex;
+}
+
+.as-cancel-text {
+  color: #111826;
+  font-size: 34rpx;
+}

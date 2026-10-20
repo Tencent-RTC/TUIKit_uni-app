@@ -1,0 +1,67 @@
+<template>
+  <BaseDrawer
+    v-model="innerVisible"
+    :height="drawerHeight"
+    :overlayOpacity="0.4"
+    bgImage="/uni_modules/tuikit-atomic-x/static/assets/live/drawer-bg.png"
+    :bgImageHeight="drawerHeight"
+    padding="0 40rpx 60rpx 40rpx"
+    :showHandle="true"
+  >
+    <view class="profile-body">
+      <view class="profile-avatar-wrap">
+        <image class="profile-avatar" :src="avatarSrc" mode="aspectFill" @error="onAvatarError" />
+      </view>
+      <text class="profile-name" :numberOfLines="1">{{ userInfo?.userName || userInfo?.userID || '' }}</text>
+      <view class="profile-follow" :class="{ 'is-following': isFollowing }" @tap="toggleFollow">
+        <text class="profile-follow-text" :class="{ 'is-following-text': isFollowing }">{{ isFollowing ? t('al.followed') : t('al.follow') }}</text>
+      </view>
+    </view>
+  </BaseDrawer>
+
+</template>
+
+<script setup>
+  import { ref, computed, watch } from 'vue';
+  import BaseDrawer from '@/components/live/BaseDrawer/index.nvue';
+  import { t } from '../../locales';
+  import { isUserFollowed, toggleUserFollowed } from '@/uni_modules/tuikit-atomic-x/utils/followStore';
+
+  const props = defineProps({
+    modelValue: { type: Boolean, default: false },
+    userInfo: { type: Object },
+    liveID: { type: String },
+  });
+  const emit = defineEmits(['update:modelValue']);
+
+  const defaultAvatarURL = '/uni_modules/tuikit-atomic-x/static/assets/live/default-avatar.png';
+
+  const drawerHeight = ref(460);
+  const avatarFailed = ref(false);
+  const isFollowing = ref(false);
+
+  const innerVisible = computed({
+    get: () => props.modelValue,
+    set: (val) => emit('update:modelValue', val),
+  });
+  const avatarSrc = computed(() => avatarFailed.value ? defaultAvatarURL : (props.userInfo?.avatarURL || defaultAvatarURL));
+
+  watch(() => props.userInfo?.userID, () => { avatarFailed.value = false; });
+  watch(() => props.modelValue, (val) => {
+    if (val) {
+      isFollowing.value = isUserFollowed(props.userInfo?.userID);
+    }
+  });
+
+  const onAvatarError = () => { avatarFailed.value = true; };
+
+  const toggleFollow = () => {
+    const uid = props.userInfo?.userID;
+    if (!uid) return;
+    isFollowing.value = toggleUserFollowed(uid);
+  };
+</script>
+
+<style lang="scss">
+  @import './AudienceProfilePanel.scss';
+</style>
