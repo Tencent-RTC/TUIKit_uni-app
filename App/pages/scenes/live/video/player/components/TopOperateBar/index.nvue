@@ -1,0 +1,111 @@
+<template>
+  <view class="top-operate-bar">
+    <view class="top-bar-left">
+      <view class="stream-info">
+        <image class="avatar" :src="hostAvatarSrc" mode="aspectFill" @error="onHostAvatarError" />
+        <view class="stream-details">
+          <text class="stream-title" :numberOfLines="1">{{ t('audience.hostLive', { name: hostName }) }}</text>
+          <text class="stream-meta" :numberOfLines="1">{{ t('audience.likeCount', { count: hostLikeCount }) }}</text>
+        </view>
+        <view
+          class="follow-button"
+          :class="{ 'follow-button-following': isFollowingHost }"
+          @click="toggleFollowHost"
+        >
+          <text class="follow-text" :class="{ 'follow-text-following': isFollowingHost }">{{ isFollowingHost ? t('audience.followed') : t('audience.follow') }}</text>
+        </view>
+      </view>
+    </view>
+    <view class="top-bar-right">
+      <view class="participants" @click="emit('audienceTap')">
+        <view class="participant-avatars">
+          <view
+            class="participant-avatar-wrap"
+            :class="{ 'participant-avatar-overlap': index > 0 }"
+            v-for="(user, index) in avatarListReversed"
+            :key="index"
+          >
+            <image class="participant-avatar" :src="user?.avatarURL || defaultAvatarURL" mode="aspectFill" />
+          </view>
+        </view>
+        <view class="participant-count">
+          <text class="count-text">{{ formatOnlineCount(currentAudienceCount) }}</text>
+        </view>
+      </view>
+      <view class="control-icons" @click.stop="emit('exit')">
+        <image class="control-icon" src="/static/images/close.png" />
+      </view>
+    </view>
+  </view>
+</template>
+
+<script setup lang="ts">
+  import { ref, computed, watch } from 'vue';
+  import { t } from '../../../../locales';
+  import { isUserFollowed, toggleUserFollowed } from '@/uni_modules/tuikit-atomic-x/utils/followStore';
+  import { useLiveListState } from '@/uni_modules/tuikit-atomic-x/state/LiveListState';
+  import { useLiveAudienceState } from '@/uni_modules/tuikit-atomic-x/state/LiveAudienceState';
+  import { useLikeState } from '@/uni_modules/tuikit-atomic-x/state/LikeState';
+
+  const emit = defineEmits(['exit', 'audienceTap']);
+  const { currentLive } = useLiveListState(uni?.$liveID);
+  const { audienceList, audienceCount } = useLiveAudienceState(uni?.$liveID);
+  const { totalLikeCount } = useLikeState(uni?.$liveID);
+
+  const defaultAvatarURL = '/uni_modules/tuikit-atomic-x/static/assets/live/default-avatar.png';
+  const hostAvatarSrc = ref(defaultAvatarURL);
+  const hostName = ref('');
+  const isFollowingHost = ref(false);
+
+  const hostLikeCount = computed(() => formatViewCount(totalLikeCount.value));
+  const currentAudienceCount = computed(() => audienceList.value?.length > 100 ? audienceCount : audienceList.value?.length);
+  const avatarListReversed = computed(() => (audienceList.value || []).slice(0, 3).reverse());
+
+  const normalizeAvatar = (url: string) => {
+    const s = (url == null ? '' : String(url)).trim();
+    if (!s || s === 'null' || s === 'undefined') return defaultAvatarURL;
+    return s;
+  };
+  const formatViewCount = (n: number): string => {
+    const v = Math.max(0, Math.floor(Number(n) || 0));
+    if (v >= 100000) return `${Math.floor(v / 10000)}${t('common.wanUnit')}+`;
+    if (v >= 10000) {
+      const w = v / 10000;
+      return `${w >= 10 ? Math.floor(w) : Math.round(w * 10) / 10}${t('common.wanUnit')}`;
+    }
+    return String(v);
+  };
+  const formatOnlineCount = (n: number): string => {
+    const v = Math.max(0, Math.floor(Number(n) || 0));
+    if (v >= 10000) return `${Math.floor(v / 10000)}${t('common.wanUnit')}+`;
+    return String(v);
+  };
+  const onHostAvatarError = () => {
+    if (hostAvatarSrc.value !== defaultAvatarURL) {
+      hostAvatarSrc.value = defaultAvatarURL;
+    }
+  };
+  const toggleFollowHost = () => {
+    const ownerID = currentLive.value?.liveOwner?.userID;
+    if (!ownerID) return;
+    isFollowingHost.value = toggleUserFollowed(ownerID);
+  };
+
+  watch(
+    () => currentLive.value?.liveOwner?.avatarURL,
+    (url) => { if (url) hostAvatarSrc.value = normalizeAvatar(url); },
+    { immediate: true }
+  );
+  watch(
+    () => currentLive.value?.liveOwner?.userName || currentLive.value?.liveOwner?.userID || '',
+    (name) => { if (name) hostName.value = name; },
+    { immediate: true }
+  );
+  watch(() => currentLive.value?.liveOwner?.userID, (ownerID) => {
+    if (ownerID) isFollowingHost.value = isUserFollowed(ownerID);
+  }, { immediate: true });
+</script>
+
+<style lang="scss">
+  @import './TopOperateBar.scss';
+</style>

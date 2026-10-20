@@ -1,0 +1,86 @@
+<template>
+  <view class="info-sheet">
+    <view class="drop-bar" @tap="handleClose">
+      <image class="drop-line" src="/static/images/room/room_lineImage.png" mode="aspectFit" />
+    </view>
+
+    <view class="info-body">
+      <text class="info-title" :numberOfLines="1">{{ truncateRoomNameDisplay(currentRoom?.roomName || roomID, 6) }}</text>
+
+      <view class="info-gap-24"></view>
+      <DetailItem :prefix-text="t('roomInfo.owner')" :info-text="ownerDisplayName" />
+
+      <view class="info-gap-16"></view>
+      <DetailItem :prefix-text="t('roomInfo.roomId')" :info-text="roomID">
+        <view class="copy-btn" @tap="copyRoomID">
+          <image class="copy-icon" src="/static/images/room/room_copy.png" mode="aspectFit" />
+          <text class="copy-text">{{ t('common.copy') }}</text>
+        </view>
+      </DetailItem>
+
+      <view class="info-gap-24"></view>
+      <view class="info-copy-all" @tap="copyAll">
+        <text class="info-copy-all-text">{{ t('roomInfo.copyAll') }}</text>
+      </view>
+    </view>
+  </view>
+</template>
+
+<script setup lang="ts">
+  import { computed } from 'vue';
+  import { useRoomState } from '@/uni_modules/tuikit-atomic-x/state';
+  import DetailItem from './DetailItem.nvue';
+  import { showToast } from '@/uni_modules/tuikit-atomic-x/utils/toast';
+  import { truncateRoomNameDisplay } from '@/uni_modules/tuikit-atomic-x/utils/roomScheduleUtils';
+  import { t } from '../../../../../locales';
+
+  const props = defineProps({
+    roomID: { type: String, required: true },
+  });
+
+  const emit = defineEmits<{ (e: 'close'): void }>();
+
+  const { currentRoom } = useRoomState();
+
+  const ownerDisplayName = computed(() => {
+    const owner = currentRoom.value?.roomOwner;
+    if (!owner) return '';
+    return owner.userName || owner.userID || '';
+  });
+
+  function handleClose() { emit('close'); }
+
+  function copyRoomID() {
+    uni.setClipboardData({
+      data: props.roomID,
+      success: () => {
+        showToast(t('roomInfo.roomIdCopied'));
+      },
+      complete: () => {
+        uni.hideToast();
+      },
+    });
+  }
+
+  function copyAll() {
+    const room = currentRoom.value;
+    if (!room) return;
+    const allInfo = t('roomInfo.allInfo', {
+      roomName: room.roomName || '',
+      roomId: room.roomID || props.roomID,
+    });
+    uni.setClipboardData({
+      data: allInfo,
+      success: () => {
+        showToast(t('roomInfo.infoCopied'));
+      },
+      complete: () => {
+        uni.hideToast();
+      },
+    });
+  }
+</script>
+
+<style lang="scss">
+  @import './DetailSheet.scss';
+</style>

@@ -1,0 +1,7 @@
+  @import '../../../../../styles/tokens.scss';
+
+  .timer-text {
+    color: $room-color-text-inverse;
+    font-size: $room-font-size-sm;
+    margin-top: 6rpx;
+  }

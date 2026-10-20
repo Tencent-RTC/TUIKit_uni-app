@@ -1,0 +1,90 @@
+@import '../../../../styles/tokens.scss';
+
+  .setting-list {
+    flex-direction: row;
+    justify-content: space-around;
+    width: 686rpx;
+  }
+
+  .cap {
+    flex: 1;
+    flex-direction: column;
+    align-items: center;
+    padding: 8rpx;
+  }
+
+  .cap-icon {
+    width: 88rpx;
+    height: 88rpx;
+    border-radius: 44rpx;
+    background-color: $live-dark-surface-08;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 16rpx;
+  }
+
+  .cap-icon-img {
+    width: 48rpx;
+    height: 48rpx;
+  }
+
+  .cap-label {
+    color: $live-dark-text-75;
+    font-size: 22rpx;
+    lines: 1;
+    text-overflow: ellipsis;
+    overflow: hidden;
+  }
+
+  .quality-panel {
+    width: 750rpx;
+    flex-direction: column;
+  }
+
+  .quality-title {
+    color: $live-dark-text-94;
+    font-size: 32rpx;
+    font-weight: 700;
+    text-align: center;
+    line-height: 88rpx;
+    height: 88rpx;
+  }
+
+  .quality-list {
+    flex-direction: column;
+    padding: 0 32rpx;
+  }
+
+  .quality-item {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    height: 88rpx;
+    padding: 0 28rpx;
+    margin-bottom: 16rpx;
+    border-radius: 16rpx;
+    border-width: 2rpx;
+    border-color: $live-dark-border-12;
+    background-color: $live-dark-surface-04;
+  }
+
+  .quality-item-active {
+    border-color: $live-color-brand-light;
+    background-image: linear-gradient(to bottom, $live-color-brand-light-soft, $live-color-brand-deep-soft);
+  }
+
+  .quality-item-label {
+    color: $live-dark-text-72;
+    font-size: 28rpx;
+    font-weight: 500;
+  }
+
+  .quality-item-label-active {
+    color: $live-dark-text-primary;
+    font-weight: 600;
+  }
+
+  .quality-item-check {
+    width: 32rpx;
+    height: 32rpx;
+  }

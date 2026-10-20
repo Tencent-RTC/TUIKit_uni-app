@@ -6,23 +6,32 @@
       :style="panelStyle"
       @tap.stop
     >
-      <view
-        v-for="(row, rowIndex) in actionRows"
-        :key="rowIndex"
-        class="msg-actions__row-wrap"
-      >
-        <view class="msg-actions__row">
-          <view
-            v-for="item in row"
-            :key="item.key"
-            class="msg-actions__item"
-            @tap="handleActionTap(item)"
-          >
-            <image class="msg-actions__icon" :src="item.icon" mode="aspectFit"></image>
-            <text class="msg-actions__text">{{ item.label }}</text>
+      <ReactionPicker
+        v-if="reactionMode"
+        :message="message"
+        @collapse="handleReactionCollapse"
+        @show-all="handleReactionShowAll"
+        @close="safeClose"
+      />
+      <view v-else class="msg-actions__rows">
+        <view
+          v-for="(row, rowIndex) in actionRows"
+          :key="rowIndex"
+          class="msg-actions__row-wrap"
+        >
+          <view class="msg-actions__row">
+            <view
+              v-for="item in row"
+              :key="item.key"
+              class="msg-actions__item"
+              @tap="handleActionTap(item)"
+            >
+              <image class="msg-actions__icon" :src="item.icon" mode="aspectFit"></image>
+              <text class="msg-actions__text">{{ item.label }}</text>
+            </view>
           </view>
+          <view v-if="rowIndex < actionRows.length - 1" class="msg-actions__divider"></view>
         </view>
-        <view v-if="rowIndex < actionRows.length - 1" class="msg-actions__divider"></view>
       </view>
     </view>
     
@@ -36,21 +45,22 @@ import { MessageStatus, MessageType } from '../../../types/message'
 import { useMessageActionState } from '../../../state/MessageActionState'
 import { throttle } from '../../../utils/lodash'
 import { isCallMessage } from '../../../utils/callMessageUtils'
+import { emitPremiumRequired } from '../../../utils/premiumRequired'
+import { listAllReactionEmojis } from '../../../utils/reactionEmoji'
+import ReactionPicker from './MessageReaction/ReactionPicker.nvue'
 
 import copyIcon from '../assets/msg_copy.png'
 import deleteIcon from '../assets/msg_delete.png'
 import forwardIcon from '../assets/msg_forward.png'
 import hideIcon from '../assets/msg_hide.png'
 import quoteIcon from '../assets/msg_quote.png'
+import reactionIcon from '../../../static/assets/message-list/msg_reaction.png'
 import recallIcon from '../assets/msg_recall.png'
 import translateIcon from '../assets/msg_translate.png'
 import voiceToTextIcon from '../assets/msg_voice_to_text.png'
 
-// 箭头几何参数（rpx，与 .msg-actions__arrow width/height 保持一致）
 const ARROW_SIZE = 24
-// 面板与气泡的间距（rpx）
 const GAP = 20
-// 箭头距离面板左右边缘的最小内边距，避免视觉脱离
 const ARROW_INSET = 16
 
 let deleteAction;
@@ -70,18 +80,16 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['close', 'action'])
+const emit = defineEmits(['close', 'action', 'reaction-show-all'])
 
 const panelRef = ref(null)
 const triggerPosition = ref({ x: 0, y: 0 })
-// phase: 'measure' 先渲染到屏幕外测量真实尺寸；'ready' 测量完成后定位显示
 const phase = ref('measure')
-// 面板是否显示在气泡下方（顶部空间不够时）
 const showBelow = ref(false)
 const isCentered = ref(false)
-// 测量得到的真实面板尺寸（rpx）
 const panelWidthRpx = ref(0)
 const panelHeightRpx = ref(0)
+const reactionMode = ref(false)
 
 onMounted(() => {
   const obj = useMessageActionState({ message: props.message })
@@ -96,7 +104,6 @@ onUnmounted(() => {
   destroyStore && destroyStore()
 })
 
-// 通用的关闭处理函数，针对 iOS 14 进行特殊处理
 const safeClose = () => {
   // #ifdef APP-IOS
   setTimeout(() => {
@@ -134,12 +141,10 @@ const canRecall = computed(() => {
   return false
 })
 
-// 仅 SOUND 类型消息可触发"转文字"操作
 const canConvertVoice = computed(() => {
   return props.message.messageType === MessageType.AUDIO
 })
 
-// 消息是否可被转发
 const canForward = computed(() => {
   if (!props.message) return false
   if (props.message.status === MessageStatus.REVOKED || props.message.status === MessageStatus.DELETED) {
@@ -154,7 +159,6 @@ const canForward = computed(() => {
   return true
 })
 
-// 消息是否可被引用
 const canQuote = computed(() => {
   if (!props.message) return false
   if (props.message.status === MessageStatus.REVOKED || props.message.status === MessageStatus.DELETED) {
@@ -164,6 +168,13 @@ const canQuote = computed(() => {
     return false
   }
   return true
+})
+
+// 与 native 一致：仅发送成功的消息且存在可用表情时才提供「贴表情」入口
+const showReactionPicker = computed(() => {
+  return props.message.status === MessageStatus.SEND_SUCCESS &&
+    !!props.message.msgID &&
+    listAllReactionEmojis().length > 0
 })
 
 const STORAGE_KEY = 'tuikit_audio_convert_visible_v1'
@@ -177,13 +188,11 @@ const voiceTextVisible = computed(() => {
   if (!voiceTextHasContent.value) return false
   const msgID = props.message.msgID
 
-  // 1. 运行时 Map（同会话最准）
   const map = uni.__audioConvertVisibleMap__
   if (map && map.has(msgID)) {
     return map.get(msgID) === true
   }
 
-  // 2. 本地存储（跨会话持久化"隐藏"记录；仅记录 false，缺省视为 true）
   try {
     const raw = uni.getStorageSync(STORAGE_KEY)
     let store = null
@@ -197,7 +206,6 @@ const voiceTextVisible = computed(() => {
     }
   } catch (e) {}
 
-  // 3. 默认可见
   return true
 })
 
@@ -205,20 +213,10 @@ const voiceActionLabel = computed(() => {
   return voiceTextVisible.value ? '隐藏文字' : '转文字'
 })
 
-// ==================== 消息翻译 ====================
-/**
- * 翻译目标语言。暂用默认 'zh'，后续可由 props / 配置注入
- * （与 handleVoiceToText 里 language 的处理同一口径）
- */
 const TRANSLATE_TARGET_LANGUAGE = 'zh'
 
-/**
- * 译文可见态存储 key：仅持久化用户主动"隐藏"的 msgID（值固定为 false），
- * 与语音转文字的 tuikit_audio_convert_visible_v1 同一范式
- */
 const TRANSLATE_STORAGE_KEY = 'tuikit_message_translate_visible_v1'
 
-// 仅文本消息可翻译；已撤回/已删除的消息不提供翻译
 const canTranslate = computed(() => {
   if (!props.message) return false
   if (props.message.messageType !== MessageType.TEXT) return false
@@ -284,7 +282,6 @@ const panelTopRpx = computed(() => {
   const want = showBelow.value ? tp.y + tp.messageHeight + GAP : tp.y - ph - GAP
   if (ph <= 0) return want
   const { minTop, maxBottom } = viewportRpx()
-  // 长消息占满屏：上下都放不下 → 居中
   if (isCentered.value) return Math.round((minTop + maxBottom - ph) / 2)
   return Math.max(minTop, Math.min(want, maxBottom - ph))
 })
@@ -402,23 +399,46 @@ const handleQuote = throttle(() => {
   safeClose()
 }, ACTION_THROTTLE_WAIT, { leading: true, trailing: false })
 
-// 语音转文字
+// 点「贴表情」→ 切换到表情面板（panel 高度变化，需重新测量定位）
+const handleReactionEntry = throttle(() => {
+  reactionMode.value = true
+  phase.value = 'measure'
+  nextTick(() => {
+    setTimeout(() => {
+      measureAndPosition()
+    }, 30)
+  })
+}, ACTION_THROTTLE_WAIT, { leading: true, trailing: false })
+
+// 收起表情面板 → 返回操作菜单（重新测量定位）
+const handleReactionCollapse = () => {
+  reactionMode.value = false
+  phase.value = 'measure'
+  nextTick(() => {
+    setTimeout(() => {
+      measureAndPosition()
+    }, 30)
+  })
+}
+
+// 点「更多」→ 关闭菜单，唤起全量表情选择器（底部弹层）
+const handleReactionShowAll = () => {
+  emit('reaction-show-all')
+  safeClose()
+}
+
 const handleVoiceToText = throttle(() => {
   const msgID = props.message.msgID
-  // 关闭面板
   emit('action', { key: voiceTextVisible.value ? 'voiceTextHide' : 'voiceToText', text: voiceActionLabel.value })
   safeClose()
 
-  // 已展示 → 触发隐藏
   if (voiceTextVisible.value) {
     uni.$emit('audioConvertHide', { msgID })
     return
   }
 
-  // 未展示 → 触发转换 / 重新展示
   uni.$emit('audioConvertingStart', { msgID })
 
-  // language 暂用默认 'zh'，后续可由 props / 配置注入
   const language = 'zh'
   if (!convertVoiceToText) {
     uni.$emit('audioConvertingError', { msgID })
@@ -464,12 +484,15 @@ const handleTranslate = throttle(() => {
   translateText([sourceText], undefined, TRANSLATE_TARGET_LANGUAGE).catch((err) => {
     console.error('[MessageActions] translateText failed:', err)
     uni.$emit('messageTranslateError', { msgID })
+    if (err && /require.*payment|purchase/i.test(err.message || '')) {
+      emitPremiumRequired('文本翻译能力需要单独购买，请购买后再使用')
+      return
+    }
     uni.showToast({ title: (err && err.message) ? err.message : '翻译失败', icon: 'none' })
   })
 }, ACTION_THROTTLE_WAIT, { leading: true, trailing: false })
 
 // ==================== 操作项配置 ====================
-// 每行最多展示的操作项数量，超出则换行
 const ACTIONS_PER_ROW = 4
 
 interface ActionItem {
@@ -480,21 +503,19 @@ interface ActionItem {
   handler: (...args: any[]) => void
 }
 
-// 引用功能开关：false 时只隐藏长按面板入口，气泡内引用块渲染 / 已引用消息的发送都不受影响
 const QUOTE_ENTRY_ENABLED = false
 
-// 统一在此配置每个操作项的 key / 文案 / 图标 / 显隐条件 / 处理函数
 const actionConfig = computed<ActionItem[]>(() => [
   { key: 'copy', label: '复制', icon: copyIcon, visible: canCopy.value, handler: handleCopy },
   { key: 'delete', label: '删除', icon: deleteIcon, visible: true, handler: handleDelete },
   { key: 'voiceToText', label: voiceActionLabel.value, icon: voiceToTextIcon, visible: canConvertVoice.value, handler: handleVoiceToText },
   { key: 'recall', label: '撤回', icon: recallIcon, visible: canRecall.value, handler: handleRecall },
   { key: 'forward', label: '转发', icon: forwardIcon, visible: canForward.value, handler: handleForward },
+  { key: 'reaction', label: '贴表情', icon: reactionIcon, visible: showReactionPicker.value, handler: handleReactionEntry },
   { key: 'quote', label: '引用', icon: quoteIcon, visible: QUOTE_ENTRY_ENABLED && canQuote.value, handler: handleQuote },
   { key: 'translate', label: translateActionLabel.value, icon: translateVisible.value ? hideIcon : translateIcon, visible: canTranslate.value, handler: handleTranslate },
 ])
 
-// actions prop 为操作项 key 列表（string[]）：非空时按顺序裁剪与排序，为空则展示全部可用项
 const visibleActions = computed<ActionItem[]>(() => {
   const available = actionConfig.value.filter((item: ActionItem) => item.visible)
   const configured = props.actions as string[]
@@ -511,7 +532,6 @@ const visibleActions = computed<ActionItem[]>(() => {
   return result
 })
 
-// 按 ACTIONS_PER_ROW 切分成多行
 const actionRows = computed<ActionItem[][]>(() => {
   const rows: ActionItem[][] = []
   const list = visibleActions.value
@@ -609,13 +629,19 @@ defineExpose({
   background-color: #FFFFFF;
   border-radius: 12rpx;
   box-shadow: 0 8rpx 24rpx rgba(0, 0, 0, 0.25);
-  padding: 33rpx 0 22rpx;
-  max-width: 500rpx;
+  padding-top: 11rpx;
+  max-width: 560rpx;
   z-index: 1000;
   justify-content: center;
   align-items: flex-start;
   left: auto;
   right: auto;
+}
+
+.msg-actions__rows {
+  padding: 22rpx 0 22rpx;
+  flex-direction: column;
+  align-items: flex-start;
 }
 
 .msg-actions__row-wrap {

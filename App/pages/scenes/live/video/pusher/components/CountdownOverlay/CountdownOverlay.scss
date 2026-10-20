@@ -1,0 +1,50 @@
+@import '../../../../styles/tokens.scss';
+
+/* 蒙层带背景色即拦截触摸,倒数期间仅「取消」按钮可点。 */
+.countdown-layer {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1200;
+  background-color: $live-mask-12;
+  justify-content: center;
+  align-items: center;
+}
+
+.countdown-circle {
+  width: 300rpx;
+  height: 300rpx;
+  border-radius: 150rpx;
+  background-color: $live-mask-55;
+  justify-content: center;
+  align-items: center;
+  margin-bottom: 204rpx;
+}
+
+.countdown-num {
+  font-size: 192rpx;
+  font-weight: 300;
+  color: $live-dark-text-primary;
+  line-height: 192rpx;
+}
+
+/* 取消按钮钉在「开始直播」按钮原位。 */
+.countdown-cancel {
+  position: absolute;
+  bottom: 50rpx;
+  left: 175rpx;
+  width: 400rpx;
+  height: 98rpx;
+  border-radius: 28rpx;
+  background-color: $live-dark-bg-sheet-72;
+  justify-content: center;
+  align-items: center;
+}
+
+.countdown-cancel-text {
+  font-size: 32rpx;
+  font-weight: 500;
+  color: $live-dark-text-92;
+}

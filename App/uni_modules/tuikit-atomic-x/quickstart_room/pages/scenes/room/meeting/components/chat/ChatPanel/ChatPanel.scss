@@ -1,0 +1,18 @@
+  @import '../../../../styles/tokens.scss';
+
+  .chat-panel {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    flex-direction: column;
+    background-color: $room-light-bg-page-alt;
+    z-index: 100;
+  }
+
+  .message-list-container {
+    flex: 1;
+    flex-direction: column;
+    background-color: $room-light-bg-page-alt;
+  }

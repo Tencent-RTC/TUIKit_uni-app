@@ -1,0 +1,187 @@
+<template>
+  <view
+    class="tool-panel"
+    :class="[expanded ? 'tool-panel--expanded' : 'tool-panel--collapsed', expanded ? panelRowCountClass : '']"
+  >
+    <view class="tool-sheet" :class="expanded ? 'tool-sheet--expanded' : 'tool-sheet--collapsed'">
+      <view class="tool-list" :class="toolListHeightClass">
+        <view v-for="(row, rowIdx) in visibleToolRows" :key="rowIdx" class="tool-row">
+          <view
+            v-for="(item, colIdx) in row"
+            :key="item ? item.name : 'placeholder-' + colIdx"
+            class="tool-cell"
+          >
+            <component
+              v-if="item"
+              :is="item.component"
+              :ref="(el: any) => registerToolRef(item.name, el)"
+              v-bind="item.props || {}"
+              @click="item.listeners?.click?.($event)"
+              @request-start="item.listeners?.['request-start']?.()"
+              @request-stop="item.listeners?.['request-stop']?.()"
+            />
+          </view>
+        </view>
+      </view>
+
+      <view v-if="hasOverflowTools" class="toggle-btn" @tap="toggle">
+        <view
+          class="toggle-icon-box"
+          :class="expanded ? 'toggle-icon-box--expanded' : 'toggle-icon-box--collapsed'"
+        >
+          <image class="toggle-icon" :src="toggleIconSrc" mode="aspectFit" />
+          <text class="toggle-text">{{ toggleText }}</text>
+        </view>
+      </view>
+    </view>
+  </view>
+</template>
+
+<script setup lang="ts">
+  import { ref, computed } from 'vue';
+  import {
+    useRoomParticipantState,
+    RoomParticipantRole,
+  } from '@/uni_modules/tuikit-atomic-x/state';
+  import type { ToolDescriptor } from './toolDescriptor';
+  import { t as i18n } from '../../../../locales';
+  import MembersButton from '../../participants/MembersButton/index.nvue';
+  import InviteUserButton from '../../participants/InviteUserButton/index.nvue';
+  import MicButton from '../../device/MicButton/index.nvue';
+  import CameraButton from '../../device/CameraButton/index.nvue';
+  import ScreenShareButton from '../../device/ScreenShareButton/index.nvue';
+  import ChatButton from '../../chat/ChatButton/index.nvue';
+  import RecordingButton from '../../recording/RecordingButton/index.nvue';
+
+  const props = defineProps({
+    roomID: { type: String, default: '' },
+    autoEnableMicrophone: { type: Boolean, default: true },
+    autoEnableCamera: { type: Boolean, default: false },
+    threshold: { type: Number, default: 5 },
+  });
+
+  const { localParticipant } = useRoomParticipantState();
+
+  const isAdminOrOwner = computed(() => {
+    const role = localParticipant.value?.role;
+    return role === RoomParticipantRole.Owner || role === RoomParticipantRole.Admin;
+  });
+
+  const allTools = computed<ToolDescriptor[]>(() => [
+    { name: 'members', component: MembersButton, props: { roomID: props.roomID } },
+    {
+      name: 'mic',
+      component: MicButton,
+      props: { autoEnableMicrophone: props.autoEnableMicrophone },
+    },
+    { name: 'camera', component: CameraButton, props: { autoEnableCamera: props.autoEnableCamera } },
+    { name: 'screenShare', component: ScreenShareButton },
+    {
+      name: 'chat',
+      component: ChatButton,
+      props: { roomID: props.roomID },
+      listeners: { click: collapse },
+    },
+    {
+      name: 'inviteUser',
+      component: InviteUserButton,
+      props: { roomID: props.roomID },
+      listeners: { click: collapse },
+    },
+    { name: 'recording', component: RecordingButton, visible: isAdminOrOwner.value },
+  ]);
+
+  const MAX_SUPPORTED_ROWS = 4;
+
+  const visibleTools = computed<ToolDescriptor[]>(() =>
+    allTools.value.filter((item) => item.visible !== false)
+  );
+
+  const hasOverflowTools = computed<boolean>(() => visibleTools.value.length > props.threshold);
+
+  const toolRows = computed<(ToolDescriptor | null)[][]>(() => {
+    const columns = Math.max(1, props.threshold);
+    const rows: (ToolDescriptor | null)[][] = [];
+    for (let start = 0; start < visibleTools.value.length; start += columns) {
+      const toolRow: (ToolDescriptor | null)[] = visibleTools.value.slice(start, start + columns);
+      while (toolRow.length < columns) toolRow.push(null);
+      rows.push(toolRow);
+    }
+    return rows;
+  });
+
+  const visibleToolRows = computed<(ToolDescriptor | null)[][]>(() => {
+    if (expanded.value || !hasOverflowTools.value) {
+      return toolRows.value;
+    }
+    return toolRows.value.slice(0, 1);
+  });
+
+  const panelRowCountClass = computed<string>(
+    () => `tool-panel--rows-${Math.min(toolRows.value.length, MAX_SUPPORTED_ROWS)}`
+  );
+
+  const toolListHeightClass = computed<string>(() =>
+    expanded.value
+      ? `tool-list--rows-${Math.min(toolRows.value.length, MAX_SUPPORTED_ROWS)}`
+      : 'tool-list--rows-0'
+  );
+
+  const expanded = ref<boolean>(false);
+
+  const toggleIconSrc = computed(() =>
+    expanded.value
+      ? '/static/images/room/room_tool_close.png'
+      : '/static/images/room/room_tool_open.png'
+  );
+
+  const toggleText = computed(() =>
+    expanded.value ? i18n('tool.collapse') : i18n('tool.expand')
+  );
+  function expand(): void {
+    if (expanded.value) return;
+    expanded.value = true;
+  }
+
+  function collapse(): void {
+    if (!expanded.value) return;
+    expanded.value = false;
+  }
+
+  function toggle(): void {
+    if (expanded.value) {
+      collapse();
+    } else {
+      expand();
+    }
+  }
+
+  const toolRefs: Record<string, any> = {};
+
+  function registerToolRef(name: string, el: any): void {
+    if (el == null) {
+      delete toolRefs[name];
+      return;
+    }
+    toolRefs[name] = el;
+  }
+
+  function closeChatPanel(): void {
+    toolRefs['chat']?.closePanel?.();
+  }
+
+  defineExpose({
+    expand,
+    collapse,
+    toggle,
+    expanded,
+    get isChatPanelOpen(): boolean {
+      return toolRefs['chat']?.isChatPanelOpen?.() === true;
+    },
+    closeChatPanel,
+  });
+</script>
+
+<style lang="scss">
+  @import './ToolPanel.scss';
+</style>

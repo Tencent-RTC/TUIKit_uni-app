@@ -1,0 +1,252 @@
+<template>
+  <view class="before-live-view">
+    <view class="navigate-back-arrow" @tap="goBack" :style="{ visibility: countdownVisible ? 'hidden' : 'visible' }">
+      <image class="navigate-back-arrow-image" src="/static/images/left-arrow.png"></image>
+    </view>
+    <view class="prepare-header" :style="concealStyle">
+      <view class="cover-btn" @tap="onEditCover">
+        <image class="cover-thumb" :src="coverURL" mode="aspectFill" @error="handleCoverError" />
+        <text class="cover-label">{{ t('anchor.editCover') }}</text>
+      </view>
+      <input
+        ref="titleInputRef"
+        class="room-title"
+        v-model="liveTitle"
+        @input="onInputTitle"
+        @focus="onInputFocus"
+        @blur="onInputBlur"
+        :focus="isInputFocused"
+        :placeholder="t('anchor.defaultTitle')"
+        :cursor-color="LIVE_TOKENS.colorTextInverse"
+        :placeholder-style="placeholderStyle"
+      />
+      <text class="room-topic" @tap.stop="onEditTitle">{{ t('anchor.editTopic') }}</text>
+    </view>
+    <CoverPickerPanel v-model="isShowCoverPicker" :selectedURL="coverURL" @select="onCoverSelect" />
+    <view class="prepare-actions" :style="concealStyle">
+      <view class="prepare-action" @tap="handleBeauty">
+        <view class="pa-icon">
+          <image class="pa-img" src="/static/images/live/prepare-beauty.png" mode="aspectFit" />
+        </view>
+        <text class="pa-label">{{ t('anchor.beauty') }}</text>
+      </view>
+      <view class="prepare-action" @tap="handleCamera">
+        <view class="pa-icon">
+          <image class="pa-img" src="/static/images/live/prepare-flip.png" mode="aspectFit" />
+        </view>
+        <text class="pa-label">{{ t('anchor.flipCamera') }}</text>
+      </view>
+      <view class="prepare-action" @tap="handleSettings">
+        <view class="pa-icon">
+          <image class="pa-img" src="/static/images/live/prepare-grid4.png" mode="aspectFit" />
+        </view>
+        <text class="pa-label">{{ t('anchor.more') }}</text>
+      </view>
+    </view>
+    <view class="start-btn" :style="[concealStyle, { bottom: startBtnBottomPx + 'px' }]" @tap="startLive">
+      <image class="start-btn-bg" src="/static/images/live/start-btn-bg.png" resize="stretch" />
+      <image class="start-dot" src="/static/images/live/start-dot.png" mode="aspectFit" />
+      <text class="start-btn-text">{{ t('anchor.startLive') }}</text>
+    </view>
+    <BeautyPanel v-model="isShowBeautyPanel" />
+    <CountdownOverlay v-model="countdownVisible" @finished="doStartLive" />
+    <BeforeLiveMorePanel v-model="isShowMorePanel" @tip="showTip" />
+  </view>
+</template>
+
+<script setup lang="ts">
+  import { ref, computed, onMounted, nextTick } from 'vue';
+  import { BeautyPanel } from '@/uni_modules/tuikit-atomic-x/components/Beauty';
+  import { useDeviceState } from '@/uni_modules/tuikit-atomic-x/state/DeviceState';
+  import { TakeSeatMode, useLiveListState } from '@/uni_modules/tuikit-atomic-x/state/LiveListState';
+  import { LIVE_TOKENS, livePlaceholderStyle } from '../../../../styles/tokens.js';
+  import { t } from '../../../../locales';
+  import BeforeLiveMorePanel from '../../components/BeforeLiveMorePanel/index.nvue';
+  import CountdownOverlay from '../../components/CountdownOverlay/index.nvue';
+  import CoverPickerPanel from '../../components/CoverPickerPanel/index.nvue';
+
+  const props = defineProps({
+    templateLayout: { type: Number, default: 600 },
+  });
+  const emit = defineEmits(['update:templateLayout', 'back', 'tip', 'started']);
+
+  const { createLive, fetchLiveList, callExperimentalAPI } = useLiveListState();
+  const { openLocalCamera, openLocalMicrophone, isFrontCamera, switchCamera } = useDeviceState();
+
+  const placeholderStyle = livePlaceholderStyle(LIVE_TOKENS.darkText50);
+
+  const defaultCoverURL = 'https://liteav-test-1252463788.cos.ap-guangzhou.myqcloud.com/live/live_cover1.png';
+
+  const coverURL = ref(defaultCoverURL);
+  const liveTitle = ref(t('anchor.defaultTitle'));
+  const liveMode = ref(t('anchor.defaultLiveMode'));
+
+  const countdownVisible = ref(false);
+  const isShowMorePanel = ref(false);
+  const isShowCoverPicker = ref(false);
+  const isShowBeautyPanel = ref(false);
+  const isInputFocused = ref(false);
+  const lastValidTitle = ref(liveTitle.value);
+  const titleInputRef = ref<any>(null);
+  const startBtnBottomPx = ref(25);
+
+  const showTip = (title: string) => {
+    emit('tip', title);
+  };
+
+  const getByteLength = (str: string): number => {
+    let len = 0;
+    for (let i = 0; i < str.length; i++) {
+      const charCode = str.charCodeAt(i);
+      if (charCode <= 0x7f) {
+        len += 1;
+      } else if (charCode <= 0x7ff) {
+        len += 2;
+      } else if (charCode <= 0xffff) {
+        len += 3;
+      } else {
+        len += 4;
+      }
+    }
+    return len;
+  };
+
+  const isPublicVisible = computed(() => liveMode.value === t('anchor.defaultLiveMode'));
+  const concealStyle = computed(() => ({ visibility: countdownVisible.value ? 'hidden' : 'visible' }));
+
+  const goBack = () => {
+    emit('back');
+  };
+
+  const onEditCover = () => {
+    isShowCoverPicker.value = true;
+  };
+
+  const handleCoverError = () => {
+    coverURL.value = defaultCoverURL;
+  };
+
+  const onInputTitle = (e: any) => {
+    const inputValue = e.detail.value;
+    if (getByteLength(inputValue) <= 100) {
+      lastValidTitle.value = inputValue;
+      return;
+    }
+    setTimeout(() => {
+      liveTitle.value = lastValidTitle.value;
+    }, 0);
+    uni.showToast({
+      title: t('voice.titleLimit'),
+      icon: 'none',
+      duration: 2000
+    });
+  };
+
+  const onEditTitle = () => {
+    if (isInputFocused.value) return;
+    isInputFocused.value = false;
+    nextTick(() => {
+      isInputFocused.value = true;
+      setTimeout(() => {
+        titleInputRef.value?.focus?.();
+      }, 100);
+    });
+  };
+
+  const onInputFocus = () => {
+    isInputFocused.value = true;
+  };
+
+  const onInputBlur = () => {
+    isInputFocused.value = false;
+  };
+
+  const handleBeauty = () => {
+    isShowBeautyPanel.value = true;
+  };
+
+  const handleCamera = () => {
+    switchCamera({ isFront: !isFrontCamera.value })
+  };
+
+  const handleSettings = () => {
+    isShowMorePanel.value = true;
+  };
+
+  const startLive = () => {
+    countdownVisible.value = true;
+  };
+
+  const onCoverSelect = (url: string) => {
+    coverURL.value = url;
+  };
+
+  const setLocalVideoMuteImage = () => {
+    const tempFilePath = '/static/images/live-mute-local-video.png';
+    let imageFilePath = '';
+    uni.saveFile({
+      tempFilePath: tempFilePath,
+      success: (res) => {
+        imageFilePath = res.savedFilePath;
+        imageFilePath = plus.io.convertLocalFileSystemURL(imageFilePath);
+        const data = { "api": "setLocalVideoMuteImage", "params": { "image": imageFilePath } }
+        callExperimentalAPI(
+          {
+            jsonData: JSON.stringify(data)
+          })
+      },
+      fail: (err) => {
+        console.error('save mute image failed');
+      },
+    });
+  }
+
+  const doStartLive = () => {
+    createLive({
+      liveInfo: {
+        liveID: uni?.$liveID,
+        liveName: liveTitle.value,
+        totalViewerCount: 4,
+        coverURL: coverURL.value,
+        isSeatEnabled: true,
+        seatMode: TakeSeatMode.APPLY,
+        maxSeatCount: 0,
+        isPublicVisible: isPublicVisible.value,
+        keepOwnerOnSeat: true,
+        seatLayoutTemplateID: props.templateLayout,
+      },
+      success: () => {
+        const params = {
+          cursor: "",
+          count: 20,
+        };
+        fetchLiveList(params);
+
+        openLocalCamera({ isFront: isFrontCamera.value });
+        openLocalMicrophone();
+        setLocalVideoMuteImage();
+      },
+      fail: (errCode, errMsg) => {
+        showTip(t('anchor.createFailed'));
+      },
+    });
+    emit('started');
+  };
+
+  onMounted(() => {
+    try {
+      const sys = uni.getSystemInfoSync();
+      const bottomPanelHeight = sys.platform === 'ios' ? 60 : 80;
+      const safeArea = sys.safeArea || { top: 0, height: sys.windowHeight };
+      const videoBottomGap = (sys.windowHeight - (safeArea.top || 0) - safeArea.height) + bottomPanelHeight;
+      const btnHeightPx = 104 * (sys.windowWidth / 750);
+      startBtnBottomPx.value = Math.max(0, Math.round((videoBottomGap - btnHeightPx) / 2));
+    } catch (e) {
+      startBtnBottomPx.value = 25;
+    }
+  });
+</script>
+
+<style lang="scss">
+  @import './BeforeLiveView.scss';
+</style>

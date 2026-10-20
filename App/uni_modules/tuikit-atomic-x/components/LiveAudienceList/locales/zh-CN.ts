@@ -1,0 +1,16 @@
+export const zhCN : Record<string, string> = {
+	'al.title': '在线观众',
+	'al.empty': '暂无观众',
+	'al.cannotFollowSelf': '无法关注自己',
+	'al.kickOut': '踢出房间',
+	'al.confirmKickOut': '确认踢出{name}吗?',
+	'al.follow': '关注',
+	'al.followed': '已关注',
+	'al.roomManagement': '直播间管理',
+	'al.mute': '禁言',
+	'al.unmute': '解除禁言',
+	'al.muteCopy': '禁止发送直播评论',
+	'al.block': '拉黑',
+	'al.blockCopy': '移出当前直播间',
+	'al.giftValue': '礼物值 {value}',
+}

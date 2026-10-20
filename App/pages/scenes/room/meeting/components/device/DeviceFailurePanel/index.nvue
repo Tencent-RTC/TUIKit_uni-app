@@ -1,0 +1,76 @@
+<template>
+  <view class="failure-mask" v-if="state.visible" @tap.stop="onDismiss">
+    <view class="failure-sheet" @tap.stop>
+      <view class="failure-grabber"></view>
+
+      <view class="failure-icon-circle">
+        <image class="failure-icon" :src="iconSrc" mode="aspectFit" />
+      </view>
+
+      <text class="failure-title">{{ titleText }}</text>
+      <text class="failure-body">{{ bodyText }}</text>
+
+      <view class="failure-btn failure-btn-primary" :class="{ 'failure-btn-disabled': state.isRetrying }" @tap.stop="onPrimary">
+        <text class="failure-btn-text failure-btn-text-primary">{{ primaryText }}</text>
+      </view>
+      <view v-if="hasSecondary" class="failure-btn failure-btn-secondary" @tap.stop="onDismiss">
+        <text class="failure-btn-text failure-btn-text-secondary">{{ t('Device.Fault.NotNow') }}</text>
+      </view>
+    </view>
+  </view>
+</template>
+
+<script setup lang="ts">
+  import { computed, onMounted, onUnmounted } from 'vue';
+  import {
+    deviceFailurePanelState as state,
+    buildDeviceFailureTitle,
+    buildDeviceFailureBody,
+    retryOpenDevice,
+    closeDeviceFailurePanel,
+    openSystemSettingsThenRetry,
+    retryOpenDeviceAfterSettings,
+  } from '../deviceFailure';
+  import { t } from '../../../../locales';
+
+  const titleText = computed(() => buildDeviceFailureTitle(state.kind, state.device));
+  const bodyText = computed(() => buildDeviceFailureBody(state.kind, state.device, state.isRestartHint));
+  const iconSrc = computed(() =>
+    state.device === 'microphone'
+      ? '/static/images/room/room_device_failure_mic.png'
+      : '/static/images/room/room_device_failure_camera.png'
+  );
+
+  const hasSecondary = computed(() => state.kind !== 'noDevice');
+  const primaryText = computed(() => {
+    if (state.kind === 'system') return t('Device.Fault.OpenSystemSettings');
+    if (state.kind === 'noDevice') return t('RoomCommon.GotIt');
+    return t('Device.Fault.Retry');
+  });
+
+  function onPrimary(): void {
+    if (state.kind === 'system') {
+      openSystemSettingsThenRetry();
+    } else if (state.kind === 'noDevice') {
+      closeDeviceFailurePanel();
+    } else {
+      retryOpenDevice();
+    }
+  }
+
+  function onDismiss(): void {
+    closeDeviceFailurePanel();
+  }
+
+  onMounted(() => {
+    uni.onAppShow(retryOpenDeviceAfterSettings);
+  });
+
+  onUnmounted(() => {
+    uni.offAppShow(retryOpenDeviceAfterSettings);
+  });
+</script>
+
+<style lang="scss">
+  @import './DeviceFailurePanel.scss';
+</style>

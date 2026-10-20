@@ -86,11 +86,11 @@ export function initRoomCallService(): void {
   };
 
   roomState.subscribeEvent(RoomEvent.onCallReceived, ((opt: any): void => {
+    console.log('[RoomCallService] onCallReceived:', opt);
     const roomInfo = opt?.roomInfo;
     const call = opt?.call;
     const roomID = roomInfo?.roomID;
     if (typeof roomID !== 'string' || roomID.length === 0) return;
-
     if (currentRoute() === ROOM_MAIN_PAGE) {
       autoReject(roomID, 'already in room');
       return;

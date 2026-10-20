@@ -38,7 +38,7 @@
             <view class="action-btn-image-container">
               <image class="action-btn-image" src="/static/images/flip.png" mode="aspectFit" />
             </view>
-            <text class="action-btn-content">翻转</text>
+            <text class="action-btn-content">{{ t('sv.flip') }}</text>
           </view>
 
           <view class="action-btn" @tap="handleHangUp" v-if="showHangup">
@@ -83,8 +83,9 @@
     useLiveSeatState
   } from "@/uni_modules/tuikit-atomic-x/state/LiveSeatState";
   import LiveToast from '@/uni_modules/tuikit-atomic-x/components/LiveToast.nvue';
+  import { t } from '../locales';
 
-  const defaultAvatarURL = 'https://web.sdk.qcloud.com/component/TUIKit/assets/avatar_01.png';
+  const defaultAvatarURL = '/uni_modules/tuikit-atomic-x/static/assets/live/default-avatar.png';
 
   const tipVisible = ref(false);
   const tipSeq = ref(0);
@@ -159,27 +160,27 @@
   const showHangup = computed(() => !props.isSelf || (props.isSelf && !props.isAnchorMode));
 
   const micOffText = computed(() => {
-    if (props.isSelf) return '静音';
-    if (props.isAnchorMode && !props.isSelf) return '禁用音频';
-    return '关闭音频';
+    if (props.isSelf) return t('sv.micOffSelf');
+    if (props.isAnchorMode && !props.isSelf) return t('sv.micOffAnchor');
+    return t('sv.micOff');
   });
   const micOnText = computed(() => {
-    if (props.isSelf) return '解除静音';
-    if (props.isAnchorMode && !props.isSelf) return '启用音频';
-    return '打开音频';
+    if (props.isSelf) return t('sv.micOnSelf');
+    if (props.isAnchorMode && !props.isSelf) return t('sv.micOnAnchor');
+    return t('sv.micOn');
   });
   const cameraOffText = computed(() => {
-    if (props.isAnchorMode && !props.isSelf) return '禁用视频';
-    return '关闭视频';
+    if (props.isAnchorMode && !props.isSelf) return t('sv.cameraOffAnchor');
+    return t('sv.cameraOff');
   });
   const cameraOnText = computed(() => {
-    if (props.isAnchorMode && !props.isSelf) return '启用视频';
-    return '打开视频';
+    if (props.isAnchorMode && !props.isSelf) return t('sv.cameraOnAnchor');
+    return t('sv.cameraOn');
   });
   const hangupText = computed(() => {
-    if (props.isAnchorMode && !props.isSelf) return '挂断';
-    if (!props.isAnchorMode) return '断开连麦';
-    return '移下麦';
+    if (props.isAnchorMode && !props.isSelf) return t('sv.hangup');
+    if (!props.isAnchorMode) return t('sv.disconnectGuest');
+    return t('sv.removeSeat');
   });
 
   const targetSeat = computed(() => {
@@ -221,7 +222,7 @@
           userID: props.userInfo.userID,
           policy: DeviceControlPolicy.UNLOCK_ONLY
         });
-        showTip(`您已将${props.userInfo.userName || props.userInfo.userID} 解除静音`)
+        showTip(t('sv.youUnmutedUser', { name: props.userInfo.userName || props.userInfo.userID }))
         close();
         return;
       }
@@ -230,7 +231,7 @@
           liveID: uni.$liveID,
           userID: props.userInfo.userID,
         });
-        showTip(`您已将${props.userInfo.userName || props.userInfo.userID} 静音`)
+        showTip(t('sv.youMutedUser', { name: props.userInfo.userName || props.userInfo.userID }))
         close();
         return;
       }
@@ -240,7 +241,7 @@
           liveID: uni.$liveID,
           fail: (errorCode) => {
             if (errorCode === -2360) {
-              showTip('你已被静音')
+              showTip(t('sv.selfMuted'))
             }
           }
         });
@@ -266,7 +267,7 @@
           userID: props.userInfo.userID,
           policy: DeviceControlPolicy.UNLOCK_ONLY
         });
-        showTip(`您已将${props.userInfo.userName || props.userInfo.userID} 解除禁画`)
+        showTip(t('sv.youUnbannedUserVideo', { name: props.userInfo.userName || props.userInfo.userID }))
         close();
         return;
       }
@@ -275,7 +276,7 @@
           liveID: uni.$liveID,
           userID: props.userInfo.userID,
         });
-        showTip(`您已将${props.userInfo.userName || props.userInfo.userID} 禁画`)
+        showTip(t('sv.youBannedUserVideo', { name: props.userInfo.userName || props.userInfo.userID }))
         close();
         return;
       }
@@ -285,7 +286,7 @@
           isFront: isFrontCamera.value,
           fail: (errorCode) => {
             if (errorCode === -2370) {
-              showTip('你已被禁画')
+              showTip(t('sv.selfBannedVideo'))
             }
           }
         });
@@ -314,8 +315,8 @@
       // 主播模式：当自己处于主播连线时，提示断开与主播的连线；否则断开与观众的连麦
       if (coHostStatus.value === CoHostStatusType.CONNECTED) {
         uni.showModal({
-          content: '确定要断开与其他主播的连线吗？',
-          confirmText: '断开',
+          content: t('sv.confirmDisconnectHost'),
+          confirmText: t('sv.disconnect'),
           success: (res) => {
             if (res.confirm) {
               exitHostConnection({
@@ -327,8 +328,8 @@
         });
       } else {
         uni.showModal({
-          content: '确定要断开与其他观众的连麦吗？',
-          confirmText: '断开',
+          content: t('sv.confirmDisconnectGuest'),
+          confirmText: t('sv.disconnect'),
           success: (res) => {
             if (res.confirm) {
               kickUserOutOfSeat({
@@ -345,7 +346,7 @@
     } else {
       // 观众模式：断开当前连麦
       uni.showModal({
-        content: '确定要断开当前连麦吗？',
+        content: t('sv.confirmDisconnect'),
         success: (res) => {
           if (res.confirm) {
             disconnect({

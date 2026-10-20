@@ -1,0 +1,368 @@
+<template>
+  <Drawer :visible="visible" @close="handleClose">
+    <view class="rdp__title-wrap">
+      <text class="rdp__title">表情回应</text>
+    </view>
+    <view v-if="summaryList.length > 0" class="rdp__summary-wrap">
+      <scroll-view
+        v-if="summaryList.length > 1"
+        class="rdp__summary"
+        direction="horizontal"
+        :show-scrollbar="false"
+        :scroll-into-view="summaryScrollInto"
+      >
+        <view
+          v-for="(summary, idx) in summaryList"
+          :key="summary.reactionID"
+          :id="'rdp-sum-' + idx"
+          class="rdp__summary-chip"
+          :class="summary.reactionID == currentReactionID ? 'rdp__summary-chip--active' : ''"
+          @tap.stop="handleSummaryTap(summary.reactionID)"
+        >
+          <image class="rdp__summary-emoji" :src="summary.src" mode="aspectFit" />
+          <text class="rdp__summary-count" :class="summary.reactionID == currentReactionID ? 'rdp__summary-count--active' : ''">{{ summary.totalUserCount }}</text>
+        </view>
+      </scroll-view>
+      <view v-else class="rdp__summary">
+        <view class="rdp__summary-chip rdp__summary-chip--active">
+          <image class="rdp__summary-emoji" :src="summaryList[0].src" mode="aspectFit" />
+          <text class="rdp__summary-count rdp__summary-count--active">{{ summaryList[0].totalUserCount }}</text>
+        </view>
+      </view>
+    </view>
+
+    <scroll-view
+      class="rdp__list"
+      direction="vertical"
+      :show-scrollbar="false"
+      @scrolltolower="handleScrollToLower"
+    >
+      <view
+        v-for="(user, idx) in userList"
+        :key="user.userID + '_' + idx"
+        class="rdp__row"
+        @tap.stop="handleRowTap(user)"
+      >
+        <Avatar
+          :src="user.avatarURL"
+          :name="user.name"
+          :size="80"
+          defaultAvatarType="user"
+          class="rdp__avatar"
+        />
+        <view class="rdp__info">
+          <text class="rdp__name" :lines="1">{{ user.name }}</text>
+          <text v-if="isSelfUser(user)" class="rdp__hint">点击删除</text>
+        </view>
+      </view>
+      <view v-if="loading" class="rdp__loading">
+        <text class="rdp__loading-text">加载中…</text>
+      </view>
+      <view v-if="!loading && userList.length == 0" class="rdp__loading">
+        <text class="rdp__loading-text">暂无回应</text>
+      </view>
+    </scroll-view>
+  </Drawer>
+</template>
+
+<script setup lang="uts">
+import { computed, ref, watch } from 'vue'
+import Avatar from '../../../Avatar/Avatar.uvue'
+import Drawer from '../../../Drawer/index.uvue'
+import { useMessageActionState } from '../../../../state/MessageActionState'
+import { useLoginState } from '../../../../state/LoginState'
+import {
+  asJSONObject,
+  readJSONString,
+  getReactionList,
+  removeMessageReaction,
+  resolveReactionUserName,
+  type ReactionBrief
+} from '../../../../utils/messageReaction'
+
+type Props = {
+  visible: boolean
+  message: any | null
+  selectedReactionID: string
+}
+
+const props = defineProps<Props>()
+
+const emit = defineEmits<{
+  close: []
+}>()
+
+/** 用户行视图模型（避免模板里直接读 UTSJSONObject） */
+type ReactionUserItem = {
+  userID: string
+  name: string
+  avatarURL: string
+}
+
+// 每个 message 对应一个 store 实例（与 MessageActions 一致）
+const actionState = useMessageActionState({ message: asJSONObject(props.message) })
+const reactionUserList = actionState.reactionUserList
+const hasMoreReactionUsers = actionState.hasMoreReactionUsers
+
+const loginUserInfo = useLoginState().loginUserInfo
+
+const currentReactionID = ref<string>(props.selectedReactionID)
+const loading = ref<boolean>(false)
+// reactionID 形如 "[TUIEmoji_Haha]"，含方括号，不能直接当元素 id；用下标。
+// 首次渲染时 scroll-view 尚未布局，需延迟赋值才生效
+const summaryScrollInto = ref<string>('')
+// 与 native ReactionDetailFetchResultPolicy 一致：切 tab 后旧请求的结果不再展示
+const loadedReactionID = ref<string>('')
+let fetchToken: number = 0
+
+const summaryList = computed((): ReactionBrief[] => getReactionList(props.message))
+
+const myUserID = computed((): string => {
+  const currentUser = loginUserInfo.value
+  if (currentUser == null) return ''
+  const id: string | null = currentUser.userID
+  return id != null ? id : ''
+})
+
+const isSelfUser = (user: ReactionUserItem): boolean => {
+  return user.userID.length > 0 && user.userID == myUserID.value
+}
+
+// 与 native ReactionDetailDialog.sortUsers 一致：我已回应时，把自己排到首位
+const userList = computed((): ReactionUserItem[] => {
+  if (loadedReactionID.value != currentReactionID.value) return []
+  const raw: any[] = reactionUserList.value
+  const result: ReactionUserItem[] = []
+  for (let i: number = 0; i < raw.length; i++) {
+    const u: UTSJSONObject = asJSONObject(raw[i])
+    result.push({
+      userID: readJSONString(u, 'userID'),
+      name: resolveReactionUserName(u),
+      avatarURL: readJSONString(u, 'avatarURL')
+    } as ReactionUserItem)
+  }
+  let reactedByMyself: boolean = false
+  const briefs: ReactionBrief[] = summaryList.value
+  for (let i: number = 0; i < briefs.length; i++) {
+    if (briefs[i].reactionID == currentReactionID.value && briefs[i].reactedByMyself) {
+      reactedByMyself = true
+      break
+    }
+  }
+  if (!reactedByMyself) return result
+  const selfIndex: number = ((): number => {
+    for (let i: number = 0; i < result.length; i++) {
+      if (result[i].userID == myUserID.value) return i
+    }
+    return -1
+  })()
+  if (selfIndex <= 0) return result
+  const selfItem: ReactionUserItem = result[selfIndex]
+  return [selfItem].concat(result.slice(0, selfIndex), result.slice(selfIndex + 1))
+})
+
+const findSummaryIndex = (reactionID: string): number => {
+  const list: ReactionBrief[] = summaryList.value
+  for (let i: number = 0; i < list.length; i++) {
+    if (list[i].reactionID == reactionID) return i
+  }
+  return -1
+}
+
+const scrollSummaryToCurrent = (): void => {
+  const idx: number = findSummaryIndex(currentReactionID.value)
+  if (idx < 0) return
+  summaryScrollInto.value = ''
+  setTimeout((): void => {
+    summaryScrollInto.value = 'rdp-sum-' + idx
+  }, 120)
+}
+
+const refresh = async (): Promise<void> => {
+  if (currentReactionID.value.length == 0) return
+  const reactionID: string = currentReactionID.value
+  const token: number = ++fetchToken
+  loading.value = true
+  try {
+    await actionState.loadReactionUsers(reactionID, 30)
+    if (token == fetchToken) {
+      loadedReactionID.value = reactionID
+    }
+  } catch (e: any) {
+    console.error('[ReactionDetailPicker] loadReactionUsers failed:', `${e}`)
+  } finally {
+    if (token == fetchToken) {
+      loading.value = false
+    }
+  }
+}
+
+const reloadForSelected = (): void => {
+  currentReactionID.value = props.selectedReactionID
+  refresh()
+  scrollSummaryToCurrent()
+}
+
+const handleClose = (): void => {
+  emit('close')
+}
+
+const handleScrollToLower = async (_e: UniScrollToLowerEvent): Promise<void> => {
+  if (!hasMoreReactionUsers.value || loading.value) return
+  loading.value = true
+  try {
+    await actionState.loadMoreReactionUsers()
+  } catch (e: any) {
+    console.error('[ReactionDetailPicker] loadMoreReactionUsers failed:', `${e}`)
+  } finally {
+    loading.value = false
+  }
+}
+
+const handleSummaryTap = (reactionID: string): void => {
+  if (reactionID == currentReactionID.value) return
+  currentReactionID.value = reactionID
+  refresh()
+}
+
+// 只能删除自己的回应，点击他人无效果
+const handleRowTap = async (user: ReactionUserItem): Promise<void> => {
+  if (!isSelfUser(user)) return
+  // 删除前读取：该 reaction 还有其他人时，删除后仍存在，需要手动刷新用户列表（store 不会主动推送）
+  const idx: number = findSummaryIndex(currentReactionID.value)
+  const stillExistsAfterRemove: boolean = idx >= 0 && summaryList.value[idx].totalUserCount > 1
+  const ok: boolean = await removeMessageReaction(props.message, currentReactionID.value)
+  // 完全删光的情况由下方 watch(summaryList) 负责：切到下一个 reaction 或关闭
+  if (ok && stillExistsAfterRemove) {
+    refresh()
+  }
+}
+
+// watch 必须放在上面所有 const 函数之后：UTS const 箭头函数不提升，immediate 会同步触发回调
+watch((): boolean => props.visible, (v: boolean): void => {
+  if (v) reloadForSelected()
+}, { immediate: true })
+
+watch((): string => props.selectedReactionID, (): void => {
+  if (!props.visible) return
+  reloadForSelected()
+})
+
+watch((): ReactionBrief[] => summaryList.value, (list: ReactionBrief[]): void => {
+  if (!props.visible) return
+  if (list.length == 0) {
+    handleClose()
+    return
+  }
+  if (findSummaryIndex(currentReactionID.value) < 0) {
+    currentReactionID.value = list[0].reactionID
+    refresh()
+  }
+})
+</script>
+
+<style>
+.rdp__title-wrap {
+  align-items: center;
+  padding: 24rpx 24rpx 0;
+}
+
+.rdp__title {
+  font-size: 32rpx;
+  font-weight: bold;
+  line-height: 44rpx;
+  color: rgba(0, 0, 0, 0.9);
+}
+
+.rdp__summary {
+  width: 702rpx;
+  flex-direction: row;
+  align-items: center;
+  height: 64rpx;
+}
+
+.rdp__summary-wrap {
+  padding: 24rpx 24rpx 16rpx;
+}
+
+.rdp__summary-chip {
+  flex-direction: row;
+  align-items: center;
+  flex-shrink: 0;
+  padding: 4rpx 16rpx;
+  margin-right: 12rpx;
+  background-color: #F0F2F7;
+  border-radius: 24rpx;
+}
+
+.rdp__summary-chip--active {
+  background-color: #1C66E5;
+}
+
+.rdp__summary-count--active {
+  color: #FFFFFF;
+}
+
+.rdp__summary-emoji {
+  width: 40rpx;
+  height: 40rpx;
+  margin-right: 6rpx;
+}
+
+.rdp__summary-count {
+  font-size: 22rpx;
+  color: rgba(0, 0, 0, 0.85);
+  line-height: 28rpx;
+}
+
+.rdp__list {
+  height: 600rpx;
+}
+
+.rdp__row {
+  flex-direction: row;
+  align-items: center;
+  height: 112rpx;
+  padding: 0 24rpx;
+}
+
+.rdp__row:active {
+  background-color: rgba(0, 0, 0, 0.04);
+}
+
+.rdp__avatar {
+  width: 80rpx;
+  height: 80rpx;
+}
+
+.rdp__info {
+  flex: 1;
+  flex-direction: column;
+  margin-left: 16rpx;
+}
+
+.rdp__name {
+  flex-shrink: 1;
+  lines: 1;
+  font-size: 28rpx;
+  line-height: 36rpx;
+  color: rgba(0, 0, 0, 0.85);
+  text-overflow: ellipsis;
+}
+
+.rdp__hint {
+  margin-top: 4rpx;
+  font-size: 22rpx;
+  color: rgba(0, 0, 0, 0.45);
+}
+
+.rdp__loading {
+  align-items: center;
+  padding: 24rpx 0;
+}
+
+.rdp__loading-text {
+  font-size: 22rpx;
+  color: rgba(0, 0, 0, 0.45);
+}
+</style>

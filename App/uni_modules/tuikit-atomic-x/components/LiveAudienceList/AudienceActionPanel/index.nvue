@@ -1,0 +1,158 @@
+<template>
+  <BaseDrawer
+    v-model="innerVisible"
+    :height="drawerHeight"
+    :overlayOpacity="0.4"
+    bgImage="/uni_modules/tuikit-atomic-x/static/assets/live/drawer-bg.png"
+    :bgImageHeight="drawerHeight"
+    padding="20rpx 36rpx 56rpx"
+    :showHandle="true"
+  >
+    <view class="host-viewer-manage-profile">
+      <image class="host-viewer-manage-avatar" :src="avatarSrc" mode="aspectFill" @error="onAvatarError" />
+      <view class="host-viewer-manage-identity">
+        <view class="host-viewer-manage-name-row">
+          <text class="host-viewer-manage-name" :numberOfLines="1">{{ userName }}</text>
+          <view class="host-viewer-manage-level" v-if="userLevel >= 0">
+            <image class="host-viewer-manage-level-bg" :src="levelBadge" mode="scaleToFill" />
+            <text class="host-viewer-manage-level-num">{{ userLevel }}</text>
+          </view>
+        </view>
+        <text class="host-viewer-manage-meta">{{ t('al.giftValue', { value: giftValue }) }}</text>
+      </view>
+      <view class="host-viewer-manage-follow-pill" :class="{ 'is-active': isFollowed }" @tap="toggleFollow">
+        <text class="host-viewer-manage-follow-label">{{ isFollowed ? t('al.followed') : t('al.follow') }}</text>
+      </view>
+    </view>
+    <text class="host-viewer-manage-section-title">{{ t('al.roomManagement') }}</text>
+    <view class="host-viewer-manage-moderation-actions">
+      <view class="host-viewer-manage-moderation-action is-mute" :class="{ 'is-active': isMuted }" @tap="toggleMute">
+        <view class="host-viewer-manage-action-icon">
+          <image class="host-viewer-manage-action-icon-image" :src="muteIcon" mode="aspectFit" />
+        </view>
+        <view class="host-viewer-manage-action-copy">
+          <text class="host-viewer-manage-action-title">{{ isMuted ? t('al.unmute') : t('al.mute') }}</text>
+          <text class="host-viewer-manage-action-desc">{{ t('al.muteCopy') }}</text>
+        </view>
+      </view>
+      <view class="host-viewer-manage-moderation-action is-block" @tap="kickOut">
+        <view class="host-viewer-manage-action-icon">
+          <image class="host-viewer-manage-action-icon-image" src="/uni_modules/tuikit-atomic-x/static/assets/live/host-viewer-block.png" mode="aspectFit" />
+        </view>
+        <view class="host-viewer-manage-action-copy">
+          <text class="host-viewer-manage-action-title">{{ t('al.block') }}</text>
+          <text class="host-viewer-manage-action-desc">{{ t('al.blockCopy') }}</text>
+        </view>
+      </view>
+    </view>
+  </BaseDrawer>
+</template>
+
+<script setup>
+  import { ref, computed, watch } from 'vue';
+  import BaseDrawer from '@/components/live/BaseDrawer/index.nvue';
+  import { levelBadgeUrl } from '@/uni_modules/tuikit-atomic-x/components/BarrageList/levelBadge';
+  import { useLiveAudienceState } from '@/uni_modules/tuikit-atomic-x/state/LiveAudienceState';
+  import { isUserFollowed, toggleUserFollowed } from '@/uni_modules/tuikit-atomic-x/utils/followStore';
+  import { t } from '../../locales';
+
+  const props = defineProps({
+    modelValue: { type: Boolean, default: false },
+    userInfo: { type: Object },
+    liveID: { type: String },
+  });
+  const emit = defineEmits(['update:modelValue']);
+
+  const { kickUserOutOfRoom, disableSendMessage, messageBannedUserList } = useLiveAudienceState(uni?.$liveID);
+
+  const defaultAvatarURL = '/uni_modules/tuikit-atomic-x/static/assets/live/default-avatar.png';
+
+  const drawerHeight = ref(560);
+  const avatarFailed = ref(false);
+  const isFollowed = ref(false);
+  const pendingMute = ref(null);
+
+  const innerVisible = computed({
+    get: () => props.modelValue,
+    set: (val) => emit('update:modelValue', val),
+  });
+  const userName = computed(() => props.userInfo?.userName || props.userInfo?.userID || '');
+  const avatarSrc = computed(() =>
+    avatarFailed.value ? defaultAvatarURL : (props.userInfo?.avatarURL || defaultAvatarURL)
+  );
+  const userLevel = computed(() => Number(props.userInfo?.level));
+  const levelBadge = computed(() => levelBadgeUrl(userLevel.value));
+  const mutedByList = computed(() =>
+    (messageBannedUserList.value || []).some((u) => u?.userID === props.userInfo?.userID)
+  );
+  const isMuted = computed(() => (pendingMute.value === null ? mutedByList.value : pendingMute.value));
+
+  const giftValue = computed(() => Math.max(0, Math.floor(Number(props.userInfo?.giftValue) || 0)));
+  const muteIcon = computed(() =>
+    isMuted.value
+      ? '/uni_modules/tuikit-atomic-x/static/assets/live/host-viewer-mute.png'
+      : '/uni_modules/tuikit-atomic-x/static/assets/live/host-viewer-comment.png'
+  );
+
+  watch(() => props.userInfo?.userID, () => { avatarFailed.value = false; });
+  watch(() => props.modelValue, (val) => {
+    if (val) {
+      isFollowed.value = isUserFollowed(props.userInfo?.userID);
+      pendingMute.value = null;
+    }
+  });
+  watch(mutedByList, () => { pendingMute.value = null; });
+
+  const onAvatarError = () => { avatarFailed.value = true; };
+
+  const close = () => {
+    innerVisible.value = false;
+  };
+
+  const toggleFollow = () => {
+    const uid = props.userInfo?.userID;
+    if (!uid) return;
+    isFollowed.value = toggleUserFollowed(uid);
+  };
+
+  const toggleMute = () => {
+    const uid = props?.userInfo?.userID;
+    if (!uid) return;
+    const next = !isMuted.value;
+    pendingMute.value = next;
+    disableSendMessage({
+      liveID: uni?.$liveID,
+      userID: uid,
+      isDisable: next,
+      success: () => {},
+      fail: (errCode, errMsg) => {
+        pendingMute.value = null;
+        console.log(`disableSendMessage fail errCode: ${errCode}, errMsg: ${errMsg}`);
+      },
+    });
+  };
+
+  const kickOut = () => {
+    uni.showModal({
+      content: t('al.confirmKickOut', { name: userName.value }),
+      success: (res) => {
+        if (res.confirm) {
+          kickUserOutOfRoom({
+            liveID: uni?.$liveID,
+            userID: props?.userInfo?.userID,
+            success: () => {
+              close();
+            },
+            fail: (errCode, errMsg) => {
+              console.log(`kickUserOutOfRoom fail errCode: ${errCode}, errMsg: ${errMsg}`);
+            },
+          });
+        }
+      }
+    });
+  };
+</script>
+
+<style lang="scss">
+  @import './AudienceActionPanel.scss';
+</style>

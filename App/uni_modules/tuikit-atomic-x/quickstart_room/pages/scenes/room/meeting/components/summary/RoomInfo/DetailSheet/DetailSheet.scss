@@ -1,0 +1,73 @@
+  @import '../../../../../styles/tokens.scss';
+
+  .info-sheet {
+    background-color: $room-dark-bg-sheet;
+    border-top-left-radius: 40rpx;
+    border-top-right-radius: 40rpx;
+    padding-bottom: 68rpx;
+  }
+
+  .drop-bar {
+    height: 70rpx;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .drop-line {
+    width: 48rpx;
+    height: 48rpx;
+  }
+
+  .info-body {
+    padding-left: 32rpx;
+    padding-right: 32rpx;
+  }
+
+  .info-title {
+    color: $room-dark-text-primary;
+    font-size: $room-font-size-3xl;
+    font-weight: 500;
+    lines: 1;
+  }
+
+  .info-gap-24 {
+    height: 48rpx;
+  }
+
+  .info-gap-16 {
+    height: 32rpx;
+  }
+
+  .info-copy-all {
+    height: 96rpx;
+    background-color: $room-dark-bg-control-soft;
+    border-radius: 16rpx;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .info-copy-all-text {
+    color: $room-dark-text-placeholder;
+    font-size: $room-font-size-xl;
+  }
+
+  .copy-btn {
+    width: 124rpx;
+    height: 50rpx;
+    background-color: $room-dark-bg-control;
+    border-radius: 10rpx;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .copy-icon {
+    width: 32rpx;
+    height: 32rpx;
+    margin-right: 4rpx;
+  }
+
+  .copy-text {
+    font-size: $room-font-size-sm;
+    color: $room-color-text-inverse;
+  }

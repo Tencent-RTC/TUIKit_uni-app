@@ -8,16 +8,6 @@ export const DEFAULT_USER_NAMES: string[] = [
 ];
 
 /**
- * 通知渠道配置
- */
-export const NOTIFICATION_CHANNEL_CONFIG = {
-  channelID: 'tuikit',
-  channelName: 'tuikit',
-  channelDesc: '自定义铃音',
-  channelSound: 'private_ring',
-};
-
-/**
  * 默认头像 URL
  */
 export const DEFAULT_AVATAR = 'https://web.sdk.qcloud.com/component/TUIKit/assets/avatar_03.png';

@@ -1,0 +1,163 @@
+<template>
+  <view class="rp">
+    <view class="rp__header">
+      <text class="rp__title">贴表情</text>
+      <view class="rp__collapse" @tap="handleCollapseTap">
+        <image class="rp__collapse-icon" :src="collapseIcon" mode="aspectFit" />
+      </view>
+    </view>
+    <view v-for="(row, rowIndex) in panelRows" :key="rowIndex" class="rp__grid">
+      <view class="rp__row">
+        <view v-for="(cell, cellIndex) in row" :key="cellIndex" class="rp__cell">
+          <image v-if="cell.src" class="rp__emoji" :src="cell.src" mode="aspectFit" @tap="handleEmojiTap(cell.key)" />
+          <view v-else-if="cell.isMore" class="rp__more" @tap="handleMoreTap">
+            <image class="rp__more-icon" :src="moreIcon" mode="aspectFit" />
+          </view>
+        </view>
+      </view>
+      <view v-if="rowIndex < panelRows.length - 1" class="rp__divider"></view>
+    </view>
+  </view>
+</template>
+
+<script>
+import { listQuickReactionEmojis } from '../../../../utils/reactionEmoji'
+import { toggleMessageReaction } from '../../../../utils/messageReaction'
+
+// 与 native LongPressEmojiPanelBuilder / MessageReactionPanelPolicy 一致：6 列 2 行，末格为「更多」入口
+var PANEL_COLUMNS = 6
+var PANEL_ROWS = 2
+var QUICK_MAX = PANEL_COLUMNS * PANEL_ROWS - 1
+
+export default {
+  name: 'ReactionPicker',
+  props: {
+    message: { type: Object, required: true }
+  },
+  data() {
+    return {
+      collapseIcon: '/uni_modules/tuikit-atomic-x/static/assets/message-list/msg_reaction_collapse.png',
+      moreIcon: '/uni_modules/tuikit-atomic-x/static/assets/message-list/msg_more.png'
+    }
+  },
+  computed: {
+    panelRows() {
+      var reactedIDs = []
+      var reactions = this.message.reactionList || []
+      for (var i = 0; i < reactions.length; i++) {
+        if (reactions[i].reactedByMyself) reactedIDs.push(reactions[i].reactionID)
+      }
+      var quickEmojis = listQuickReactionEmojis(QUICK_MAX, reactedIDs)
+      var cells = []
+      for (var j = 0; j < quickEmojis.length; j++) {
+        cells.push({ key: quickEmojis[j].key, src: quickEmojis[j].src })
+      }
+      while (cells.length < QUICK_MAX) cells.push({})
+      cells.push({ isMore: true })
+      var rows = []
+      for (var r = 0; r < PANEL_ROWS; r++) {
+        rows.push(cells.slice(r * PANEL_COLUMNS, (r + 1) * PANEL_COLUMNS))
+      }
+      return rows
+    }
+  },
+  methods: {
+    // 回应的执行与失败提示统一在 utils/messageReaction；store 由 MessageActions 持有，故 keepStore=true。
+    handleEmojiTap(reactionID) {
+      var self = this
+      toggleMessageReaction(this.message, reactionID, true).then(function() {
+        self.$emit('close')
+      })
+    },
+    handleCollapseTap() {
+      this.$emit('collapse')
+    },
+    handleMoreTap() {
+      this.$emit('showAll')
+    }
+  }
+}
+</script>
+
+<style>
+.rp {
+  flex-direction: column;
+  width: 456rpx;
+  margin: 0 12rpx;
+}
+
+.rp__header {
+  flex-direction: row;
+  align-items: center;
+  height: 28rpx;
+  margin: 12rpx 24rpx 16rpx;
+}
+
+.rp__title {
+  flex: 1;
+  font-size: 20rpx;
+  color: rgba(0, 0, 0, 0.9);
+}
+
+.rp__collapse {
+  width: 28rpx;
+  height: 28rpx;
+  align-items: center;
+  justify-content: center;
+}
+
+.rp__collapse:active {
+  opacity: 0.6;
+}
+
+.rp__collapse-icon {
+  width: 28rpx;
+  height: 28rpx;
+}
+
+.rp__grid {
+  flex-direction: column;
+  padding: 0 24rpx;
+}
+
+.rp__row {
+  flex-direction: row;
+}
+
+.rp__cell {
+  width: 68rpx;
+  height: 68rpx;
+  align-items: center;
+  justify-content: center;
+}
+
+.rp__cell:active {
+  opacity: 0.6;
+}
+
+.rp__emoji {
+  width: 68rpx;
+  height: 68rpx;
+  padding: 10rpx;
+}
+
+.rp__more {
+  width: 48rpx;
+  height: 48rpx;
+  border-radius: 24rpx;
+  background-color: #F0F2F7;
+  align-items: center;
+  justify-content: center;
+}
+
+.rp__more-icon {
+  width: 32rpx;
+  height: 32rpx;
+}
+
+.rp__divider {
+  height: 2rpx;
+  margin: 6rpx 0;
+  background-color: rgba(0, 0, 0, 0.08);
+}
+</style>

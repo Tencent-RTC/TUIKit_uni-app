@@ -1,0 +1,40 @@
+<template>
+  <view class="title-container">
+    <view class="title-tap-area" @tap="handleTitleTap">
+      <view class="title-row">
+        <text class="title-text" :numberOfLines="1">{{ truncateRoomNameDisplay(currentRoom?.roomName || roomID, 6) }}</text>
+        <image class="title-arrow" src="/static/images/room/room_drop_down.png" mode="aspectFit" />
+      </view>
+      <RoomTimer />
+    </view>
+
+    <view v-if="isInfoVisible" class="info-mask" @tap="handleInfoClose">
+      <view @tap.stop>
+        <DetailSheet :roomID="roomID" @close="handleInfoClose" />
+      </view>
+    </view>
+  </view>
+</template>
+
+<script setup lang="ts">
+  import { ref } from 'vue';
+  import { useRoomState } from '@/uni_modules/tuikit-atomic-x/state';
+  import { truncateRoomNameDisplay } from '@/uni_modules/tuikit-atomic-x/utils/roomScheduleUtils';
+  import RoomTimer from './Timer/index.nvue';
+  import DetailSheet from './DetailSheet/index.nvue';
+
+  defineProps({
+    roomID: { type: String, default: '' },
+  });
+
+  const { currentRoom } = useRoomState();
+
+  const isInfoVisible = ref(false);
+
+  function handleTitleTap() { isInfoVisible.value = true; }
+  function handleInfoClose() { isInfoVisible.value = false; }
+</script>
+
+<style lang="scss">
+  @import './RoomInfo.scss';
+</style>

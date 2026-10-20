@@ -17,7 +17,7 @@
       <text class="gift-balance-value">{{ balance }}</text>
     </view>
 
-    <text class="gift-title">赠送礼物</text>
+    <text class="gift-title">{{ t('gift.pickerTitle') }}</text>
 
     <view class="category-tabs">
       <view
@@ -73,8 +73,8 @@
                 <view class="combo-core-ring"></view>
                 <!-- 中心圆盘（在 ring 内居中，盖住内圈形成环）；按压缩放 -->
                 <view class="combo-face" :class="{ 'is-pressing': pressing }">
-                  <text class="combo-label">长按</text>
-                  <text class="combo-label">连击</text>
+                  <text class="combo-label">{{ t('gift.comboPress') }}</text>
+                  <text class="combo-label">{{ t('gift.comboLabel') }}</text>
                 </view>
               </view>
               <view class="combo-count">
@@ -96,7 +96,7 @@
                    故外层 relative + image 绝对定位铺底 + 文字层绝对定位居中（对齐 .control-bar-bg 方案）。 -->
               <view v-if="selectedGiftIndex === index" class="gift-send">
                 <image class="gift-send-bg" src="/uni_modules/tuikit-atomic-x/static/assets/live/gift-send.png" mode="scaleToFill" />
-                <text class="gift-send-text" @tap.stop="onSendTap(index)">赠送</text>
+                <text class="gift-send-text" @tap.stop="onSendTap(index)">{{ t('gift.send') }}</text>
               </view>
             </view>
           </view>
@@ -141,7 +141,8 @@
     onMounted,
     onUnmounted
   } from 'vue';
-  import BaseDrawer from '@/components/live/BaseDrawer.nvue';
+  import BaseDrawer from '@/components/live/BaseDrawer/index.nvue';
+  import { t } from '../locales';
   import {
     preloadGiftAnimations
   } from './giftService';
@@ -152,6 +153,10 @@
     getScreenSizeAsync,
     heightPercentToRpx
   } from "../../utils/screen";
+  import {
+    getSystemLanguage,
+    resolveSdkLanguage
+  } from "../locales";
 
   // nvue 原生 dom 模块：用 getComponentRect 获取连击环的屏幕坐标，
   // 供顶层涟漪覆盖层定位（涟漪提层后需按环的实际位置绘制）。
@@ -573,21 +578,19 @@
 
   onMounted(() => {
     if (!uni?.$liveID) return;
-    const LanguageMap = {
-      'zh-CN': 'zh-Hans',
-      'zh-TW': 'zh-Hant',
-      'zh-Hans-US': 'zh-Hans',
-      en: 'en',
-    };
     uni.getSystemInfo()
       .then((systemInfo) => {
         // 初始化屏幕尺寸缓存，更新 drawer 高度为屏幕 50%。
         getScreenSizeAsync().then(() => {
           drawerHeight.value = heightPercentToRpx(0.5);
         });
+        // 礼物名语言:plus.os.language 优先(systemInfo.language 部分机型返回应用语言而非系统语言),
+        // 前缀回退与 UI 词条判定同构,避免礼物名与界面语言混排。
+        const language = resolveSdkLanguage(getSystemLanguage());
+        console.log(`[GiftPicker] setLanguage: ${language}`);
         setLanguage({
           liveID: uni.$liveID,
-          language: LanguageMap[systemInfo.language] || LanguageMap['zh-CN'],
+          language,
         });
         refreshUsableGifts({ liveID: uni.$liveID });
       })

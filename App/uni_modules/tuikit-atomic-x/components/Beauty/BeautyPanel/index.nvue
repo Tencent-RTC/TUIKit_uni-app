@@ -1,0 +1,42 @@
+<template>
+  <BaseDrawer
+    v-model="innerVisible"
+    :height="360"
+    :overlayOpacity="0.5"
+    bgImage="/uni_modules/tuikit-atomic-x/static/assets/live/drawer-bg.png"
+    :bgImageHeight="710"
+    padding="0 40rpx 60rpx 40rpx"
+    :useSafeBottom="true"
+  >
+    <view class="beauty-heading">
+      <text class="beauty-title">{{ t('beauty_title') }}</text>
+    </view>
+
+    <BeautySliders :trackWidth="420" />
+  </BaseDrawer>
+</template>
+
+<script setup lang="ts">
+import { computed } from 'vue'
+import BaseDrawer from '@/components/live/BaseDrawer/index.nvue'
+import BeautySliders from '../BeautySliders/index.nvue'
+import { t } from '../../locales'
+
+const props = defineProps({
+  modelValue: {
+    type: Boolean,
+    default: false
+  }
+})
+
+const emit = defineEmits(['update:modelValue'])
+
+const innerVisible = computed({
+  get: () => props.modelValue,
+  set: (v) => emit('update:modelValue', v)
+})
+</script>
+
+<style lang="scss">
+  @import './BeautyPanel.scss';
+</style>

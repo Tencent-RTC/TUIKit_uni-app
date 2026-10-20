@@ -1,0 +1,48 @@
+  @import '../../../../styles/tokens.scss';
+
+  .screen-sharing-placeholder {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: $room-dark-bg-base;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .screen-sharing-content {
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .screen-sharing-icon {
+    width: 96rpx;
+    height: 96rpx;
+    margin-bottom: 24rpx;
+  }
+
+  .screen-sharing-text {
+    color: $room-color-text-inverse;
+    font-size: $room-font-size-base;
+    line-height: 40rpx;
+    margin-bottom: 64rpx;
+  }
+
+  .screen-sharing-stop-btn {
+    width: 200rpx;
+    height: 72rpx;
+    border-radius: 36rpx;
+    background-color: $room-color-danger-solid;
+    flex-direction: row;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .screen-sharing-stop-btn-text {
+    color: $room-color-text-inverse;
+    font-size: $room-font-size-base;
+    line-height: 40rpx;
+  }

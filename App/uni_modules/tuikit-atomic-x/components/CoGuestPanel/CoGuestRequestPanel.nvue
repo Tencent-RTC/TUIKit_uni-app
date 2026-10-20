@@ -42,17 +42,17 @@
       <image class="co-mic-split-bg" src="/uni_modules/tuikit-atomic-x/static/assets/live/co-mic-split-bg.png" mode="scaleToFill" />
       <!-- 左半：语音连麦 -->
       <view class="co-mic-apply is-voice" @tap="handleSendCoGuest('mic')">
-        <text class="co-mic-apply-text">语音连麦</text>
+        <text class="co-mic-apply-text">{{ t('voice_co_guest') }}</text>
       </view>
       <!-- 右半：视频连麦 -->
       <view class="co-mic-apply is-video" @tap="handleSendCoGuest('video')">
-        <text class="co-mic-apply-text">视频连麦</text>
+        <text class="co-mic-apply-text">{{ t('video_co_guest') }}</text>
       </view>
     </view>
     <!-- USER_APPLYING：单个"取消申请"按钮 -->
     <view class="co-mic-actions is-single" v-else>
       <view class="co-mic-apply is-cancel" @tap="handleCancelApplication">
-        <text class="co-mic-apply-text is-cancel-text">取消申请</text>
+        <text class="co-mic-apply-text is-cancel-text">{{ t('cancel_apply') }}</text>
       </view>
     </view>
   </BaseDrawer>
@@ -97,72 +97,35 @@
         </view>
         <!-- 标题 + 副标题 -->
         <view class="detail-heading">
-          <text class="detail-title">{{ beautyMode ? '美颜调节' : '调整视频连麦画面' }}</text>
-          <text class="detail-subtitle">观众将实时看到效果</text>
+          <text class="detail-title">{{ beautyMode ? t('beauty_adjust') : t('adjust_title') }}</text>
+          <text class="detail-subtitle">{{ t('adjust_subtitle') }}</text>
         </view>
         <!-- 能力项 <-> 美颜调节 原地内联切换（横向滑动）。
              美颜模式时容器整体上移(switch-lift)：三滑块远离屏幕底部系统手势区
              (iOS Home 条 / Android 手势条)，避免拖动被拦截；能力项模式保持原位。 -->
         <view class="detail-switch" :class="{ 'switch-lift': beautyMode }">
-        <!-- 三个能力项：美化 / 镜像 / 翻转镜头 -->
         <view class="detail-actions" :class="{ 'panel-hidden-left': beautyMode }">
           <view class="detail-action" @tap="handleBeauty">
             <view class="cap-icon">
               <image class="cap-icon-img" src="/uni_modules/tuikit-atomic-x/static/assets/live/co-mic-beauty.png" mode="aspectFit" />
             </view>
-            <text class="cap-label">美化</text>
+            <text class="cap-label">{{ t('beautify') }}</text>
           </view>
           <view class="detail-action" @tap="handleToggleMirror">
             <view class="cap-icon">
               <image class="cap-icon-img" src="/uni_modules/tuikit-atomic-x/static/assets/live/co-mic-mirror.png" mode="aspectFit" />
             </view>
-            <text class="cap-label">镜像</text>
+            <text class="cap-label">{{ t('mirror') }}</text>
           </view>
           <view class="detail-action" @tap="handleFlipCamera">
             <view class="cap-icon">
               <image class="cap-icon-img" src="/uni_modules/tuikit-atomic-x/static/assets/live/co-mic-flip.png" mode="aspectFit" />
             </view>
-            <text class="cap-label">翻转镜头</text>
+            <text class="cap-label">{{ t('flip_camera') }}</text>
           </view>
         </view>
-
-          <!-- 美颜调节区：磨皮 / 美白 / 红润 三个品牌蓝滑块。
-               返回走标题栏返回按钮的分层返回（美颜模式先退回三能力项）；
-               @touchstart/move/end 用 .stop 阻止事件冒泡到外层 overlay，避免拖动误触"返回"。 -->
           <view class="beauty-adjust" :class="{ 'panel-shown': beautyMode }" @tap.stop>
-            <view class="beauty-row">
-              <text class="beauty-row-label">磨皮</text>
-              <Slider
-                class="beauty-slider"
-                :modelValue="smoothLevel"
-                :min="0" :max="9"
-                @input="onSmoothInput"
-                @change="onSmoothChange"
-              />
-              <text class="beauty-row-value">{{ smoothLevel }}</text>
-            </view>
-            <view class="beauty-row">
-              <text class="beauty-row-label">美白</text>
-              <Slider
-                class="beauty-slider"
-                :modelValue="whitenessLevel"
-                :min="0" :max="9"
-                @input="onWhitenessInput"
-                @change="onWhitenessChange"
-              />
-              <text class="beauty-row-value">{{ whitenessLevel }}</text>
-            </view>
-            <view class="beauty-row">
-              <text class="beauty-row-label">红润</text>
-              <Slider
-                class="beauty-slider"
-                :modelValue="ruddyLevel"
-                :min="0" :max="9"
-                @input="onRuddyInput"
-                @change="onRuddyChange"
-              />
-              <text class="beauty-row-value">{{ ruddyLevel }}</text>
-            </view>
+            <BeautySliders />
           </view>
         </view>
       </view>
@@ -181,14 +144,14 @@
 
 <script setup lang="ts">
   import { onMounted, ref, onUnmounted, computed, watch, nextTick } from 'vue';
-  import BaseDrawer from '@/components/live/BaseDrawer.nvue';
-  import Slider from '@/uni_modules/tuikit-atomic-x/components/Slider.nvue';
+  import BaseDrawer from '@/components/live/BaseDrawer/index.nvue';
+  import { BeautySliders } from '@/uni_modules/tuikit-atomic-x/components/Beauty';
   import LiveToast from '@/uni_modules/tuikit-atomic-x/components/LiveToast.nvue';
 
   import { useDeviceState } from "@/uni_modules/tuikit-atomic-x/state/DeviceState";
   import { MirrorType } from "@/uni_modules/tuikit-atomic-x/state/DeviceState";
-  import { useBaseBeautyState } from "@/uni_modules/tuikit-atomic-x/state/BaseBeautyState";
   import { useCoGuestState, NoResponseReason } from "@/uni_modules/tuikit-atomic-x/state/CoGuestState";
+  import { t } from '../locales';
   import { useLoginState } from "@/uni_modules/tuikit-atomic-x/state/LoginState";
   import { useLiveListState } from "@/uni_modules/tuikit-atomic-x/state/LiveListState";
   const { loginUserInfo } = useLoginState()
@@ -221,7 +184,7 @@
   } = useCoGuestState(uni?.$liveID);
 
 
-  const defaultAvatarURL = 'https://web.sdk.qcloud.com/component/TUIKit/assets/avatar_01.png';
+  const defaultAvatarURL = '/uni_modules/tuikit-atomic-x/static/assets/live/default-avatar.png';
   // nvue 原生 animation / dom 模块
   const animation = uni.requireNativePlugin('animation');
   const dom = uni.requireNativePlugin('dom');
@@ -295,21 +258,9 @@
   // 失效,而 JS 节点无变化不会重新触发 onAttachedToWindow 注册,必须重建节点恢复。
   const cameraTestViewReady = ref(true);
   // 美颜内联调节（方案 A：detail 面板内原地切换，边看预览边调）。
-  // beautyMode=true 时下方从"三能力项"横滑切换为"磨皮/美白/红润"三个滑块。
-  const {
-    smoothLevel, whitenessLevel, ruddyLevel,
-    setSmoothLevel, setWhitenessLevel, setRuddyLevel,
-  } = useBaseBeautyState();
+  // beautyMode=true 时下方从"三能力项"横滑切换为"磨皮/美白/红润"三个滑块
+  // (内容由共享组件 BeautySliders 承载,与 BeautyPanel 共用同一实现)。
   const beautyMode = ref(false);
-  // 使用自撸滑块（view + touch），完全避开官方 <slider> 的原生 thumb"光晕"外圈，
-  // 使用封装的 <Slider> 组件（本地自研，无原生 SeekBar 光晕，位置浮点/值整数解耦，多指过滤）。
-  // input（拖动中，节流后）与 change（松手时）都需要同步到底层美颜 SDK。
-  const onSmoothInput = (v: number) => { setSmoothLevel({ smoothLevel: v }); };
-  const onSmoothChange = (v: number) => { setSmoothLevel({ smoothLevel: v }); };
-  const onWhitenessInput = (v: number) => { setWhitenessLevel({ whitenessLevel: v }); };
-  const onWhitenessChange = (v: number) => { setWhitenessLevel({ whitenessLevel: v }); };
-  const onRuddyInput = (v: number) => { setRuddyLevel({ ruddyLevel: v }); };
-  const onRuddyChange = (v: number) => { setRuddyLevel({ ruddyLevel: v }); };
 
   const exitBeautyMode = () => { beautyMode.value = false; };
   // 分层返回：美颜调节 → 三能力项 → 关闭 detail 面板。
@@ -505,7 +456,7 @@
     if (uni.$localGuestStatus !== 'CONNECTED') return;
     console.log(`[CoGuest] layout changed: ${oldVal} -> ${newVal}, recover camera then restart test.`);
     // 提示用户:布局切换导致预览短暂中断,约 1 秒后自动恢复,避免误以为预览故障。
-    showTip('直播布局已调整，正在恢复画面');
+    showTip(t('layout_adjusted'));
     stopCameraTest();
     // 清跟随/重试计时器与计数,交由重启流程重建。
     clearTimeout(cameraTestRetryTimer);
@@ -563,7 +514,7 @@
   //   触发 @error 后先切换到本地 fallback，避免用户看到空白。
   // 2. 面板打开时，如果 avatarURL 已就绪但 image 请求生命周期已 unmount 过，可能不会自动重发请求；
   //   watch(innerVisible) 里在打开瞬间先清空再赋值，强制触发 image 重新加载（"src 变化才发请求"）。
-  // @error 兜底头像：与主播信息胶囊保持一致，统一回退到 defaultAvatarURL（远程 avatar_01.png），
+  // @error 兜底头像：与主播信息胶囊保持一致，统一回退到 defaultAvatarURL（随包本地头像），
   // 而不是本地 default-avatar.png（那会导致连麦面板默认头像和主播胶囊长得不一样）。
   const LOCAL_FALLBACK_AVATAR = defaultAvatarURL;
   const anchorAvatarDisplay = ref('');
@@ -648,7 +599,7 @@
     } else {
       uni.$localGuestStatus = 'IDLE'
       guestStatus.value = 'IDLE'
-      showTip('上麦申请被拒绝');
+      showTip(t('request_rejected'));
     }
   }
   const handleGuestApplicationNoResponse = (event) => {
@@ -657,7 +608,7 @@
     if (res.reason === NoResponseReason.TIMEOUT) {
       uni.$localGuestStatus = 'IDLE'
       guestStatus.value = 'IDLE'
-      showTip('上麦申请超时');
+      showTip(t('request_timeout'));
     }
   }
 
@@ -675,7 +626,7 @@
       },
       fail: (errorCode) => {
         if (errorCode === 100006) {
-          showTip('您当前无法执行此操作（可能是无权限，或受场景限制等原因）')
+          showTip(t('cannot_do_now'))
         }
         uni.$localGuestStatus = 'IDLE'
         guestStatus.value = 'IDLE'
@@ -929,7 +880,7 @@
     border-top-right-radius: 52rpx;
   }
 
-  /* 面板内 handle（对齐 BaseDrawer 的 drawer-handle） */
+  /* 面板内 handle（对齐 BaseDrawer 的 base-drawer-handle） */
   .detail-panel .drawer-handle {
     width: 72rpx;
     height: 8rpx;
@@ -1046,30 +997,7 @@
     opacity: 1;
   }
 
-  /* 单行美颜项：label + hit-area(轨道) + 数值，横向排列。行高按 hit-area 60rpx 撑开。 */
-  .beauty-row {
-    flex-direction: row;
-    align-items: center;
-    margin-bottom: 12rpx;
-    height: 60rpx;
-  }
-
-  .beauty-row-label {
-    width: 88rpx;
-    color: rgba(255, 255, 255, 0.9);
-    font-size: 26rpx;
-  }
-
-  /* 自研 Slider 组件的行内布局：与两侧 label / value 之间保持 20rpx 间距。 */
-  .beauty-slider {
-    margin: 0 20rpx;
-  }
-  .beauty-row-value {
-    width: 40rpx;
-    color: rgba(255, 255, 255, 0.7);
-    font-size: 24rpx;
-    text-align: right;
-  }
+  /* 美颜调节三行(label+Slider+数值)由共享组件 BeautySliders 承载,样式随组件走。 */
 
   .detail-action {
     flex-direction: column;

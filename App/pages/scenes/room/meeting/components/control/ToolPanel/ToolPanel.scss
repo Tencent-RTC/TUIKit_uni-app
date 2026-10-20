@@ -1,0 +1,133 @@
+  @import '../../../../styles/tokens.scss';
+
+
+  .tool-panel {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    flex-direction: column;
+  }
+
+  .tool-panel--collapsed {
+    height: 192rpx;
+    padding: 0;
+  }
+
+  .tool-panel--expanded {
+    padding: 0 16rpx 34rpx;
+  }
+
+  .tool-panel--rows-1 {
+    height: 216rpx;
+  }
+
+  .tool-panel--rows-2 {
+    height: 350rpx;
+  }
+
+  .tool-panel--rows-3 {
+    height: 484rpx;
+  }
+
+  .tool-panel--rows-4 {
+    height: 618rpx;
+  }
+
+  .tool-sheet {
+    flex: 1;
+    flex-direction: row;
+    align-items: flex-start;
+    justify-content: center;
+  }
+
+  .tool-sheet--collapsed {
+    padding: 29rpx 32rpx;
+    background-color: $room-dark-bg-base;
+    border-radius: 0;
+  }
+
+  .tool-sheet--expanded {
+    padding: 24rpx;
+    background-color: $room-dark-bg-surface;
+    transition-duration: 200ms;
+    transition-timing-function: ease-out;
+    border-radius: 24rpx;
+  }
+
+  .tool-list {
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .tool-list--rows-0 {
+    height: 134rpx;
+  }
+
+  .tool-list--rows-1 {
+    height: 134rpx;
+  }
+
+  .tool-list--rows-2 {
+    height: 268rpx;
+  }
+
+  .tool-list--rows-3 {
+    height: 402rpx;
+  }
+
+  .tool-list--rows-4 {
+    height: 536rpx;
+  }
+
+  .tool-row {
+    height: 134rpx;
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .tool-cell {
+    width: 118rpx;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .toggle-btn {
+    height: 134rpx;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding-left: 8rpx;
+  }
+
+  .toggle-icon-box {
+    width: 66rpx;
+    height: 104rpx;
+    border-radius: 20rpx;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .toggle-icon-box--collapsed {
+    background-color: $room-dark-bg-surface;
+  }
+
+  .toggle-icon-box--expanded {
+    background-color: transparent;
+  }
+
+  .toggle-icon {
+    width: 48rpx;
+    height: 48rpx;
+  }
+
+  .toggle-text {
+    color: $room-color-text-inverse;
+    font-size: $room-font-size-xs;
+    margin-top: 6rpx;
+    lines: 1;
+    text-overflow: ellipsis;
+    text-align: center;
+  }

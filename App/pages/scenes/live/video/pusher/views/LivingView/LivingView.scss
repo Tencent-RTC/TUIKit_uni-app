@@ -1,0 +1,178 @@
+@import '../../../../styles/tokens.scss';
+
+.living-view {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+}
+
+.live-content {
+  flex: 1;
+  position: absolute;
+
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.go-guest-request-container {
+  position: fixed;
+  top: 280rpx;
+  right: 30rpx;
+  width: 200rpx;
+  height: 200rpx;
+  border-radius: 40rpx;
+  background: $live-dark-bg-control-solid;
+
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+}
+
+.avatar-overlay-container {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.go-guest-request-img {
+  width: 60rpx;
+  height: 60rpx;
+  border-radius: 30rpx;
+  transition-property: transform, opacity;
+  transition-duration: 0.3s;
+  transition-timing-function: ease;
+  object-fit: cover;
+}
+
+.go-guest-request-text {
+  margin-top: 30rpx;
+  font-size: 24rpx;
+  color: $live-dark-text-primary;
+}
+
+.live-bottom-Panel {
+  flex: 1;
+  position: fixed;
+  bottom: 40rpx;
+  left: 20rpx;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.action-buttons {
+  flex-direction: row;
+  align-items: center;
+  padding-right: 70rpx;
+}
+
+.action-button-item {
+  width: 64rpx;
+  height: 92rpx;
+  margin-left: 24rpx;
+  justify-content: center;
+  align-items: center;
+}
+
+.action-button-item.disabled {
+  opacity: 0.5;
+  filter: grayscale(100%);
+  pointer-events: none;
+}
+
+.action-button-icon {
+  width: 56rpx;
+  height: 56rpx;
+  margin-bottom: 4rpx;
+}
+
+.co-mic-btn,
+.action-btn-bg {
+  background-color: $live-dark-bg-float;
+  border-radius: 50%;
+  border: 2rpx solid $live-dark-surface-055;
+}
+
+.action-button-text {
+  color: $live-dark-text-primary;
+  font-size: 20rpx;
+}
+
+.custom-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: $live-mask;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.custom-modal {
+  width: 500rpx;
+  background-color: $live-surface-white;
+  border-radius: 20rpx;
+  box-shadow: 0 4rpx 16rpx $live-mask-light;
+  flex-direction: column;
+  align-items: center;
+}
+
+.modal-content {
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  margin-top: 40rpx;
+}
+
+.modal-text {
+  color: $live-color-black;
+  font-size: 32rpx;
+  font-weight: 600;
+  text-align: center;
+  line-height: 40rpx;
+  margin-bottom: 30rpx;
+  max-width: 400rpx;
+  word-wrap: break-word;
+  word-break: break-all;
+  white-space: normal;
+}
+
+.modal-actions {
+  flex-direction: row;
+  justify-content: space-around;
+  align-items: center;
+  border-top: 2rpx solid $live-dark-text-soft;
+  width: 500rpx;
+}
+
+.modal-btn {
+  width: 250rpx;
+  padding: 28rpx;
+  justify-content: center;
+  align-items: center;
+}
+
+.modal-btn-confirm {
+  border-left: 2rpx solid $live-dark-text-soft;
+}
+
+.modal-btn-reject {
+  font-size: 32rpx;
+  font-weight: bold;
+  color: $live-dark-text-muted;
+}
+
+.modal-btn-accept {
+  font-size: 32rpx;
+  font-weight: bold;
+  color: $live-color-brand-deep;
+}

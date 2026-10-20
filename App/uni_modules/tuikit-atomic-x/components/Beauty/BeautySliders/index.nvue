@@ -1,0 +1,72 @@
+<template>
+  <!-- 美颜参数滑块组(标签 + Slider + 数值),无外壳,由宿主提供容器。 -->
+  <view class="beauty-rows">
+    <view class="beauty-row">
+      <text class="beauty-row-label">{{ t('smoothing') }}</text>
+      <Slider
+        class="beauty-slider"
+        :modelValue="smoothLevel"
+        :min="0" :max="9"
+        :trackWidth="trackWidth"
+        @input="onSmoothInput"
+        @change="onSmoothChange"
+      />
+      <text class="beauty-row-value">{{ smoothLevel }}</text>
+    </view>
+    <view class="beauty-row">
+      <text class="beauty-row-label">{{ t('whitening') }}</text>
+      <Slider
+        class="beauty-slider"
+        :modelValue="whitenessLevel"
+        :min="0" :max="9"
+        :trackWidth="trackWidth"
+        @input="onWhitenessInput"
+        @change="onWhitenessChange"
+      />
+      <text class="beauty-row-value">{{ whitenessLevel }}</text>
+    </view>
+    <view class="beauty-row">
+      <text class="beauty-row-label">{{ t('rosy') }}</text>
+      <Slider
+        class="beauty-slider"
+        :modelValue="ruddyLevel"
+        :min="0" :max="9"
+        :trackWidth="trackWidth"
+        @input="onRuddyInput"
+        @change="onRuddyChange"
+      />
+      <text class="beauty-row-value">{{ ruddyLevel }}</text>
+    </view>
+  </view>
+</template>
+
+<script setup lang="ts">
+  import Slider from '@/uni_modules/tuikit-atomic-x/components/Slider.nvue';
+  import { t } from '../../locales';
+  import { useBaseBeautyState } from '@/uni_modules/tuikit-atomic-x/state/BaseBeautyState';
+
+  const props = defineProps({
+    // 轨道宽度(rpx):随宿主布局调整。
+    trackWidth: { type: Number, default: 320 },
+  });
+
+  const {
+    setSmoothLevel,
+    setWhitenessLevel,
+    setRuddyLevel,
+    smoothLevel,
+    whitenessLevel,
+    ruddyLevel,
+  } = useBaseBeautyState();
+
+  const onSmoothInput = (v: number) => { setSmoothLevel({ smoothLevel: v }); };
+  const onSmoothChange = (v: number) => { setSmoothLevel({ smoothLevel: v }); };
+  const onWhitenessInput = (v: number) => { setWhitenessLevel({ whitenessLevel: v }); };
+  const onWhitenessChange = (v: number) => { setWhitenessLevel({ whitenessLevel: v }); };
+  const onRuddyInput = (v: number) => { setRuddyLevel({ ruddyLevel: v }); };
+  const onRuddyChange = (v: number) => { setRuddyLevel({ ruddyLevel: v }); };
+</script>
+
+<style lang="scss">
+  @import './BeautySliders.scss';
+</style>

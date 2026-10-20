@@ -1,0 +1,19 @@
+  @import '../../../../styles/tokens.scss';
+
+  .exit-btn {
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .exit-icon {
+    width: 40rpx;
+    height: 40rpx;
+    margin-right: 6rpx;
+  }
+
+  .exit-text {
+    color: $room-color-danger-deep;
+    font-size: $room-font-size-base;
+    font-weight: 600;
+  }

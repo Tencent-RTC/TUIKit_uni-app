@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="io.dcloud.uniappx.tuikit_atomic_x">
+
+    <!-- LogFileProvider: 日志文件分享所需的 FileProvider -->
+    <application>
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.atomicx.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/atomicx_file_paths" />
+        </provider>
+    </application>
+
+</manifest>

@@ -1,0 +1,117 @@
+<template>
+  <view class="countdown-layer" v-if="visible">
+    <view class="countdown-circle">
+      <text class="countdown-num" ref="numRef">{{ count }}</text>
+    </view>
+    <view class="countdown-cancel" @tap="onCancel">
+      <text class="countdown-cancel-text">{{ t('common.cancel') }}</text>
+    </view>
+  </view>
+</template>
+
+<script setup lang="ts">
+  import { ref, watch, nextTick, onUnmounted } from 'vue';
+  import { t } from '../../../../locales';
+
+  const props = defineProps({
+    modelValue: {
+      type: Boolean,
+      default: false,
+    },
+  });
+
+  const emit = defineEmits(['update:modelValue', 'finished']);
+
+  const animation = (uni as any).requireNativePlugin('animation');
+
+  const visible = ref(false);
+  const count = ref(3);
+  const numRef = ref<any>(null);
+
+  let tickTimer: any = null;
+  let fadeOutTimer: any = null;
+
+  const clearTimers = () => {
+    if (tickTimer != null) {
+      clearInterval(tickTimer);
+      tickTimer = null;
+    }
+    if (fadeOutTimer != null) {
+      clearTimeout(fadeOutTimer);
+      fadeOutTimer = null;
+    }
+  };
+
+  const close = () => {
+    clearTimers();
+    visible.value = false;
+    emit('update:modelValue', false);
+  };
+
+  const playNumTick = () => {
+    const el = numRef.value;
+    if (!el) return;
+    animation.transition(el, {
+      styles: { transform: 'scale(1.6)', opacity: 0 },
+      duration: 0,
+      timingFunction: 'linear',
+    });
+    animation.transition(el, {
+      styles: { transform: 'scale(1)', opacity: 1 },
+      duration: 200,
+      timingFunction: 'cubic-bezier(0.22, 1, 0.36, 1)',
+    });
+    if (fadeOutTimer != null) clearTimeout(fadeOutTimer);
+    fadeOutTimer = setTimeout(() => {
+      fadeOutTimer = null;
+      animation.transition(el, {
+        styles: { transform: 'scale(0.85)', opacity: 0 },
+        duration: 200,
+        timingFunction: 'ease-in',
+      });
+    }, 800);
+  };
+
+  const startCountdown = () => {
+    clearTimers();
+    visible.value = true;
+    count.value = 3;
+    nextTick(() => {
+      playNumTick();
+    });
+    let n = 3;
+    tickTimer = setInterval(() => {
+      n--;
+      if (n <= 0) {
+        clearTimers();
+        visible.value = false;
+        emit('update:modelValue', false);
+        emit('finished');
+        return;
+      }
+      count.value = n;
+      playNumTick();
+    }, 1000);
+  };
+
+  const onCancel = () => {
+    close();
+  };
+
+  watch(() => props.modelValue, (val) => {
+    if (val) {
+      startCountdown();
+    } else if (visible.value) {
+      clearTimers();
+      visible.value = false;
+    }
+  });
+
+  onUnmounted(() => {
+    clearTimers();
+  });
+</script>
+
+<style lang="scss">
+  @import './CountdownOverlay.scss';
+</style>

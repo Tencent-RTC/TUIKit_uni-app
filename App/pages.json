@@ -86,17 +86,6 @@
       }
     },
     {
-      "path": "pages/scenes/live/video/pusher/liveEnd",
-      "disableSwipeBack": true,
-      "style": {
-        "navigationBarTextStyle": "white",
-        "disableSwipeBack": true,
-        "app-plus": {
-          "titleNView": false
-        }
-      }
-    },
-    {
       "path": "pages/scenes/chat/chat/index",
       "style": {
         "navigationStyle": "custom",

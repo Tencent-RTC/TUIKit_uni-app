@@ -1,0 +1,113 @@
+  @import '../../../../styles/tokens.scss';
+
+  .member-row {
+    flex-direction: row;
+    align-items: center;
+    height: 100rpx;
+    padding-left: 32rpx;
+    padding-right: 32rpx;
+    margin-bottom: 20rpx;
+  }
+
+  .avatar-wrap {
+    width: 80rpx;
+    height: 80rpx;
+    border-radius: 40rpx;
+    background-color: $room-dark-bg-surface;
+  }
+
+  .avatar-img {
+    width: 80rpx;
+    height: 80rpx;
+    border-radius: 40rpx;
+  }
+
+  .user-info {
+    flex: 1;
+    margin-left: 24rpx;
+    flex-direction: column;
+    justify-content: center;
+  }
+
+  .name-row {
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .name-text {
+    color: $room-dark-text-primary;
+    font-size: $room-font-size-xl;
+    lines: 1;
+    text-overflow: ellipsis;
+    max-width: 380rpx;
+  }
+
+  .me-tag {
+    color: $room-dark-text-primary;
+    font-size: $room-font-size-base;
+    margin-left: 8rpx;
+  }
+
+  .badge-row {
+    flex-direction: row;
+    align-items: center;
+    margin-top: 4rpx;
+  }
+
+  .badge-icon {
+    width: 28rpx;
+    height: 28rpx;
+    margin-right: 4rpx;
+  }
+
+  .badge-text {
+    font-size: $room-font-size-sm;
+  }
+
+  .status-icons {
+    flex-direction: row;
+    align-items: center;
+    margin-left: 24rpx;
+  }
+
+  .status-icon {
+    width: 40rpx;
+    height: 40rpx;
+    margin-left: 40rpx;
+  }
+
+  /* ── 未进房：呼叫中徽标 + 呼叫/取消按钮 ── */
+  .calling-tag {
+    color: $room-dark-text-primary;
+    font-weight: 400;
+    font-size: $room-font-size-base;
+    padding: 4rpx 10rpx;
+  }
+
+  .rejected-tag {
+    color: $room-dark-text-primary;
+    font-weight: 400;
+    font-size: $room-font-size-base;
+    padding: 4rpx 10rpx;
+  }
+
+  .action-area {
+    flex-direction: row;
+    align-items: center;
+    margin-left: 24rpx;
+  }
+
+  .action-btn-call {
+    background-color: $room-dark-bg-control-strong;
+    justify-content: center;
+    align-items: center;
+    padding: 8rpx 20rpx;
+    border-radius: 12rpx;
+  }
+
+  .action-btn-text-call {
+    color: $room-dark-text-primary;
+    font-weight: 400;
+    font-size: $room-font-size-base;
+    line-height: 40rpx;
+  }

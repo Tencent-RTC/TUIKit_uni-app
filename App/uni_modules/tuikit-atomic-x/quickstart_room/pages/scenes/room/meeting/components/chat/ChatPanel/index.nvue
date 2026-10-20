@@ -1,0 +1,152 @@
+<template>
+  <view v-if="props.visible" class="chat-panel">
+    <CustomNavbar
+      position="fixed"
+      :title="t('chat.title')"
+      :showBack="true"
+      :showMenu="false"
+      @back="onNavBack"
+    />
+
+    <view
+      class="message-list-container"
+      :style="{ paddingBottom: inputToolbarHeight + 'px' }"
+      @tap="closeSoftKeyboard"
+    >
+      <MessageList
+        v-if="conversationID"
+        :conversationID="conversationID"
+        :inputToolbarHeight="inputToolbarHeight"
+        :inputPanelHeight="inputPanelHeight"
+        :messageActionList="MESSAGE_ACTION_LIST"
+        @onMessageListTap="closeSoftKeyboard"
+      />
+    </view>
+
+    <MessageInput
+      v-if="conversationID"
+      ref="messageInputRef"
+      :conversationID="conversationID"
+      :setOfflinePushInfo="setOfflinePushInfo"
+      :toolList="customToolList"
+      :enableVoice="false"
+      :enableMention="false"
+      @height-change="onMessageInputHeightChange"
+    />
+  </view>
+</template>
+
+<script setup lang="ts">
+  import { ref, computed, watch } from 'vue';
+  import MessageList from '@/uni_modules/tuikit-atomic-x/components/MessageList/MessageList.nvue';
+  import MessageInput, { DEFAULT_TOOLS } from '@/uni_modules/tuikit-atomic-x/components/MessageInput/MessageInput.nvue';
+  import type { ToolItem } from '@/uni_modules/tuikit-atomic-x/components/MessageInput/types';
+  import CustomNavbar from '@/uni_modules/tuikit-atomic-x/components/CustomNavbar/CustomNavbar.nvue';
+  import { useConversationListState } from '@/uni_modules/tuikit-atomic-x/state/ConversationListState';
+  import { useLoginState } from '@/uni_modules/tuikit-atomic-x/state/LoginState';
+  import { MessageType } from '@/uni_modules/tuikit-atomic-x/types/message';
+  import type { OfflinePushContext, OfflinePushInfo } from '@/uni_modules/tuikit-atomic-x/types/message';
+  import { chatConversationIDOf } from '../ChatButton/chatUnreadStore';
+  import { t } from '../../../../locales';
+
+  const props = withDefaults(defineProps<{
+    roomID: string;
+    visible?: boolean;
+  }>(), {
+    visible: true,
+  });
+
+  const emit = defineEmits<{
+    (e: 'close'): void;
+  }>();
+
+  const { loginUserInfo } = useLoginState();
+
+  const messageInputRef = ref<any>(null);
+  const inputToolbarHeight = ref(0);
+  const inputPanelHeight = ref(0);
+  const currentConversation = ref<any>(null);
+
+  const { getConversationInfo } = useConversationListState('chat');
+
+  const conversationID = computed<string>(() => chatConversationIDOf(props.roomID));
+
+  const isC2CConversation = computed(() => conversationID.value.startsWith('c2c_'));
+
+
+  const refreshConversationInfo = (): void => {
+    if (conversationID.value.length === 0) return;
+    getConversationInfo(conversationID.value)
+      .then((info) => {
+        currentConversation.value = info;
+      })
+      .catch((e) => {
+        console.error('[ChatPanel] getConversationInfo failed:', e);
+      });
+  };
+
+  // 长按菜单白名单：不含 'forward'，会中聊天不提供消息转发
+  const MESSAGE_ACTION_LIST: string[] = ['copy', 'delete', 'voiceToText', 'recall', 'quote', 'translate'];
+
+  const customToolList = computed<ToolItem[]>(() => {
+    return DEFAULT_TOOLS.filter(tool => tool.id !== 'videoCall' && tool.id !== 'voiceCall' && tool.id !== 'video' && tool.id !== 'image');
+  });
+
+  const onNavBack = (): void => {
+    emit('close');
+  };
+
+  const onMessageInputHeightChange = (payload: { inputToolbarHeight: number; inputPanelHeight: number }): void => {
+    inputToolbarHeight.value = payload.inputToolbarHeight;
+    inputPanelHeight.value = payload.inputPanelHeight;
+  };
+
+  const closeSoftKeyboard = (): void => {
+    const refVal: any = messageInputRef.value;
+    if (refVal != null && typeof refVal.collapse === 'function') {
+      refVal.collapse();
+    }
+  };
+
+  const setOfflinePushInfo = (ctx: OfflinePushContext): OfflinePushInfo | null => {
+    const title = isC2CConversation.value
+      ? (loginUserInfo.value?.nickname || loginUserInfo.value?.userID || t('chat.newMessage'))
+      : ((currentConversation.value && currentConversation.value.title) || t('chat.newMessage'));
+    const conv = ctx.conversationID;
+
+    let description = t('chat.newMessageBracket');
+    switch (ctx.messageType) {
+      case MessageType.TEXT:
+        description = (ctx.messagePayload as { text?: string })?.text || t('chat.textMessage');
+        break;
+      case MessageType.IMAGE: description = t('chat.image'); break;
+      case MessageType.VIDEO: description = t('chat.video'); break;
+      case MessageType.AUDIO: description = t('chat.audio'); break;
+      case MessageType.FILE: description = t('chat.file'); break;
+      case MessageType.CUSTOM: return null;
+      default: return null;
+    }
+
+    return {
+      title,
+      description,
+      extensionInfo: {
+        ext: JSON.stringify({
+          conversationID: conv,
+          messageType: ctx.messageType,
+        }),
+      },
+    };
+  };
+
+  refreshConversationInfo();
+
+  watch(
+    conversationID,
+    () => refreshConversationInfo()
+  );
+</script>
+
+<style lang="scss">
+  @import './ChatPanel.scss';
+</style>

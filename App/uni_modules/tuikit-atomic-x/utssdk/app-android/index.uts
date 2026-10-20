@@ -1,7 +1,7 @@
 import Context from "android.content.Context";
 import Intent from "android.content.Intent";
 import { CallExperimentalAPIOptions, HybridListenerOptions } from "../interface";
-import { ExperimentalApiInvoker, FloatViewManager, Logger, VibratorFeature, SystemImagePicker, EngineBridge, AlbumPickerManager, CallEngineManager } from 'uts.sdk.modules.atomicx.kotlin';
+import { ExperimentalApiInvoker, FloatViewManager, Logger, VibratorFeature, SystemImagePicker, EngineBridge, AlbumPickerManager, LogFileProvider, CallEngineManager } from 'uts.sdk.modules.atomicx.kotlin';
 
 // from native aar
 import { TUIRoomDefine, TUIRoomEngine } from 'com.tencent.cloud.tuikit.engine.room';
@@ -373,14 +373,27 @@ export function pickSingleImageFromAlbum(
   SystemImagePicker.pickSingleImage(activity!, onSuccess, onCancel);
 }
 
-// ================= LogUpload: 日志导出 ====================
-// Android 暂不支持，防止编译报错的空实现
+// ================= LogFileProvider: 日志导出 ====================
 
+/**
+ * 获取日志文件列表
+ * @returns 日志文件列表 JSON 字符串，格式: [{ "fileName": string, "filePath": string }]
+ */
 export function fetchLogFileList(): string {
-  return "[]"
+  return LogFileProvider.shared.fetchLogfileList(UTSAndroid.getAppContext() as Context)
 }
 
+/**
+ * 分享指定索引的日志文件（弹出系统分享面板）
+ * @param row 日志文件在列表中的索引
+ */
 export function shareLog(row: number) {
+  UTSAndroid.getDispatcher("main").async(function (_) {
+    const activity = UTSAndroid.getUniActivity()
+    if (activity != null) {
+      LogFileProvider.shared.shareLog(activity!, row.toInt())
+    }
+  }, null)
 }
 
 // ================= Engine Bridge =================

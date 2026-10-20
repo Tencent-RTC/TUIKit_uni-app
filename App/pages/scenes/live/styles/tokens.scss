@@ -1,0 +1,135 @@
+/* ==================== 品牌 / 功能色 ==================== */
+$live-color-brand:                 #0468FC; /* 主品牌蓝：主按钮、选中态 */
+$live-color-brand-deep:            #1C66E5; /* 品牌深蓝：深色底上的品牌文字、按压态 */
+$live-color-brand-600:             #2B6AD6; /* 品牌蓝 600 */
+$live-color-brand-500:             #2B65FB; /* 品牌蓝 500 */
+$live-color-brand-400:             #338AFF; /* 品牌蓝 400 */
+$live-color-brand-300:             #238CFE; /* 品牌蓝 300：描边 */
+$live-color-brand-light:           #4A9EFF; /* 品牌亮蓝：深色底上的品牌描边/文字 */
+$live-color-brand-text-strong:     #8ECFFF; /* 品牌强文字 */
+$live-color-brand-ios:             #007AFF; /* 系统蓝：开关等原生控件 */
+$live-color-brand-light-soft:      rgba(74, 158, 255, 0.42); /* 品牌亮蓝浅底 */
+$live-color-brand-deep-soft:       rgba(0, 82, 217, 0.26); /* 品牌深蓝浅底 */
+$live-color-live:                  #FE2876; /* 直播粉：直播中标识 */
+$live-color-live-soft:             rgba(254, 40, 118, 0.25); /* 直播粉浅底 */
+$live-color-danger-solid:          #FF3B30; /* 危险实底：红点、录制指示 */
+$live-color-danger-deep:           #C44450; /* 危险深：离开 / 结束 */
+$live-color-danger-light-soft:     rgba(255, 91, 122, 0.22); /* 危险粉浅底 */
+$live-color-success-soft:          rgba(30, 203, 119, 0.7); /* 成功浅底 */
+$live-color-warning-soft:          rgba(207, 164, 56, 0.72); /* 警示金浅底 */
+$live-color-warning-border:        rgba(255, 230, 157, 0.3); /* 警示金描边 */
+$live-color-brown-soft:            rgba(174, 107, 66, 0.7); /* 棕浅底 */
+$live-color-purple-border:         rgba(211, 174, 255, 0.2); /* 紫描边 */
+$live-color-net-poor:              #FFD08A; /* 网络较差：trigger 文字/图标 */
+$live-color-net-very-poor:         #FF927D; /* 网络非常差 */
+$live-color-net-disconnected:      #FF6978; /* 网络断开 */
+$live-color-net-warn-soft:        rgba(255, 154, 38, 0.12); /* 网络警示图标底 */
+$live-color-net-warn-line:        rgba(255, 181, 74, 0.22); /* 网络警示图标描边 */
+$live-color-net-danger-soft:      rgba(255, 75, 92, 0.12); /* 网络异常图标底 */
+$live-color-net-danger-line:      rgba(255, 102, 118, 0.22); /* 网络异常图标描边 */
+$live-color-net-metric-warn:      #FFBD5C; /* 网络指标数字（较差） */
+$live-color-net-metric-danger:    #FF7180; /* 网络指标数字（断开） */
+$live-color-brand-tab-active:     rgba(210, 231, 255, 0.3); /* tab 激活底：brand-2 25% 混白 7% */
+$live-color-brand-tab-line:       rgba(74, 158, 255, 0.35); /* tab 激活描边 */
+$live-color-brand-icon-soft:      rgba(230, 241, 255, 0.17); /* 品牌图标底：brand-2 14% 混白 3.5% */
+$live-color-brand-icon-line:      rgba(74, 158, 255, 0.22); /* 品牌图标描边 */
+$live-color-brand-tint-soft:      rgba(74, 158, 255, 0.15); /* 品牌浅底 */
+$live-color-black:                 #000000; /* 纯黑 */
+
+/* ==================== 深色主题：面 / 底 ==================== */
+$live-dark-bg-page:                rgba(15, 16, 20, 1); /* 页面最底 */
+$live-dark-bg-page-50:             rgba(15, 16, 20, 0.5); /* 页面最底（半透明） */
+$live-dark-bg-base:                rgba(19, 20, 23, 1); /* 基础底 */
+$live-dark-bg-elevated:            rgba(31, 32, 36, 1); /* 抬升一层 */
+$live-dark-bg-sheet:               rgba(34, 38, 46, 1); /* 弹层面 */
+$live-dark-bg-sheet-72:            rgba(28, 28, 32, 0.72); /* 弹层面（半透明） */
+$live-dark-bg-surface:             rgba(43, 44, 48, 1); /* 卡片 / 按钮面 */
+$live-dark-bg-raised:              rgba(58, 60, 66, 1); /* 更高一层（输入框） */
+$live-dark-bg-card:                #23242A; /* 卡片底 */
+$live-dark-bg-purple-deep:         #1F1024; /* 深紫底 */
+$live-dark-bg-float:               rgba(20, 20, 22, 0.54); /* 浮层底 */
+$live-dark-bg-float-50:            rgba(20, 20, 22, 0.5); /* 浮层底（半透明） */
+$live-dark-bg-overlay-35:          rgba(10, 12, 18, 0.35); /* 蒙版底 */
+$live-dark-bg-overlay-30:          rgba(10, 12, 18, 0.3); /* 蒙版底（浅） */
+$live-dark-bg-overlay-22:         rgba(10, 12, 18, 0.22); /* 蒙版底（极浅：状态触发胶囊） */
+$live-dark-bg-overlay-34:          rgba(10, 10, 15, 0.34); /* 蒙版底（紫调） */
+$live-dark-bg-control:             rgba(79, 88, 107, 0.3); /* 控件灰底 */
+$live-dark-bg-control-solid:       #4F586B; /* 控件灰底（实） */
+$live-dark-bg-control-strong:      rgba(174, 187, 205, 0.68); /* 控件灰底（深） */
+
+/* ==================== 深色主题：文字（白 + 透明度） ==================== */
+$live-dark-text-primary:           #FFFFFF; /* 主文字 */
+$live-dark-text-96:                rgba(255, 255, 255, 0.96); /* 强文字 */
+$live-dark-text-42:                rgba(255, 255, 255, 0.42); /* 角标文字 */
+$live-dark-text-38:                rgba(255, 255, 255, 0.38); /* 说明文字 */
+$live-dark-text-36:                rgba(255, 255, 255, 0.36); /* 单位文字 */
+$live-dark-text-34:                rgba(255, 255, 255, 0.34); /* 弱化标签 */
+$live-dark-text-94:                rgba(255, 255, 255, 0.94); /* 次级文字 */
+$live-dark-text-92:                rgba(255, 255, 255, 0.92); /* 次级文字 */
+$live-dark-text-90:                rgba(255, 255, 255, 0.9); /* 辅助文字 */
+$live-dark-text-85:                rgba(255, 255, 255, 0.85); /* 辅助文字 */
+$live-dark-text-82:                rgba(255, 255, 255, 0.82); /* 弱化文字 */
+$live-dark-text-76:                rgba(255, 255, 255, 0.76); /* 弱化文字 */
+$live-dark-text-75:                rgba(255, 255, 255, 0.75); /* 弱化文字 */
+$live-dark-text-72:                rgba(255, 255, 255, 0.72); /* 弱化文字 */
+$live-dark-text-70:                rgba(255, 255, 255, 0.7); /* 更弱文字 */
+$live-dark-text-68:                rgba(255, 255, 255, 0.68); /* 更弱文字 */
+$live-dark-text-60:                rgba(255, 255, 255, 0.6); /* 占位文字 */
+$live-dark-text-55:                rgba(255, 255, 255, 0.55); /* 占位文字 */
+$live-dark-text-50:                rgba(255, 255, 255, 0.5); /* 辅助标签 / tab 未激活文字 */
+$live-dark-text-muted:             rgba(79, 88, 107, 1); /* 禁用 / 极弱文字 */
+$live-dark-text-soft:              rgba(213, 224, 242, 1); /* 淡蓝白文字 */
+
+/* ==================== 深色主题：面（白 + 透明度） ==================== */
+$live-dark-surface-04:             rgba(255, 255, 255, 0.04); /* 极浅面 */
+$live-dark-surface-06:             rgba(255, 255, 255, 0.06); /* 浅面：tab 容器 */
+$live-dark-surface-065:            rgba(255, 255, 255, 0.065); /* 浅面：状态卡 */
+$live-dark-surface-055:            rgba(255, 255, 255, 0.055); /* 极浅面 */
+$live-dark-surface-08:             rgba(255, 255, 255, 0.08); /* 浅面 */
+$live-dark-surface-10:             rgba(255, 255, 255, 0.1); /* 浅面 */
+$live-dark-surface-12:             rgba(255, 255, 255, 0.12); /* 按钮面 */
+$live-dark-surface-15:             rgba(255, 255, 255, 0.15); /* 按钮面 */
+$live-dark-surface-20:             rgba(255, 255, 255, 0.2); /* 按钮面（强） */
+$live-surface-white:               #FFFFFF; /* 白色面：与主题无关的按钮 / 卡片 */
+
+/* ==================== 深色主题：描边（白 + 透明度） ==================== */
+$live-dark-border-10:              rgba(255, 255, 255, 0.1); /* 极浅描边 */
+$live-dark-border-065:             rgba(255, 255, 255, 0.065); /* 分割线（状态卡内） */
+$live-dark-border-07:              rgba(255, 255, 255, 0.07); /* 状态卡描边 */
+$live-dark-border-12:              rgba(255, 255, 255, 0.12); /* 浅描边 */
+$live-dark-border-24:              rgba(255, 255, 255, 0.24); /* 描边 */
+$live-dark-border-42:              rgba(255, 255, 255, 0.42); /* 描边（强） */
+$live-dark-border-90:              rgba(255, 255, 255, 0.9); /* 描边（极强） */
+$live-dark-border-solid:           #FFFFFF; /* 实白描边 */
+
+/* ==================== 浅色主题（直播列表页） ==================== */
+$live-light-bg-page:               #F2F5FC; /* 页面底色 */
+$live-light-bg-surface:            #FFFFFF; /* 卡片 / 弹层面 */
+$live-light-border:                #F0F0F0; /* 分割线 */
+$live-light-text-primary:          #333333; /* 主文字 */
+$live-light-text-heading:          #222222; /* 标题文字 */
+$live-light-text-placeholder:      #999999; /* 占位文字 */
+$live-light-text-muted:            #BDBDBD; /* 弱化文字 */
+
+/* ==================== 遮罩 ==================== */
+$live-mask:                        rgba(0, 0, 0, 0.4); /* 遮罩 */
+$live-mask-light:                  rgba(0, 0, 0, 0.3); /* 遮罩（弱） */
+$live-mask-strong:                 rgba(0, 0, 0, 0.7); /* 遮罩（强） */
+$live-mask-60:                     rgba(0, 0, 0, 0.6); /* 遮罩 60% */
+$live-mask-55:                     rgba(0, 0, 0, 0.55); /* 遮罩 55% */
+$live-mask-50:                     rgba(0, 0, 0, 0.5); /* 遮罩 50% */
+$live-mask-25:                     rgba(0, 0, 0, 0.25); /* 遮罩 25% */
+$live-mask-20:                     rgba(0, 0, 0, 0.2); /* 遮罩 20% */
+$live-mask-12:                     rgba(0, 0, 0, 0.12); /* 遮罩 12% */
+$live-mask-01:                     rgba(0, 0, 0, 0.01); /* 遮罩 1%：nvue 透明 view 不拦截触摸,靠它兜底 */
+
+/* ==================== 装饰 / 渐变文字色 ==================== */
+$live-color-tint-ivory:            #FFFBED; /* 入场提示渐变文字 */
+$live-color-tint-frost:            #F8FBFF; /* 入场提示渐变文字 */
+$live-color-tint-peach:            #FFF3E8; /* 入场提示渐变文字 */
+$live-color-tint-periwinkle:       #DBE7FF; /* 入场提示渐变文字 */
+$live-color-tint-aqua:             #E9FBFF; /* 入场提示渐变文字 */
+$live-color-tint-lilac:            #FFF3FF; /* 入场提示渐变文字 */
+$live-color-tint-cream:            #FFF9DD; /* 入场提示渐变文字 */
+$live-color-tint-sand:             #FFF8DD; /* 入场提示渐变文字 */
+$live-color-tint-cyan:             #78D8FF; /* 入场提示渐变文字 */

@@ -1,0 +1,122 @@
+<template>
+  <Drawer :visible="visible" @close="handleClose">
+    <list class="rfp__list" :style="listStyle" :show-scrollbar="false">
+      <cell v-for="(item, itemIndex) in gridItems" :key="itemIndex">
+        <view v-if="item.title" class="rfp__header">
+          <text class="rfp__header-text">{{ item.title }}</text>
+        </view>
+        <view v-else class="rfp__row">
+          <view
+            v-for="emoji in item.emojis"
+            :key="emoji.key"
+            class="rfp__cell"
+            @tap.stop="handleEmojiTap(emoji.key)"
+          >
+            <image class="rfp__emoji" :src="emoji.src" mode="aspectFit" />
+          </view>
+        </view>
+      </cell>
+    </list>
+  </Drawer>
+</template>
+
+<script>
+import Avatar from '../../../Avatar/Avatar.nvue'
+import Drawer from '../../../Drawer/index.nvue'
+import { listAllReactionEmojis, listRecentReactionEmojis } from '../../../../utils/reactionEmoji'
+import { toggleMessageReaction } from '../../../../utils/messageReaction'
+
+// 与 native ReactionEmojiPickerDialog 一致：8 列网格，「最近使用」+「全部」两个分组
+var GRID_COLUMNS = 8
+
+export default {
+  name: 'ReactionFullPicker',
+  components: { Avatar, Drawer },
+  props: {
+    visible: { type: Boolean, default: false },
+    message: { type: Object, required: true }
+  },
+  data() {
+    return {
+      // 「最近使用」每次打开弹层时重新获取（listRecentReactionEmojis 非响应式）
+      gridItems: []
+    }
+  },
+  computed: {
+    // 面板高度 = 屏高 60%，限制在 800-1040rpx（native 400-520dp）
+    listStyle() {
+      var si = uni.getSystemInfoSync()
+      var heightRpx = ((si.windowHeight || 667) / (si.windowWidth || 375)) * 750
+      var h = Math.min(Math.max(heightRpx * 0.6, 800), 1040)
+      return { height: Math.round(h) + 'rpx' }
+    }
+  },
+  watch: {
+    visible(v) {
+      if (v) this.refreshGridItems()
+    }
+  },
+  created() {
+    if (this.visible) this.refreshGridItems()
+  },
+  methods: {
+    refreshGridItems() {
+      var items = []
+      var appendSection = function(title, emojis) {
+        if (emojis.length === 0) return
+        items.push({ title: title, emojis: [] })
+        for (var i = 0; i < emojis.length; i += GRID_COLUMNS) {
+          items.push({ emojis: emojis.slice(i, i + GRID_COLUMNS) })
+        }
+      }
+      appendSection('最近使用', listRecentReactionEmojis())
+      appendSection('全部', listAllReactionEmojis())
+      this.gridItems = items
+    },
+    handleEmojiTap(reactionID) {
+      var self = this
+      toggleMessageReaction(this.message, reactionID).then(function() {
+        self.handleClose()
+      })
+    },
+    handleClose() {
+      this.$emit('close')
+    }
+  }
+}
+</script>
+
+<style>
+.rfp__list {
+  padding: 0 32rpx;
+}
+
+.rfp__header {
+  padding: 16rpx 0;
+}
+
+.rfp__header-text {
+  font-size: 24rpx;
+  color: rgba(0, 0, 0, 0.55);
+}
+
+.rfp__row {
+  flex-direction: row;
+}
+
+.rfp__cell {
+  width: 85rpx;
+  height: 88rpx;
+  align-items: center;
+  justify-content: center;
+}
+
+.rfp__cell:active {
+  opacity: 0.6;
+}
+
+.rfp__emoji {
+  width: 64rpx;
+  height: 64rpx;
+}
+</style>

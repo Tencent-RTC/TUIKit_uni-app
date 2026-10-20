@@ -1,0 +1,153 @@
+<template>
+  <view class="rp">
+    <view class="rp__header">
+      <text class="rp__title">贴表情</text>
+      <view class="rp__collapse" @tap="emit('collapse')">
+        <image class="rp__collapse-icon" :src="collapseIcon" mode="aspectFit" />
+      </view>
+    </view>
+    <view v-for="(row, rowIndex) in panelRows" :key="rowIndex" class="rp__grid">
+      <view class="rp__row">
+        <view v-for="(cell, cellIndex) in row" :key="cellIndex" class="rp__cell">
+          <image v-if="cell.src" class="rp__emoji" :src="cell.src" mode="aspectFit" @tap="handleEmojiTap(cell.key)" />
+          <view v-else-if="cell.isMore" class="rp__more" @tap="emit('show-all')">
+            <image class="rp__more-icon" :src="moreIcon" mode="aspectFit" />
+          </view>
+        </view>
+      </view>
+      <view v-if="rowIndex < panelRows.length - 1" class="rp__divider"></view>
+    </view>
+  </view>
+</template>
+
+<script setup lang="ts">
+import { computed } from 'vue'
+import collapseIcon from '../../../../static/assets/message-list/msg_reaction_collapse.png'
+import moreIcon from '../../../../static/assets/message-list/msg_more.png'
+import { listQuickReactionEmojis } from '../../../../utils/reactionEmoji'
+import type { ReactionEmoji } from '../../../../utils/reactionEmoji'
+import { toggleMessageReaction } from '../../../../utils/messageReaction'
+import type { MessageInfo } from '../../../../types/message'
+
+const PANEL_COLUMNS = 6
+const PANEL_ROWS = 2
+const QUICK_MAX = PANEL_COLUMNS * PANEL_ROWS - 1
+
+interface Props {
+  message: MessageInfo
+}
+
+interface PanelCell {
+  key?: string
+  src?: string
+  isMore?: boolean
+}
+
+const props = defineProps<Props>()
+
+const emit = defineEmits<{
+  collapse: []
+  'show-all': []
+  close: []
+}>()
+
+const panelRows = computed<PanelCell[][]>(() => {
+  const reactedIDs = (props.message.reactionList || [])
+    .filter((r: any) => r.reactedByMyself)
+    .map((r: any) => r.reactionID)
+  const quickEmojis = listQuickReactionEmojis(QUICK_MAX, reactedIDs)
+  const cells: PanelCell[] = quickEmojis.map((emoji: ReactionEmoji) => ({ key: emoji.key, src: emoji.src }))
+  while (cells.length < QUICK_MAX) cells.push({})
+  cells.push({ isMore: true })
+  const rows: PanelCell[][] = []
+  for (let i = 0; i < PANEL_ROWS; i++) {
+    rows.push(cells.slice(i * PANEL_COLUMNS, (i + 1) * PANEL_COLUMNS))
+  }
+  return rows
+})
+
+const handleEmojiTap = async (reactionID: string) => {
+  await toggleMessageReaction(props.message, reactionID, true)
+  emit('close')
+}
+</script>
+
+<style>
+.rp {
+  flex-direction: column;
+  width: 456rpx;
+  margin: 0 12rpx;
+  padding-bottom: 10rpx;
+}
+
+.rp__header {
+  flex-direction: row;
+  align-items: center;
+  height: 28rpx;
+  margin: 12rpx 24rpx 0;
+}
+
+.rp__title {
+  flex: 1;
+  font-size: 20rpx;
+  color: rgba(0, 0, 0, 0.9);
+}
+
+.rp__collapse {
+  width: 28rpx;
+  height: 28rpx;
+  align-items: center;
+  justify-content: center;
+}
+
+.rp__collapse:active {
+  opacity: 0.6;
+}
+
+.rp__collapse-icon {
+  width: 28rpx;
+  height: 28rpx;
+}
+
+.rp__grid {
+  flex-direction: column;
+  padding: 0 24rpx;
+}
+
+.rp__row {
+  flex-direction: row;
+}
+
+.rp__cell {
+  width: 68rpx;
+  height: 68rpx;
+  align-items: center;
+  justify-content: center;
+}
+
+.rp__emoji {
+  width: 68rpx;
+  height: 68rpx;
+  padding: 10rpx;
+}
+
+.rp__cell:active {
+  opacity: 0.6;
+}
+
+.rp__more {
+  align-items: center;
+  justify-content: center;
+}
+
+.rp__more-icon {
+  width: 32rpx;
+  height: 32rpx;
+}
+
+.rp__divider {
+  height: 2rpx;
+  margin: 6rpx 0;
+  background-color: rgba(0, 0, 0, 0.08);
+}
+</style>

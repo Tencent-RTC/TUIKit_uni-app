@@ -1,0 +1,35 @@
+@import '../../../../styles/tokens.scss';
+
+/* 标题顶距 8rpx:BaseDrawer 自带 handle 热区占顶部,补回视觉间距。 */
+.title {
+  color: $live-dark-text-94;
+  font-size: 29rpx;
+  font-weight: 600;
+  text-align: center;
+  margin-top: 8rpx;
+}
+
+.cover-list {
+  flex-direction: row;
+  justify-content: center;
+  align-items: center;
+  margin-top: 37rpx;
+}
+
+/* 描边层(双层模拟,见模板注释):内容区宽 670,5 格 + 间隔 → 每格 118rpx。 */
+.cover-option {
+  width: 118rpx;
+  height: 118rpx;
+  margin-left: 8rpx;
+  margin-right: 8rpx;
+  border-radius: 24rpx;
+  justify-content: center;
+  align-items: center;
+}
+
+/* 内层图比外层小 8rpx,露出底色成描边;加载中透明度由内联 style 控制。 */
+.cover-img {
+  width: 110rpx;
+  height: 110rpx;
+  border-radius: 20rpx;
+}

@@ -14,7 +14,14 @@
     ></view>
 
     <view class="content">
-      <Avatar :src="callerAvatar || ''" :name="callerName || ''" :size="128" :shape="'circle'" defaultAvatarType="user" pureMode />
+      <Avatar
+        :src="callerAvatar || ''"
+        :name="callerName || ''"
+        :size="CALLER_AVATAR_SIZE_PX"
+        :shape="'circle'"
+        defaultAvatarType="user"
+        pureMode
+      />
       <text class="invite-text">{{ inviteText }}</text>
       <text class="room-name" :numberOfLines="2">{{ displayRoomName }}</text>
       <text v-if="metaText.length > 0" class="meta-text">{{ metaText }}</text>
@@ -22,7 +29,7 @@
 
     <view class="bottom">
       <view class="slider-track" :style="{ width: trackWidthPx + 'px' }">
-        <text class="slider-label" :style="{ opacity: labelOpacity }">立即加入</text>
+        <text class="slider-label" :style="{ opacity: labelOpacity }">{{ t('invitation.joinNow') }}</text>
         <view
           class="slider-thumb"
           :style="thumbStyle"
@@ -36,7 +43,7 @@
       </view>
 
       <view class="reject-btn" @tap="handleReject">
-        <text class="reject-text">暂不进入</text>
+        <text class="reject-text">{{ t('invitation.reject') }}</text>
       </view>
     </view>
   </view>
@@ -53,6 +60,7 @@
     ROOM_MAIN_PAGE,
     clearPendingInvite,
   } from '@/uni_modules/tuikit-atomic-x/server/roomCallService';
+  import { t } from '../../locales';
 
   const roomState = useRoomState();
 
@@ -66,32 +74,48 @@
   const isHandling = ref(false);
 
   const inviteText = computed(() =>
-    callerName.value.length > 0 ? `${callerName.value}邀请你加入会议` : '邀请你加入会议'
+    callerName.value.length > 0
+      ? t('invitation.callerInvite', { name: callerName.value })
+      : t('invitation.defaultInvite')
   );
 
   const displayRoomName = computed(() => {
     if (roomName.value.length > 0) return roomName.value;
-    if (roomID.value.length > 0) return `会议 ${roomID.value}`;
-    return '会议邀请';
+    if (roomID.value.length > 0) return t('invitation.meetingNo', { roomId: roomID.value });
+    return t('invitation.title');
   });
 
   const metaText = computed(() => {
     const parts: string[] = [];
-    if (ownerName.value.length > 0) parts.push(`主持人：${ownerName.value}`);
-    if (participantCount.value > 0) parts.push(`参会人：${participantCount.value}人`);
+    if (ownerName.value.length > 0) parts.push(t('invitation.host', { name: ownerName.value }));
+    if (participantCount.value > 0) {
+      parts.push(t('invitation.participants', { count: participantCount.value }));
+    }
     return parts.join('  |  ');
   });
 
+  const DESIGN_WIDTH_RPX = 750;
+  const FALLBACK_WINDOW_WIDTH_PX = 375;
+  const FALLBACK_SCREEN_HEIGHT_PX = 667;
+  const SLIDER_TRACK_WIDTH_RPX = 400;
+  const SLIDER_THUMB_SIZE_RPX = 128;
+  const SLIDER_THUMB_INSET_RPX = 12;
+  const CALLER_AVATAR_SIZE_PX = 128;
+  const VIBRATE_INTERVAL_MS = 2000;
+  const CLOSE_BACK_DELAY_MS = 300;
+
   const _sysInfo = uni.getSystemInfoSync();
-  const _windowWidth = (_sysInfo?.windowWidth ?? 375) as number;
-  const rpx2px = (rpx: number): number => (rpx / 750) * _windowWidth;
+  const _windowWidth = (_sysInfo?.windowWidth ?? FALLBACK_WINDOW_WIDTH_PX) as number;
+  const rpx2px = (rpx: number): number => (rpx / DESIGN_WIDTH_RPX) * _windowWidth;
 
   const bgWidth = ref(_windowWidth);
-  const bgHeight = ref((_sysInfo?.screenHeight ?? _sysInfo?.windowHeight ?? 667) as number);
+  const bgHeight = ref(
+    (_sysInfo?.screenHeight ?? _sysInfo?.windowHeight ?? FALLBACK_SCREEN_HEIGHT_PX) as number
+  );
 
-  const trackWidthPx = ref(rpx2px(400));
-  const thumbSizePx = ref(rpx2px(128));
-  const thumbInsetPx = ref(rpx2px(12));
+  const trackWidthPx = ref(rpx2px(SLIDER_TRACK_WIDTH_RPX));
+  const thumbSizePx = ref(rpx2px(SLIDER_THUMB_SIZE_RPX));
+  const thumbInsetPx = ref(rpx2px(SLIDER_THUMB_INSET_RPX));
   const TRIGGER_RATIO = 0.7;
   const thumbOffset = ref(0);
 
@@ -103,11 +127,11 @@
   }));
 
   const labelOpacity = computed((): number => {
-    const max = maxOffset();
-    let op = 1 - (thumbOffset.value / max) * 2;
-    if (op < 0) op = 0;
-    if (op > 1) op = 1;
-    return op;
+    const sliderMaxOffset = maxOffset();
+    let opacity = 1 - (thumbOffset.value / sliderMaxOffset) * 2;
+    if (opacity < 0) opacity = 0;
+    if (opacity > 1) opacity = 1;
+    return opacity;
   });
 
   let dragStartX = 0;
@@ -119,9 +143,9 @@
   }
 
   function touchScreenX(e: any): number {
-    const t = e?.changedTouches?.[0] ?? e?.touches?.[0];
-    if (!t) return 0;
-    return (t.screenX ?? t.pageX ?? t.clientX ?? 0) as number;
+    const touch = e?.changedTouches?.[0] ?? e?.touches?.[0];
+    if (!touch) return 0;
+    return (touch.screenX ?? touch.pageX ?? touch.clientX ?? 0) as number;
   }
 
   function onThumbTouchStart(e: any): void {
@@ -133,10 +157,10 @@
 
   function onThumbTouchMove(e: any): void {
     if (!isDragging || isHandling.value) return;
-    const max = maxOffset();
+    const sliderMaxOffset = maxOffset();
     let next = dragStartOffset + (touchScreenX(e) - dragStartX);
     if (next < 0) next = 0;
-    if (next > max) next = max;
+    if (next > sliderMaxOffset) next = sliderMaxOffset;
     if (next === thumbOffset.value) return;
     thumbOffset.value = next;
   }
@@ -144,9 +168,9 @@
   function onThumbTouchEnd(): void {
     if (!isDragging) return;
     isDragging = false;
-    const max = maxOffset();
-    if (thumbOffset.value / max >= TRIGGER_RATIO) {
-      thumbOffset.value = max;
+    const sliderMaxOffset = maxOffset();
+    if (thumbOffset.value / sliderMaxOffset >= TRIGGER_RATIO) {
+      thumbOffset.value = sliderMaxOffset;
       handleAccept();
       return;
     }
@@ -162,12 +186,12 @@
 
   function startRinging(): void {
     try {
-      const ctx: any = uni.createInnerAudioContext();
-      ctx.src = '/static/phone_ringing.mp3';
-      ctx.loop = true;
-      ctx.obeyMuteSwitch = false;
-      ctx.play();
-      _ringAudioCtx = ctx;
+      const audioContext: any = uni.createInnerAudioContext();
+      audioContext.src = '/static/phone_ringing.mp3';
+      audioContext.loop = true;
+      audioContext.obeyMuteSwitch = false;
+      audioContext.play();
+      _ringAudioCtx = audioContext;
     } catch (e) {
       console.warn('[invitation] createInnerAudioContext failed:', e);
     }
@@ -175,15 +199,15 @@
     try {
       uni.vibrateLong({ type: 'medium' });
     } catch (e) {
-      console.error(e)
+      console.error('[invitation] vibrate failed:', e);
     }
     _vibrateTimer = setInterval((): void => {
       try {
         uni.vibrateLong({ type: 'medium' });
       } catch (e) {
-        console.error(e)
+        console.error('[invitation] vibrate repeat failed:', e);
       }
-    }, 2000) as unknown as number;
+    }, VIBRATE_INTERVAL_MS) as unknown as number;
   }
 
   function stopRinging(): void {
@@ -196,7 +220,7 @@
         _ringAudioCtx.stop();
         _ringAudioCtx.destroy();
       } catch (e) {
-        console.error(e)
+        console.error('[invitation] stop ringtone failed:', e);
       }
       _ringAudioCtx = null;
     }
@@ -216,12 +240,13 @@
             console.error('[invitation] redirect to room main failed:', err);
             isHandling.value = false;
             resetThumb();
-            showErrorToast(err, '跳转会议室失败');
+            showErrorToast(err, t('RoomInvite.EnterFailed'));
           },
         });
       })
       .catch((e: any) => {
         resetThumb();
+        showErrorToast(e, t('RoomInvite.AcceptFailed'));
       });
   }
 
@@ -241,27 +266,29 @@
   }
 
   function onInviteClosed(payload: any): void {
-    const rid = payload?.roomID;
-    if (typeof rid === 'string' && rid.length > 0 && rid !== roomID.value) return;
-    setTimeout(() => uni.navigateBack(), 300);
+    const closedRoomID = payload?.roomID;
+    if (typeof closedRoomID === 'string' && closedRoomID.length > 0 && closedRoomID !== roomID.value) {
+      return;
+    }
+    setTimeout(() => uni.navigateBack(), CLOSE_BACK_DELAY_MS);
   }
 
   onLoad((options: any) => {
-    const dec = (v: any): string => {
-      const s = (v ?? '').toString();
+    const decodeParam = (value: any): string => {
+      const rawValue = (value ?? '').toString();
       try {
-        return decodeURIComponent(s);
+        return decodeURIComponent(rawValue);
       } catch (_e) {
-        return s;
+        return rawValue;
       }
     };
-    roomID.value = dec(options?.roomID);
-    roomName.value = dec(options?.roomName);
-    callerName.value = dec(options?.callerName);
-    callerAvatar.value = dec(options?.callerAvatar);
-    ownerName.value = dec(options?.ownerName);
-    const c = parseInt(dec(options?.participantCount), 10);
-    participantCount.value = Number.isNaN(c) ? 0 : c;
+    roomID.value = decodeParam(options?.roomID);
+    roomName.value = decodeParam(options?.roomName);
+    callerName.value = decodeParam(options?.callerName);
+    callerAvatar.value = decodeParam(options?.callerAvatar);
+    ownerName.value = decodeParam(options?.ownerName);
+    const parsedCount = parseInt(decodeParam(options?.participantCount), 10);
+    participantCount.value = Number.isNaN(parsedCount) ? 0 : parsedCount;
     fetchRoomInfoIfNeeded();
   });
 
@@ -311,116 +338,6 @@
   });
 </script>
 
-<style>
-  .invite-page {
-    flex: 1;
-    position: relative;
-    background-color: #1A1D24;
-    flex-direction: column;
-  }
-
-  .bg-image {
-    position: absolute;
-    top: 0;
-    left: 0;
-    opacity: 0.7;
-  }
-
-  .bg-overlay {
-    position: absolute;
-    top: 0;
-    left: 0;
-    background-color: rgba(0, 0, 0, 0.45);
-  }
-
-  .bg-overlay--no-image {
-    background-color: rgba(0, 0, 0, 0.15);
-  }
-
-  .content {
-    flex: 1;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding-left: 64rpx;
-    padding-right: 64rpx;
-  }
-
-  .invite-text {
-    margin-top: 28rpx;
-    color: #E5E7EB;
-    font-size: 28rpx;
-    max-width: 560rpx;
-    text-align: center;
-    lines: 1;
-    text-overflow: ellipsis;
-  }
-
-  .room-name {
-    margin-top: 28rpx;
-    color: #FFFFFF;
-    font-size: 48rpx;
-    font-weight: 600;
-    text-align: center;
-    lines: 2;
-    text-overflow: ellipsis;
-  }
-
-  .meta-text {
-    margin-top: 24rpx;
-    color: #B8BFCC;
-    font-size: 26rpx;
-    max-width: 560rpx;
-    text-align: center;
-    lines: 1;
-    text-overflow: ellipsis;
-  }
-
-  .bottom {
-    flex-direction: column;
-    align-items: center;
-    padding-bottom: 96rpx;
-  }
-
-
-  .slider-track {
-    position: relative;
-    height: 154rpx;
-    border-radius: 100rpx;
-    background-color: rgba(255, 255, 255, 0.16);
-    justify-content: center;
-    align-items: center;
-    overflow: hidden;
-  }
-
-  .slider-label {
-    color: #FFFFFF;
-    font-size: 32rpx;
-  }
-
-  .slider-thumb {
-    position: absolute;
-    top: 12rpx;
-    left: 12rpx;
-    background-color: #1C66E5;
-    justify-content: center;
-    align-items: center;
-  }
-
-  .slider-thumb-icon {
-    width: 44rpx;
-    height: 44rpx;
-  }
-
-  .reject-btn {
-    margin-top: 48rpx;
-    height: 60rpx;
-    justify-content: center;
-    align-items: center;
-  }
-
-  .reject-text {
-    color: #D5E0F2;
-    font-size: 30rpx;
-  }
+<style lang="scss">
+  @import './invitation.scss';
 </style>

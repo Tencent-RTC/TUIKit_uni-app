@@ -24,11 +24,12 @@
         </view>
         <view v-if="highlight" ref="highlightOverlayRef" class="msg__highlight-overlay"></view>
       </view>
+      <MessageReactionBar v-if="showStandaloneReaction" :message="message" @show-detail="handleShowReactionDetail" />
       <view v-if="showTime" class="msg__time" @tap.stop="handleMessageContentTap" style="background-color: black;">
         <text class="msg__time-text msg__text--no-select">{{ formatMessageTime(message.timestamp) }}</text>
       </view>
     </view>
-    <MessageActions v-if="showActions" ref="messageActionsRef" :message="message" :actions="messageActionList" @close="handleActionsClose" @action="handleAction" />
+    <MessageActions v-if="showActions" ref="messageActionsRef" :message="message" :actions="messageActionList" @close="handleActionsClose" @action="handleAction" @reaction-show-all="handleReactionShowAll" />
 
     <!-- 转发目标选择器：组件内部自洽，选中后直接调 forwardMessages，不抛给业务层 -->
     <ForwardPicker
@@ -36,6 +37,21 @@
       :excludeConversationID="conversationID"
       @select="handleForwardSelect"
       @close="handleForwardPickerClose"
+    />
+
+    <!-- 表情回应详情选择器：底部弹出，展示当前 reaction 的用户列表，支持点击移除 -->
+    <ReactionDetailPicker
+      v-if="showReactionDetail"
+      :visible="showReactionDetail"
+      :message="message"
+      :selectedReactionID="reactionDetailReactionID"
+      @update:visible="(v) => (showReactionDetail = v)"
+      @close="handleReactionDetailClose"
+    />
+    <ReactionFullPicker
+      :visible="showReactionFullPicker"
+      :message="message"
+      @close="showReactionFullPicker = false"
     />
   </view>
 </template>
@@ -54,6 +70,9 @@
   import CustomMessage from './CustomMessage/CustomMessage.nvue'
   import MergerMessage from './MergerMessage/MergerMessage.nvue'
   import MessageActions from './MessageActions.nvue'
+  import MessageReactionBar from './MessageReaction/MessageReactionBar.nvue'
+  import ReactionDetailPicker from './MessageReaction/ReactionDetailPicker.nvue'
+  import ReactionFullPicker from './MessageReaction/ReactionFullPicker.nvue'
   import ForwardPicker from './ForwardPicker.nvue'
   import type { MessageInfo } from '../../../types/message'
   import { MessageType, MessageStatus, MessageForwardType } from '../../../types/message'
@@ -106,6 +125,9 @@
   const showActions = ref(false)
   // 转发目标选择器可见性（组件内部状态，不外泄）
   const showForwardPicker = ref(false)
+  const showReactionDetail = ref(false)
+  const showReactionFullPicker = ref(false)
+  const reactionDetailReactionID = ref<string>('')
   const messageActionsRef = ref(null)
   const messageContentRef = ref(null)
   const highlightOverlayRef = ref(null)
@@ -204,6 +226,10 @@
     return props.message.isSentBySelf &&
       props.message.status === MessageStatus.SEND_SUCCESS &&
       props.message.needReadReceipt
+  })
+
+  const showStandaloneReaction = computed(() => {
+    return (props.message.reactionList || []).length > 0
   })
 
   // 已读状态文本
@@ -589,6 +615,21 @@
 
   const handleForwardPickerClose = () => {
     showForwardPicker.value = false
+  }
+
+  const handleReactionShowAll = () => {
+    showReactionFullPicker.value = true
+  }
+
+  const handleShowReactionDetail = (reactionID: string) => {
+    if (!reactionID) return
+    reactionDetailReactionID.value = reactionID
+    showReactionDetail.value = true
+  }
+
+  const handleReactionDetailClose = () => {
+    showReactionDetail.value = false
+    reactionDetailReactionID.value = ''
   }
 
   const handleForwardSelect = async (targetConversationID: string) => {

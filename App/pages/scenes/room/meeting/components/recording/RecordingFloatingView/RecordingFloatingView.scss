@@ -1,0 +1,87 @@
+  @import '../../../../styles/tokens.scss';
+
+  .recording-root {
+    position: absolute;
+    top: 0;
+    left: 0;
+  }
+
+  .outside-mask {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+  }
+
+  .pill {
+    flex-direction: row;
+    align-items: center;
+    height: 60rpx;
+    padding-left: 16rpx;
+    padding-right: 16rpx;
+    border-radius: 16rpx;
+    background-color: $room-dark-bg-float;
+  }
+
+  .card {
+    position: fixed;
+    left: 32rpx;
+    flex-direction: column;
+    padding-bottom: 24rpx;
+    border-radius: 16rpx;
+    background-color: $room-dark-bg-float;
+  }
+
+  .card-header {
+    flex-direction: row;
+    align-items: center;
+    height: 60rpx;
+    padding-left: 16rpx;
+    padding-right: 16rpx;
+  }
+
+  .dot {
+    width: 16rpx;
+    height: 16rpx;
+    border-radius: 8rpx;
+    background-color: $room-color-danger-solid;
+  }
+
+  .text {
+    color: $room-dark-text-primary;
+    font-size: $room-font-size-sm;
+    margin-left: 12rpx;
+    lines: 1;
+  }
+
+  .arrow {
+    width: 32rpx;
+    height: 32rpx;
+    margin-left: 8rpx;
+  }
+
+  .arrow-up {
+    transform: rotate(180deg);
+  }
+
+  .stop-btn {
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    margin-top: 16rpx;
+    padding-left: 24rpx;
+    padding-right: 24rpx;
+  }
+
+  .stop-icon {
+    width: 80rpx;
+    height: 80rpx;
+  }
+
+  .stop-text {
+    color: $room-dark-text-primary;
+    font-size: $room-font-size-sm;
+    margin-top: 8rpx;
+    lines: 1;
+  }

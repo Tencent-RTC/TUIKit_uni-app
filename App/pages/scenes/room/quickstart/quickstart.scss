@@ -1,0 +1,110 @@
+  @import '../styles/tokens.scss';
+
+  .page {
+    flex: 1;
+    background-color: $room-light-bg-page;
+    flex-direction: column;
+  }
+
+  .header {
+    flex-direction: row;
+    align-items: center;
+    padding-left: 24rpx;
+    padding-right: 24rpx;
+    background-color: $room-light-bg-surface;
+  }
+
+  .back-btn {
+    width: 44rpx;
+    height: 44rpx;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .back-icon {
+    width: 32rpx;
+    height: 32rpx;
+  }
+
+  .header-title {
+    font-size: $room-font-size-xl;
+    font-weight: 500;
+    color: $room-light-text-primary;
+    margin-left: 24rpx;
+  }
+
+  .header-gap {
+    height: 20rpx;
+  }
+
+  .card {
+    margin-left: 24rpx;
+    margin-right: 24rpx;
+    background-color: $room-light-bg-surface;
+    border-radius: 16rpx;
+    flex-direction: column;
+  }
+
+  .card-gap {
+    height: 40rpx;
+  }
+
+  .form-item {
+    flex-direction: row;
+    align-items: center;
+    padding-top: 28rpx;
+    padding-bottom: 28rpx;
+    padding-left: 32rpx;
+    padding-right: 32rpx;
+  }
+
+  .switch-item {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    padding-top: 20rpx;
+    padding-bottom: 20rpx;
+    padding-left: 32rpx;
+    padding-right: 32rpx;
+  }
+
+  .form-label {
+    width: 176rpx;
+    font-size: $room-font-size-xl;
+    color: $room-light-text-secondary;
+  }
+
+  .form-value {
+    flex: 1;
+    font-size: $room-font-size-xl;
+    font-weight: 500;
+    color: $room-light-text-primary;
+  }
+
+  .form-divider {
+    height: 1rpx;
+    margin-left: 40rpx;
+    margin-right: 40rpx;
+    background-color: $room-light-bg-page;
+  }
+
+  .footer {
+    margin-top: 96rpx;
+    flex-direction: row;
+    justify-content: center;
+  }
+
+  .submit-btn {
+    width: 400rpx;
+    height: 104rpx;
+    border-radius: 20rpx;
+    background-color: $room-color-brand;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .submit-btn-text {
+    color: $room-color-text-inverse;
+    font-size: $room-font-size-xl;
+    font-weight: 600;
+  }

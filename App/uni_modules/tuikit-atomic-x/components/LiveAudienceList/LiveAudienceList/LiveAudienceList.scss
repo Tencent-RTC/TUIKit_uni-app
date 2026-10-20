@@ -1,0 +1,140 @@
+  .audience-header {
+    padding: 20rpx 0;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    height: 80rpx;
+  }
+
+  .audience-title {
+    font-size: 30rpx;
+    color: rgba(255, 255, 255, 0.9);
+    font-weight: 400;
+  }
+
+  .audience-grid {
+    flex-direction: column;
+    width: 686rpx;
+  }
+
+  .audience-row-wrap {
+    flex-direction: column;
+    width: 686rpx;
+  }
+
+  .audience-item {
+    flex-direction: row;
+    align-items: center;
+    width: 686rpx;
+    height: 168rpx;
+  }
+
+  .audience-divider {
+    flex-direction: row;
+    width: 686rpx;
+    height: 1rpx;
+  }
+  .audience-divider-left {
+    flex: 1;
+    height: 1rpx;
+    background-image: linear-gradient(to right, rgba(255, 255, 255, 0), rgba(255, 255, 255, 0.16));
+  }
+  .audience-divider-right {
+    flex: 1;
+    height: 1rpx;
+    background-image: linear-gradient(to right, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0));
+  }
+
+  .audience-marker {
+    width: 48rpx;
+    color: rgba(255, 255, 255, 0.38);
+    font-size: 30rpx;
+    text-align: center;
+    margin-right: 28rpx;
+  }
+
+  .audience-avatar-container {
+    width: 100rpx;
+    height: 100rpx;
+    margin-right: 28rpx;
+    overflow: hidden;
+    border-radius: 50rpx;
+  }
+
+  .audience-avatar {
+    width: 100rpx;
+    height: 100rpx;
+    border-radius: 50rpx;
+  }
+
+  .audience-identity {
+    flex: 1;
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .audience-name {
+    flex: 0 1 auto;
+    font-size: 30rpx;
+    color: rgba(255, 255, 255, 0.88);
+    font-weight: 500;
+    lines: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+    max-width: 300rpx;
+  }
+
+  .aud-level-badge {
+    position: relative;
+    width: 68rpx;
+    height: 30rpx;
+    margin-left: 12rpx;
+    flex-shrink: 0;
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-end;
+  }
+  .aud-level-bg {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 68rpx;
+    height: 30rpx;
+  }
+  .aud-level-num {
+    position: relative;
+    color: #ffffff;
+    font-size: 18rpx;
+    font-weight: 800;
+    line-height: 30rpx;
+    margin-right: 12rpx;
+    text-align: center;
+    min-width: 24rpx;
+  }
+
+  .audience-gift-value {
+    color: #ffe29a;
+    font-size: 24rpx;
+    font-weight: 700;
+    text-align: right;
+    flex-shrink: 0;
+    lines: 1;
+  }
+
+  .empty-state,
+  .loading-state {
+    padding: 64rpx;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .empty-text {
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 28rpx;
+  }
+
+  .loading-image {
+    width: 48rpx;
+    height: 48rpx;
+  }

@@ -8,7 +8,7 @@
 
       <view class="user-info-container" v-if="isShowAnchor">
         <text class="user-name">{{ userInfo?.userName || userInfo?.userID || '' }}</text>
-        <text class="user-roomid">直播房间ID：{{ userInfo?.liveID || userInfo?.roomId }}</text>
+        <text class="user-roomid">{{ t('sv.roomId') }}{{ userInfo?.liveID || userInfo?.roomId }}</text>
       </view>
       <view class="user-info-container" v-if="!isShowAnchor">
         <text class="user-name">{{ userInfo?.userName || userInfo?.userID || '' }}</text>
@@ -19,7 +19,9 @@
 </template>
 
 <script setup>
-const defaultAvatarURL = 'https://web.sdk.qcloud.com/component/TUIKit/assets/avatar_01.png';
+import { t } from '../locales';
+
+const defaultAvatarURL = '/uni_modules/tuikit-atomic-x/static/assets/live/default-avatar.png';
 
 const props = defineProps({
   modelValue: { type: Boolean, default: false },

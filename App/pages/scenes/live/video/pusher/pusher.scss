@@ -1,0 +1,8 @@
+@import '../../styles/tokens.scss';
+
+  .live-container {
+    flex: 1;
+    position: relative;
+    background: $live-dark-bg-page-50;
+    overflow: hidden;
+  }

@@ -15,7 +15,7 @@ import { safeJsonParse } from "../utils/utsUtils";
 /**
  * 直播统计数据类型
  * @typedef {Object} LiveSummaryDataParam
- * @property {number} totalDuration - 直播总时长（秒）
+ * @property {number} totalDuration - 直播总时长（毫秒）
  * @property {number} totalViewers - 累计观看人数
  * @property {number} totalGiftsSent - 累计收到礼物数量
  * @property {number} totalGiftUniqueSenders - 累计送礼人数

@@ -161,20 +161,22 @@ class MessageActionState {
   loadUnreadMembers = (): Promise<void> => this.callSimpleApi('loadUnreadMembers');
   loadMoreMembers = (): Promise<void> => this.callSimpleApi('loadMoreMembers');
 
-  /** 添加表情回应 */
+  /**
+   * 添加表情回应。23007 视为成功，与 state/MessageActionState.ts 保持一致；
+   * 不能放宽 callApiWithParams（pin / setExtensions 等共用），所以这里单独判定。
+   */
   addReaction = (reactionID: string): Promise<void> =>
-    this.callApiWithParams('addReaction', { reactionID });
+    this.callApiWithParams('addReaction', { reactionID }, [23007]);
 
   /** 移除表情回应 */
   removeReaction = (reactionID: string): Promise<void> =>
     this.callApiWithParams('removeReaction', { reactionID });
 
   /** 加载表情回应用户 */
-  loadReactionUsers = (reactionID: string): Promise<void> =>
-    this.callApiWithParams('loadReactionUsers', { reactionID });
+  loadReactionUsers = (reactionID: string, count: number = 0): Promise<void> =>
+    this.callApiWithParams('loadReactionUsers', { reactionID, count });
 
-  loadMoreReactionUsers = (reactionID: string): Promise<void> =>
-    this.callApiWithParams('loadMoreReactionUsers', { reactionID });
+  loadMoreReactionUsers = (): Promise<void> => this.callSimpleApi('loadMoreReactionUsers');
 
   /** 设置消息扩展 */
   setExtensions = (extensions: Record<string, string>): Promise<void> =>
@@ -274,14 +276,15 @@ class MessageActionState {
     });
   }
 
-  private callApiWithParams(api: string, extraParams: Record<string, any>): Promise<void> {
+  /** okCodes：除 0 以外也视为成功的返回码（默认无） */
+  private callApiWithParams(api: string, extraParams: Record<string, any>, okCodes: number[] = []): Promise<void> {
     return new Promise((resolve, reject) => {
       const params: Record<string, any> = { createStoreParams: this.instanceId };
       for (const k in extraParams) { params[k] = extraParams[k]; }
       callAPI(JSON.stringify({ api, params }), (response: string) => {
         try {
           const result = safeJsonParse<any>(response, {});
-          if (result.code === 0) {
+          if (result.code === 0 || okCodes.indexOf(result.code) >= 0) {
             resolve();
           } else {
             reject(new Error(result.message || `${api} failed`));

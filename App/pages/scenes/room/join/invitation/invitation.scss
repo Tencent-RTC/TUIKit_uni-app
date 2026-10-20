@@ -1,0 +1,105 @@
+  @import '../../styles/tokens.scss';
+
+  .invite-page {
+    flex: 1;
+    position: relative;
+    background-color: $room-dark-bg-sheet;
+    flex-direction: column;
+  }
+
+  .bg-image {
+    position: absolute;
+    top: 0;
+    left: 0;
+    opacity: 0.7;
+  }
+
+  .bg-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    background-color: $room-mask;
+  }
+
+  .bg-overlay--no-image {
+    background-color: $room-mask-light;
+  }
+
+  .content {
+    flex: 1;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding-left: 64rpx;
+    padding-right: 64rpx;
+  }
+
+  .invite-text {
+    margin-top: 28rpx;
+    color: $room-dark-text-disabled;
+    font-size: $room-font-size-base;
+  }
+
+  .room-name {
+    margin-top: 28rpx;
+    color: $room-color-text-inverse;
+    font-size: $room-font-size-4xl;
+    font-weight: 600;
+    text-align: center;
+    lines: 2;
+    text-overflow: ellipsis;
+  }
+
+  .meta-text {
+    margin-top: 24rpx;
+    color: $room-dark-text-placeholder;
+    font-size: $room-font-size-md;
+  }
+
+  .bottom {
+    flex-direction: column;
+    align-items: center;
+    padding-bottom: 96rpx;
+  }
+
+
+  .slider-track {
+    position: relative;
+    height: 154rpx;
+    border-radius: 100rpx;
+    background-color: $room-dark-bg-glass;
+    justify-content: center;
+    align-items: center;
+    overflow: hidden;
+  }
+
+  .slider-label {
+    color: $room-color-text-inverse;
+    font-size: $room-font-size-xl;
+  }
+
+  .slider-thumb {
+    position: absolute;
+    top: 12rpx;
+    left: 12rpx;
+    background-color: $room-color-brand-deep;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .slider-thumb-icon {
+    width: 44rpx;
+    height: 44rpx;
+  }
+
+  .reject-btn {
+    margin-top: 48rpx;
+    height: 60rpx;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .reject-text {
+    color: $room-dark-text-primary;
+    font-size: $room-font-size-lg;
+  }

@@ -13,44 +13,51 @@
 
     <view class="card" @tap="handleRootTap">
       <view class="form-item">
-        <text class="form-label">房间名称</text>
+        <text class="form-label">{{ t('schedule.roomName') }}</text>
         <input
           ref="roomNameInputRef"
           class="form-input"
           :value="roomName"
-          placeholder="请输入房间名称"
-          placeholder-style="color: #C2C7D0; font-size: 32rpx;"
-          :maxlength="30"
+          :placeholder="t('schedule.roomNamePlaceholder')"
+          :placeholder-style="placeholderStyle"
+          :maxlength="ROOM_NAME_MAX_LENGTH"
           @input="onRoomNameInput"
         />
       </view>
 
       <view class="form-item" @tap="handleOpenTimePicker">
-        <text class="form-label">开始时间</text>
+        <text class="form-label">{{ t('schedule.startTime') }}</text>
         <text class="form-value" :numberOfLines="1">{{ startTimeText }}</text>
         <image class="form-arrow" src="/static/images/room/room_chevron-down.png" mode="aspectFit" />
       </view>
 
       <view class="form-item" @tap="handleOpenDurationPicker">
-        <text class="form-label">房间时长</text>
+        <text class="form-label">{{ t('schedule.duration') }}</text>
         <text class="form-value" :numberOfLines="1">{{ durationText }}</text>
         <image class="form-arrow" src="/static/images/room/room_chevron-down.png" mode="aspectFit" />
       </view>
 
       <view class="form-item" @tap="handleOpenTimezonePicker">
-        <text class="form-label">时区</text>
+        <text class="form-label">{{ t('schedule.timezone') }}</text>
         <text class="form-value" :numberOfLines="1">{{ timezoneText }}</text>
         <image class="form-arrow" src="/static/images/room/room_chevron-down.png" mode="aspectFit" />
       </view>
 
       <view class="form-item" @tap="handleOpenMemberPanel">
-        <text class="form-label">参与成员</text>
+        <text class="form-label">{{ t('schedule.attendees') }}</text>
         <view class="attendee-box">
           <view
             v-for="user in attendeeAvatarList"
             :key="user.userID"
             class="attendee-avatar-wrap">
-            <Avatar :src="user.avatarURL || ''" :name="user.displayName || ''" :size="48" :shape="'circle'" defaultAvatarType="user" pureMode />
+            <Avatar
+              :src="user.avatarURL || ''"
+              :name="user.displayName || ''"
+              :size="ATTENDEE_AVATAR_SIZE_PX"
+              :shape="'circle'"
+              defaultAvatarType="user"
+              pureMode
+            />
           </view>
           <text class="attendee-text">{{ attendeeText }}</text>
         </view>
@@ -60,19 +67,19 @@
 
     <view class="card" v-if="!isEditMode" @tap="handleRootTap">
       <view class="form-item switch-item">
-        <text class="form-label">房间加密</text>
-        <ToggleSwitch :checked="isRoomEncrypted" activeColor="#0468FC" @change="onRoomEncryptedChange" />
+        <text class="form-label">{{ t('schedule.encrypt') }}</text>
+        <ToggleSwitch :checked="isRoomEncrypted" :activeColor="ROOM_TOKENS.colorBrand" @change="onRoomEncryptedChange" />
       </view>
       <view v-if="isRoomEncrypted" class="form-item">
-        <text class="form-label">进房密码</text>
+        <text class="form-label">{{ t('schedule.password') }}</text>
         <input
           ref="roomPasswordInputRef"
           class="form-input"
           type="number"
           :value="roomPassword"
-          placeholder="请输入 6 位数字密码"
-          placeholder-style="color: #C2C7D0; font-size: 32rpx;"
-          :maxlength="6"
+          :placeholder="t('schedule.passwordPlaceholder')"
+          :placeholder-style="placeholderStyle"
+          :maxlength="ROOM_PASSWORD_LENGTH"
           @input="onRoomPasswordInput"
         />
       </view>
@@ -80,12 +87,12 @@
 
     <view class="card" v-if="!isEditMode" @tap="handleRootTap">
       <view class="form-item switch-item">
-        <text class="form-label">全体静音</text>
-        <ToggleSwitch :checked="isAllMicrophoneDisabled" activeColor="#0468FC" @change="onAllMicChange" />
+        <text class="form-label">{{ t('schedule.muteAll') }}</text>
+        <ToggleSwitch :checked="isAllMicrophoneDisabled" :activeColor="ROOM_TOKENS.colorBrand" @change="onAllMicChange" />
       </view>
       <view class="form-item switch-item">
-        <text class="form-label">全体禁画</text>
-        <ToggleSwitch :checked="isAllCameraDisabled" activeColor="#0468FC" @change="onAllCameraChange" />
+        <text class="form-label">{{ t('schedule.banAllVideo') }}</text>
+        <ToggleSwitch :checked="isAllCameraDisabled" :activeColor="ROOM_TOKENS.colorBrand" @change="onAllCameraChange" />
       </view>
     </view>
 
@@ -112,7 +119,7 @@
     <ScheduleInviteSheet
       :visible="isInviteSheetVisible"
       :roomID="createdRoomID"
-      title="预定成功，邀请他们加入"
+      :title="t('schedule.successInviteTitle')"
       @close="handleInviteSheetClose"
     />
     </scroll-view>
@@ -146,7 +153,7 @@
   import DurationPicker from '@/uni_modules/tuikit-atomic-x/components/DurationPicker/index.nvue';
   import ScheduleInviteSheet from './components/ScheduleInviteSheet/index.nvue';
   import SelectMember from '@/uni_modules/tuikit-atomic-x/components/UserPicker/SelectMember/index.nvue';
-import Avatar from '@/uni_modules/tuikit-atomic-x/components/Avatar/Avatar.nvue';
+  import Avatar from '@/uni_modules/tuikit-atomic-x/components/Avatar/Avatar.nvue';
   import { showErrorToast } from '@/uni_modules/tuikit-atomic-x/utils/roomErrorHandler';
   import {
     formatDuration,
@@ -163,11 +170,22 @@ import Avatar from '@/uni_modules/tuikit-atomic-x/components/Avatar/Avatar.nvue'
     utcToWallClockMs,
   } from '@/uni_modules/tuikit-atomic-x/utils/timezones';
   import { showToast } from '@/uni_modules/tuikit-atomic-x/utils/toast';
+  import { ROOM_TOKENS, roomPlaceholderStyle } from '../styles/tokens.js';
+  import { t } from '../locales';
+
+  const placeholderStyle = roomPlaceholderStyle(ROOM_TOKENS.lightTextPlaceholder, ROOM_TOKENS.fontSizeXl);
 
   const { loginUserInfo } = useLoginState();
   const roomState = useRoomState();
 
   const MAX_AVATAR_PREVIEW = 4;
+  const ROOM_NAME_MAX_LENGTH = 30;
+  const ATTENDEE_AVATAR_SIZE_PX = 48;
+  const DEFAULT_DURATION_MINUTES = 30;
+  const ROOM_PASSWORD_LENGTH = 6;
+  const SECONDS_PER_MINUTE = 60;
+  const MS_PER_SECOND = 1000;
+  const SAVE_SUCCESS_BACK_DELAY_MS = 600;
 
   type AttendeeUser = {
     userID: string;
@@ -182,7 +200,7 @@ import Avatar from '@/uni_modules/tuikit-atomic-x/components/Avatar/Avatar.nvue'
   const roomType = ref<number>(RoomType.Standard);
   const startTime = ref<number>(getDefaultStartTime());
   const timezoneIndex = ref<number>(getDefaultTimezoneIndex());
-  const durationMinutes = ref<number>(30);
+  const durationMinutes = ref<number>(DEFAULT_DURATION_MINUTES);
   const isRoomEncrypted = ref(false);
   const roomPassword = ref('');
   const isPasswordSystemGenerated = ref(false);
@@ -195,8 +213,8 @@ import Avatar from '@/uni_modules/tuikit-atomic-x/components/Avatar/Avatar.nvue'
 
   const editRoomID = ref('');
   const isEditMode = computed(() => editRoomID.value.length > 0);
-  const pageTitle = computed(() => (isEditMode.value ? '修改房间' : '预定房间'));
-  const submitText = computed(() => (isEditMode.value ? '保存' : '预定房间'));
+  const pageTitle = computed(() => (isEditMode.value ? t('schedule.editTitle') : t('schedule.createTitle')));
+  const submitText = computed(() => (isEditMode.value ? t('common.save') : t('schedule.submitCreate')));
 
   const isTimePickerVisible = ref(false);
   const isTimezonePickerVisible = ref(false);
@@ -223,34 +241,36 @@ import Avatar from '@/uni_modules/tuikit-atomic-x/components/Avatar/Avatar.nvue'
   );
   const attendeeText = computed(() => {
     const n = attendeeList.value.length;
-    return n === 0 ? '添加' : `${n}人`;
+    return n === 0 ? t('common.add') : t('common.peopleCount', { count: n });
   });
 
   const isSubmitDisabled = computed(() => roomName.value.trim().length === 0 || isSubmitting.value);
   const submitBtnStyle = computed(() => ({ opacity: isSubmitDisabled.value ? 0.5 : 1 }));
 
   onLoad((options: any) => {
-    const rid = options?.roomID ? decodeURIComponent(String(options.roomID)) : '';
-    if (rid.length > 0) {
-      editRoomID.value = rid;
+    const targetRoomID = options?.roomID ? decodeURIComponent(String(options.roomID)) : '';
+    if (targetRoomID.length > 0) {
+      editRoomID.value = targetRoomID;
       if (options?.roomName) roomName.value = decodeURIComponent(String(options.roomName));
       if (options?.roomType) roomType.value = parseInt(String(options.roomType), 10) || RoomType.Standard;
       if (options?.startTime) {
-        const st = parseInt(String(options.startTime), 10);
-        if (st > 0) startTime.value = st;
+        const parsedStartTime = parseInt(String(options.startTime), 10);
+        if (parsedStartTime > 0) startTime.value = parsedStartTime;
       }
       if (options?.duration) {
-        const du = parseInt(String(options.duration), 10);
-        if (du > 0) durationMinutes.value = du;
+        const parsedDuration = parseInt(String(options.duration), 10);
+        if (parsedDuration > 0) durationMinutes.value = parsedDuration;
       }
       isAllMicrophoneDisabled.value = options?.allMicDisabled === '1';
       isAllCameraDisabled.value = options?.allCameraDisabled === '1';
       isAllMessageDisabled.value = options?.allMessageDisabled === '1';
       isAllScreenShareDisabled.value = options?.allScreenShareDisabled === '1';
       if (options?.password) {
-        const pwd = decodeURIComponent(String(options.password)).replace(/\D/g, '').slice(0, 6);
-        if (pwd.length > 0) {
-          roomPassword.value = pwd;
+        const password = decodeURIComponent(String(options.password))
+          .replace(/\D/g, '')
+          .slice(0, ROOM_PASSWORD_LENGTH);
+        if (password.length > 0) {
+          roomPassword.value = password;
           isRoomEncrypted.value = true;
           isPasswordSystemGenerated.value = false;
         }
@@ -262,13 +282,12 @@ import Avatar from '@/uni_modules/tuikit-atomic-x/components/Avatar/Avatar.nvue'
     if (!isEditMode.value && roomName.value.length === 0) {
       const nickName = loginUserInfo.value?.nickname || loginUserInfo.value?.userID || '';
       if (nickName.length > 0) {
-        const MAX_LEN = 30
-        const SUFFIX = '的临时房间'
-        const maxNickLen = MAX_LEN - SUFFIX.length
-        const trimmed = nickName.length > maxNickLen ? nickName.slice(0, maxNickLen) : nickName
-        roomName.value = `${trimmed}${SUFFIX}`
+        const suffix = t('schedule.tempRoomSuffix');
+        const maxNickLength = ROOM_NAME_MAX_LENGTH - suffix.length;
+        const trimmedNickName = nickName.length > maxNickLength ? nickName.slice(0, maxNickLength) : nickName;
+        roomName.value = `${trimmedNickName}${suffix}`;
       } else {
-        roomName.value = ''
+        roomName.value = '';
       }
     }
     if (isEditMode.value) loadScheduledAttendees();
@@ -280,24 +299,24 @@ import Avatar from '@/uni_modules/tuikit-atomic-x/components/Avatar/Avatar.nvue'
   });
 
   function loadScheduledAttendees(): void {
-    const rid = editRoomID.value;
-    if (rid.length === 0) return;
+    const roomID = editRoomID.value;
+    if (roomID.length === 0) return;
     const collected: AttendeeUser[] = [];
     const MAX_PAGES = 50;
     let pageIndex = 0;
     let cursor = '';
     const loopFetch = (): Promise<void> => {
       return roomState
-        .getScheduledAttendees({ roomID: rid, cursor })
+        .getScheduledAttendees({ roomID, cursor })
         .then((res: any) => {
           const list = (res?.attendees || []) as any[];
-          for (const a of list) {
-            const uid = a.userID || '';
-            const nick = a.userName || a.nickname || '';
+          for (const attendee of list) {
+            const userID = attendee.userID || '';
+            const nick = attendee.userName || attendee.nickname || '';
             collected.push({
-              userID: uid,
-              displayName: nick.length > 0 ? `${uid}(${nick})` : uid,
-              avatarURL: a.avatarURL || '',
+              userID,
+              displayName: nick.length > 0 ? `${userID}(${nick})` : userID,
+              avatarURL: attendee.avatarURL || '',
             } as AttendeeUser);
           }
           pageIndex += 1;
@@ -321,17 +340,17 @@ import Avatar from '@/uni_modules/tuikit-atomic-x/components/Avatar/Avatar.nvue'
 
 
   function onRoomEncryptedChange(e: any): void {
-    const on = e.detail.value as boolean;
-    isRoomEncrypted.value = on;
-    if (!on) return;
-    if (roomPassword.value.length !== 6 && !isEditMode.value) {
+    const enabled = e.detail.value as boolean;
+    isRoomEncrypted.value = enabled;
+    if (!enabled) return;
+    if (roomPassword.value.length !== ROOM_PASSWORD_LENGTH && !isEditMode.value) {
       roomPassword.value = generateRoomPassword();
       isPasswordSystemGenerated.value = true;
     }
   }
   function onRoomPasswordInput(e: any): void {
-    const raw = (e?.detail?.value ?? '') as string;
-    roomPassword.value = raw.replace(/\D/g, '').slice(0, 6);
+    const inputValue = (e?.detail?.value ?? '') as string;
+    roomPassword.value = inputValue.replace(/\D/g, '').slice(0, ROOM_PASSWORD_LENGTH);
     isPasswordSystemGenerated.value = false;
   }
 
@@ -340,12 +359,6 @@ import Avatar from '@/uni_modules/tuikit-atomic-x/components/Avatar/Avatar.nvue'
   }
   function onAllCameraChange(e: any): void {
     isAllCameraDisabled.value = e.detail.value;
-  }
-  function onAllMessageChange(e: any): void {
-    isAllMessageDisabled.value = e.detail.value;
-  }
-  function onAllScreenShareDisabledChange(e: any): void {
-    isAllScreenShareDisabled.value = e.detail.value;
   }
 
   function handleRootTap(): void {
@@ -397,16 +410,16 @@ import Avatar from '@/uni_modules/tuikit-atomic-x/components/Avatar/Avatar.nvue'
   function handleSubmit(): void {
     if (isSubmitDisabled.value) {
       if (roomName.value.trim().length === 0) {
-        showToast('请输入房间名称');
+        showToast(t('Schedule.Error.RoomName'));
       }
       return;
     }
     if (startTime.value <= Date.now()) {
-      showToast('开始时间不能早于当前时间');
+      showToast(t('Schedule.Error.StartTime'));
       return;
     }
-    if (isRoomEncrypted.value && roomPassword.value.length !== 6) {
-      showToast('请输入 6 位数字进房密码');
+    if (isRoomEncrypted.value && roomPassword.value.length !== ROOM_PASSWORD_LENGTH) {
+      showToast(t('Schedule.Error.Password'));
       return;
     }
     uni.hideKeyboard();
@@ -418,8 +431,10 @@ import Avatar from '@/uni_modules/tuikit-atomic-x/components/Avatar/Avatar.nvue'
     const scheduleOptions = {
       roomName: roomName.value.trim(),
       password: isRoomEncrypted.value ? roomPassword.value : '',
-      scheduleStartTime: Math.floor(utcStartMs / 1000),
-      scheduleEndTime: Math.floor((utcStartMs + durationMinutes.value * 60 * 1000) / 1000),
+      scheduleStartTime: Math.floor(utcStartMs / MS_PER_SECOND),
+      scheduleEndTime: Math.floor(
+        (utcStartMs + durationMinutes.value * SECONDS_PER_MINUTE * MS_PER_SECOND) / MS_PER_SECOND
+      ),
       scheduleAttendees: isEditMode.value ? undefined : currentIDs.slice(),
       isAllMicrophoneDisabled: isAllMicrophoneDisabled.value,
       isAllCameraDisabled: isAllCameraDisabled.value,
@@ -441,10 +456,10 @@ import Avatar from '@/uni_modules/tuikit-atomic-x/components/Avatar/Avatar.nvue'
       .then(() => {
         isSubmitting.value = false;
         if (isEditMode.value) {
-          showToast('保存成功');
+          showToast(t('schedule.saveSuccess'));
           setTimeout(() => {
             uni.navigateBack();
-          }, 600);
+          }, SAVE_SUCCESS_BACK_DELAY_MS);
           return;
         }
         createdRoomID.value = targetRoomID;
@@ -452,7 +467,7 @@ import Avatar from '@/uni_modules/tuikit-atomic-x/components/Avatar/Avatar.nvue'
       })
       .catch((e: any) => {
         isSubmitting.value = false;
-        showErrorToast(e, isEditMode.value ? '保存失败' : '预定房间失败');
+        showErrorToast(e, isEditMode.value ? t('Schedule.SaveFailed') : t('Schedule.CreateFailed'));
       });
   }
 
@@ -480,7 +495,7 @@ import Avatar from '@/uni_modules/tuikit-atomic-x/components/Avatar/Avatar.nvue'
           .removeScheduledAttendees({ roomID, userIDList: toRemove.slice() })
           .catch((e: any) => {
             console.warn('[schedule] removeScheduledAttendees failed:', e);
-            showToast('部分成员移除失败');
+            showToast(t('Schedule.Failure.RemovePartial'));
           }),
       );
     }
@@ -490,7 +505,7 @@ import Avatar from '@/uni_modules/tuikit-atomic-x/components/Avatar/Avatar.nvue'
           .addScheduledAttendees({ roomID, userIDList: toAdd.slice() })
           .catch((e: any) => {
             console.warn('[schedule] addScheduledAttendees failed:', e);
-            showToast('部分成员添加失败');
+            showToast(t('Schedule.Failure.AddPartial'));
           }),
       );
     }
@@ -499,122 +514,6 @@ import Avatar from '@/uni_modules/tuikit-atomic-x/components/Avatar/Avatar.nvue'
   }
 </script>
 
-<style>
-  .root {
-    flex: 1;
-    background-color: #F2F5FC;
-    flex-direction: column;
-  }
-  .page {
-    flex: 1;
-    flex-direction: column;
-    padding-bottom: 32rpx;
-  }
-
-  .card {
-    margin: 40rpx 32rpx 0;
-    padding: 20rpx 40rpx;
-    background-color: #FFFFFF;
-    border-radius: 12rpx;
-    flex-direction: column;
-  }
-
-  .form-item {
-    flex-direction: row;
-    align-items: center;
-    padding: 20rpx 0;
-  }
-
-  .switch-item {
-    justify-content: space-between;
-  }
-
-  .form-label {
-    width: 176rpx;
-    font-size: 32rpx;
-    color: #2B2E38;
-  }
-
-  .form-input {
-    flex: 1;
-    font-size: 32rpx;
-    font-weight: 500;
-    color: #A2A4A8;
-    lines: 1;
-    padding: 0;
-    text-align: right;
-  }
-
-  .form-value {
-    flex: 1;
-    font-size: 32rpx;
-    font-weight: 500;
-    color: #A2A4A8;
-    text-align: right;
-    lines: 1;
-    text-overflow: ellipsis;
-  }
-
-  .form-arrow {
-    width: 28rpx;
-    height: 28rpx;
-    margin-left: 8rpx;
-  }
-
-  .form-arrow-right {
-    transform: rotate(-90deg);
-  }
-
-  .attendee-box {
-    flex: 1;
-    flex-direction: row;
-    align-items: center;
-    justify-content: flex-end;
-  }
-
-  .attendee-avatar-wrap {
-    margin-left: 8rpx;
-  }
-
-  .attendee-text {
-    font-size: 32rpx;
-    font-weight: 500;
-    color: #A2A4A8;
-    margin-left: 12rpx;
-  }
-
-  .form-hint-wrap {
-    padding-top: 8rpx;
-    padding-bottom: 8rpx;
-    padding-left: 4rpx;
-    padding-right: 32rpx;
-    flex-direction: row;
-  }
-
-  .form-hint-text {
-    flex: 1;
-    color: #A2A4A8;
-    font-size: 24rpx;
-    line-height: 36rpx;
-  }
-
-  .footer {
-    margin-top: 40rpx;
-    padding: 0 32rpx;
-  }
-
-  .submit-btn {
-    border-radius: 16rpx;
-    background-image: linear-gradient(to right, #006EFF, #0C59F2);
-    flex-direction: row;
-    justify-content: center;
-    align-items: center;
-  }
-
-  .submit-btn-text {
-    color: #FFFFFF;
-    font-size: 32rpx;
-    font-weight: 500;
-    padding: 22rpx 0;
-  }
+<style lang="scss">
+  @import './schedule.scss';
 </style>

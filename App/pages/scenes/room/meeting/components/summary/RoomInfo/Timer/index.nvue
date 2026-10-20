@@ -1,0 +1,48 @@
+<template>
+  <text class="timer-text">{{ timerText }}</text>
+</template>
+
+<script setup lang="ts">
+  import { ref, onMounted, onUnmounted } from 'vue';
+
+  const SECONDS_PER_MINUTE = 60;
+  const SECONDS_PER_HOUR = 3600;
+  const MS_PER_SECOND = 1000;
+  const TIMER_TICK_MS = 1000;
+  const MIN_TWO_DIGIT_VALUE = 10;
+
+  const timerText = ref('00:00');
+  let timerHandle: any = null;
+  let initTimestamp = 0;
+
+  function formatTimer(totalSeconds: number): string {
+    const padToTwoDigits = (value: number): string =>
+      value < MIN_TWO_DIGIT_VALUE ? `0${value}` : `${value}`;
+    const hours = Math.floor(totalSeconds / SECONDS_PER_HOUR);
+    const minutes = Math.floor((totalSeconds / SECONDS_PER_MINUTE) % SECONDS_PER_MINUTE);
+    const seconds = totalSeconds % SECONDS_PER_MINUTE;
+    return hours > 0
+      ? `${padToTwoDigits(hours)}:${padToTwoDigits(minutes)}:${padToTwoDigits(seconds)}`
+      : `${padToTwoDigits(minutes)}:${padToTwoDigits(seconds)}`;
+  }
+
+  onMounted(() => {
+    initTimestamp = Date.now();
+    timerText.value = formatTimer(0);
+    timerHandle = setInterval(() => {
+      const elapsedSeconds = Math.floor((Date.now() - initTimestamp) / MS_PER_SECOND);
+      timerText.value = formatTimer(elapsedSeconds);
+    }, TIMER_TICK_MS);
+  });
+
+  onUnmounted(() => {
+    if (timerHandle) {
+      clearInterval(timerHandle);
+      timerHandle = null;
+    }
+  });
+</script>
+
+<style lang="scss">
+  @import './Timer.scss';
+</style>

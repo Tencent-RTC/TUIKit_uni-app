@@ -1,0 +1,141 @@
+  @import '../../../styles/tokens.scss';
+
+  .room-schedule-list {
+    flex: 1;
+    flex-direction: column;
+  }
+
+  .list-scroll {
+    flex: 1;
+    padding: 0 40rpx;
+  }
+
+  .group {
+    flex-direction: column;
+    padding-top: 40rpx;
+    padding-bottom: 20rpx;
+  }
+
+  .group-title-row {
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .group-title-icon {
+    width: 32rpx;
+    height: 32rpx;
+    margin-right: 4rpx;
+  }
+
+  .group-title-text {
+    font-weight: 400;
+    font-size: $room-font-size-base;
+    color: $room-light-text-muted;
+  }
+
+  .item {
+    flex-direction: row;
+    align-items: center;
+    padding-top: 40rpx;
+  }
+
+  .item-main {
+    flex: 1;
+    flex-direction: column;
+  }
+
+  .item-top {
+    flex-direction: row;
+    align-items: center;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  .item-name {
+    max-width: 460rpx;
+    font-size: $room-font-size-xl;
+    font-weight: 500;
+    color: $room-light-text-secondary;
+    lines: 1;
+    text-overflow: ellipsis;
+  }
+
+  .item-arrow {
+    width: 32rpx;
+    height: 32rpx;
+    flex-shrink: 0;
+    transform: rotate(-90deg);
+  }
+
+  .item-bottom {
+    flex-direction: row;
+    align-items: center;
+    margin-top: 12rpx;
+  }
+
+  .item-time {
+    font-weight: 400;
+    font-size: $room-font-size-base;
+    color: $room-light-text-secondary;
+  }
+
+  .item-divider {
+    font-weight: 400;
+    font-size: $room-font-size-base;
+    color: $room-light-text-muted;
+    margin-left: 16rpx;
+    margin-right: 16rpx;
+  }
+
+  .item-id {
+    font-weight: 400;
+    font-size: $room-font-size-base;
+    color: $room-light-text-secondary;
+  }
+
+  .item-status-text {
+    font-weight: 400;
+    font-size: $room-font-size-base;
+    color: $room-color-danger-light;
+  }
+
+  .item-status-running {
+    color: $room-color-brand;
+  }
+
+  .enter-btn {
+    margin-left: 40rpx;
+    padding: 10rpx 40rpx;
+    border-radius: 28rpx;
+    background-color: $room-light-bg-subtle;
+    flex-direction: row;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .enter-btn-text {
+    font-size: $room-font-size-base;
+    font-weight: 400;
+    line-height: 44rpx;
+    color: $room-light-text-secondary;
+  }
+
+  .empty {
+    flex: 1;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .empty-icon {
+    width: 300rpx;
+    height: 198rpx;
+    margin-bottom: 16rpx;
+  }
+
+  .empty-text {
+    font-weight: 400;
+    font-size: $room-font-size-base;
+    line-height: 44rpx;
+    color: $room-light-text-muted;
+  }

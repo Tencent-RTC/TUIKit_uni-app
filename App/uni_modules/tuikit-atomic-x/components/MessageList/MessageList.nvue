@@ -41,6 +41,7 @@
             :highlight="item.message?.msgID === currentHighlightID"
             :customCenterChecker="customCenterChecker"
             :customMessageRender="customMessageRender"
+            :messageActionList="messageActionList"
             :inputPanelHeight="inputPanelHeight"
             @onMessageListTap="handleMessageListTap"
             @onMessageTap="handleMessageTap"
@@ -67,6 +68,14 @@
       />
       <text class="msg-list__scroll-btn-text">新消息</text>
     </view>
+
+    <ConfirmDialog
+      v-model="premiumDialogVisible"
+      title="提示"
+      :message="premiumDialogMessage"
+      confirmText="我知道了"
+      cancelText=""
+    />
   </view>
 </template>
 
@@ -74,6 +83,8 @@
 import { ref, computed, watch, onMounted, onBeforeMount, onBeforeUnmount, nextTick, getCurrentInstance } from 'vue'
 import Message from './Message/Message.nvue'
 import MessageTimeDivider from './MessageTimeDivider/MessageTimeDivider.nvue'
+import ConfirmDialog from '../ConfirmDialog/ConfirmDialog.nvue'
+import { PREMIUM_REQUIRED_EVENT } from '../../utils/premiumRequired'
 import { useMessageListState } from '../../state/MessageListState'
 import { useConversationListState } from '../../state/ConversationListState'
 import { useListTransform } from './useListTransform'
@@ -93,14 +104,9 @@ interface Props {
   messageActionList?: string[]
   filter?: ((message: MessageInfo) => boolean) | null
   locateMessage?: MessageInfo | null
-  // 输入框工具栏高度（px）
   inputToolbarHeight?: number
-  // 键盘/Emoji面板高度（px）
   inputPanelHeight?: number
-  // 自定义居中消息判断方法
   customCenterChecker?: CustomCenterChecker | null
-  // 自定义消息渲染：(message, conversationID) => Component | null
-  // 返回组件 → 接管 CUSTOM 消息渲染；返回 null/undefined → 走内置 CustomMessage 默认渲染
   customMessageRender?: any
 }
 
@@ -112,7 +118,7 @@ interface MessageListExpose {
 const props = withDefaults(defineProps<Props>(), {
   messageListType: MessageListType.HISTORY,
   alignment: 'two-sided',
-  messageAggregationTime: 300, // 5分钟
+  messageAggregationTime: 300,
   enableReadReceipt: false,
   messageActionList: () => [],
   filter: null,
@@ -229,7 +235,6 @@ const messageItems = computed<MessageItem[]>(() => {
     return []
   }
   
-  // 过滤消息
   const filteredMessages = props.filter 
     ? messageList.value.filter(props.filter)
     : messageList.value.filter(message => message.status !== MessageStatus.DELETED)
@@ -338,16 +343,6 @@ const onLoadMore = async () => {
   }
 }
 
-/**
- * @param animated 是否带动画。
- *
- * ★ 必须做布尔归一化：
- *   模板 @tap 直接绑函数时，nvue 会把 tap 事件对象作为第一个实参传进来
- *   （`@tap="scrollToBottom"` → animated = UITouchEvent 对象），
- *   于是 `animated: <对象>` 进到 dom.scrollToElement 的 native 层，
- *   iOS 侧按 BOOL 解析非布尔对象 → **App 崩溃**。
- *   defineExpose 出去的外部调用同样不可控，所以在函数入口统一收口。
- */
 const scrollToBottom = (animated: any = true) => {
   if (messageItems.value.length === 0) return
 
@@ -368,12 +363,10 @@ const scrollToBottom = (animated: any = true) => {
   showScrollToBottom.value = false
 }
 
-// 模板 @tap 专用：不把事件对象透传给 scrollToBottom
 const handleScrollToBottomTap = () => {
   scrollToBottom(true)
 }
 
-// 正在定位中的 msgID：同一目标重复触发时直接跳过，避免 loadMessages 被并发调用多次
 let locatingMessageID: string = ''
 
 const scrollToMessage = async (message: MessageInfo, animated = true) => {
@@ -414,7 +407,6 @@ const doScrollToMessage = (messageID: string, animated = true, highlight = true)
   const targetCell = cellRefs[targetIndex]
   
   if (targetCell) {
-    // 同 scrollToBottom：animated 必须是真布尔，否则 iOS native 解析非布尔值会崩
     try {
       const dom = uni.requireNativePlugin('dom')
       dom.scrollToElement(targetCell, {
@@ -438,9 +430,6 @@ const doScrollToMessage = (messageID: string, animated = true, highlight = true)
 
 const isBottomAnchorVisible = ref(true)
 
-// ponytail: 只认「用户主动拖动离开底部」，不认锚点的实时可见性。
-// 1rpx 锚点在新消息插入时会被瞬时推出视口触发 @disappear，watch 读到这个抖动值就会
-// 误判成「用户在翻历史」→ 不滚动 + 闪一下新消息按钮。用 isDragging 过滤掉非用户操作的位移。
 const userLeftBottom = ref(false)
 
 const onBottomAnchorAppear = () => {
@@ -461,7 +450,6 @@ const handleScroll = (e: any) => {
   lastScrollTop.value = e.contentOffset.y
 
   if (e.isDragging) {
-    // 首屏补正期间用户已上手拖动 → 停止后续自动滚到底，避免把用户拽回去
     firstScreenUserScrolled = true
     if (!isBottomAnchorVisible.value) userLeftBottom.value = true
     emit('onMessageListTap');
@@ -572,7 +560,6 @@ watch(messageList, (newMessages, oldMessages) => {
       clearConversationUnreadCount(props.conversationID)
     }
 
-    // 先采样再改 showScrollToBottom，避免下面的判断依赖上面这次赋值的顺序
     const wasAtBottom = isAtBottom()
 
     if (!isMyMessage && !wasAtBottom && !hasNewerMessages.value) {
@@ -589,7 +576,6 @@ watch(messageList, (newMessages, oldMessages) => {
       })
     }
     
-    // 新消息到达时，通知 transform hook 处理
     nextTick(() => {
       listTransform.onNewMessage();
     });
@@ -626,11 +612,19 @@ onBeforeMount(() => {
   }
 });
 
+const premiumDialogVisible = ref(false)
+const premiumDialogMessage = ref('')
+const handleReactionPremiumRequired = (message: string) => {
+  premiumDialogMessage.value = message
+  premiumDialogVisible.value = true
+}
+
 onMounted(() => {
   if (messageList.value && messageList.value.length > 0) {
     startFirstScreenFinalize()
   }
 
+  uni.$on(PREMIUM_REQUIRED_EVENT, handleReactionPremiumRequired)
   uni.$on('audioConvertStreamGrow', handleAudioConvertStreamGrow)
   uni.$on('messageBoxGrow', handleAudioConvertStreamGrow)
   uni.$on('scrollToMessage', handleScrollToMessageEvent)
@@ -660,7 +654,6 @@ const handleAudioConvertStreamGrow = (data: { msgID: string; boxRef?: any }) => 
     const inputTotalHeight = (props.inputPanelHeight || 0) + (props.inputToolbarHeight || 0)
     const buffer = 16
 
-    // 第一步：用 boxRef 测量转写文本框位置，判断是否被遮挡
     dom.getComponentRect(data.boxRef, (boxResult: any) => {
       if (!boxResult || !boxResult.result || !boxResult.size) return
 
@@ -676,11 +669,9 @@ const handleAudioConvertStreamGrow = (data: { msgID: string; boxRef?: any }) => 
       const boxHeight = boxResult.size.height || 0
       const visibleBottom = windowHeight - inputTotalHeight
 
-      // box 已完全可见 → 不滚动
       if (boxBottom <= visibleBottom - buffer) return
       if (boxHeight <= 0) return
 
-      // 第二步：测 cell 与 list 的位置算 cellTopInList
       dom.getComponentRect(targetCell, (cellResult: any) => {
         if (!cellResult || !cellResult.result || !cellResult.size) return
         dom.getComponentRect(listEl, (listResult: any) => {
@@ -690,8 +681,6 @@ const handleAudioConvertStreamGrow = (data: { msgID: string; boxRef?: any }) => 
           const listTop = listResult.size.top || 0
           const cellTopInList = cellTop - listTop
 
-          // 净滚动 boxHeight：offset = boxHeight - cellTopInList
-          // 让 cell 顶部停在 list 视口顶部下方 (cellTopInList - boxHeight) 处
           const offset = boxHeight - cellTopInList
           dom.scrollToElement(targetCell, {
             offset: offset,
@@ -710,20 +699,15 @@ onBeforeUnmount(() => {
     stopReadyWatch = null
   }
   clearConversationUnreadCount(props.conversationID);
+  uni.$off(PREMIUM_REQUIRED_EVENT, handleReactionPremiumRequired)
   uni.$off('audioConvertStreamGrow', handleAudioConvertStreamGrow)
   uni.$off('messageBoxGrow', handleAudioConvertStreamGrow)
   uni.$off('scrollToMessage', handleScrollToMessageEvent)
   destroyStore()
 })
 
-/**
- * 获取最后一条消息底部到屏幕顶部的px值
- */
 const getLastMessageCellPosition = async (): Promise<number> => {
   return new Promise((resolve) => {
-    // 优先用底部锚点（高度 1rpx，bottom 就是内容底部），它始终对应当前列表真实末尾。
-    // cellRefs 只增不减（setCellRef 不清理），cellRefs.length 是历史最大值，
-    // 切会话/列表变短后 cellRefs[cellRefs.length - 1] 会命中已销毁的旧 cell 导致测量失真。
     const lastCell = (listBottomAnchorRef.value || cellRefs[messageItems.value.length - 1]) as any;
     if (!lastCell) {
       resolve(0);
@@ -752,11 +736,9 @@ const listTransform = useListTransform({
   threshold: 10
 });
 
-// 监听面板高度变化
 watch(() => props.inputPanelHeight, async (newHeight, oldHeight) => {
   const isOpening = oldHeight === 0 && newHeight > 0;
   
-  // 面板打开时先滚动到底部
   if (newHeight > 0) {
     scrollToBottom(false);
     await nextTick();

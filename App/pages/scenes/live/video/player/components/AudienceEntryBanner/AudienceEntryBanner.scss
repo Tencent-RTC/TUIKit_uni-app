@@ -1,0 +1,117 @@
+@import '../../../../styles/tokens.scss';
+
+  .audience-entry {
+    position: absolute;
+    left: 24rpx;
+    max-width: 560rpx;
+    height: 56rpx;
+    padding-left: 18rpx;
+    padding-right: 18rpx;
+    border-radius: 24rpx;
+    background-color: $live-dark-bg-overlay-34;
+    flex-direction: row;
+    align-items: center;
+    z-index: 1000;
+  }
+
+  .entry-bg {
+    position: absolute;
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    border-radius: 22rpx;
+  }
+
+  .live-level-badge {
+    position: relative;
+    width: 68rpx;
+    height: 30rpx;
+    padding-left: 6rpx;
+    padding-right: 6rpx;
+    margin-right: 8rpx;
+    border-radius: 15rpx;
+    overflow: hidden;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .badge-bg {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 68rpx;
+    height: 30rpx;
+  }
+
+  .badge-icon {
+    width: 20rpx;
+    height: 20rpx;
+    margin-right: 2rpx;
+    flex-shrink: 0;
+  }
+
+  .live-level-num {
+    position: relative;
+    font-size: 17rpx;
+    font-weight: 800;
+    line-height: 30rpx;
+    text-align: center;
+  }
+
+  .level-num-basic {
+    color: $live-color-tint-periwinkle;
+  }
+
+  .level-num-advanced {
+    color: $live-color-tint-aqua;
+  }
+
+  .live-level-badge-premium {
+    border-color: $live-dark-border-42;
+  }
+
+  .level-num-premium {
+    color: $live-color-tint-lilac;
+  }
+
+  .level-num-elite {
+    color: $live-color-tint-cream;
+  }
+
+  .audience-entry-name {
+    color: $live-color-tint-cyan;
+    font-size: 26rpx;
+    font-weight: 600;
+    lines: 1;
+    max-width: 240rpx;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .audience-entry-action {
+    color: $live-dark-text-90;
+    font-size: 26rpx;
+    font-weight: 600;
+    margin-left: 12rpx;
+  }
+
+  .audience-entry-action-premium {
+    color: $live-dark-text-94;
+  }
+
+  .audience-entry-action-elite {
+    color: $live-color-tint-sand;
+  }
+
+  .audience-entry-premium {
+    border-width: 2rpx;
+    border-color: $live-color-purple-border;
+  }
+
+  .audience-entry-elite {
+    border-width: 2rpx;
+    border-color: $live-color-warning-border;
+  }

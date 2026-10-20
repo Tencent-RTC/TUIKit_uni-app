@@ -1,0 +1,117 @@
+  @import '../../../../styles/tokens.scss';
+
+  .mgr-mask {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: $room-mask;
+    flex-direction: column;
+    justify-content: flex-end;
+  }
+
+  .mgr-sheet {
+    background-color: $room-dark-bg-sheet;
+    border-top-left-radius: 40rpx;
+    border-top-right-radius: 40rpx;
+  }
+
+  .drop-bar {
+    height: 70rpx;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .drop-line {
+    width: 48rpx;
+    height: 48rpx;
+  }
+
+  .user-header {
+    flex-direction: row;
+    align-items: center;
+    padding-left: 32rpx;
+    padding-right: 32rpx;
+  }
+
+  .header-info {
+    flex: 1;
+    margin-left: 24rpx;
+    flex-direction: column;
+    justify-content: center;
+  }
+
+  .header-name-row {
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .header-name {
+    color: $room-dark-text-primary;
+    font-size: $room-font-size-xl;
+    font-weight: 500;
+    lines: 1;
+    text-overflow: ellipsis;
+    max-width: 480rpx;
+  }
+
+  .header-me-tag {
+    color: $room-dark-text-primary;
+    font-size: $room-font-size-base;
+    margin-left: 8rpx;
+  }
+
+  .badge-row {
+    flex-direction: row;
+    align-items: center;
+    margin-top: 8rpx;
+  }
+
+  .badge-icon {
+    width: 28rpx;
+    height: 28rpx;
+    margin-right: 4rpx;
+  }
+
+  .badge-text {
+    font-size: $room-font-size-sm;
+  }
+
+  .header-gap {
+    height: 24rpx;
+  }
+
+  .ctrl-list {
+    flex-direction: column;
+  }
+
+  .ctrl-item {
+    height: 100rpx;
+    padding-left: 32rpx;
+    padding-right: 32rpx;
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .ctrl-icon {
+    width: 40rpx;
+    height: 40rpx;
+    margin-right: 24rpx;
+  }
+
+  .ctrl-text {
+    color: $room-color-text-inverse;
+    font-size: $room-font-size-xl;
+  }
+
+  .ctrl-divider {
+    height: 1rpx;
+    background-color: $room-dark-bg-hairline;
+    margin-left: 32rpx;
+    margin-right: 32rpx;
+  }
+
+  .bottom-safe {
+    height: 68rpx;
+  }

@@ -1,0 +1,65 @@
+<template>
+  <view class="live-summary-view">
+    <image class="live-summary-back-btn" src="/static/images/close.png" mode="aspectFit" @tap="emit('close')" />
+    <view class="live-summary-header">
+      <text class="live-summary-title">{{ t('anchor.liveEnded') }}</text>
+      <text class="live-summary-duration">{{ t('anchor.summaryDuration') }} {{ durationText }}</text>
+    </view>
+    <view class="live-summary-stats-card">
+      <view v-for="(row, rowIndex) in statRows" :key="rowIndex" class="live-summary-stats-row">
+        <view v-for="item in row" :key="item.label" class="live-summary-stats-item">
+          <text class="live-summary-stats-value">{{ item.value }}</text>
+          <text class="live-summary-stats-label">{{ item.label }}</text>
+        </view>
+      </view>
+    </view>
+  </view>
+</template>
+
+<script setup lang="ts">
+  import { computed } from 'vue';
+  import { t } from '../../../../locales';
+
+  const props = defineProps({
+    summary: {
+      type: Object,
+      default: () => null,
+    },
+    liveDuration: {
+      type: Number,
+      default: 0,
+    },
+  });
+
+  const emit = defineEmits(['close']);
+
+  const formatCount = (value: any) => {
+    const num = Number(value);
+    if (!Number.isFinite(num) || num < 0) return '--';
+    if (num >= 10000) return `${(num / 10000).toFixed(1)}${t('common.wanUnit')}`;
+    return String(num);
+  };
+
+  const formatDuration = (seconds: any) => {
+    const total = Math.max(0, Math.floor(Number(seconds) || 0));
+    const h = String(Math.floor(total / 3600)).padStart(2, '0');
+    const m = String(Math.floor((total % 3600) / 60)).padStart(2, '0');
+    const s = String(total % 60).padStart(2, '0');
+    return `${h}:${m}:${s}`;
+  };
+
+  const durationText = computed(() => formatDuration(props.liveDuration));
+
+  const statItems = computed(() => [
+    { value: formatCount(props.summary?.totalViewers), label: t('anchor.summaryViewers') },
+    { value: formatCount(props.summary?.totalLikesReceived), label: t('anchor.summaryLikes') },
+    { value: formatCount(props.summary?.totalGiftCoins), label: t('anchor.summaryGiftCoins') },
+    { value: formatCount(props.summary?.totalGiftUniqueSenders), label: t('anchor.summaryGiftSenders') },
+  ]);
+
+  const statRows = computed(() => [statItems.value.slice(0, 2), statItems.value.slice(2)]);
+</script>
+
+<style lang="scss">
+  @import './LiveSummaryView.scss';
+</style>

@@ -1,0 +1,136 @@
+<template>
+  <view
+    v-if="currentEntry"
+    ref="entryElRef"
+    class="audience-entry"
+    :class="levelClass"
+    :style="{ top: props.topPx + 'px', transform: 'translateX(-400px)', opacity: 0 }"
+  >
+    <image v-if="entryBgSrc" class="entry-bg" :src="entryBgSrc" mode="scaleToFill" />
+    <view class="live-level-badge" :class="levelBadgeClass" v-if="currentEntry.level > 0">
+      <image class="badge-bg" :src="badgeGradientSrc" mode="scaleToFill" />
+      <image class="badge-icon" :src="badgeIconSrc" mode="aspectFit" />
+      <text class="live-level-num" :class="levelNumClass">{{ currentEntry.level }}</text>
+    </view>
+    <text class="audience-entry-name" numberOfLines="1">{{ currentEntry.userName }}</text>
+    <text
+      class="audience-entry-action"
+      :class="{ 'audience-entry-action-premium': levelClass === 'audience-entry-premium', 'audience-entry-action-elite': levelClass === 'audience-entry-elite' }"
+    >{{ t('audience.enteredRoom') }}</text>
+  </view>
+</template>
+
+<script setup lang="ts">
+  import { ref, computed, nextTick, onUnmounted } from 'vue';
+  import { t } from '../../../../locales';
+
+  type AudienceEntryUser = { userID: string; userName: string; level: number };
+
+  const props = defineProps<{
+    topPx: number;
+  }>();
+
+  const currentEntry = ref<AudienceEntryUser | null>(null);
+  const entryElRef = ref(null);
+  let entryQueue: AudienceEntryUser[] = [];
+  let isProcessingQueue = false;
+  let entryTimer: any = null;
+  const recentEntryAt = new Map<string, number>();
+  const animation = uni.requireNativePlugin('animation');
+  const HOLD_MS = 1500;
+  const EXIT_MS = 240;
+  const ENTER_MS = 400;
+  const DUPLICATE_WINDOW_MS = 5000;
+  const RECENT_MAP_MAX = 1000;
+  const QUEUE_MAX = 10;
+  const QUEUE_TRIM_KEEP = 2;
+
+  const sleep = (ms: number) => new Promise(resolve => { entryTimer = setTimeout(resolve, ms); });
+
+  const playEnter = () => {
+    const el = entryElRef.value;
+    if (!el) return;
+    animation.transition(el, {
+      styles: { transform: 'translateX(12px)', opacity: 1 },
+      duration: ENTER_MS,
+      timingFunction: 'ease-out',
+    });
+  };
+  const playExit = () => {
+    const el = entryElRef.value;
+    if (!el) return;
+    animation.transition(el, {
+      styles: { transform: 'translateX(-18px)', opacity: 0 },
+      duration: EXIT_MS,
+      timingFunction: 'ease-in',
+    });
+  };
+
+  const processQueue = async () => {
+    if (isProcessingQueue || entryQueue.length === 0) return;
+    isProcessingQueue = true;
+    try {
+      while (entryQueue.length > 0) {
+        const entry = entryQueue.splice(0, 1)[0];
+        currentEntry.value = entry;
+        await nextTick();
+        playEnter();
+        await sleep(HOLD_MS);
+        playExit();
+        await sleep(EXIT_MS);
+        currentEntry.value = null;
+      }
+    } finally {
+      isProcessingQueue = false;
+    }
+  };
+
+  const push = (user: AudienceEntryUser) => {
+    if (!user?.userName) return;
+    const now = Date.now();
+    if (now - (recentEntryAt.get(user.userID) || 0) < DUPLICATE_WINDOW_MS) return;
+    recentEntryAt.set(user.userID, now);
+    if (recentEntryAt.size > RECENT_MAP_MAX) {
+      recentEntryAt.clear();
+    }
+    entryQueue.push(user);
+    if (entryQueue.length > QUEUE_MAX) {
+      entryQueue = entryQueue.slice(-QUEUE_TRIM_KEEP);
+    }
+    processQueue();
+  };
+
+  const levelTier = (level: number): string => {
+    if (level >= 40) return 'elite';
+    if (level >= 25) return 'premium';
+    if (level >= 10) return 'advanced';
+    return 'basic';
+  };
+  const levelClass = computed(() => {
+    const tier = levelTier(currentEntry.value?.level || 0);
+    if (tier === 'elite') return 'audience-entry-elite';
+    if (tier === 'premium') return 'audience-entry-premium';
+    return '';
+  });
+
+  const badgeTier = computed(() => levelTier(currentEntry.value?.level || 0));
+  const levelBadgeClass = computed(() => 'live-level-badge-' + badgeTier.value);
+  const levelNumClass = computed(() => 'level-num-' + badgeTier.value);
+  const badgeGradientSrc = computed(() => `/static/images/live/badge/badge-gradient-${badgeTier.value}.png`);
+  const badgeIconSrc = computed(() => `/static/images/live/badge/badge-icon-${badgeTier.value}.png`);
+  const entryBgSrc = computed(() => {
+    if (levelClass.value === 'audience-entry-premium') return '/static/images/live/badge/tip-bg-premium.png';
+    if (levelClass.value === 'audience-entry-elite') return '/static/images/live/badge/tip-bg-elite.png';
+    return '';
+  });
+
+  defineExpose({ push });
+
+  onUnmounted(() => {
+    if (entryTimer) { clearTimeout(entryTimer); entryTimer = null; }
+  });
+</script>
+
+<style lang="scss">
+  @import './AudienceEntryBanner.scss';
+</style>

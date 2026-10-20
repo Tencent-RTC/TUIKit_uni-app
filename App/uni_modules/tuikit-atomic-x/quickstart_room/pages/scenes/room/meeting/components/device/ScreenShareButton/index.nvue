@@ -1,0 +1,195 @@
+<template>
+  <view class="bottom-btn" :style="dimStyle">
+    <view class="bottom-icon-box" @tap="handleTap">
+      <image
+        class="bottom-icon"
+        :src="screenShareIconSrc"
+        mode="aspectFit"
+      />
+      <text class="bottom-text">{{ screenShareText }}</text>
+    </view>
+
+    <ConfirmDialog
+      :modelValue="dialogState.visible"
+      :title="dialogState.title"
+      :confirmText="dialogState.confirmButton"
+      :cancelText="dialogState.cancelButton"
+      @confirm="onDialogConfirm"
+      @cancel="onDialogCancel"
+      @update:modelValue="(val: boolean) => { if (!val) closeDialog(); }"
+    >
+      <scroll-view
+        v-if="dialogState.scrollable"
+        scroll-y
+        class="dialog-scroll"
+      >
+        <text class="dialog-message">{{ dialogState.message }}</text>
+      </scroll-view>
+      <text v-else class="dialog-message">{{ dialogState.message }}</text>
+    </ConfirmDialog>
+
+    <Toast
+      v-model:visible="toastState.visible"
+      :message="toastState.message"
+      :type="toastState.type"
+    />
+  </view>
+</template>
+
+<script setup lang="ts">
+  import { computed, reactive } from 'vue';
+  import { useRoomState } from '@/uni_modules/tuikit-atomic-x/state';
+  import { useDeviceState } from '@/uni_modules/tuikit-atomic-x/state';
+  import { useRoomParticipantState } from '@/uni_modules/tuikit-atomic-x/state';
+  import {
+    RoomParticipantRole,
+    DeviceStatus,
+  } from '@/uni_modules/tuikit-atomic-x/state';
+  import { showErrorToast, parseErrorCode, ERR_SCREEN_SHARE_EXTENSION_NOT_CONFIGURED } from '@/uni_modules/tuikit-atomic-x/utils/roomErrorHandler';
+  import ConfirmDialog from '@/uni_modules/tuikit-atomic-x/components/ConfirmDialog/ConfirmDialog.nvue';
+  import Toast, { type ToastType } from '@/uni_modules/tuikit-atomic-x/components/Toast';
+  import { t } from '../../../../locales';
+
+  const { currentRoom } = useRoomState();
+  const { localParticipant, participantWithScreen } = useRoomParticipantState();
+  const { startScreenShare, stopScreenShare } = useDeviceState();
+
+  const isScreenSharing = computed(() => {
+    return localParticipant.value?.screenShareStatus === DeviceStatus.ON;
+  });
+
+  const isDimmed = computed(() => {
+    return (
+      currentRoom.value?.isAllScreenShareDisabled === true &&
+      localParticipant.value?.role === RoomParticipantRole.GeneralUser &&
+      localParticipant.value?.screenShareStatus === DeviceStatus.OFF
+    );
+  });
+
+  const dimStyle = computed(() => ({ opacity: isDimmed.value ? 0.5 : 1 }));
+
+  const screenShareIconSrc = computed(() =>
+    isScreenSharing.value
+      ? '/static/images/room/room_stop_screen_share.png'
+      : '/static/images/room/room_start_screen_share.png',
+  );
+
+  const screenShareText = computed(() =>
+    isScreenSharing.value ? t('screenShare.stopShare') : t('screenShare.share'),
+  );
+
+  const OCCUPIED_MESSAGE = t('ScreenShare.Failure.RemoteSharing');
+  const DISABLED_MESSAGE = t('ScreenShare.Failure.OwnerAdminOnly');
+  const SAFETY_MESSAGE = t('screenShare.securityMessage');
+  const STOP_CONFIRM_MESSAGE = t('screenShare.stopMessage');
+  const IOS_EXTENSION_MISSING_MESSAGE = t('screenShare.iosGuide');
+
+  type DialogConfig = {
+    title: string;
+    message: string;
+    confirmButton: string;
+    cancelButton: string;
+    onConfirm: () => void;
+    onCancel: () => void;
+    scrollable?: boolean;
+    confirmButtonDanger?: boolean;
+  };
+
+  const dialogState = reactive<DialogConfig & { visible: boolean }>({
+    visible: false,
+    title: '',
+    message: '',
+    confirmButton: t('common.ok'),
+    cancelButton: t('common.cancel'),
+    onConfirm: (): void => {},
+    onCancel: (): void => {},
+    scrollable: false,
+    confirmButtonDanger: false,
+  });
+
+  const toastState = reactive<{ visible: boolean; message: string; type: ToastType }>({
+    visible: false,
+    message: '',
+    type: 'none',
+  });
+
+  function showDialog(config: DialogConfig): void {
+    console.log('----showDialog', config);
+    dialogState.title = config.title;
+    dialogState.message = config.message;
+    dialogState.confirmButton = config.confirmButton;
+    dialogState.cancelButton = config.cancelButton;
+    dialogState.onConfirm = config.onConfirm;
+    dialogState.onCancel = config.onCancel;
+    dialogState.scrollable = config.scrollable === true;
+    dialogState.confirmButtonDanger = config.confirmButtonDanger === true;
+    dialogState.visible = true;
+  }
+
+  function closeDialog(): void {
+    dialogState.visible = false;
+  }
+
+  function onDialogConfirm(): void {
+    closeDialog();
+    dialogState.onConfirm();
+  }
+
+  function onDialogCancel(): void {
+    closeDialog();
+    dialogState.onCancel();
+  }
+
+  function handleTap(): void {
+    if (isScreenSharing.value) {
+      showDialog({
+        title: t('screenShare.stopTitle'),
+        message: STOP_CONFIRM_MESSAGE,
+        confirmButton: t('screenShare.stopConfirm'),
+        cancelButton: t('common.cancel'),
+        confirmButtonDanger: true,
+        onConfirm: (): void => {
+          stopScreenShare();
+        },
+        onCancel: (): void => {},
+      });
+    } else if (isDimmed.value) {
+      toastState.message = DISABLED_MESSAGE;
+      toastState.type = 'none';
+      toastState.visible = true;
+    } else if (participantWithScreen.value != null) {
+      toastState.message = OCCUPIED_MESSAGE;
+      toastState.type = 'none';
+      toastState.visible = true;
+    } else {
+      showDialog({
+        title: t('screenShare.securityTitle'),
+        message: SAFETY_MESSAGE,
+        confirmButton: t('screenShare.continueShare'),
+        cancelButton: t('common.cancel'),
+        onConfirm: (): void => {
+          startScreenShare().catch((e: any): void => {
+            if (parseErrorCode(e) === ERR_SCREEN_SHARE_EXTENSION_NOT_CONFIGURED) {
+              showDialog({
+                title: t('screenShare.iosNotConfiguredTitle'),
+                message: IOS_EXTENSION_MISSING_MESSAGE,
+                confirmButton: t('RoomCommon.GotIt'),
+                cancelButton: '',
+                onConfirm: (): void => {},
+                onCancel: (): void => {},
+                scrollable: true,
+              });
+              return;
+            }
+            showErrorToast(e, t('ScreenShare.StartFailed'));
+          });
+        },
+        onCancel: (): void => {},
+      });
+    }
+  }
+</script>
+
+<style lang="scss">
+  @import './ScreenShareButton.scss';
+</style>

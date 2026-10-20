@@ -1,0 +1,468 @@
+<template>
+  <view class="living-view">
+    <TopOperateBar @audienceTap="showAudienceList" @endTap="onEndTap" @fanClubTap="showFanClubTip" />
+    <LiveStatusPanel v-if="liveID" :liveID="liveID" />
+    <view class="live-content">
+      <view class="go-guest-request-container" v-if="(applicants || []).length > 0 && isShowCoGuestPanelAvatar" @tap="showCoGuestPanel('requests')">
+        <view class="avatar-overlay-container" :style="getAvatarContainerStyle()">
+          <image v-for="(applicant, index) in applicants.slice(0, 2)" :key="index" class="go-guest-request-img" :style="getAvatarStyle(index, Math.min(applicants.length, 3))" :src="applicant?.avatarURL || defaultAvatarURL" />
+          <image v-if="applicants.length >= 3" class="go-guest-request-img" :style="getAvatarStyle(2, 3)" src="/static/images/live-more.png" />
+        </view>
+        <text class="go-guest-request-text">{{ t('anchor.applyCoGuest', { count: (applicants || []).length }) }}</text>
+      </view>
+      <BarrageList mode="anchor" :topPx="barrageTopPx" @itemTap="audienceOperator" @receiveGift="onBarrageReceiveGift" ref="barrageListRef" />
+      <view class="live-bottom-Panel" :style="{ width: safeArea.width + 'px' }">
+        <BarrageInput></BarrageInput>
+        <view
+          class="action-buttons"
+          :style="{ opacity: isBarrageInputActive ? 0 : 1 }"
+          :userInteractionEnabled="!isBarrageInputActive"
+        >
+          <view class="action-button-item" :class="{ 'disabled': shouldDisableCoHostButton }" @tap="showCoHostPanel">
+            <image class="action-button-icon action-btn-bg" src="/static/images/link-host.png" mode="aspectFit" />
+            <text class="action-button-text">{{ t('anchor.linkAnchor') }}</text>
+          </view>
+          <view class="action-button-item" @tap="showCoGuestPanel('requests')">
+            <image class="action-button-icon co-mic-btn" src="/static/images/live/live-co-guest.png" mode="aspectFit" />
+            <text class="action-button-text">{{ t('anchor.linkAudience') }}</text>
+          </view>
+          <view class="action-button-item" @tap="handleSettings">
+            <image class="action-button-icon action-btn-bg" src="/static/images/live-more.png" mode="aspectFit" />
+            <text class="action-button-text">{{ t('anchor.more') }}</text>
+          </view>
+          <Like role="anchor" />
+        </view>
+      </view>
+      <LiveAudienceList v-model="isShowAudienceList" :liveID="liveID" @overlayActiveChange="onAudienceInnerPanelChange"></LiveAudienceList>
+      <AudienceActionPanel v-if="liveID" v-model="isShowAudienceActionPanel" :userInfo="selectedAudience" :liveID="liveID"></AudienceActionPanel>
+      <CoGuestPanel v-if="liveID" v-model="isShowCoGuestPanel" :activeTab="activeTab"></CoGuestPanel>
+      <CoHostPanel v-if="liveID" v-model="isShowCoHostPanel"></CoHostPanel>
+      <MoreOperatePanel v-if="liveID" v-model="isShowMoreOperatePanel" @tip="showTip" />
+      <UserInfoPanel v-if="liveID" v-model="isShowUserInfoPanel" :userInfo="clickUserInfo" :isShowAnchor="isShowAnchorInfo"></UserInfoPanel>
+      <EndLivePanel
+        ref="endLivePanelRef"
+        v-if="liveID"
+        @ended="onLiveEnded"
+        @overlayActiveChange="onEndLiveOverlayChange"
+      />
+      <view class="custom-modal-overlay" v-if="showCustomModal">
+        <view class="custom-modal" @click.stop>
+          <view class="modal-content">
+            <text class="modal-text"> {{ modalContent }}</text>
+          </view>
+          <view class="modal-actions">
+            <view class="modal-btn modal-btn-cancel" @tap="handleModalCancel">
+              <text class="modal-btn-reject">{{ t('anchor.reject') }}</text>
+            </view>
+            <view class="modal-btn modal-btn-confirm" @tap="handleModalConfirm">
+              <text class="modal-btn-accept">{{ t('anchor.accept') }}</text>
+            </view>
+          </view>
+        </view>
+      </view>
+    </view>
+  </view>
+</template>
+
+<script setup lang="ts">
+  import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
+  import { CoGuestPanel } from '@/uni_modules/tuikit-atomic-x/components/CoGuestPanel';
+  import { LiveAudienceList, AudienceActionPanel } from '@/uni_modules/tuikit-atomic-x/components/LiveAudienceList';
+  import { UserInfoPanel } from '@/uni_modules/tuikit-atomic-x/components/LiveStreamView';
+  import { CoHostStatusType, useCoHostState } from '@/uni_modules/tuikit-atomic-x/state/CoHostState';
+  import { useCoGuestState } from '@/uni_modules/tuikit-atomic-x/state/CoGuestState';
+  import { useLiveAudienceState } from '@/uni_modules/tuikit-atomic-x/state/LiveAudienceState';
+  import { useLiveListState } from '@/uni_modules/tuikit-atomic-x/state/LiveListState';
+  import { useLoginState } from '@/uni_modules/tuikit-atomic-x/state/LoginState';
+  import { t } from '../../../../locales';
+  import BarrageInput from '@/uni_modules/tuikit-atomic-x/components/BarrageInput';
+  import BarrageList from '@/uni_modules/tuikit-atomic-x/components/BarrageList';
+  import CoHostPanel from '@/uni_modules/tuikit-atomic-x/components/CoHostPanel';
+  import Like from '@/uni_modules/tuikit-atomic-x/components/Like.nvue';
+  import EndLivePanel from '../../components/EndLivePanel/index.nvue';
+  import LiveStatusPanel from '../../components/LiveStatusPanel/index.nvue';
+  import MoreOperatePanel from '../../components/MoreOperatePanel/index.nvue';
+  import TopOperateBar from '../../components/TopOperateBar/index.nvue';
+
+  const props = defineProps({
+    liveID: { type: String, default: '' },
+    safeArea: {
+      type: Object,
+      default: () => ({
+        left: 0,
+        right: 0,
+        top: 0,
+        bottom: 0,
+        width: 375,
+        height: 750,
+      }),
+    },
+  });
+  const emit = defineEmits(['tip', 'ended', 'receiveGift']);
+
+  const { loginUserInfo } = useLoginState();
+  const { addCoHostListener, removeCoHostListener, acceptHostConnection, rejectHostConnection, coHostStatus, invitees } = useCoHostState(uni?.$liveID)
+  const { applicants, rejectApplication, connected } = useCoGuestState(uni?.$liveID);
+  const { audienceList, messageBannedUserList } = useLiveAudienceState(uni?.$liveID);
+  const { fetchLiveList, currentLive } = useLiveListState();
+
+  const defaultAvatarURL = '/uni_modules/tuikit-atomic-x/static/assets/live/default-avatar.png';
+  const BARRAGE_LIST_H_PX = uni.upx2px(380);
+  const SYNC_WIN_H = (() => {
+    try { return uni.getSystemInfoSync().windowHeight || 0; } catch (e) { return 0; }
+  })();
+
+  const avatarOverlayConfig = {
+    size: 80,
+    overlapRatio: 0.6,
+    enableScale: false,
+    enableOpacity: false,
+  };
+
+  const isShowUserInfoPanel = ref(false);
+  const isShowAudienceList = ref(false);
+  const isShowCoHostPanel = ref(false);
+  const isShowCoGuestPanel = ref(false);
+  const isShowAudienceActionPanel = ref(false);
+  const isShowMoreOperatePanel = ref(false);
+  const endLivePanelRef = ref<any>(null);
+  const isShowAnchorInfo = ref(false);
+  const isShowCoGuestPanelAvatar = ref(true);
+  const activeTab = ref('requests');
+  const selectedAudience = ref({});
+  const clickUserInfo = ref({});
+  const barrageListRef = ref();
+  const barrageInputShift = ref(0);
+  const isBarrageInputActive = ref(false);
+
+  const showCustomModal = ref(false);
+  const modalContent = ref('');
+  const currentModalUserInfo = ref(null);
+
+  const audienceInnerPanelVisible = ref(false);
+  const endLiveOverlayVisible = ref(false);
+
+  const showTip = (title: string) => {
+    emit('tip', title);
+  };
+
+  const currentUserID = computed(() => loginUserInfo.value?.userID);
+  const shouldDisableCoHostButton = computed(() => connected.value.length > 1);
+  const barrageTopPx = computed(() => {
+    const winH = SYNC_WIN_H;
+    if (winH <= 0) return -9999;
+    const bottomGap = (Number(props.safeArea && props.safeArea.height) || 0) * 1 / 8
+      + barrageInputShift.value;
+    return Math.max(0, Math.round(winH - bottomGap - BARRAGE_LIST_H_PX));
+  });
+  const anyOverlayVisible = computed(() =>
+    isShowAudienceList.value ||
+    isShowAudienceActionPanel.value ||
+    isShowCoGuestPanel.value ||
+    isShowCoHostPanel.value ||
+    isShowMoreOperatePanel.value ||
+    isShowUserInfoPanel.value ||
+    endLiveOverlayVisible.value ||
+    showCustomModal.value ||
+    audienceInnerPanelVisible.value
+  );
+
+  watch(anyOverlayVisible, (visible) => {
+    uni.$emit('barrageInput:setHidden', !!visible);
+  });
+
+  watch(messageBannedUserList, (newValue, oldValue) => {
+    const isBanned = (newValue || []).some((obj: any) => obj?.userID === uni.$userID);
+    const wasBanned = (oldValue || []).some((obj: any) => obj?.userID === uni.$userID);
+    if (isBanned && !wasBanned) showTip(t('anchor.banned'));
+    if (!isBanned && wasBanned) showTip(t('anchor.unbanned'));
+  });
+
+  watch(applicants, (newVal, oldVal) => {
+    if (!isShowCoGuestPanelAvatar.value) {
+      applicants.value.forEach(applicant => {
+        rejectApplication({
+          liveID: uni?.$liveID,
+          userID: applicant.userID,
+        });
+      });
+    }
+  }, {
+    deep: true,
+    immediate: true,
+  })
+
+  watch(coHostStatus, (newVal) => {
+    if (newVal === CoHostStatusType.DISCONNECTED) {
+      isShowCoGuestPanelAvatar.value = true
+    }
+  }, {
+    deep: true,
+    immediate: true,
+  })
+
+  watch(invitees, (newVal) => {
+    if (!newVal && !isShowCoGuestPanelAvatar.value) {
+      isShowCoGuestPanelAvatar.value = true
+    } else {
+      applicants.value.forEach(applicant => {
+        rejectApplication({
+          liveID: uni?.$liveID,
+          userID: applicant.userID,
+        });
+      });
+    }
+  })
+
+  watch(currentLive, (newVal, oldVal) => {
+    if (newVal) {
+      console.log(`currentLive change: ${JSON.stringify(newVal)}`);
+    }
+  });
+
+  const showUserInfoPanel = () => {
+    isShowUserInfoPanel.value = true;
+  };
+
+  const showCustomModalDialog = (userInfo) => {
+    currentModalUserInfo.value = userInfo;
+    modalContent.value = t('anchor.linkInvite', { name: userInfo.userName || userInfo.userID || '' });
+    showCustomModal.value = true;
+  };
+
+  const closeCustomModal = () => {
+    showCustomModal.value = false;
+    currentModalUserInfo.value = null;
+  };
+
+  const getAvatarContainerStyle = () => {
+    const count = applicants.value?.length || 0;
+    if (count === 0) return {};
+
+    const overlapOffset = avatarOverlayConfig.size * (1 - avatarOverlayConfig.overlapRatio);
+    const containerWidth = avatarOverlayConfig.size + (count - 1) * overlapOffset;
+
+    return {
+      position: 'relative',
+      width: `${containerWidth}rpx`,
+      height: `${avatarOverlayConfig.size}rpx`,
+      margin: '0 auto'
+    };
+  };
+
+  const getAvatarStyle = (index: number, totalCount: number) => {
+    const overlapOffset = avatarOverlayConfig.size * (1 - avatarOverlayConfig.overlapRatio);
+
+    const left = index * overlapOffset;
+
+    const baseStyle = {
+      position: 'absolute',
+      left: `${left}rpx`,
+      top: '0',
+      width: `${avatarOverlayConfig.size}rpx`,
+      height: `${avatarOverlayConfig.size}rpx`,
+      borderRadius: `${avatarOverlayConfig.size / 2}rpx`,
+    };
+
+    if (avatarOverlayConfig.enableScale) {
+      baseStyle.transform = `scale(${1 - index * 0.05})`;
+    }
+
+    if (avatarOverlayConfig.enableOpacity) {
+      baseStyle.opacity = 1 - index * 0.1;
+    }
+
+    return baseStyle;
+  };
+
+  const showAudienceList = () => {
+    isShowAudienceList.value = true;
+  };
+
+  const onEndTap = () => {
+    endLivePanelRef.value?.requestEnd?.();
+  };
+
+  const showFanClubTip = () => {
+    showTip(t('anchor.fanClubComingSoon'));
+  }
+
+  const showCoGuestPanel = (activeTabValue: string = 'requests') => {
+    console.warn(`go guest Panel activeTab = ${activeTabValue}`);
+    activeTab.value = activeTabValue;
+    isShowCoGuestPanel.value = true;
+  };
+
+  const audienceOperator = (message: any) => {
+    console.warn(`click message: ${JSON.stringify(message)}`);
+    if (message?.sender?.userID === currentLive?.value.liveOwner.userID) return;
+
+    if (message?.sender?.userID === currentUserID.value) {
+      showTip(t('anchor.cannotFollowSelf'));
+      return;
+    }
+    const targetAudience = audienceList.value.find(audience =>
+      audience.userID === message?.sender?.userID
+    );
+    if (!targetAudience) {
+      isShowAnchorInfo.value = false;
+      clickUserInfo.value = message?.sender;
+      showUserInfoPanel()
+    } else {
+      selectedAudience.value = targetAudience;
+      isShowAudienceActionPanel.value = true;
+    }
+  };
+
+  const onBarrageReceiveGift = (giftData: any) => {
+    if (!giftData) return;
+    emit('receiveGift', giftData);
+  };
+
+  const showCoHostPanel = () => {
+    if (connected.value.length > 1) {
+      return
+    }
+    const params = {
+      cursor: '',
+      count: 20,
+    };
+    fetchLiveList(params);
+    isShowCoHostPanel.value = true;
+  };
+
+  const handleSettings = () => {
+    isShowMoreOperatePanel.value = true;
+  };
+
+  const onAudienceInnerPanelChange = (visible: boolean) => {
+    audienceInnerPanelVisible.value = !!visible;
+  };
+
+  const onLiveEnded = () => {
+    emit('ended');
+  };
+
+  const onEndLiveOverlayChange = (visible: boolean) => {
+    endLiveOverlayVisible.value = !!visible;
+  };
+
+  const handleModalCancel = () => {
+    if (currentModalUserInfo.value) {
+      rejectHostConnection({
+        liveID: uni?.$liveID,
+        fromHostLiveID: currentModalUserInfo.value.liveID
+      });
+    }
+    isShowCoGuestPanelAvatar.value = true
+    closeCustomModal();
+  };
+
+  const handleModalConfirm = () => {
+    if (currentModalUserInfo.value) {
+      acceptHostConnection({
+        liveID: uni?.$liveID,
+        fromHostLiveID: currentModalUserInfo.value.liveID
+      });
+    }
+    closeCustomModal();
+  };
+
+  const onBarrageInputShift = (px: number) => {
+    barrageInputShift.value = Math.max(0, Math.round(Number(px) || 0));
+  };
+
+  const handleBarrageInputShow = () => {
+    isBarrageInputActive.value = true;
+  };
+
+  const handleBarrageInputHide = () => {
+    isBarrageInputActive.value = false;
+  };
+
+  const handleCoHostRequestAccepted = (event) => {
+    showTip(t('anchor.linkAccepted'))
+  }
+
+  const handleCoHostRequestRejected = (event) => {
+    showTip(t('anchor.linkRejected'))
+  }
+
+  const handleCoHostRequestTimeout = (event) => {
+    showTip(t('anchor.linkTimeout'))
+    isShowCoGuestPanelAvatar.value = true
+    closeCustomModal();
+  }
+
+  const handleCoHostRequestReceived = (event) => {
+    if (isShowCoGuestPanelAvatar.value && applicants.value.length === 0) {
+      isShowCoGuestPanelAvatar.value = false
+    }
+    const res = JSON.parse(event);
+    const inviter = JSON.parse(res.inviter);
+    if (connected.value.length > 1 || applicants.value.length > 0) {
+      rejectHostConnection({
+        liveID: uni?.$liveID,
+        fromHostLiveID: inviter.liveID
+      })
+      return
+    }
+    showCustomModalDialog(inviter);
+  }
+
+  const ShowAnchorViewClickPanel = (userInfo) => {
+    clickUserInfo.value = userInfo,
+      showUserInfoPanel()
+    isShowAnchorInfo.value = false
+  }
+
+  onMounted(() => {
+    addCoHostListener(uni.$liveID,
+      'onCoHostRequestAccepted',
+      handleCoHostRequestAccepted
+    )
+    addCoHostListener(uni.$liveID,
+      'onCoHostRequestRejected',
+      handleCoHostRequestRejected
+    )
+    addCoHostListener(uni.$liveID,
+      'onCoHostRequestTimeout',
+      handleCoHostRequestTimeout
+    )
+    addCoHostListener(uni.$liveID,
+      'onCoHostRequestReceived',
+      handleCoHostRequestReceived
+    )
+    uni.$on('anchorStreamViewClick', ShowAnchorViewClickPanel);
+    uni.$on('barrageInput:show', handleBarrageInputShow);
+    uni.$on('barrageInput:hide', handleBarrageInputHide);
+    uni.$on('barrageInput:shift', onBarrageInputShift);
+  });
+
+  onUnmounted(() => {
+    removeCoHostListener(uni.$liveID,
+      'onCoHostRequestAccepted',
+      handleCoHostRequestAccepted
+    )
+    removeCoHostListener(uni.$liveID,
+      'onCoHostRequestRejected',
+      handleCoHostRequestRejected
+    )
+    removeCoHostListener(uni.$liveID,
+      'onCoHostRequestTimeout',
+      handleCoHostRequestTimeout
+    )
+    removeCoHostListener(uni.$liveID,
+      'onCoHostRequestReceived',
+      handleCoHostRequestReceived
+    )
+    uni.$off('anchorStreamViewClick', ShowAnchorViewClickPanel);
+    uni.$off('barrageInput:show', handleBarrageInputShow);
+    uni.$off('barrageInput:hide', handleBarrageInputHide);
+    uni.$off('barrageInput:shift', onBarrageInputShift);
+  });
+</script>
+
+<style lang="scss">
+  @import './LivingView.scss';
+</style>

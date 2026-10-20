@@ -25,7 +25,7 @@
         >
           <view class="item-main">
             <view class="item-top">
-              <text class="item-name" :numberOfLines="1">{{ truncateRoomNameDisplay(room.roomName || room.roomID, 6) }}</text>
+              <text class="item-name" :numberOfLines="1">{{ truncateRoomNameDisplay(room.roomName || room.roomID, ROOM_NAME_DISPLAY_MAX_CHARS) }}</text>
               <image class="item-arrow" src="/static/images/room/room_chevron-down.png" mode="aspectFit" />
             </view>
             <view class="item-bottom">
@@ -40,13 +40,13 @@
             </view>
           </view>
           <view class="enter-btn" @tap.stop="handleEnterRoom(room)">
-            <text class="enter-btn-text">进入</text>
+            <text class="enter-btn-text">{{ t('scheduleList.enter') }}</text>
           </view>
         </view>
       </view>
 
       <view v-if="isLoadingMore" class="loading-more">
-        <text class="loading-more-text">加载中...</text>
+        <text class="loading-more-text">{{ t('common.loadingMore') }}</text>
       </view>
     </scroll-view>
   </view>
@@ -58,10 +58,13 @@
   import type { RoomInfo } from '@/uni_modules/tuikit-atomic-x/types/room';
   import { showErrorToast } from '@/uni_modules/tuikit-atomic-x/utils/roomErrorHandler';
   import { formatTimeSec, formatRoomIDDisplay, groupRoomsByDate, truncateRoomNameDisplay } from '@/uni_modules/tuikit-atomic-x/utils/roomScheduleUtils';
+  import { t } from '../../../locales';
 
   const roomState = useRoomState();
   const scheduledRoomList = roomState.scheduledRoomList;
   const scheduledRoomListCursor = roomState.scheduledRoomListCursor;
+
+  const ROOM_NAME_DISPLAY_MAX_CHARS = 6;
 
   const isLoadingMore = ref(false);
 
@@ -70,13 +73,13 @@
   const groups = computed(() => groupRoomsByDate(scheduledRoomList.value || []));
 
   const isEmpty = computed(() => (scheduledRoomList.value || []).length === 0);
-  const emptyText = computed(() => '暂无预定的房间');
+  const emptyText = computed(() => t('scheduleList.empty'));
 
   onMounted(() => {
     roomState
       .getScheduledRoomList({ cursor: '' })
       .catch((e: any) => {
-        showErrorToast(e, '获取预定房间失败');
+        showErrorToast(e, t('Schedule.FetchListFailed'));
       });
   });
 
@@ -90,16 +93,16 @@
       })
       .catch((e: any) => {
         isLoadingMore.value = false;
-        showErrorToast(e, '加载更多失败');
+        showErrorToast(e, t('Schedule.LoadMoreFailed'));
       });
   }
 
   function formatRoomTimeRange(room: RoomInfo): string {
-    const start = formatTimeSec(room?.scheduledStartTime);
-    const end = formatTimeSec(room?.scheduledEndTime);
-    if (start.length === 0) return '';
-    if (end.length === 0) return start;
-    return `${start} - ${end}`;
+    const startTimeText = formatTimeSec(room?.scheduledStartTime);
+    const endTimeText = formatTimeSec(room?.scheduledEndTime);
+    if (startTimeText.length === 0) return '';
+    if (endTimeText.length === 0) return startTimeText;
+    return `${startTimeText} - ${endTimeText}`;
   }
 
   function isRoomRunning(room: RoomInfo): boolean {
@@ -107,23 +110,23 @@
   }
 
   function formatRoomStatusText(room: RoomInfo): string {
-    return isRoomRunning(room) ? '进行中' : '未开始';
+    return isRoomRunning(room) ? t('scheduleList.running') : t('scheduleList.notStarted');
   }
 
   function handleRoomTap(room: RoomInfo): void {
-    const rid = room?.roomID || '';
-    if (rid.length === 0) return;
+    const targetRoomID = room?.roomID || '';
+    if (targetRoomID.length === 0) return;
     uni.navigateTo({
-      url: `/pages/scenes/room/schedule/detail/index?roomID=${encodeURIComponent(rid)}`,
+      url: `/pages/scenes/room/schedule/detail/index?roomID=${encodeURIComponent(targetRoomID)}`,
     });
   }
 
   function handleEnterRoom(room: RoomInfo): void {
-    const rid = room?.roomID || '';
-    if (rid.length === 0) return;
+    const targetRoomID = room?.roomID || '';
+    if (targetRoomID.length === 0) return;
     const query = [
       'mode=join',
-      `roomID=${encodeURIComponent(rid)}`,
+      `roomID=${encodeURIComponent(targetRoomID)}`,
       'autoEnableCamera=0',
       'autoEnableMicrophone=1',
       'autoEnableSpeaker=1',
@@ -132,158 +135,6 @@
   }
 </script>
 
-<style>
-  .room-schedule-list {
-    flex: 1;
-    flex-direction: column;
-  }
-
-  .list-scroll {
-    flex: 1;
-    padding: 0 40rpx;
-  }
-
-  .group {
-    flex-direction: column;
-    padding-top: 40rpx;
-    padding-bottom: 20rpx;
-  }
-
-  .group-title-row {
-    flex-direction: row;
-    align-items: center;
-  }
-
-  .group-title-icon {
-    width: 32rpx;
-    height: 32rpx;
-    margin-right: 4rpx;
-  }
-
-  .group-title-text {
-    font-weight: 400;
-    font-size: 28rpx;
-    color: #969EB4;
-  }
-
-  .item {
-    flex-direction: row;
-    align-items: center;
-    padding-top: 40rpx;
-  }
-
-  .item-main {
-    flex: 1;
-    flex-direction: column;
-  }
-
-  .item-top {
-    flex-direction: row;
-    align-items: center;
-    flex: 1;
-    overflow: hidden;
-  }
-
-  .item-name {
-    max-width: 460rpx;
-    font-size: 32rpx;
-    font-weight: 500;
-    color: #4F586B;
-    lines: 1;
-    text-overflow: ellipsis;
-  }
-
-  .item-arrow {
-    width: 32rpx;
-    height: 32rpx;
-    flex-shrink: 0;
-    transform: rotate(-90deg);
-  }
-
-  .item-bottom {
-    flex-direction: row;
-    align-items: center;
-    margin-top: 12rpx;
-    flex: 1;
-    overflow: hidden;
-  }
-
-  .item-time {
-    font-weight: 400;
-    font-size: 28rpx;
-    color: #4F586B;
-    lines: 1;
-    text-overflow: ellipsis;
-    flex-shrink: 0;
-  }
-
-  .item-divider {
-    font-weight: 400;
-    font-size: 28rpx;
-    color: #969EB4;
-    margin-left: 16rpx;
-    margin-right: 16rpx;
-    flex-shrink: 0;
-  }
-
-  .item-id {
-    font-weight: 400;
-    font-size: 28rpx;
-    color: #4F586B;
-    /* flex:1 + min-width:0 是 weex 中让 ellipsis 生效的标配——
-       默认 min-width:auto（=内容宽度）会让 flex item 无法收缩到内容以下 */
-    flex: 1;
-    min-width: 0;
-    lines: 1;
-    text-overflow: ellipsis;
-  }
-
-  .item-status-text {
-    font-weight: 400;
-    font-size: 28rpx;
-    color: #FF643D;
-    lines: 1;
-    flex-shrink: 0;
-  }
-
-  .item-status-running {
-    color: #0468FC;
-  }
-
-  .enter-btn {
-    margin-left: 40rpx;
-    padding: 10rpx 40rpx;
-    border-radius: 28rpx;
-    background-color: #F0F3FA;
-    flex-direction: row;
-    justify-content: center;
-    align-items: center;
-  }
-
-  .enter-btn-text {
-    font-size: 28rpx;
-    font-weight: 400;
-    line-height: 44rpx;
-    color: #4F586B;
-  }
-
-  .empty {
-    flex: 1;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
-  }
-
-  .empty-icon {
-    width: 300rpx;
-    height: 198rpx;
-    margin-bottom: 16rpx;
-  }
-
-  .empty-text {
-    font-weight: 400;
-    font-size: 28rpx;
-    line-height: 44rpx;
-    color: #8F9AB2;
-  }
+<style lang="scss">
+  @import './RoomScheduleList.scss';
 </style>

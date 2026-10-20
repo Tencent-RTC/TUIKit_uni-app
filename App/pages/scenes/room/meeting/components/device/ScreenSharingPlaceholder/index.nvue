@@ -1,0 +1,61 @@
+<template>
+  <view class="screen-sharing-placeholder">
+    <view class="screen-sharing-content">
+      <image
+        class="screen-sharing-icon"
+        src="/static/images/room/room_screen_sharing.png"
+        mode="aspectFit"
+      />
+      <text class="screen-sharing-text">{{ t('screenShare.sharingText') }}</text>
+      <view class="screen-sharing-stop-btn" @tap="onStopScreenShare">
+        <text class="screen-sharing-stop-btn-text">{{ t('screenShare.stopBtn') }}</text>
+      </view>
+    </view>
+
+    <ConfirmDialog
+      :modelValue="dialogVisible"
+      :title="t('screenShare.stopTitle')"
+      :confirmText="t('screenShare.stopConfirm')"
+      :cancelText="t('common.cancel')"
+      :message="STOP_CONFIRM_MESSAGE"
+      @confirm="onConfirmStop"
+      @cancel="onCancelStop"
+      @update:modelValue="(val: boolean) => { if (!val) dialogVisible = false; }"
+    />
+  </view>
+</template>
+
+<script setup lang="ts">
+  import { computed, ref } from 'vue';
+  import { useDeviceState, useRoomParticipantState, DeviceStatus } from '@/uni_modules/tuikit-atomic-x/state';
+  import ConfirmDialog from '@/uni_modules/tuikit-atomic-x/components/ConfirmDialog/ConfirmDialog.nvue';
+  import { t } from '../../../../locales';
+
+  const { localParticipant } = useRoomParticipantState();
+  const { stopScreenShare } = useDeviceState();
+
+  const isLocalScreenSharing = computed(() => {
+    return localParticipant.value?.screenShareStatus === DeviceStatus.ON;
+  });
+
+  const dialogVisible = ref<boolean>(false);
+
+  const STOP_CONFIRM_MESSAGE = t('screenShare.stopMessage');
+
+  function onStopScreenShare(): void {
+    dialogVisible.value = true;
+  }
+
+  function onConfirmStop(): void {
+    dialogVisible.value = false;
+    stopScreenShare();
+  }
+
+  function onCancelStop(): void {
+    dialogVisible.value = false;
+  }
+</script>
+
+<style lang="scss">
+  @import './ScreenSharingPlaceholder.scss';
+</style>

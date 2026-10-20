@@ -1,0 +1,138 @@
+<template>
+  <view v-if="chipList.length > 0" class="rb" :class="{'rb--out': message.isSentBySelf}">
+    <view
+      v-for="chip in chipList"
+      :key="chip.reactionID"
+      class="rb__chip"
+      :class="chipThemeClass"
+    >
+      <image class="rb__emoji" :src="chip.src" mode="aspectFit" @tap.stop="handleEmojiTap(chip.reactionID)" />
+      <view class="rb__texts" @tap.stop="handleChipTap(chip.reactionID)">
+        <view v-if="chip.name.length > 0" class="rb__line"></view>
+        <text v-if="chip.name.length > 0" class="rb__name rb__text--no-select" :numberOfLines="1">{{ chip.name }}</text>
+        <text v-if="chip.suffix.length > 0" class="rb__suffix rb__text--no-select">{{ chip.suffix }}</text>
+      </view>
+    </view>
+  </view>
+</template>
+
+<script setup lang="ts">
+import { computed } from 'vue'
+import type { MessageInfo } from '../../../../types/message'
+import { buildReactionEmojiSrc } from '../../../../utils/reactionEmoji'
+import { buildReactionChipText, toggleMessageReaction } from '../../../../utils/messageReaction'
+
+interface Props {
+  message: MessageInfo
+}
+
+interface ReactionChip {
+  reactionID: string
+  src: string
+  name: string
+  suffix: string
+}
+
+const props = defineProps<Props>()
+
+const chipThemeClass = computed(() => {
+  return props.message.isSentBySelf ? 'rb__chip--out' : 'rb__chip--in'
+})
+
+const chipList = computed<ReactionChip[]>(() => {
+  const chips: ReactionChip[] = []
+  ;(props.message.reactionList || []).forEach((reaction) => {
+    const src = buildReactionEmojiSrc(reaction.reactionID)
+    if (!src || (reaction.totalUserCount || 0) <= 0) return
+    const text = buildReactionChipText(reaction)
+    chips.push({ reactionID: reaction.reactionID, src, name: text.name, suffix: text.suffix })
+  })
+  return chips
+})
+
+const emit = defineEmits<{
+  'show-detail': [reactionID: string]
+}>()
+
+// 点表情 → 快速 toggle（添加/移除），失败提示由 toggleMessageReaction 统一处理
+const handleEmojiTap = (reactionID: string) => {
+  toggleMessageReaction(props.message, reactionID)
+}
+
+// 点名字区域 → 唤起回应详情
+const handleChipTap = (reactionID: string) => {
+  emit('show-detail', reactionID)
+}
+</script>
+
+<style>
+.rb {
+  flex: 1;
+  flex-direction: row;
+  flex-wrap: wrap;
+}
+
+.rb--out {
+  justify-content: flex-end;
+  /* nvue column flex 默认 align-items: flex-start（非 stretch），单 chip 时 .rb
+     宽度 = chip 宽度，justify-content 看不到效果（chip 撑满 .rb）。
+     align-self: flex-end 让 .rb 整体在父容器内靠右，chip 视觉上贴气泡右内壁。*/
+  align-self: flex-end;
+}
+.rb__chip {
+  flex-direction: row;
+  align-items: center;
+  max-width: 360rpx;
+  margin-top: 12rpx;
+  padding: 8rpx 16rpx;
+  border-radius: 24rpx;
+  background-color: #E4E7EF;
+}
+
+.rb__chip--in {
+  margin-right: 16rpx;
+}
+
+.rb__chip--out {
+  margin-left: 16rpx;
+}
+
+
+.rb__emoji {
+  width: 32rpx;
+  height: 32rpx;
+}
+
+.rb__texts {
+  flex-direction: row;
+  align-items: center;
+}
+
+.rb__line {
+  width: 2rpx;
+  height: 28rpx;
+  margin: 0 8rpx;
+  background-color: rgba(0, 0, 0, 0.12);
+}
+
+.rb__suffix {
+  font-size: 24rpx;
+  line-height: 32rpx;
+  color: rgba(0, 0, 0, 0.55);
+}
+
+.rb__name {
+  max-width: 200rpx;
+  font-size: 24rpx;
+  line-height: 32rpx;
+  color: rgba(0, 0, 0, 0.55);
+  lines: 1;
+  text-overflow: ellipsis;
+}
+
+.rb__text--no-select {
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+</style>

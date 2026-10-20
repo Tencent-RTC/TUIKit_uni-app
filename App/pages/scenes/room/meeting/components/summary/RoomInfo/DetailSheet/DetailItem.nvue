@@ -1,0 +1,21 @@
+<template>
+  <view class="info-row">
+    <text class="info-prefix">{{ prefixText }}</text>
+    <view class="info-gap"></view>
+    <text class="info-text" :numberOfLines="1">{{ infoText }}</text>
+    <view class="info-slot" v-if="$slots.default">
+      <slot />
+    </view>
+  </view>
+</template>
+
+<script setup lang="ts">
+  defineProps({
+    prefixText: { type: String, required: true },
+    infoText: { type: String, required: true },
+  });
+</script>
+
+<style lang="scss">
+  @import './DetailItem.scss';
+</style>

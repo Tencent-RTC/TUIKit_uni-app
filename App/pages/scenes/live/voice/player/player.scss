@@ -1,0 +1,110 @@
+@import '../../styles/tokens.scss';
+
+  .voice-audience-container {
+    width: 750rpx;
+    position: relative;
+    flex-direction: column;
+  }
+
+  .voice-bg {
+    position: absolute;
+    left: 0;
+    top: 0;
+  }
+
+  .voice-bg-mask {
+    position: absolute;
+    left: 0;
+    top: 0;
+    background-color: $live-mask-strong;
+  }
+
+  .live-header {
+    position: relative;
+    z-index: 10;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    padding-left: 32rpx;
+    padding-right: 32rpx;
+    padding-top: 20rpx;
+    padding-bottom: 20rpx;
+    margin-top: 80rpx;
+  }
+
+  .header-left {
+    flex-direction: row;
+    align-items: center;
+    flex: 1;
+  }
+
+  .stream-info {
+    flex-direction: row;
+    align-items: center;
+    background-color: $live-mask-light;
+    padding-top: 6rpx;
+    padding-bottom: 6rpx;
+    padding-left: 10rpx;
+    padding-right: 10rpx;
+    border-radius: 40rpx;
+  }
+
+  .header-avatar {
+    width: 56rpx;
+    height: 56rpx;
+    border-radius: 28rpx;
+    border-width: 2rpx;
+    border-style: solid;
+    border-color: $live-dark-border-solid;
+    margin-right: 12rpx;
+  }
+
+  .stream-details {
+    flex-direction: column;
+  }
+
+  .stream-title {
+    color: $live-dark-text-primary;
+    font-size: 26rpx;
+    font-weight: 500;
+    width: 120rpx;
+    lines: 1;
+  }
+
+  .header-right {
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-end;
+  }
+
+  .control-icons {
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .control-icon {
+    width: 48rpx;
+    height: 48rpx;
+    margin-left: 16rpx;
+  }
+
+
+  .action-buttons {
+    position: fixed;
+    right: 40rpx;
+    bottom: 80rpx;
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .action-btn {
+    width: 64rpx;
+    height: 64rpx;
+    margin-left: 16rpx;
+  }
+
+  .action-btn-bg {
+    background-color: $live-dark-bg-float;
+    border-radius: 50%;
+    border: 2rpx solid $live-dark-surface-055;
+  }

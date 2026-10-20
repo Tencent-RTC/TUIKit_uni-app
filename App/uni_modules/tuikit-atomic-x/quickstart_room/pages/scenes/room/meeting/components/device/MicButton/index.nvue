@@ -1,0 +1,133 @@
+<template>
+  <view class="bottom-btn" @tap="handleTap" :style="dimStyle">
+    <view class="bottom-icon-box" :class="{ 'bottom-icon-box-webinar': isWebinar }">
+      <image
+        class="bottom-icon"
+        :src="micIconSrc"
+        mode="aspectFit"
+      />
+      <text class="bottom-text">{{ micText }}</text>
+    </view>
+  </view>
+</template>
+
+<script setup lang="ts">
+  import { computed, ref, watch, onMounted, onUnmounted } from 'vue';
+  import {
+    useRoomState,
+    useDeviceState,
+    useRoomParticipantState,
+    RoomParticipantRole,
+    DeviceStatus,
+    RoomParticipantEvent,
+    useLoginState,
+  } from '@/uni_modules/tuikit-atomic-x/state';
+  import { showErrorToast } from '@/uni_modules/tuikit-atomic-x/utils/roomErrorHandler';
+  import { showToast } from '@/uni_modules/tuikit-atomic-x/utils/toast';
+  import { t } from '../../../../locales';
+  import { useIsLocalParticipantReady, canOpenMicrophone } from '../devicePermission';
+  import { showDeviceFailure, resetDeviceStartFailCount, assertSystemPermissionGranted } from '../deviceFailure';
+
+  const props = defineProps({
+    isWebinar: { type: Boolean, default: false },
+    /** 进房后是否自动开启麦克风（声明式偏好，由页面传入，组件自己执行） */
+    autoEnableMicrophone: { type: Boolean, default: false },
+  });
+
+  const { currentRoom } = useRoomState();
+  const roomParticipantState = useRoomParticipantState();
+  const { localParticipant } = roomParticipantState;
+  const { openLocalMicrophone, closeLocalMicrophone } = useDeviceState();
+  const { loginUserInfo } = useLoginState();
+  const isLocalParticipantReady = useIsLocalParticipantReady();
+
+  const micOn = computed(() => localParticipant.value?.microphoneStatus === DeviceStatus.ON);
+
+  const isDimmed = computed(() => {
+    return (
+      currentRoom.value?.isAllMicrophoneDisabled === true &&
+      localParticipant.value?.role === RoomParticipantRole.GeneralUser &&
+      localParticipant.value?.microphoneStatus === DeviceStatus.OFF
+    );
+  });
+
+  const dimStyle = computed(() => ({ opacity: isDimmed.value ? 0.5 : 1 }));
+
+  const micIconSrc = computed(() =>
+    micOn.value
+      ? '/static/images/room/room_mic_on.png'
+      : '/static/images/room/room_mic_off.png',
+  );
+
+  const micText = computed(() => (micOn.value ? t('device.mute') : t('device.unmute')));
+
+  const hasAutoEnabled = ref(false);
+
+  async function startMicrophone(): Promise<void> {
+    await assertSystemPermissionGranted('microphone');
+    await openLocalMicrophone();
+    await roomParticipantState.unmuteMicrophone();
+  }
+
+  async function openMicrophone(): Promise<void> {
+    if (micOn.value) return;
+    try {
+      await startMicrophone();
+      resetDeviceStartFailCount('microphone');
+    } catch (e) {
+      showDeviceFailure(e, 'microphone', startMicrophone, t('Device.ToggleMicFailed'));
+    }
+  }
+  watch(
+    () => [props.autoEnableMicrophone, isLocalParticipantReady.value] as const,
+    ([autoEnable, isReady]) => {
+      if (!autoEnable || !isReady || hasAutoEnabled.value) return;
+      if (!canOpenMicrophone()) return;
+      hasAutoEnabled.value = true;
+      openMicrophone();
+    },
+    { immediate: true }
+  );
+
+  function handleDemotedToAudience(payload: any): void {
+    const demotedUserID = payload?.userInfo?.userID ?? '';
+    const localUserID = loginUserInfo.value?.userID ?? '';
+    if (demotedUserID.length === 0 || demotedUserID !== localUserID) return;
+    closeLocalMicrophone();
+  }
+
+  onMounted(() => {
+    roomParticipantState.subscribeEvent(
+      RoomParticipantEvent.onParticipantDemotedToAudience,
+      handleDemotedToAudience as any
+    );
+  });
+
+  onUnmounted(() => {
+    roomParticipantState.unsubscribeEvent(
+      RoomParticipantEvent.onParticipantDemotedToAudience,
+      handleDemotedToAudience as any
+    );
+    closeLocalMicrophone();
+  });
+
+  async function handleTap() {
+    if (isDimmed.value) {
+      showToast(t('Device.AllMicDisabled'));
+      return;
+    }
+    try {
+      if (micOn.value) {
+        await roomParticipantState.muteMicrophone();
+      } else {
+        await openMicrophone();
+      }
+    } catch (e) {
+      showErrorToast(e, t('Device.ToggleMicFailed'));
+    }
+  }
+</script>
+
+<style lang="scss">
+  @import './MicButton.scss';
+</style>

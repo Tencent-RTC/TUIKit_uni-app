@@ -1,0 +1,114 @@
+import { emojiBaseUrl, emojiUrlMap, emojiNameMap } from '../constants/emoji'
+
+export type ReactionEmoji = {
+  key: string
+  src: string
+}
+
+/** 长按面板里快捷展示的表情个数 */
+export const QUICK_REACTION_COUNT = 6
+
+const RECENT_REACTION_STORAGE_KEY = 'tuikit_recent_reaction_emojis_v1'
+const RECENT_REACTION_MAX_COUNT = 20
+
+let cachedReactionEmojiList: ReactionEmoji[] | null = null
+
+export const buildReactionEmojiSrc = (reactionID: string): string => {
+  const fileName = emojiUrlMap.get(reactionID)
+  return fileName != null ? emojiBaseUrl + fileName : ''
+}
+
+export const listAllReactionEmojis = (): ReactionEmoji[] => {
+  // 模块级 let 在闭包里会被 mutate，Kotlin 拒绝 smart cast，先拷到局部 const
+  const cached: ReactionEmoji[] | null = cachedReactionEmojiList
+  if (cached != null) return cached
+  const list: ReactionEmoji[] = []
+  emojiNameMap.forEach((_name: string, key: string) => {
+    const src: string = buildReactionEmojiSrc(key)
+    if (src.length > 0) {
+      list.push({ key: key, src: src } as ReactionEmoji)
+    }
+  })
+  cachedReactionEmojiList = list
+  return list
+}
+
+/** 最近使用的 reactionID 列表（最新在前），统一以 JSON 字符串存储 */
+const readRecentReactionIDs = (): string[] => {
+  const result: string[] = []
+  try {
+    const raw: any | null = uni.getStorageSync(RECENT_REACTION_STORAGE_KEY)
+    if (raw == null || typeof raw != 'string') return result
+    const text: string = raw as string
+    if (text.length == 0) return result
+    const parsed: any | null = JSON.parse(text)
+    if (parsed == null || !Array.isArray(parsed)) return result
+    const arr: any[] = parsed as any[]
+    arr.forEach((item: any) => {
+      if (typeof item == 'string') {
+        result.push(item as string)
+      }
+    })
+  } catch (e: any) {}
+  return result
+}
+
+export const pushRecentReactionEmoji = (reactionID: string): void => {
+  if (buildReactionEmojiSrc(reactionID).length == 0) return
+  const nextList: string[] = [reactionID]
+  readRecentReactionIDs().forEach((id: string) => {
+    if (id != reactionID && nextList.length < RECENT_REACTION_MAX_COUNT) {
+      nextList.push(id)
+    }
+  })
+  try {
+    uni.setStorageSync(RECENT_REACTION_STORAGE_KEY, JSON.stringify(nextList))
+  } catch (e: any) {
+    console.error('[reactionEmoji] persist recent reaction failed:', `${e}`)
+  }
+}
+
+/** 快捷表情：最近使用优先，不足 count 个时按全量顺序补齐 */
+/** 最近使用的表情列表（最新在前） */
+export const listRecentReactionEmojis = (): ReactionEmoji[] => {
+  const allEmojis: ReactionEmoji[] = listAllReactionEmojis()
+  const recent: ReactionEmoji[] = []
+  readRecentReactionIDs().forEach((id: string) => {
+    allEmojis.forEach((emoji: ReactionEmoji) => {
+      if (emoji.key == id && recent.indexOf(emoji) < 0) {
+        recent.push(emoji)
+      }
+    })
+  })
+  return recent
+}
+
+// 与 native ReactionQuickPickerView 一致：我已回应的 > 最近使用 > 全部，去重后取前 count 个
+export const listQuickReactionEmojis = (count: number, reactedIDs: string[]): ReactionEmoji[] => {
+  const allEmojis: ReactionEmoji[] = listAllReactionEmojis()
+  const picked: ReactionEmoji[] = []
+  const pickedKeys: Map<string, boolean> = new Map<string, boolean>()
+  const pushIfNew = (id: string): void => {
+    if (picked.length >= count) return
+    if (pickedKeys.has(id)) return
+    allEmojis.forEach((emoji: ReactionEmoji) => {
+      if (emoji.key == id && !pickedKeys.has(id) && picked.length < count) {
+        picked.push(emoji)
+        pickedKeys.set(id, true)
+      }
+    })
+  }
+
+  reactedIDs.forEach(pushIfNew)
+  readRecentReactionIDs().slice(0, count).forEach((id: string) => {
+    pushIfNew(id)
+  })
+  allEmojis.forEach((emoji: ReactionEmoji) => {
+    if (picked.length >= count) return
+    if (pickedKeys.has(emoji.key)) return
+    picked.push(emoji)
+    pickedKeys.set(emoji.key, true)
+  })
+
+  return picked
+}

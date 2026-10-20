@@ -1,0 +1,45 @@
+@import '../../styles/tokens.scss';
+
+  .live-container {
+    flex: 1;
+    position: relative;
+    width: 750rpx;
+    background: $live-dark-bg-page;
+  }
+
+  .live-content {
+    flex: 1;
+    position: relative;
+    width: 750rpx;
+  }
+
+  .footer {
+    flex: 1;
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 80rpx;
+    padding-left: 32rpx;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    width: 686rpx;
+    z-index: 10;
+  }
+
+  .action-buttons {
+    position: fixed;
+    right: 40rpx;
+    bottom: 80rpx;
+    flex-direction: row;
+    align-items: center;
+    z-index: 10;
+  }
+
+  .co-mic-control-bar-wrap {
+    position: fixed;
+    left: 32rpx;
+    bottom: 36rpx;
+    width: 686rpx;
+    z-index: 10;
+  }

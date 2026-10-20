@@ -1,0 +1,165 @@
+<template>
+  <view>
+    <BaseDrawer
+      v-model="innerVisible"
+      :height="300"
+      :overlayOpacity="0.5"
+      bgImage="/uni_modules/tuikit-atomic-x/static/assets/live/drawer-bg.png"
+      :bgImageHeight="710"
+      padding="0 48rpx 40rpx 48rpx"
+      :useSafeBottom="true"
+    >
+      <text class="title">{{ t('anchor.moreSettings') }}</text>
+
+      <view class="setting-list">
+        <view class="cap" @tap="handleNotSupported">
+          <view class="cap-icon">
+            <image class="cap-icon-img" src="/static/images/live/prepare-sticker.png" mode="aspectFit" />
+          </view>
+          <text class="cap-label">{{ t('morePanel.sticker') }}</text>
+        </view>
+        <view class="cap" @tap="openQualityPanel">
+          <view class="cap-icon">
+            <image class="cap-icon-img" src="/static/images/live/prepare-quality.png" mode="aspectFit" />
+          </view>
+          <text class="cap-label">{{ t('morePanel.quality') }}</text>
+        </view>
+        <view class="cap" @tap="handleMirror">
+          <view class="cap-icon">
+            <image
+              class="cap-icon-img"
+              :src="mirrorEnabled
+                ? '/static/images/live/prepare-mirror-on.png'
+                : '/static/images/live/prepare-mirror-off.png'"
+              mode="aspectFit"
+            />
+          </view>
+          <text class="cap-label">{{ t('morePanel.mirror') }}</text>
+        </view>
+        <view class="cap" @tap="handleNotSupported">
+          <view class="cap-icon">
+            <image class="cap-icon-img" src="/static/images/live/prepare-sound-effect.png" mode="aspectFit" />
+          </view>
+          <text class="cap-label">{{ t('anchor.soundEffect') }}</text>
+        </view>
+      </view>
+    </BaseDrawer>
+    <BaseDrawer
+      v-model="qualityVisible"
+      :height="qualityDrawerHeight"
+      :overlayOpacity="0.5"
+      bgImage="/uni_modules/tuikit-atomic-x/static/assets/live/drawer-bg.png"
+      :bgImageHeight="710"
+      padding="0 0 60rpx 0"
+      :useSafeBottom="true"
+    >
+      <view class="quality-panel">
+        <text class="quality-title">{{ t('morePanel.switchQuality') }}</text>
+        <view class="quality-list">
+          <view
+            class="quality-item"
+            :class="{ 'quality-item-active': item.quality === currentQuality }"
+            v-for="item in qualityList"
+            :key="item.quality"
+            @tap="onSelectQuality(item)"
+          >
+            <text
+              class="quality-item-label"
+              :class="{ 'quality-item-label-active': item.quality === currentQuality }"
+            >{{ item.label }}</text>
+            <image
+              v-if="item.quality === currentQuality"
+              class="quality-item-check"
+              src="/uni_modules/tuikit-atomic-x/static/icon/checked.png"
+              mode="aspectFit"
+            />
+          </view>
+        </view>
+      </view>
+    </BaseDrawer>
+  </view>
+</template>
+
+<script setup lang="ts">
+  import { ref, computed, watch } from 'vue';
+  import { MirrorType, VideoQuality, useDeviceState } from '@/uni_modules/tuikit-atomic-x/state/DeviceState';
+  import { t } from '../../../../locales';
+  import BaseDrawer from '@/components/live/BaseDrawer/index.nvue';
+
+  const props = defineProps({
+    modelValue: {
+      type: Boolean,
+      default: false,
+    },
+  });
+
+  const emit = defineEmits(['update:modelValue', 'tip']);
+
+  const { localMirrorType, isFrontCamera, switchMirror, localVideoQuality, updateVideoQuality } = useDeviceState();
+
+  const qualityList = [
+    { quality: VideoQuality.QUALITY_1080P, label: '1080P' },
+    { quality: VideoQuality.QUALITY_720P, label: '720P' },
+  ];
+
+  const qualityVisible = ref(false);
+
+  const innerVisible = computed({
+    get: () => props.modelValue,
+    set: (val) => emit('update:modelValue', val),
+  });
+
+  const mirrorEnabled = computed(() => {
+    return localMirrorType.value === MirrorType.AUTO
+      || localMirrorType.value === MirrorType.ENABLE;
+  });
+
+  const currentQuality = computed(() => {
+    const q = Number(localVideoQuality.value);
+    return qualityList.some((item) => item.quality === q)
+      ? q
+      : VideoQuality.QUALITY_720P;
+  });
+
+  const qualityDrawerHeight = computed(() => {
+    const rows = Math.max(1, qualityList.length);
+    return 224 + rows * 104;
+  });
+
+  const handleMirror = () => {
+    if (!isFrontCamera.value) {
+      emit('tip', t('morePanel.frontOnly'));
+      return;
+    }
+    switchMirror({
+      mirrorType: mirrorEnabled.value ? MirrorType.DISABLE : MirrorType.ENABLE,
+    });
+  };
+
+  const handleNotSupported = () => {
+    emit('tip', t('morePanel.notSupported'));
+  };
+
+  const openQualityPanel = () => {
+    qualityVisible.value = true;
+  };
+
+  const onSelectQuality = (item: { quality: VideoQuality; label: string }) => {
+    if (item.quality === currentQuality.value) {
+      qualityVisible.value = false;
+      return;
+    }
+    updateVideoQuality({ quality: item.quality });
+    qualityVisible.value = false;
+  };
+
+  watch(qualityVisible, (val, oldVal) => {
+    if (oldVal && !val) {
+      innerVisible.value = false;
+    }
+  });
+</script>
+
+<style lang="scss">
+  @import './BeforeLiveMorePanel.scss';
+</style>

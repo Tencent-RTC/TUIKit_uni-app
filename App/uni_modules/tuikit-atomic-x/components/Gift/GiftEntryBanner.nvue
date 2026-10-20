@@ -30,7 +30,7 @@
             mode="aspectFit"
             @error="onGiftIconError(slot0)"
           />
-          <text v-else class="gift-entry-image-fallback">礼</text>
+          <text v-else class="gift-entry-image-fallback">{{ t('gift.giftFallback') }}</text>
         </view>
       </view>
       <view class="gift-entry-count" :ref="(el: any) => { countRefs[0].value = el; }">
@@ -62,7 +62,7 @@
             mode="aspectFit"
             @error="onGiftIconError(slot1)"
           />
-          <text v-else class="gift-entry-image-fallback">礼</text>
+          <text v-else class="gift-entry-image-fallback">{{ t('gift.giftFallback') }}</text>
         </view>
       </view>
       <view class="gift-entry-count" :ref="(el: any) => { countRefs[1].value = el; }">
@@ -75,6 +75,7 @@
 
 <script setup>
   import { reactive, computed, onUnmounted, ref } from 'vue';
+  import { t } from '../locales';
 
   defineProps({
     // 距底部像素（避开底部操作栏 / 礼物面板上方 / 消息列表上方）
@@ -161,12 +162,12 @@
     const recipientId = recipient && recipient.userID ? recipient.userID : '';
     const giftId = gift.giftID || gift.name || '';
     // 发送者名：无昵称时统一显示为"直播间观众"。
-    const name = sender.userName || '直播间观众';
-    const giftName = gift.name || '礼物';
+    const name = sender.userName || t('gift.senderFallback');
+    const giftName = gift.name || t('gift.giftNameFallback');
     // 详情文案：当前只支持【非 PK】场景，固定为 "送出 {礼物名}"。
     // 不做"送给 XX"分支（若接收者昵称存在就显示送给），也不保留 showName 开关；
     // 后续若需支持 PK 指定收礼人，再另行扩展此处的文案分支。
-    const detailText = `送出 ${giftName}`;
+    const detailText = t('gift.sent', { name: giftName });
     // 本次事件携带的礼物数量（聚合增量）：收礼事件一次可能推 N 个礼物（连击打包），
     // 不读会把 ×N 丢成 ×1，导致入场条计数比消息列表少。默认 1。
     const count = Math.max(1, Math.round(Number(giftData.count) || 1));
@@ -197,7 +198,7 @@
       senderId,
       recipientId,
       name,
-      nameFirst: (name || '观').slice(0, 1),
+      nameFirst: (name || t('gift.senderCharFallback')).slice(0, 1),
       avatar: sender.avatarURL || '',
       giftName,
       giftIcon: gift.iconURL || '',

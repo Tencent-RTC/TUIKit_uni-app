@@ -1,0 +1,62 @@
+<template>
+  <view class="bottom-btn">
+    <view class="bottom-icon-box" :class="{ 'bottom-icon-box-webinar': isWebinar }" @tap="handleTap">
+      <image class="bottom-icon" src="/static/images/room/room_invate_tool.png" mode="aspectFit" />
+      <text class="bottom-text">{{ t('participants.invite') }}</text>
+    </view>
+
+    <InviteUserSheet
+      :visible="isActionSheetOpen"
+      :roomID="props.roomID"
+      @close="isActionSheetOpen = false"
+      @addMember="isSelectMemberOpen = true"
+      @invite="isInviteInfoSheetOpen = true"
+    />
+
+    <MainInviteSheet
+      :visible="isInviteInfoSheetOpen"
+      :roomID="props.roomID"
+      theme="dark"
+      :show-time="false"
+      @close="isInviteInfoSheetOpen = false"
+    />
+
+    <SelectMember
+      :visible="isSelectMemberOpen"
+      :roomID="props.roomID"
+      @close="isSelectMemberOpen = false"
+    />
+  </view>
+</template>
+
+<script setup lang="ts">
+  import { ref } from 'vue';
+  import InviteUserSheet from './InviteUserSheet/index.nvue';
+  import MainInviteSheet from './MainInviteSheet/index.nvue';
+  import SelectMember from '@/uni_modules/tuikit-atomic-x/components/UserPicker/SelectMember/index.nvue';
+  import { t } from '../../../../locales';
+
+  const props = defineProps({
+    roomID: { type: String, default: '' },
+    isWebinar: { type: Boolean, default: false },
+  });
+
+  const emit = defineEmits(['click']);
+
+  const isActionSheetOpen = ref<boolean>(false);
+  const isInviteInfoSheetOpen = ref<boolean>(false);
+  const isSelectMemberOpen = ref<boolean>(false);
+
+  function handleTap(): void {
+    if (props.roomID.length === 0) {
+      console.warn('[room] InviteUserButton: missing roomID');
+      return;
+    }
+    isActionSheetOpen.value = true;
+    emit('click', { roomID: props.roomID });
+  }
+</script>
+
+<style lang="scss">
+  @import './InviteUserButton.scss';
+</style>

@@ -1,0 +1,80 @@
+.base-drawer-container {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 2600;
+}
+
+.base-drawer-mask {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0);
+}
+
+.base-drawer-wrapper {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 750rpx;
+  transform: translateY(100%);
+}
+
+.base-drawer-shift-wrapper {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 750rpx;
+}
+
+.base-drawer {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 750rpx;
+  background-color: #0a090e;
+  overflow: hidden;
+  flex-direction: column;
+  align-items: center;
+}
+
+.base-drawer-bg-image {
+  position: absolute;
+  left: 0;
+  width: 750rpx;
+}
+
+.base-drawer-content {
+  position: relative;
+  flex: 1;
+  width: 750rpx;
+  flex-direction: column;
+  align-items: center;
+}
+
+.base-drawer-glow {
+  position: absolute;
+}
+
+.base-drawer-handle {
+  width: 750rpx;
+  height: 56rpx;
+  justify-content: center;
+  align-items: center;
+  margin-top: 4rpx;
+  margin-bottom: 16rpx;
+}
+
+.base-drawer-handle-bar {
+  width: 72rpx;
+  height: 8rpx;
+  border-top-left-radius: 4rpx;
+  border-top-right-radius: 4rpx;
+  border-bottom-left-radius: 4rpx;
+  border-bottom-right-radius: 4rpx;
+  background-color: rgba(255, 255, 255, 0.2);
+}

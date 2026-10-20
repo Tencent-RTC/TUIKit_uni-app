@@ -1,0 +1,149 @@
+@import '../../../../styles/tokens.scss';
+
+/* 根容器:fixed 全屏锚点,供内部面板的 fixed 弹层取参考系。
+   【必须有 0.01 背景色】nvue/Android 上完全透明的 view 不拦截触摸,
+   点击会穿透到下层 LiveCoreView(原生组件),表现为全部按钮点不动。 */
+.before-live-view {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: $live-mask-01;
+}
+
+.navigate-back-arrow {
+  position: absolute;
+  top: 130rpx;
+  left: 60rpx;
+  z-index: 1000;
+  width: 60rpx;
+  height: 60rpx;
+}
+
+.navigate-back-arrow-image {
+  width: 20rpx;
+  height: 35rpx;
+}
+
+.prepare-header {
+  position: fixed;
+  top: 264rpx;
+  left: 0;
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.cover-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.cover-thumb {
+  width: 116rpx;
+  height: 116rpx;
+  border-radius: 28rpx;
+}
+
+.cover-label {
+  margin-top: 24rpx;
+  font-size: 20rpx;
+  color: $live-dark-text-primary;
+}
+
+.room-title {
+  margin-top: 40rpx;
+  width: 590rpx;
+  font-size: 40rpx;
+  font-weight: 600;
+  color: $live-dark-text-primary;
+  text-align: center;
+  lines: 1;
+}
+
+/* padding 扩大命中区:nvue text 的触摸命中区默认只有文字笔画本身。 */
+.room-topic {
+  margin-top: 8rpx;
+  padding: 16rpx 32rpx;
+  font-size: 24rpx;
+  color: $live-dark-text-70;
+}
+
+.prepare-actions {
+  position: fixed;
+  bottom: 252rpx;
+  left: 0;
+  right: 0;
+  display: flex;
+  flex-direction: row;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.prepare-action {
+  width: 136rpx;
+  margin-left: 32rpx;
+  margin-right: 32rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.pa-icon {
+  width: 104rpx;
+  height: 104rpx;
+  border-radius: 52rpx;
+  background-color: $live-dark-bg-float-50;
+  border-width: 2rpx;
+  border-color: $live-dark-border-10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 14rpx;
+}
+
+.pa-img {
+  width: 58rpx;
+  height: 58rpx;
+}
+
+.pa-label {
+  font-size: 22rpx;
+  font-weight: 600;
+  color: $live-dark-text-primary;
+}
+
+.start-btn {
+  position: fixed;
+  left: 40rpx;
+  right: 40rpx;
+  height: 104rpx;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+}
+
+.start-btn-bg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 104rpx;
+}
+
+/* 白点光晕已烘进 start-dot.png(nvue 不支持 box-shadow)。 */
+.start-dot {
+  width: 48rpx;
+  height: 48rpx;
+  margin-right: 12rpx;
+}
+
+.start-btn-text {
+  font-size: 32rpx;
+  font-weight: 600;
+  color: $live-dark-text-primary;
+}

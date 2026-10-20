@@ -1,0 +1,61 @@
+/* ==================== 品牌 / 功能色 ==================== */
+$room-color-brand:                 #0468FC; /* 主品牌色：主按钮、开关、链接、选中态 */
+$room-color-brand-deep:            #1C66E5; /* 品牌深色：深色底上的品牌文字、按压态 */
+$room-color-brand-gradient-start:  #006EFF; /* 品牌渐变起点 */
+$room-color-brand-gradient-end:    #0C59F2; /* 品牌渐变终点 */
+$room-color-brand-border:          #A8C8FF; /* 品牌描边 */
+$room-color-brand-bg-soft:         #F0F8FF; /* 品牌浅底（复制按钮等） */
+$room-color-danger:                #F2504B; /* 危险：踢出房间等 */
+$room-color-danger-deep:           #ED414D; /* 危险深：离开 / 结束会议 */
+$room-color-danger-solid:          #FF3B30; /* 危险实底：红点、录制指示 */
+$room-color-danger-light:          #FF643D; /* 危险浅：进行中状态 */
+$room-color-warning:               #FF7200; /* 警示橙：角色标签 */
+
+/* ==================== 浅色主题（页面 / 弹层） ==================== */
+$room-light-bg-page:               #F2F5FC; /* 页面底色 */
+$room-light-bg-page-alt:           #F8F9FB; /* 页面底色（次级） */
+$room-light-bg-surface:            #FFFFFF; /* 卡片 / 弹层面 */
+$room-light-bg-subtle:             #F0F3FA; /* 卡片内浅底 */
+$room-light-bg-disabled:           #EBEBEE; /* 禁用底 */
+$room-light-border:                #EFF2F7; /* 分割线 / 描边 */
+$room-light-text-primary:          #1F2229; /* 主文字 */
+$room-light-text-secondary:        #4B5468; /* 次级文字 */
+$room-light-text-tertiary:         #6B7385; /* 辅助文字 */
+$room-light-text-muted:            #A2A4A8; /* 弱化文字 */
+$room-light-text-placeholder:      #C2C7D0; /* 占位文字 */
+
+/* ==================== 深色主题（会议中） ==================== */
+$room-dark-bg-base:                #0F1014; /* 会议页最底 */
+$room-dark-bg-surface:             #2A2D38; /* 面板 / 按钮面 */
+$room-dark-bg-sheet:               #1F2229; /* 弹层面 */
+$room-dark-bg-raised:              #353740; /* 更高一层（按钮 / 输入框） */
+$room-dark-bg-control:             #4A5970; /* 控件灰底 */
+$room-dark-bg-control-strong:      #6B758A; /* 控件灰底（深） */
+$room-dark-bg-control-soft:        rgba(74, 89, 112, 0.3); /* 控件半透明底 */
+$room-dark-bg-float:               rgba(34, 38, 46, 0.7); /* 浮层底 */
+$room-dark-bg-hairline:            rgba(217, 222, 232, 0.1); /* 极浅底 */
+$room-dark-bg-glass:               rgba(255, 255, 255, 0.16); /* 毛玻璃底 */
+$room-dark-border:                 #26282C; /* 分割线 */
+$room-dark-text-primary:           #D5E0F2; /* 主文字 */
+$room-dark-text-secondary:         #969EB4; /* 次级文字 */
+$room-dark-text-tertiary:          #7C85A6; /* 辅助文字 */
+$room-dark-text-muted:             #4F586B; /* 弱化文字 */
+$room-dark-text-placeholder:       #C5CCDC; /* 占位文字 */
+$room-dark-text-disabled:          #E5E7EB; /* 禁用文字 */
+
+/* ==================== 与主题无关 ==================== */
+$room-color-text-inverse:          #FFFFFF; /* 反色文字：品牌底 / 深色底上的白字 */
+$room-mask:                        rgba(0, 0, 0, 0.4);   /* 遮罩 */
+$room-mask-strong:                 rgba(0, 0, 0, 0.6);   /* 遮罩（强） */
+$room-mask-light:                  rgba(0, 0, 0, 0.15);  /* 遮罩（弱） */
+
+/* ==================== 字号 ==================== */
+$room-font-size-xs:                20rpx; /* 角标 / 极小说明 */
+$room-font-size-sm:                24rpx; /* 辅助说明 */
+$room-font-size-md:                26rpx; /* 小正文 */
+$room-font-size-base:              28rpx; /* 正文 */
+$room-font-size-lg:                30rpx; /* 次标题 */
+$room-font-size-xl:                32rpx; /* 标题 / 按钮 */
+$room-font-size-2xl:               36rpx; /* 大标题 */
+$room-font-size-3xl:               40rpx; /* 特写文字 */
+$room-font-size-4xl:               48rpx; /* 房间号等展示文字 */

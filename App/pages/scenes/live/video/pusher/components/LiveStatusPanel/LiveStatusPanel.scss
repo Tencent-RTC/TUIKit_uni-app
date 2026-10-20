@@ -1,0 +1,420 @@
+@import '../../../../styles/tokens.scss';
+
+.live-status-root {
+  width: 750rpx;
+}
+
+.live-status-trigger {
+  position: fixed;
+  top: 220rpx;
+  right: 0;
+  height: 38rpx;
+  flex-direction: row;
+  align-items: center;
+  padding-left: 20rpx;
+  padding-right: 18rpx;
+  border-top-left-radius: 19rpx;
+  border-top-right-radius: 0;
+  border-bottom-left-radius: 19rpx;
+  border-bottom-right-radius: 0;
+  background-color: $live-dark-bg-overlay-22;
+}
+
+.live-status-trigger-network {
+  height: 26rpx;
+  margin-right: 10rpx;
+}
+
+.live-status-trigger-label {
+  font-size: 20rpx;
+  font-weight: 500;
+  color: $live-dark-text-96;
+  margin-right: 10rpx;
+}
+
+.live-status-trigger-chevron {
+  width: 11rpx;
+  height: 11rpx;
+  border-top-width: 2rpx;
+  border-top-style: solid;
+  border-top-color: rgba(255, 255, 255, 0.8);
+  border-right-width: 2rpx;
+  border-right-style: solid;
+  border-right-color: rgba(255, 255, 255, 0.8);
+  transform: rotate(45deg);
+  opacity: 0.86;
+}
+
+.live-status-trigger--poor .live-status-trigger-label {
+  color: $live-color-net-poor;
+}
+
+.live-status-trigger--very-poor .live-status-trigger-label {
+  color: $live-color-net-very-poor;
+}
+
+.live-status-trigger--disconnected .live-status-trigger-label {
+  color: $live-color-net-disconnected;
+}
+
+.live-status-heading {
+  width: 678rpx;
+  height: 56rpx;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.live-status-heading-title {
+  font-size: 36rpx;
+  font-weight: 600;
+  color: $live-dark-text-primary;
+  margin-left: 16rpx;
+}
+
+.live-status-timer {
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+}
+
+.live-status-timer-dot {
+  width: 10rpx;
+  height: 10rpx;
+  border-radius: 5rpx;
+  background-color: $live-color-brand-light;
+  margin-right: 10rpx;
+}
+
+.live-status-timer-text {
+  font-size: 22rpx;
+  color: $live-dark-text-90;
+}
+
+.live-status-tabs {
+  width: 678rpx;
+  margin-top: 20rpx;
+  margin-bottom: 16rpx;
+  padding: 6rpx;
+  flex-direction: row;
+  border-radius: 24rpx;
+  background-color: $live-dark-surface-06;
+}
+
+.live-status-tab {
+  flex: 1;
+  height: 64rpx;
+  justify-content: center;
+  align-items: center;
+  border-radius: 18rpx;
+}
+
+.live-status-tab--active {
+  background-color: $live-color-brand-tab-active;
+  border-width: 1rpx;
+  border-style: solid;
+  border-color: $live-color-brand-tab-line;
+}
+
+.live-status-tab-text {
+  font-size: 26rpx;
+  font-weight: 500;
+  color: $live-dark-text-50;
+}
+
+.live-status-tab-text--active {
+  color: $live-dark-text-primary;
+}
+
+.live-status-page {
+  width: 678rpx;
+  flex-direction: column;
+}
+
+.live-status-card {
+  width: 678rpx;
+  padding: 32rpx 24rpx 20rpx;
+  border-radius: 32rpx;
+  border-width: 1rpx;
+  border-style: solid;
+  border-color: $live-dark-border-07;
+  background-color: $live-dark-surface-065;
+  flex-direction: column;
+}
+
+.live-status-card-heading {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6rpx;
+}
+
+.live-status-card-heading-title {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: $live-dark-text-94;
+}
+
+.live-status-card-heading-tag {
+  font-size: 20rpx;
+  color: $live-dark-text-38;
+}
+
+.live-status-data-row {
+  flex-direction: row;
+}
+
+.live-status-metric {
+  flex: 1;
+  padding: 28rpx 8rpx 24rpx;
+  flex-direction: column;
+}
+
+.live-status-metric--divider {
+  border-bottom-width: 1rpx;
+  border-bottom-style: solid;
+  border-bottom-color: $live-dark-border-065;
+}
+
+.live-status-metric-label {
+  font-size: 22rpx;
+  color: $live-dark-text-50;
+  margin-bottom: 12rpx;
+}
+
+.live-status-metric-value-row {
+  flex-direction: row;
+  align-items: flex-end;
+}
+
+.live-status-metric-value {
+  font-size: 40rpx;
+  font-weight: 600;
+  color: $live-dark-text-96;
+  line-height: 40rpx;
+}
+
+.live-status-metric-unit {
+  font-size: 18rpx;
+  color: $live-dark-text-36;
+  margin-left: 6rpx;
+  margin-bottom: 4rpx;
+}
+
+.live-status-tip-card {
+  width: 678rpx;
+  margin-top: 20rpx;
+  padding: 22rpx 24rpx;
+  border-radius: 28rpx;
+  border-width: 1rpx;
+  border-style: solid;
+  border-color: $live-dark-border-07;
+  background-color: $live-dark-surface-065;
+  flex-direction: row;
+  align-items: center;
+}
+
+.live-status-tip-icon {
+  width: 56rpx;
+  height: 56rpx;
+  border-radius: 18rpx;
+  background-color: $live-color-brand-tint-soft;
+  color: $live-color-brand-light;
+  font-size: 32rpx;
+  text-align: center;
+  line-height: 56rpx;
+  margin-right: 20rpx;
+}
+
+.live-status-tip-copy {
+  flex: 1;
+  flex-direction: column;
+}
+
+.live-status-tip-title {
+  font-size: 24rpx;
+  font-weight: 600;
+  color: $live-dark-text-82;
+}
+
+.live-status-tip-sub {
+  font-size: 20rpx;
+  color: $live-dark-text-38;
+  margin-top: 4rpx;
+}
+
+.live-status-health-list {
+  width: 678rpx;
+  padding: 6rpx 6rpx 0;
+  flex-direction: column;
+}
+
+.live-status-health-item {
+  flex-direction: row;
+  align-items: center;
+  min-height: 100rpx;
+  border-bottom-width: 1rpx;
+  border-bottom-style: solid;
+  border-bottom-color: $live-dark-border-065;
+}
+
+.live-status-health-item--last {
+  border-bottom-width: 0;
+}
+
+.live-status-health-icon {
+  width: 54rpx;
+  height: 54rpx;
+  border-radius: 18rpx;
+  border-width: 1rpx;
+  border-style: solid;
+  border-color: $live-color-brand-icon-line;
+  background-color: $live-color-brand-icon-soft;
+  justify-content: center;
+  align-items: center;
+}
+
+.live-status-health-icon--poor {
+  border-color: $live-color-net-warn-line;
+  background-color: $live-color-net-warn-soft;
+}
+
+.live-status-health-icon--disconnected {
+  border-color: $live-color-net-danger-line;
+  background-color: $live-color-net-danger-soft;
+}
+
+.live-status-health-icon-img {
+  width: 36rpx;
+  height: 36rpx;
+}
+
+.live-status-health-copy {
+  flex: 1;
+  margin-left: 18rpx;
+  flex-direction: column;
+}
+
+.live-status-health-title {
+  font-size: 26rpx;
+  font-weight: 600;
+  color: $live-dark-text-90;
+}
+
+.live-status-health-sub {
+  font-size: 20rpx;
+  color: $live-dark-text-38;
+  margin-top: 4rpx;
+}
+
+.live-status-health-value {
+  font-size: 22rpx;
+  color: $live-dark-text-42;
+}
+
+.live-status-audio-item {
+  align-items: flex-start;
+  min-height: 136rpx;
+  padding-top: 16rpx;
+  padding-bottom: 12rpx;
+}
+
+.live-status-volume-row {
+  margin-top: 8rpx;
+  flex-direction: row;
+  align-items: center;
+}
+
+.live-status-volume {
+  flex: 1;
+  height: 32rpx;
+}
+
+.live-status-volume-value {
+  width: 52rpx;
+  font-size: 20rpx;
+  color: $live-dark-text-50;
+  text-align: right;
+}
+
+.live-status-network-card {
+  width: 678rpx;
+  margin-top: 12rpx;
+  padding: 16rpx 8rpx;
+  border-radius: 28rpx;
+  border-width: 1rpx;
+  border-style: solid;
+  border-color: $live-dark-border-07;
+  background-color: $live-dark-surface-065;
+  flex-direction: row;
+}
+
+.live-status-network-metric {
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+}
+
+.live-status-network-value {
+  font-size: 36rpx;
+  font-weight: 600;
+  color: $live-color-brand-light;
+}
+
+.live-status-network-card--poor .live-status-network-value {
+  color: $live-color-net-metric-warn;
+}
+
+.live-status-network-card--disconnected .live-status-network-value {
+  color: $live-color-net-metric-danger;
+}
+
+.live-status-network-label {
+  font-size: 18rpx;
+  color: $live-dark-text-42;
+  margin-top: 8rpx;
+}
+
+.live-status-media-card {
+  width: 678rpx;
+  margin-top: 12rpx;
+  padding: 20rpx;
+  border-radius: 28rpx;
+  border-width: 1rpx;
+  border-style: solid;
+  border-color: $live-dark-border-07;
+  background-color: $live-dark-surface-065;
+  flex-direction: row;
+}
+
+.live-status-media-column {
+  flex: 1;
+  flex-direction: column;
+}
+
+.live-status-media-column--first {
+  margin-right: 36rpx;
+}
+
+.live-status-media-title {
+  font-size: 22rpx;
+  font-weight: 600;
+  color: $live-dark-text-82;
+}
+
+.live-status-media-row {
+  margin-top: 10rpx;
+  flex-direction: row;
+  align-items: center;
+}
+
+.live-status-media-key {
+  width: 100rpx;
+  font-size: 18rpx;
+  color: $live-dark-text-34;
+}
+
+.live-status-media-value {
+  font-size: 18rpx;
+  color: $live-dark-text-68;
+}

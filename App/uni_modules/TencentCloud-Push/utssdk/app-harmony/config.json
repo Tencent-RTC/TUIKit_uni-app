@@ -1,6 +1,0 @@
-{
-  "dependencies": {
-    "@tencentcloud/imsdk": "8.7.7203",
-    "@tencentcloud/timpush": "8.7.7203"
-  }
-}
