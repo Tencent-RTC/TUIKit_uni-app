@@ -1,0 +1,41 @@
+<template>
+  <view class="switch-button" @tap="onTap">
+    <view class="switch-button-track" :class="{ 'switch-button-track-on': modelValue }">
+      <view class="switch-button-thumb" :style="thumbStyle"></view>
+    </view>
+  </view>
+</template>
+
+<script setup lang="ts">
+  import { computed } from 'vue';
+
+  const props = defineProps({
+    modelValue: { type: Boolean, default: false },
+  });
+
+  const emit = defineEmits(['update:modelValue', 'change']);
+
+  const TRACK_WIDTH = 88;
+  const THUMB_SIZE = 36;
+  const THUMB_INSET = 4;
+
+  const onTap = () => {
+    const next = !props.modelValue;
+    emit('update:modelValue', next);
+    emit('change', next);
+  };
+
+  const travelPx = computed(() =>
+    uni.upx2px(TRACK_WIDTH - THUMB_SIZE - THUMB_INSET * 2)
+  );
+
+  const thumbStyle = computed(() => ({
+    transform: props.modelValue
+      ? `translateX(${travelPx.value}px)`
+      : 'translateX(0px)',
+  }));
+</script>
+
+<style lang="scss">
+  @import './SwitchButton.scss';
+</style>

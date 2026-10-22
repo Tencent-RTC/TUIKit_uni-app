@@ -1,0 +1,88 @@
+<template>
+  <BaseDrawer
+    v-model="innerVisible"
+    :height="drawerHeight"
+    :overlayOpacity="0.5"
+    bgImage="/uni_modules/tuikit-atomic-x/static/assets/live/drawer-bg.png"
+    :bgImageHeight="710"
+    padding="0 0 60rpx 0"
+    :useSafeBottom="true"
+  >
+    <view class="quality-panel">
+      <text class="quality-title">{{ t('morePanel.switchQuality') }}</text>
+      <view class="quality-list">
+        <view
+          class="quality-item"
+          :class="{ 'quality-item-active': item.quality === currentQuality }"
+          v-for="item in qualityList"
+          :key="item.quality"
+          @tap="onSelectQuality(item)"
+        >
+          <text
+            class="quality-item-label"
+            :class="{ 'quality-item-label-active': item.quality === currentQuality }"
+          >{{ item.label }}</text>
+          <image
+            v-if="item.quality === currentQuality"
+            class="quality-item-check"
+            src="/uni_modules/tuikit-atomic-x/static/icon/checked.png"
+            mode="aspectFit"
+          />
+        </view>
+      </view>
+    </view>
+  </BaseDrawer>
+</template>
+
+<script setup lang="ts">
+  import { computed } from 'vue';
+  import { VideoQuality, useDeviceState } from '@/uni_modules/tuikit-atomic-x/state/DeviceState';
+  import { t } from '../../../../locales';
+  import BaseDrawer from '@/components/live/BaseDrawer/index.nvue';
+
+  const props = defineProps({
+    modelValue: {
+      type: Boolean,
+      default: false,
+    },
+  });
+
+  const emit = defineEmits(['update:modelValue']);
+
+  const innerVisible = computed({
+    get: () => props.modelValue,
+    set: (val) => emit('update:modelValue', val),
+  });
+
+  const { localVideoQuality, updateVideoQuality } = useDeviceState();
+
+  const qualityList = [
+    { quality: VideoQuality.QUALITY_1080P, label: '1080P' },
+    { quality: VideoQuality.QUALITY_720P, label: '720P' },
+  ];
+
+  const currentQuality = computed(() => {
+    const q = Number(localVideoQuality.value);
+    return qualityList.some((item) => item.quality === q)
+      ? q
+      : VideoQuality.QUALITY_720P;
+  });
+
+  const drawerHeight = computed(() => {
+    const rows = Math.max(1, qualityList.length);
+    return 224 + rows * 104;
+  });
+
+  const onSelectQuality = (item) => {
+    if (item.quality === currentQuality.value) {
+      innerVisible.value = false;
+      return;
+    }
+    updateVideoQuality({ quality: item.quality });
+    innerVisible.value = false;
+  };
+</script>
+
+<style lang="scss">
+  @import './QualityPanel.scss';
+</style>

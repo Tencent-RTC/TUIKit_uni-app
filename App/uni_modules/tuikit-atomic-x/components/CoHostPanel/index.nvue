@@ -93,7 +93,9 @@
     useLoginState
   } from "@/uni_modules/tuikit-atomic-x/state/LoginState";
   import { useCoGuestState } from "@/uni_modules/tuikit-atomic-x/state/CoGuestState";
-  const { applicants, rejectApplication } = useCoGuestState(uni?.$liveID);
+  const { currentLive } = useLiveListState();
+  const liveID = computed(() => String(currentLive.value?.liveID || ''));
+  const { applicants, rejectApplication } = useCoGuestState(liveID.value);
   const defaultAvatarURL = '/uni_modules/tuikit-atomic-x/static/assets/live/default-avatar.png';
   const props = defineProps({
     modelValue: {
@@ -125,11 +127,10 @@
     cancelHostConnection,
     invitees,
     exitHostConnection,
-  } = useCoHostState(uni?.$liveID)
+  } = useCoHostState(liveID.value)
   const {
     // 响应式状态
     liveListCursor,
-    currentLive,
     // 操作方法 - callback在params中
     fetchLiveList,
     liveList
@@ -191,7 +192,7 @@
     if (newVal && invitees?.value.length > 0) {
       newVal.forEach(applicant => {
         rejectApplication({
-          liveID: uni?.$liveID,
+          liveID: liveID.value,
           userID: applicant.userID,
         });
       });
@@ -258,7 +259,7 @@
 
   function cancelLink(host) {
     cancelHostConnection({
-      liveID: uni?.$liveID,
+      liveID: liveID.value,
       toHostLiveID: host?.liveID,
       success: () => {
         showTip(t('ch.inviteCancelled'));
@@ -280,7 +281,7 @@
       return
     }
     requestHostConnection({
-      liveID: uni?.$liveID,
+      liveID: liveID.value,
       targetHostLiveID: host.liveID,
       layoutTemplate: CoHostLayoutTemplateType.HOST_DYNAMIC_GRID,
       timeout: 30,
@@ -309,7 +310,7 @@
       success: (res) => {
         if (res.confirm) {
           exitHostConnection({
-            liveID: uni?.$liveID,
+            liveID: liveID.value,
             success: () => {
               close()
             },

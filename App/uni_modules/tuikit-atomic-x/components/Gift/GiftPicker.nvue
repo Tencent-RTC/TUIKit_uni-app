@@ -150,6 +150,9 @@
     useGiftState
   } from "@/uni_modules/tuikit-atomic-x/state/GiftState";
   import {
+    useLiveListState
+  } from "@/uni_modules/tuikit-atomic-x/state/LiveListState";
+  import {
     getScreenSizeAsync,
     heightPercentToRpx
   } from "../../utils/screen";
@@ -183,12 +186,14 @@
     set: (val) => emit('update:modelValue', val)
   });
 
+  const { currentLive } = useLiveListState();
+  const liveID = computed(() => String(currentLive.value?.liveID || ''));
   const {
     usableGifts,
     sendGift,
     refreshUsableGifts,
     setLanguage
-  } = useGiftState(uni?.$liveID);
+  } = useGiftState(liveID.value);
 
   // ============ 基础状态 ============
   const selectedGiftIndex = ref(-1);
@@ -398,7 +403,7 @@
     lastFlushAt = Date.now();
 
     sendGift({
-      liveID: uni.$liveID,
+      liveID: liveID.value,
       giftID: giftID,
       count: count,
       success: () => {
@@ -576,8 +581,10 @@
     if (!val) stopCombo();
   });
 
-  onMounted(() => {
-    if (!uni?.$liveID) return;
+  let giftPickerInited = false;
+  const initGiftPicker = () => {
+    if (giftPickerInited || !liveID.value) return;
+    giftPickerInited = true;
     uni.getSystemInfo()
       .then((systemInfo) => {
         // 初始化屏幕尺寸缓存，更新 drawer 高度为屏幕 50%。
@@ -589,14 +596,23 @@
         const language = resolveSdkLanguage(getSystemLanguage());
         console.log(`[GiftPicker] setLanguage: ${language}`);
         setLanguage({
-          liveID: uni.$liveID,
+          liveID: liveID.value,
           language,
         });
-        refreshUsableGifts({ liveID: uni.$liveID });
+        refreshUsableGifts({ liveID: liveID.value });
       })
       .catch((e) => {
         console.error('获取系统信息失败', e);
       });
+  };
+
+  onMounted(() => {
+    initGiftPicker();
+    if (!giftPickerInited) {
+      watch(liveID, (val) => {
+        if (val) initGiftPicker();
+      });
+    }
   });
 
   onUnmounted(() => {

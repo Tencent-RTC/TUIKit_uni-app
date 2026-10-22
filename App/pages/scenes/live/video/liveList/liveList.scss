@@ -6,6 +6,10 @@
     position: relative;
   }
 
+  .list-header {
+    background-color: $live-surface-white;
+  }
+
   .header {
     display: flex;
     flex-direction: row;

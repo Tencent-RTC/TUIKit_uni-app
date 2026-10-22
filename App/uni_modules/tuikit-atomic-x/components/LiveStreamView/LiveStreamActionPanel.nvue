@@ -82,8 +82,14 @@
     DeviceControlPolicy,
     useLiveSeatState
   } from "@/uni_modules/tuikit-atomic-x/state/LiveSeatState";
+  import {
+    useLiveListState
+  } from "@/uni_modules/tuikit-atomic-x/state/LiveListState";
   import LiveToast from '@/uni_modules/tuikit-atomic-x/components/LiveToast.nvue';
   import { t } from '../locales';
+
+  const { currentLive } = useLiveListState();
+  const liveID = computed(() => String(currentLive.value?.liveID || ''));
 
   const defaultAvatarURL = '/uni_modules/tuikit-atomic-x/static/assets/live/default-avatar.png';
 
@@ -134,14 +140,14 @@
     openLocalMicrophone,
     closeLocalMicrophone,
     switchCamera,
-  } = useDeviceState(uni?.$liveID);
+  } = useDeviceState(liveID.value);
   const {
     exitHostConnection,
     coHostStatus
-  } = useCoHostState(uni?.$liveID);
+  } = useCoHostState(liveID.value);
   const {
     disconnect
-  } = useCoGuestState(uni?.$liveID);
+  } = useCoGuestState(liveID.value);
   const {
     seatList,
     muteMicrophone,
@@ -151,7 +157,7 @@
     openRemoteMicrophone,
     closeRemoteMicrophone,
     kickUserOutOfSeat
-  } = useLiveSeatState(uni?.$liveID);
+  } = useLiveSeatState(liveID.value);
 
   // 控件显隐与文案
   const showMic = computed(() => props.isSelf || (!props.isSelf && !props.isAnchorMode));
@@ -218,7 +224,7 @@
     if (!props.isSelf) {
       if (targetMicStatus.value === DeviceStatus.OFF) {
         openRemoteMicrophone({
-          liveID: uni.$liveID,
+          liveID: liveID.value,
           userID: props.userInfo.userID,
           policy: DeviceControlPolicy.UNLOCK_ONLY
         });
@@ -228,7 +234,7 @@
       }
       if (targetMicStatus.value === DeviceStatus.ON) {
         closeRemoteMicrophone({
-          liveID: uni.$liveID,
+          liveID: liveID.value,
           userID: props.userInfo.userID,
         });
         showTip(t('sv.youMutedUser', { name: props.userInfo.userName || props.userInfo.userID }))
@@ -238,7 +244,7 @@
     } else {
       if (targetMicStatus.value === DeviceStatus.OFF) {
         unmuteMicrophone({
-          liveID: uni.$liveID,
+          liveID: liveID.value,
           fail: (errorCode) => {
             if (errorCode === -2360) {
               showTip(t('sv.selfMuted'))
@@ -250,7 +256,7 @@
       }
       if (targetMicStatus.value === DeviceStatus.ON) {
         muteMicrophone({
-          liveID: uni.$liveID
+          liveID: liveID.value
         });
         close();
         return;
@@ -263,7 +269,7 @@
     if (!props.isSelf) {
       if (targetCameraStatus.value === DeviceStatus.OFF) {
         openRemoteCamera({
-          liveID: uni.$liveID,
+          liveID: liveID.value,
           userID: props.userInfo.userID,
           policy: DeviceControlPolicy.UNLOCK_ONLY
         });
@@ -273,7 +279,7 @@
       }
       if (targetCameraStatus.value === DeviceStatus.ON) {
         closeRemoteCamera({
-          liveID: uni.$liveID,
+          liveID: liveID.value,
           userID: props.userInfo.userID,
         });
         showTip(t('sv.youBannedUserVideo', { name: props.userInfo.userName || props.userInfo.userID }))
@@ -320,7 +326,7 @@
           success: (res) => {
             if (res.confirm) {
               exitHostConnection({
-                liveID: uni?.$liveID
+                liveID: liveID.value
               });
             }
             close();
@@ -333,7 +339,7 @@
           success: (res) => {
             if (res.confirm) {
               kickUserOutOfSeat({
-                liveID: uni?.$liveID,
+                liveID: liveID.value,
                 userID: props.userInfo.userID,
                 success: () => {},
                 fail: () => {},
@@ -350,7 +356,7 @@
         success: (res) => {
           if (res.confirm) {
             disconnect({
-              liveID: uni?.$liveID,
+              liveID: liveID.value,
               success: () => {},
               fail: () => {},
             });

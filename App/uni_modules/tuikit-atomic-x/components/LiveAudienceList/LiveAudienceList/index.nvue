@@ -53,7 +53,7 @@
     </scroll-view>
   </BaseDrawer>
 
-  <AudienceActionPanel v-model="isShowAudienceActionPanel" :userInfo="selectedAudience" :liveID="liveID">
+  <AudienceActionPanel v-model="isShowAudienceActionPanel" :userInfo="selectedAudience" :liveID="liveID" @tip="showTip">
   </AudienceActionPanel>
   <AudienceProfilePanel v-model="isShowAudienceProfilePanel" :userInfo="selectedAudience" :liveID="liveID">
   </AudienceProfilePanel>
@@ -67,7 +67,7 @@
 </template>
 
 <script setup>
-  import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
+  import { ref, computed, watch, onMounted } from 'vue';
   import BaseDrawer from '@/components/live/BaseDrawer/index.nvue';
   import AudienceActionPanel from '@/uni_modules/tuikit-atomic-x/components/LiveAudienceList/AudienceActionPanel/index.nvue';
   import AudienceProfilePanel from '@/uni_modules/tuikit-atomic-x/components/LiveAudienceList/AudienceProfilePanel/index.nvue';
@@ -86,9 +86,10 @@
   const emit = defineEmits(['update:modelValue', 'overlayActiveChange']);
 
   const { currentLive } = useLiveListState();
+  const liveID = computed(() => props.liveID || String(currentLive.value?.liveID || ''));
   const { loginUserInfo } = useLoginState();
-  const { audienceList } = useLiveAudienceState(uni?.$liveID);
-  const { addGiftListener, removeGiftListener } = useGiftState(uni?.$liveID);
+  const { audienceList } = useLiveAudienceState(liveID.value);
+  const { addGiftListener, removeGiftListener } = useGiftState(liveID.value);
 
   const defaultAvatarURL = '/uni_modules/tuikit-atomic-x/static/assets/live/default-avatar.png';
   const ROW_H = 169;
@@ -208,11 +209,11 @@
     getScreenSizeAsync().then(() => {
       targetDrawerRpx.value = heightPercentToRpx(0.6);
     });
-    try { addGiftListener(uni?.$liveID, 'onReceiveGift', onReceiveGift); } catch (e) { console.error(e); }
-  });
-
-  onUnmounted(() => {
-    try { removeGiftListener(uni?.$liveID, 'onReceiveGift', onReceiveGift); } catch (e) { console.error(e); }
+    watch(liveID, (id, _, onCleanup) => {
+      if (!id) return;
+      addGiftListener(id, 'onReceiveGift', onReceiveGift);
+      onCleanup(() => removeGiftListener(id, 'onReceiveGift', onReceiveGift));
+    }, { immediate: true });
   });
 </script>
 

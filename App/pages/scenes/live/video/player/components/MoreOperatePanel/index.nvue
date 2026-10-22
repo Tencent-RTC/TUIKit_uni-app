@@ -72,8 +72,10 @@
   import BaseDrawer from '@/components/live/BaseDrawer/index.nvue';
   import LiveToast from '@/uni_modules/tuikit-atomic-x/components/LiveToast.nvue';
   import { t } from '../../../../locales';
-  // @ts-ignore
   import { enableMultiPlaybackQuality, queryPlaybackQualityList, switchPlaybackQuality } from '@/uni_modules/tuikit-atomic-x';
+  import { useLiveListState } from '@/uni_modules/tuikit-atomic-x/state/LiveListState';
+
+  const { currentLive } = useLiveListState();
 
   const props = defineProps({
     modelValue: {
@@ -85,11 +87,11 @@
   const emit = defineEmits(['update:modelValue']);
 
   const capabilities = [
-    { id: 'quality',         icon: '/static/images/live/cap-quality.png',         label: t('morePanel.quality') },
-    { id: 'superResolution', icon: '/static/images/live/cap-superResolution.png', label: t('morePanel.superResolution') },
-    { id: 'hdr',             icon: '/static/images/live/cap-hdr.png',             label: 'HDR' },
-    { id: 'volumeEqualizer', icon: '/static/images/live/cap-volumeEqualizer.png', label: t('morePanel.volumeEqualizer') },
-    { id: 'sleep',           icon: '/static/images/live/cap-sleep.png',           label: t('morePanel.sleepTimer') },
+    { id: 'quality',         icon: '/static/images/live/icon/cap-quality.png',         label: t('morePanel.quality') },
+    { id: 'superResolution', icon: '/static/images/live/icon/cap-superResolution.png', label: t('morePanel.superResolution') },
+    { id: 'hdr',             icon: '/static/images/live/icon/cap-hdr.png',             label: 'HDR' },
+    { id: 'volumeEqualizer', icon: '/static/images/live/icon/cap-volumeEqualizer.png', label: t('morePanel.volumeEqualizer') },
+    { id: 'sleep',           icon: '/static/images/live/icon/cap-sleep.png',           label: t('morePanel.sleepTimer') },
   ];
 
   const QUALITY_LABEL_MAP = {
@@ -144,7 +146,7 @@
   };
 
   const openQualityPanel = () => {
-    const roomId = uni.$liveID;
+    const roomId = String(currentLive.value?.liveID || '');
     if (!roomId) {
       console.warn('[MoreOperatePanel] no roomId, skip query quality');
       return;

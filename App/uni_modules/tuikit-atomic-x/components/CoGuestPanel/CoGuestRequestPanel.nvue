@@ -156,6 +156,7 @@
   import { useLiveListState } from "@/uni_modules/tuikit-atomic-x/state/LiveListState";
   const { loginUserInfo } = useLoginState()
   const { currentLive } = useLiveListState()
+  const liveID = computed(() => String(currentLive.value?.liveID || ''))
   const currentCoGuestType = ref('')
 
   const tipVisible = ref(false);
@@ -175,13 +176,13 @@
     openLocalCamera, closeLocalCamera, switchCamera, switchMirror, updateVideoQuality,
     startCameraTest, stopCameraTest,
     startScreenShare, stopScreenShare,
-  } = useDeviceState(uni?.$liveID);
+  } = useDeviceState(liveID.value);
   const {
-    invitees, applicants,
+    invitees, applicants, connected,
     applyForSeat, cancelApplication,
     addCoGuestHostListener, removeCoGuestHostListener,
     addCoGuestGuestListener, removeCoGuestGuestListener
-  } = useCoGuestState(uni?.$liveID);
+  } = useCoGuestState(liveID.value);
 
 
   const defaultAvatarURL = '/uni_modules/tuikit-atomic-x/static/assets/live/default-avatar.png';
@@ -211,7 +212,7 @@
       default: false,
     },
   });
-  const emit = defineEmits(['update:modelValue', 'accepted']);
+  const emit = defineEmits(['update:modelValue', 'accepted', 'statusChange']);
 
   // 通过 computed 转发 v-model：props 只读，不能直接 v-model 到 prop。
   const innerVisible = computed({
@@ -439,34 +440,18 @@
     }, DETAIL_ANIM_DURATION);
   };
 
-  // 【布局变化保持预览】主播调整视频布局(seatLayoutTemplateID 变化)时,native 重建
-  // 整个视频视图体系并改动本地摄像头绑定,预览画面随之消失。实测(日志验证):重建后
-  // 直接重挂 view + startCameraTest 虽返回 success,但摄像头处于中间态、渲染管道并未
-  // 重建,画面无法恢复。修复走两条已验证路径的串联:
-  //   1. openLocalCamera 恢复"发布态"——closeCoMicDetail 已验证此路径会触发 cameraStatus
-  //      OFF→ON → LiveCoreView 重新 setLocalVideoView,把摄像头从中间态拉回干净状态;
-  //   2. 再从发布态 startCameraTest——与面板首开完全同路径(首开即"发布态→测试预览")。
-  // oldVal 为 undefined 时是进房初始化赋值,不视为布局变化。
   watch(() => currentLive.value?.seatLayoutTemplateID, (newVal, oldVal) => {
     if (oldVal === undefined || newVal === oldVal) return;
     if (!detailMounted.value) return;
-    // 仅处理当前用户在麦(连麦中)的场景:布局重建会重绑【麦位用户】的摄像头绑定,
-    // 故只有上麦用户的预览会被扰动。未上麦时无发布态、测试预览不受布局变化影响,
-    // 无需重启采集(重启反而造成一次无谓的画面中断)。
     if (uni.$localGuestStatus !== 'CONNECTED') return;
     console.log(`[CoGuest] layout changed: ${oldVal} -> ${newVal}, recover camera then restart test.`);
-    // 提示用户:布局切换导致预览短暂中断,约 1 秒后自动恢复,避免误以为预览故障。
     showTip(t('layout_adjusted'));
     stopCameraTest();
-    // 清跟随/重试计时器与计数,交由重启流程重建。
     clearTimeout(cameraTestRetryTimer);
     clearTimeout(cameraFollowTimer);
     cameraFollowPending = false;
     cameraTestRetryCount = 0;
-    // 先卸载:使失效的原生注册随节点销毁一起释放。
     cameraTestViewReady.value = false;
-    // 连麦中先恢复发布态(申请前无发布态可恢复,跳过)。openLocalCamera 触发 cameraStatus
-    // OFF→ON → native 重新绑定连麦 view,摄像头回到已知干净状态。
     if (props.initialDetailOpen) {
       openLocalCamera({
         isFront: isFrontCamera.value,
@@ -478,54 +463,37 @@
     clearTimeout(cameraRelayoutTimer);
     cameraRelayoutTimer = setTimeout(() => {
       cameraRelayoutTimer = null;
-      // 延迟期间面板可能已被用户关闭/组件卸载:守卫后再重建。
       if (!detailMounted.value) return;
       console.log('[CoGuest] relayout settle, remount camera test view & restart capture.');
       cameraTestViewReady.value = true;
-      // nextTick 等节点挂载,tryStartCameraTest 的自适应重试(-1 时 100ms×10)
-      // 覆盖 onAttachedToWindow 完成前的注册时序。
       nextTick(() => { tryStartCameraTest(); });
     }, 1000);
   });
 
-  // 镜像：切换前后摄像头镜像（ENABLE/DISABLE）。
   const handleToggleMirror = () => {
     mirrorEnabled.value = !mirrorEnabled.value;
     switchMirror({ mirrorType: mirrorEnabled.value ? MirrorType.ENABLE : MirrorType.DISABLE });
   };
 
-  // 翻转：前后摄像头切换。
   const handleFlipCamera = () => {
     switchCamera({ isFront: !isFrontCamera.value });
   };
 
-  // 美化：进入 detail 面板内联美颜调节模式（原地横滑切换，边看预览边调）。
   const handleBeauty = () => {
     beautyMode.value = true;
   };
 
-  // 主播资料（面板顶部展示）：从当前直播间 currentLive.liveOwner 派生，
-  // 昵称优先 userName，缺省回退 userID；头像缺省用占位图。
   const anchorAvatarURL = computed(() => currentLive.value?.liveOwner?.avatarURL || defaultAvatarURL);
   const anchorName = computed(() => currentLive.value?.liveOwner?.userName || currentLive.value?.liveOwner?.userID || '');
 
-  // 头像实际渲染 URL：
-  // 1. nvue 里 <image> 从远端加载有偶发失败（CDN 抖动 / 请求被打断 / 内存回收），需要 @error 兜底。
-  //   触发 @error 后先切换到本地 fallback，避免用户看到空白。
-  // 2. 面板打开时，如果 avatarURL 已就绪但 image 请求生命周期已 unmount 过，可能不会自动重发请求；
-  //   watch(innerVisible) 里在打开瞬间先清空再赋值，强制触发 image 重新加载（"src 变化才发请求"）。
-  // @error 兜底头像：与主播信息胶囊保持一致，统一回退到 defaultAvatarURL（随包本地头像），
-  // 而不是本地 default-avatar.png（那会导致连麦面板默认头像和主播胶囊长得不一样）。
   const LOCAL_FALLBACK_AVATAR = defaultAvatarURL;
   const anchorAvatarDisplay = ref('');
   const applyAnchorAvatar = () => {
     const url = anchorAvatarURL.value;
-    // 先清空再赋值，跨过"同值不重发请求"的 diff 优化，强制重新加载。
     anchorAvatarDisplay.value = '';
     setTimeout(() => { anchorAvatarDisplay.value = url; }, 0);
   };
   const onAnchorAvatarError = () => {
-    // 远端图加载失败：回退到默认头像（与主播胶囊一致）；加守卫避免默认图本身失败时死循环。
     if (anchorAvatarDisplay.value !== LOCAL_FALLBACK_AVATAR) {
       anchorAvatarDisplay.value = LOCAL_FALLBACK_AVATAR;
     }
@@ -533,7 +501,6 @@
   const onAnchorAvatarLoad = () => {
     // 加载成功回调（保留 hook，方便后续扩展，比如埋点/淡入动画）。
   };
-  // 数据变化 / 面板打开时，都强制刷新一次头像加载。
   watch(anchorAvatarURL, () => { applyAnchorAvatar(); });
   watch(innerVisible, (val) => { if (val) applyAnchorAvatar(); }, { immediate: true });
 
@@ -542,8 +509,8 @@
   };
 
   onMounted(() => {
-    addCoGuestGuestListener(uni?.$liveID, 'onGuestApplicationResponded', handleGuestApplicationResponded)
-    addCoGuestGuestListener(uni?.$liveID, 'onGuestApplicationNoResponse', handleGuestApplicationNoResponse)
+    addCoGuestGuestListener(liveID.value, 'onGuestApplicationResponded', handleGuestApplicationResponded)
+    addCoGuestGuestListener(liveID.value, 'onGuestApplicationNoResponse', handleGuestApplicationNoResponse)
   })
 
   onUnmounted(() => {
@@ -552,62 +519,71 @@
     clearTimeout(cameraTestRetryTimer)
     clearTimeout(cameraFollowTimer)
     clearTimeout(cameraRelayoutTimer)
-    // 兜底：组件销毁时若摄像头测试预览仍开启，停止预览避免占用。
-    // 连麦中场景不做重开动作（组件销毁时用户已离开该页面场景）。
     if (detailMounted.value) {
       stopCameraTest()
     }
-    removeCoGuestGuestListener(uni?.$liveID, 'onGuestApplicationResponded', handleGuestApplicationResponded)
-    removeCoGuestGuestListener(uni?.$liveID, 'onGuestApplicationNoResponse', handleGuestApplicationNoResponse)
+    removeCoGuestGuestListener(liveID.value, 'onGuestApplicationResponded', handleGuestApplicationResponded)
+    removeCoGuestGuestListener(liveID.value, 'onGuestApplicationNoResponse', handleGuestApplicationNoResponse)
   })
 
+
+  const finalizeAccepted = () => {
+    if (uni.$localGuestStatus === 'CONNECTED') return;
+    uni.$localGuestStatus = 'CONNECTED'
+    guestStatus.value = 'CONNECTED'
+    emit('statusChange', 'CONNECTED')
+    if (currentCoGuestType.value === 'video') {
+      openLocalCamera({
+        isFront: isFrontCamera.value !== false,
+        success: () => {
+          console.log('openLocalCamera success.');
+        },
+        fail: (errCode, errMsg) => {
+          console.error(`openLocalCamera fail errCode: ${errCode}, errMsg: ${errMsg}`);
+        },
+      });
+    }
+    openLocalMicrophone({
+      success: () => {
+        console.log('openLocalMicrophone success.');
+      },
+      fail: (errCode, errMsg) => {
+        console.error(`openLocalMicrophone fail errCode: ${errCode}, errMsg: ${errMsg}`);
+      },
+    });
+    if (detailMounted.value) {
+      closeCoMicDetail();
+    }
+    emit('update:modelValue', false);
+    emit('accepted');
+  };
 
   const handleGuestApplicationResponded = (event) => {
     const res = JSON.parse(event)
     if (res.isAccept) {
-      uni.$localGuestStatus = 'CONNECTED'
-      guestStatus.value = 'CONNECTED'
-      if (currentCoGuestType.value === 'video') {
-        // 跟随上麦前在"画面调整"面板设置的前后置(翻转镜头改的是全局 isFrontCamera),
-        // 而非硬编码前置——保证上麦成功后的画面与预览时一致。
-        openLocalCamera({
-          isFront: isFrontCamera.value !== false,
-          success: () => {
-            console.log('openLocalCamera success.');
-          },
-          fail: (errCode, errMsg) => {
-            console.error(`openLocalCamera fail errCode: ${errCode}, errMsg: ${errMsg}`);
-          },
-        });
-      }
-      openLocalMicrophone({
-        success: () => {
-          console.log('openLocalMicrophone success.');
-        },
-        fail: (errCode, errMsg) => {
-          console.error(`openLocalMicrophone fail errCode: ${errCode}, errMsg: ${errMsg}`);
-        },
-      });
-      // 连麦被主播接通：drawer 自动收起，同时通知父组件展开控制条。
-      // 仅当 detail 面板正开着时才收起它；若 detail 没开（常见场景），
-      // 不调 closeCoMicDetail，避免其 stopCameraTest 干扰刚 openLocalCamera 打开的摄像头流。
-      if (detailMounted.value) {
-        closeCoMicDetail();
-      }
-      emit('update:modelValue', false);
-      emit('accepted');
+      finalizeAccepted();
     } else {
       uni.$localGuestStatus = 'IDLE'
       guestStatus.value = 'IDLE'
+      emit('statusChange', 'IDLE')
       showTip(t('request_rejected'));
     }
   }
+
+  watch(connected, (newList) => {
+    const list = Array.isArray(newList) ? newList : [];
+    const hasSelf = list.some((item: any) => item?.userID && item?.userID === props.userID);
+    if (hasSelf && uni.$localGuestStatus === 'USER_APPLYING') {
+      finalizeAccepted();
+    }
+  }, { deep: true });
   const handleGuestApplicationNoResponse = (event) => {
     console.log('miles-test-handleGuestApplicationNoResponse', event)
     const res = JSON.parse(event)
     if (res.reason === NoResponseReason.TIMEOUT) {
       uni.$localGuestStatus = 'IDLE'
       guestStatus.value = 'IDLE'
+      emit('statusChange', 'IDLE')
       showTip(t('request_timeout'));
     }
   }
@@ -620,7 +596,7 @@
     currentCoGuestType.value = type
     applyForSeat({
       liveID: props.liveID,
-      seatIndex: props.seatIndex, // 申请上麦传 -1, 随机分配麦位, xinlxin 反馈
+      seatIndex: props.seatIndex,
       timeout: 30,
       success: () => {
       },
@@ -630,30 +606,26 @@
         }
         uni.$localGuestStatus = 'IDLE'
         guestStatus.value = 'IDLE'
+        emit('statusChange', 'IDLE')
       },
     });
     uni.$localGuestStatus = 'USER_APPLYING'
     // 申请后不关闭面板，按钮就地切换为"取消申请"单按钮。
     guestStatus.value = 'USER_APPLYING'
+    emit('statusChange', 'USER_APPLYING')
   }
 
-  // 取消连麦申请：取消后回到 IDLE，
-  // 面板保留（不关闭），按钮切回语音/视频双块，可重新选择。
   const handleCancelApplication = () => {
     cancelApplication({
       liveID: props.liveID,
     })
     uni.$localGuestStatus = 'IDLE'
     guestStatus.value = 'IDLE'
+    emit('statusChange', 'IDLE')
   }
 </script>
 
 <style>
-  /* 连麦面板特有样式。
-     容器/遮罩/抽屉/背景图/handle 等通用样式已抽离到 BaseDrawer.nvue。 */
-
-  /* 右上角"画面调整"设置按钮（.audience-co-mic-sheet-control.is-right，
-     top:18px→36rpx right:20px→40rpx；compact 36px→72rpx 圆形半透明底）。 */
   .sheet-control {
     position: absolute;
     top: 36rpx;
@@ -710,9 +682,6 @@
     font-weight: 600;
   }
 
-  /* 连麦方式按钮区：margin-top:44rpx，两块并排，宽度撑满内容区。
-     relative 承载绝对定位的斜边背景；圆角由容器控制（22rpx），
-     矩形斜边 PNG 的四角由 overflow:hidden 裁成圆角。 */
   .co-mic-actions {
     position: relative;
     flex-direction: row;

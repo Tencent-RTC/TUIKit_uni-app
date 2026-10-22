@@ -80,12 +80,16 @@
   .control-icons {
     flex-direction: row;
     align-items: center;
+    justify-content: center;
+    width: 52rpx;
+    height: 52rpx;
+    border-radius: 26rpx;
+    background-color: $live-dark-bg-overlay-22;
   }
 
   .control-icon {
-    width: 48rpx;
-    height: 48rpx;
-    margin-left: 16rpx;
+    width: 30rpx;
+    height: 30rpx;
   }
 
 

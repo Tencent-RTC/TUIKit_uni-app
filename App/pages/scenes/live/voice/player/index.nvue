@@ -14,7 +14,7 @@
       </view>
       <view class="header-right">
         <view class="control-icons" @tap="navigateBack()">
-          <image class="control-icon" src="/static/images/close.png" />
+          <image class="control-icon" src="/static/images/live/icon/close.png" />
         </view>
       </view>
     </view>
@@ -30,9 +30,9 @@
     />
 
     <view class="action-buttons">
-      <image class="action-btn action-btn-bg" v-if="uni.$localGuestStatus === 'IDLE'" @tap="handleCoGuestButtonClick" src="/static/images/live/live-co-guest.png" mode="aspectFit" />
-      <image class="action-btn action-btn-bg" v-if="uni.$localGuestStatus === 'USER_APPLYING'" @tap="ShowCoGuestRequestPanel()" src="/static/images/live-request.png" />
-      <image class="action-btn action-btn-bg" v-if="uni.$localGuestStatus === 'CONNECTED'" @tap="ShowCoGuestRequestPanel()" src="/static/images/live-disconnect.png" />
+      <image class="action-btn action-btn-bg" v-if="uni.$localGuestStatus === 'IDLE'" @tap="handleCoGuestButtonClick" src="/static/images/live/icon/co-guest.png" mode="aspectFit" />
+      <image class="action-btn action-btn-bg" v-if="uni.$localGuestStatus === 'USER_APPLYING'" @tap="ShowCoGuestRequestPanel()" src="/static/images/live/icon/co-guest-request.png" />
+      <image class="action-btn action-btn-bg" v-if="uni.$localGuestStatus === 'CONNECTED'" @tap="ShowCoGuestRequestPanel()" src="/static/images/live/icon/co-guest-disconnect.png" />
     </view>
 
     <OptionSheet v-model="isShowExitSheet" :title="exitSheetTitle" :itemList="exitSheetItems" @select="onExitSheetSelect" />
@@ -71,16 +71,17 @@
   });
 
   const { loginUserInfo } = useLoginState();
+  const liveID = ref('');
   const { joinLive, leaveLive, currentLive, addLiveListListener, removeLiveListListener } = useLiveListState();
-  const { seatList, speakingUsers, muteMicrophone, unmuteMicrophone, addLiveSeatEventListener, removeLiveSeatEventListener } = useLiveSeatState(uni?.$liveID);
-  const { openLocalMicrophone, closeLocalMicrophone, microphoneStatus } = useDeviceState(uni?.$liveID);
-  const { applyForSeat, disconnect, cancelApplication, connected, addCoGuestGuestListener, removeCoGuestGuestListener } = useCoGuestState(uni?.$liveID);
+  const { seatList, speakingUsers, muteMicrophone, unmuteMicrophone, addLiveSeatEventListener, removeLiveSeatEventListener } = useLiveSeatState(liveID.value);
+  const { openLocalMicrophone, closeLocalMicrophone, microphoneStatus } = useDeviceState(liveID.value);
+  const { applyForSeat, disconnect, cancelApplication, connected, addCoGuestGuestListener, removeCoGuestGuestListener } = useCoGuestState(liveID.value);
 
   const systemInfo = ref<any>({});
   const defaultAvatarURL = '/uni_modules/tuikit-atomic-x/static/assets/live/default-avatar.png';
 
-  const liveID = ref('');
   const JOIN_FAIL_REDIRECT_MS = 500;
+
   const EXIT_REDIRECT_DELAY_MS = 1500;
 
   const isShowSeatActionSheet = ref(false);
@@ -138,7 +139,6 @@
     }
   }, { deep: true, immediate: true });
 
-  // 轻提示(LiveToast)状态:tipSeq 递增强制重建(重复触发时 v-model 同值不触发 watch)。
   const tipVisible = ref(false);
   const tipSeq = ref(0);
   const tipTitle = ref('');
@@ -153,9 +153,8 @@
 
   onLoad((options: any) => {
     console.warn('VoiceAudience onLoad = ', options);
-    // 与 videoView 一致:优先页面参数,再退全局,兜底 ''——避免 uni.$liveID 为
-    // undefined 时把 undefined 赋给 liveID 引发下游空指针。
-    liveID.value = options?.liveID || uni.$liveID || '';
+    // 与 videoView 一致:优先页面参数,兜底 ''——避免 undefined 赋给 liveID 引发下游空指针。
+    liveID.value = options?.liveID || '';
 
     if (liveID.value) {
       joinLive({
@@ -182,19 +181,19 @@
     });
     addLiveListListener('onLiveEnded', handleLiveEnded);
     addLiveListListener('onKickedOutOfLive', handleKickedOutOfLive);
-    addLiveSeatEventListener(uni?.$liveID, 'onLocalMicrophoneOpenedByAdmin', handleLocalMicrophoneOpenedByAdmin);
-    addLiveSeatEventListener(uni?.$liveID, 'onLocalMicrophoneClosedByAdmin', handleLocalMicrophoneClosedByAdmin);
-    addCoGuestGuestListener(uni?.$liveID, 'onGuestApplicationResponded', handleGuestApplicationResponded);
-    addCoGuestGuestListener(uni?.$liveID, 'onGuestApplicationNoResponse', handleGuestApplicationNoResponse);
+    addLiveSeatEventListener(liveID.value, 'onLocalMicrophoneOpenedByAdmin', handleLocalMicrophoneOpenedByAdmin);
+    addLiveSeatEventListener(liveID.value, 'onLocalMicrophoneClosedByAdmin', handleLocalMicrophoneClosedByAdmin);
+    addCoGuestGuestListener(liveID.value, 'onGuestApplicationResponded', handleGuestApplicationResponded);
+    addCoGuestGuestListener(liveID.value, 'onGuestApplicationNoResponse', handleGuestApplicationNoResponse);
   });
 
   onUnmounted(() => {
     removeLiveListListener('onLiveEnded', handleLiveEnded);
     removeLiveListListener('onKickedOutOfLive', handleKickedOutOfLive);
-    removeLiveSeatEventListener(uni?.$liveID, 'onLocalMicrophoneOpenedByAdmin', handleLocalMicrophoneOpenedByAdmin);
-    removeLiveSeatEventListener(uni?.$liveID, 'onLocalMicrophoneClosedByAdmin', handleLocalMicrophoneClosedByAdmin);
-    removeCoGuestGuestListener(uni?.$liveID, 'onGuestApplicationResponded', handleGuestApplicationResponded);
-    removeCoGuestGuestListener(uni?.$liveID, 'onGuestApplicationNoResponse', handleGuestApplicationNoResponse);
+    removeLiveSeatEventListener(liveID.value, 'onLocalMicrophoneOpenedByAdmin', handleLocalMicrophoneOpenedByAdmin);
+    removeLiveSeatEventListener(liveID.value, 'onLocalMicrophoneClosedByAdmin', handleLocalMicrophoneClosedByAdmin);
+    removeCoGuestGuestListener(liveID.value, 'onGuestApplicationResponded', handleGuestApplicationResponded);
+    removeCoGuestGuestListener(liveID.value, 'onGuestApplicationNoResponse', handleGuestApplicationNoResponse);
   });
 
   const handleLocalMicrophoneOpenedByAdmin = () => {
@@ -208,10 +207,9 @@
   const handleLiveEnded = () => {
     removeLiveListListener('onLiveEnded', handleLiveEnded);
     removeLiveListListener('onKickedOutOfLive', handleKickedOutOfLive);
-    removeLiveSeatEventListener(uni?.$liveID, 'onLocalMicrophoneOpenedByAdmin', handleLocalMicrophoneOpenedByAdmin);
-    removeLiveSeatEventListener(uni?.$liveID, 'onLocalMicrophoneClosedByAdmin', handleLocalMicrophoneClosedByAdmin);
+    removeLiveSeatEventListener(liveID.value, 'onLocalMicrophoneOpenedByAdmin', handleLocalMicrophoneOpenedByAdmin);
+    removeLiveSeatEventListener(liveID.value, 'onLocalMicrophoneClosedByAdmin', handleLocalMicrophoneClosedByAdmin);
     showTip(t('audience.liveEnded'));
-    uni.$liveID = '';
     // 同"被踢出":延迟跳转,让 toast 先显示再跳回列表页(否则页面秒销毁看不到提示)。
     setTimeout(() => {
       uni.redirectTo({ url: '/pages/scenes/live/voice/liveList/index' });
@@ -221,10 +219,9 @@
   const handleKickedOutOfLive = () => {
     removeLiveListListener('onLiveEnded', handleLiveEnded);
     removeLiveListListener('onKickedOutOfLive', handleKickedOutOfLive);
-    removeLiveSeatEventListener(uni?.$liveID, 'onLocalMicrophoneOpenedByAdmin', handleLocalMicrophoneOpenedByAdmin);
-    removeLiveSeatEventListener(uni?.$liveID, 'onLocalMicrophoneClosedByAdmin', handleLocalMicrophoneClosedByAdmin);
+    removeLiveSeatEventListener(liveID.value, 'onLocalMicrophoneOpenedByAdmin', handleLocalMicrophoneOpenedByAdmin);
+    removeLiveSeatEventListener(liveID.value, 'onLocalMicrophoneClosedByAdmin', handleLocalMicrophoneClosedByAdmin);
     showTip(t('audience.kickedOut'));
-    uni.$liveID = '';
     // showTip 的 toast 挂在当前页面,同步 redirectTo 会秒销毁页面导致 toast 看不到,
     // 延迟跳转让提示先显示一会儿(≈1.5s)再跳回列表页。
     setTimeout(() => {
@@ -246,18 +243,17 @@
   const onExitSheetSelect = (res: { tapIndex: number }) => {
     const index = res.tapIndex;
     if (uni.$localGuestStatus === 'CONNECTED' && index === 0) {
-      disconnect({ liveID: uni?.$liveID });
+      disconnect({ liveID: liveID.value });
       uni.$localGuestStatus = 'IDLE';
       return;
     }
     if ((uni.$localGuestStatus === 'CONNECTED' && index === 1) || (uni.$localGuestStatus !== 'CONNECTED' && index === 0)) {
       if (uni.$localGuestStatus === 'CONNECTED') {
         disconnect({
-          liveID: uni?.$liveID,
+          liveID: liveID.value,
           success: () => {
             leaveLive({
               success: () => {
-                uni.$liveID = '';
                 uni.redirectTo({ url: '/pages/scenes/live/voice/liveList/index' });
               }
             });
@@ -269,7 +265,6 @@
       }
       leaveLive({
         success: () => {
-          uni.$liveID = '';
           uni.redirectTo({ url: '/pages/scenes/live/voice/liveList/index' });
         }
       });
@@ -280,7 +275,7 @@
     if (uni.$localGuestStatus === 'IDLE') {
       showTip(t('voice.requestSubmitted'));
       applyForSeat({
-        liveID: uni.$liveID,
+        liveID: liveID.value,
         seatIndex: -1,
         timeout: 30,
         success: () => {
@@ -342,11 +337,11 @@
   const onSeatActionSelect = (res: { tapIndex: number }) => {
     if (res.tapIndex === 0) {
       if (isMicOn.value) {
-        muteMicrophone({ liveID: uni.$liveID });
+        muteMicrophone({ liveID: liveID.value });
         closeLocalMicrophone();
       } else {
         unmuteMicrophone({
-          liveID: uni.$liveID,
+          liveID: liveID.value,
           success: () => {
             openLocalMicrophone();
           },
@@ -360,10 +355,10 @@
 
   const onCoGuestSheetSelect = (res: { tapIndex: number }) => {
     if (uni.$localGuestStatus === 'CONNECTED' && res.tapIndex === 0) {
-      disconnect({ liveID: uni?.$liveID });
+      disconnect({ liveID: liveID.value });
       uni.$localGuestStatus = 'IDLE';
     } else if (uni.$localGuestStatus === 'USER_APPLYING' && res.tapIndex === 0) {
-      cancelApplication({ liveID: uni?.$liveID });
+      cancelApplication({ liveID: liveID.value });
       uni.$localGuestStatus = 'IDLE';
     }
   };

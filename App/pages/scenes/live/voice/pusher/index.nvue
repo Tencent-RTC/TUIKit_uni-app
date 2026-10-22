@@ -54,7 +54,7 @@
           </view>
         </view>
         <view class="header-right">
-          <image class="control-icon" @tap="handleEndLive" src="/static/images/live-end.png" />
+          <image class="control-icon" @tap="handleEndLive" src="/static/images/live/icon/end-live.png" />
         </view>
       </view>
 
@@ -72,7 +72,7 @@
         <view class="live-action-buttons">
           <view class="live-action-item" @tap="showCoGuestPanel">
             <view class="action-icon-wrapper">
-              <image class="live-action-icon co-mic-btn" src="/static/images/live/live-co-guest.png" mode="aspectFit" />
+              <image class="live-action-icon co-mic-btn" src="/static/images/live/icon/co-guest.png" mode="aspectFit" />
               <view v-if="applicantCount > 0" class="badge">
                 <text class="badge-text">{{ applicantCount > 99 ? '99+' : applicantCount }}</text>
               </view>
@@ -158,6 +158,7 @@
   import { useDeviceState, DeviceStatus } from "@/uni_modules/tuikit-atomic-x/state/DeviceState";
   import { useLiveSeatState } from "@/uni_modules/tuikit-atomic-x/state/LiveSeatState";
   import { useCoGuestState } from "@/uni_modules/tuikit-atomic-x/state/CoGuestState";
+  import { getLiveErrorMessage } from "@/uni_modules/tuikit-atomic-x/utils/liveErrorHandler";
 
     const tipVisible = ref(false);
   const tipSeq = ref(0);
@@ -176,11 +177,11 @@
   });
 
   const { loginUserInfo } = useLoginState();
-  uni.$liveID = `voice_${uni.$userID}`;
+  const liveID = ref(`voice_${uni.$userID}`);
   const { createLive, endLive } = useLiveListState();
   const { openLocalMicrophone, closeLocalMicrophone, microphoneStatus } = useDeviceState();
-  const { seatList, speakingUsers, muteMicrophone, unmuteMicrophone } = useLiveSeatState(uni.$liveID);
-  const { applicants, acceptApplication, rejectApplication } = useCoGuestState(uni.$liveID);
+  const { seatList, speakingUsers, muteMicrophone, unmuteMicrophone } = useLiveSeatState(liveID.value);
+  const { applicants, acceptApplication, rejectApplication } = useCoGuestState(liveID.value);
 
   const systemInfo = ref<any>({});
   const safeArea = ref({ left: 0, right: 0, top: 0, bottom: 0, width: 375, height: 750 });
@@ -346,11 +347,11 @@
   const onSeatActionSelect = (res: { tapIndex: number }) => {
     if (res.tapIndex === 0) {
       if (isMicOn.value) {
-        muteMicrophone({ liveID: uni.$liveID });
+        muteMicrophone({ liveID: liveID.value });
         closeLocalMicrophone();
       } else {
         unmuteMicrophone({
-          liveID: uni.$liveID,
+          liveID: liveID.value,
           success: () => {
             openLocalMicrophone();
           },
@@ -372,7 +373,7 @@
 
   const handleAcceptApplication = (audience: any) => {
     acceptApplication({
-      liveID: uni.$liveID,
+      liveID: liveID.value,
       userID: audience?.userID,
       success: () => {
         console.log('acceptApplication success.');
@@ -385,7 +386,7 @@
 
   const handleRejectApplication = (audience: any) => {
     rejectApplication({
-      liveID: uni.$liveID,
+      liveID: liveID.value,
       userID: audience?.userID,
       success: () => {
         console.log('rejectApplication success.');
@@ -399,7 +400,7 @@
   const handleStartLive = () => {
     createLive({
       liveInfo: {
-        liveID: uni.$liveID,
+        liveID: liveID.value,
         liveName: liveTitle.value || defaultLiveTitle.value,
         coverURL: coverURL.value,
         keepOwnerOnSeat: true,
@@ -413,8 +414,8 @@
         isStartLive.value = true;
       },
       fail: (errCode: any, errMsg: any) => {
-        console.log('创建语聊房失败', errCode, errMsg);
-        showTip(t('voice.createFailed'));
+        console.error(`createLive fail errCode: ${errCode}, errMsg: ${errMsg}`);
+        showTip(`${t('voice.createFailed')}: ${getLiveErrorMessage(errCode)}`);
       },
     });
   };
@@ -427,7 +428,6 @@
     if (res.tapIndex === 0) {
       endLive({
         success: () => {
-          uni.$liveID = ''
           uni.redirectTo({ url: '/pages/scenes/live/voice/liveList/index' });
         },
       });

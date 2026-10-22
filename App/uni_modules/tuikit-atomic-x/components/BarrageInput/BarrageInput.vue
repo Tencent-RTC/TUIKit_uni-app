@@ -11,13 +11,16 @@
   import { ref, computed, watch, onMounted, onUnmounted } from "vue";
   import { useBarrageState } from "@/uni_modules/tuikit-atomic-x/state/BarrageState";
   import { useLiveAudienceState } from '@/uni_modules/tuikit-atomic-x/state/LiveAudienceState';
+  import { useLiveListState } from '@/uni_modules/tuikit-atomic-x/state/LiveListState';
   import { transformEmojiNameToKey } from '@/uni_modules/tuikit-atomic-x/utils/emojiUtils';
   import { t, getSystemLanguage } from '../locales';
 
   const placeholderRef = ref<any>(null);
 
-  const { sendTextMessage } = useBarrageState(uni?.$liveID);
-  const { messageBannedUserList } = useLiveAudienceState(uni?.$liveID);
+  const { currentLive } = useLiveListState();
+  const liveID = computed(() => String(currentLive.value?.liveID || ''));
+  const { sendTextMessage } = useBarrageState(liveID.value);
+  const { messageBannedUserList } = useLiveAudienceState(liveID.value);
 
   const isDisableSendMessage = ref(false);
   const entryPlaceholder = computed(() => isDisableSendMessage.value ? t('bi.bannedPlaceholder') : t('bi.placeholder'));
@@ -426,7 +429,7 @@
     }
     const textToSend = transformEmojiNameToKey(raw);
     sendTextMessage({
-      liveID: uni?.$liveID,
+      liveID: liveID.value,
       text: textToSend,
       success: () => {},
       fail: (code: any, msg: any) => { console.error(`sendTextMessage failed, code: ${code}, msg: ${msg}`); },
