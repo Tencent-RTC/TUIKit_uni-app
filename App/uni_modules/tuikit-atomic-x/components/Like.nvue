@@ -30,8 +30,9 @@
 </template>
 
 <script setup lang="ts">
-  import { ref, onMounted, onUnmounted } from 'vue';
+  import { ref, computed, onMounted, onUnmounted } from 'vue';
   import { useLikeState } from "@/uni_modules/tuikit-atomic-x/state/LikeState";
+  import { useLiveListState } from "@/uni_modules/tuikit-atomic-x/state/LiveListState";
 
   const props = defineProps({
     role: {
@@ -50,7 +51,9 @@
     },
   });
 
-  const { sendLike, addLikeListener, removeLikeListener } = useLikeState(uni.$liveID);
+  const { currentLive } = useLiveListState();
+  const liveID = computed(() => String(currentLive.value?.liveID || ''));
+  const { sendLike, addLikeListener, removeLikeListener } = useLikeState(liveID.value);
 
   // nvue 原生 animation 模块：直接对按钮元素 ref 执行 transform/opacity 动画（与底部操作按钮统一），
   // 不依赖 CSS transition（nvue Weex 上 class/style 切 transform 不稳定）。
@@ -258,7 +261,7 @@
     pendingCount.value = 0;
     lastSendAt = Date.now();
     sendLike({
-      liveID: uni.$liveID,
+      liveID: liveID.value,
       count,
       success: () => { /* noop */ },
       fail: (code: any, msg: any) => {
@@ -301,11 +304,11 @@
   }
 
   onMounted(() => {
-    addLikeListener(uni.$liveID, 'onReceiveLikesMessage', handleReceiveLikesMessage);
+    addLikeListener(liveID.value, 'onReceiveLikesMessage', handleReceiveLikesMessage);
   });
 
   onUnmounted(() => {
-    removeLikeListener(uni.$liveID, 'onReceiveLikesMessage', handleReceiveLikesMessage);
+    removeLikeListener(liveID.value, 'onReceiveLikesMessage', handleReceiveLikesMessage);
     if (rafTimer != null) { clearTimeout(rafTimer); rafTimer = null; }
     if (batchTimer != null) { clearTimeout(batchTimer); batchTimer = null; }
     if (likeBtnReleaseTimer != null) { clearTimeout(likeBtnReleaseTimer); likeBtnReleaseTimer = null; }

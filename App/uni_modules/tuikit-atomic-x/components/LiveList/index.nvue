@@ -94,7 +94,6 @@
   // 进入直播间
   const handleJoinLive = async (live) => {
     try {
-      uni.$liveID = live.liveID;
       const isVoiceRoom = (live.liveID || '').startsWith('voice');
 
       if (live?.liveOwner?.userID === uni.$userID) {

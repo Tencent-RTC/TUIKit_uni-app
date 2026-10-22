@@ -1,5 +1,5 @@
 <template>
-  <view class="top-operate-bar">
+  <view class="top-operate-bar" :style="{ top: topOffsetPx + 'px' }">
     <view class="top-bar-left">
       <view class="anchor-info">
         <image class="avatar" :src="anchorAvatar" mode="aspectFill" @error="onAvatarError" />
@@ -8,7 +8,7 @@
           <text class="anchor-meta" :numberOfLines="1">{{ anchorMetaText }}</text>
         </view>
         <view class="fan-club-button" @tap.stop="emit('fanClubTap')">
-          <image class="fan-club-icon" src="/static/images/live/fan-club-button.png" mode="scaleToFill" />
+          <image class="fan-club-icon" src="/static/images/live/icon/fan-club.png" mode="scaleToFill" />
         </view>
       </view>
     </view>
@@ -37,26 +37,41 @@
         </view>
       </view>
       <view class="control-icons" @tap="emit('endTap')">
-        <image class="control-icon" src="/static/images/close.png" mode="aspectFill" />
+        <image class="control-icon" src="/static/images/live/icon/close.png" mode="aspectFill" />
       </view>
     </view>
   </view>
 </template>
 
 <script setup lang="ts">
-  import { ref, computed, onMounted, onUnmounted } from 'vue';
+  import { ref, computed, watch, onMounted } from 'vue';
   import { useGiftState } from '@/uni_modules/tuikit-atomic-x/state/GiftState';
   import { useLiveAudienceState } from '@/uni_modules/tuikit-atomic-x/state/LiveAudienceState';
   import { useLikeState } from '@/uni_modules/tuikit-atomic-x/state/LikeState';
+  import { useLiveListState } from '@/uni_modules/tuikit-atomic-x/state/LiveListState';
   import { useLoginState } from '@/uni_modules/tuikit-atomic-x/state/LoginState';
   import { t } from '../../../../locales';
 
+  const props = defineProps<{
+    liveID?: string,
+  }>();
   const emit = defineEmits(['audienceTap', 'endTap', 'fanClubTap']);
 
   const { loginUserInfo } = useLoginState();
-  const { audienceList, audienceCount } = useLiveAudienceState(uni?.$liveID);
-  const { totalLikeCount } = useLikeState(uni?.$liveID);
-  const { addGiftListener, removeGiftListener } = useGiftState(uni?.$liveID);
+  const { currentLive } = useLiveListState();
+  const liveID = computed(() => props.liveID || String(currentLive.value?.liveID || ''));
+  const { audienceList, audienceCount } = useLiveAudienceState(liveID.value);
+  const { totalLikeCount } = useLikeState(liveID.value);
+  const { addGiftListener, removeGiftListener } = useGiftState(liveID.value);
+
+  const topOffsetPx = (() => {
+    try {
+      const statusBarTop = (uni.getSystemInfoSync().safeArea as any)?.top || 0;
+      return uni.upx2px(40) - statusBarTop + 8;
+    } catch (e) {
+      return uni.upx2px(40);
+    }
+  })();
 
   const defaultAvatarURL = '/uni_modules/tuikit-atomic-x/static/assets/live/default-avatar.png';
   const RANKED_AVATAR_COUNT = 3;
@@ -135,8 +150,13 @@
   });
   const viewerCountText = computed(() => formatCountValue(currentAudienceCount.value));
 
-  onMounted(() => { addGiftListener(uni?.$liveID, 'onReceiveGift', onReceiveGift); });
-  onUnmounted(() => { removeGiftListener(uni?.$liveID, 'onReceiveGift', onReceiveGift); });
+  onMounted(() => {
+    watch(liveID, (id, _, onCleanup) => {
+      if (!id) return;
+      addGiftListener(id, 'onReceiveGift', onReceiveGift);
+      onCleanup(() => removeGiftListener(id, 'onReceiveGift', onReceiveGift));
+    }, { immediate: true });
+  });
 </script>
 
 <style lang="scss">

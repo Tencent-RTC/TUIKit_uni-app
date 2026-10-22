@@ -79,7 +79,6 @@ function bindEvent(liveID: string): void {
   }, (data: string) => {
     try {
       const result = safeJsonParse<any>(data, {});
-      console.log(`[${liveID}][summaryData] Data:`, result);
       summaryData.value = safeJsonParse<LiveSummaryDataParam | null>(result.summaryData, null);
     } catch (error) {
       console.error(`[${liveID}][summaryData] Error:`, error);

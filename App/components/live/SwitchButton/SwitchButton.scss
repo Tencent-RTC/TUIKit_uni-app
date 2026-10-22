@@ -1,0 +1,33 @@
+.switch-button-track {
+  position: relative;
+  width: 88rpx;
+  height: 44rpx;
+  background-color: rgba(79, 88, 107, 0.3);
+  border-top-left-radius: 22rpx;
+  border-top-right-radius: 22rpx;
+  border-bottom-left-radius: 22rpx;
+  border-bottom-right-radius: 22rpx;
+  transition-property: background-color;
+  transition-duration: 0.15s;
+  transition-timing-function: ease-out;
+}
+
+.switch-button-track-on {
+  background-color: #007AFF;
+}
+
+.switch-button-thumb {
+  position: absolute;
+  top: 4rpx;
+  left: 4rpx;
+  width: 36rpx;
+  height: 36rpx;
+  background-color: #FFFFFF;
+  border-top-left-radius: 18rpx;
+  border-top-right-radius: 18rpx;
+  border-bottom-left-radius: 18rpx;
+  border-bottom-right-radius: 18rpx;
+  transition-property: transform;
+  transition-duration: 0.15s;
+  transition-timing-function: ease-out;
+}

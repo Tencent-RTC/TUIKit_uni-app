@@ -3,14 +3,14 @@
     <!-- systemInfo 异步填充,首帧 safeArea/windowHeight 为 undefined,
          裸访问会抛全局报错;全部字段加 || 兜底,首帧以 0 渲染、回调后校正。 -->
     <view class="live-stream-view-content" :class="{ 'audience-mode': !isAnchor }" @touchend.stop="" :style="{
-                top: isAnchor ? (((systemInfo.safeArea || {}).top || 0) + 'px') : '0px',
-                left: isAnchor ? '0px' : '0px',
+                top: '0px',
+                left: '0px',
                 width: isAnchor ? (safeArea.width + 'px') : (viewWidthPx + 'px'),
-                height: isAnchor ? (((systemInfo.safeArea || {}).height || 0) + 'px') : (((systemInfo.windowHeight || 0) + 'px')),
+                height: isAnchor ? (((Number(safeArea.top) || 0) + (Number(safeArea.height) || 0)) + 'px') : (((systemInfo.windowHeight || 0) + 'px')),
               }">
       <!-- 主播模式：显示默认头像 -->
       <view v-if="isAnchor && cameraStatus === DeviceStatus.OFF && seatList.length === 1 && isLiving" class="default-avatar"
-        :style="{ top: safeArea.height * 1/2 + 'px' }">
+        :style="{ top: streamViewHeight * 1/2 + 'px' }">
         <image style="width: 96rpx; height: 96rpx; border-radius: 99px;"
           :src="loginUserInfo.avatarURL || defaultAvatarURL" />
       </view>
@@ -158,6 +158,9 @@
   import {
     useCoGuestState
   } from "@/uni_modules/tuikit-atomic-x/state/CoGuestState";
+  import {
+    useLiveListState
+  } from "@/uni_modules/tuikit-atomic-x/state/LiveListState";
   import LiveStreamActionPanel from '@/uni_modules/tuikit-atomic-x/components/LiveStreamView/LiveStreamActionPanel.nvue';
 
   const props = defineProps({
@@ -196,15 +199,19 @@
     loginUserInfo
   } = useLoginState();
   const {
+    currentLive
+  } = useLiveListState();
+  const liveID = computed(() => props.liveID || String(currentLive.value?.liveID || ''));
+  const {
     connected,
     coHostStatus
-  } = useCoHostState(uni?.$liveID);
+  } = useCoHostState(liveID.value);
   const {
     cameraStatus
   } = useDeviceState();
   const {
     connected: audienceConnected
-  } = useCoGuestState(uni?.$liveID)
+  } = useCoGuestState(liveID.value)
   const standardWidth = 750;
   let standardHeight = standardWidth * 16 / 9;
   const safeArea = ref({
@@ -412,7 +419,7 @@
         }
 
         if (props.isAnchor) {
-          streamViewHeight.value = systemInfo.value.safeArea.height - bottomPanelHeight.value;
+          streamViewHeight.value = (systemInfo.value.safeArea?.top || 0) + (systemInfo.value.safeArea?.height || 0) - bottomPanelHeight.value;
         } else {
           streamViewHeight.value = systemInfo.value.windowHeight;
         }
@@ -644,7 +651,7 @@
   watch(seatList, (newValue) => {
     if ((newValue || []).length > 1 && canvas.value?.w && canvas.value?.h) {
       if (props.isAnchor) {
-        streamViewHeight.value = systemInfo.value.safeArea.height - bottomPanelHeight.value;
+        streamViewHeight.value = (systemInfo.value.safeArea?.top || 0) + (systemInfo.value.safeArea?.height || 0) - bottomPanelHeight.value;
       } else {
         streamViewHeight.value = systemInfo.value.windowHeight;
       }

@@ -1,63 +1,132 @@
 <template>
-  <view class="live-summary-view">
-    <image class="live-summary-back-btn" src="/static/images/close.png" mode="aspectFit" @tap="emit('close')" />
-    <view class="live-summary-header">
-      <text class="live-summary-title">{{ t('anchor.liveEnded') }}</text>
-      <text class="live-summary-duration">{{ t('anchor.summaryDuration') }} {{ durationText }}</text>
-    </view>
-    <view class="live-summary-stats-card">
-      <view v-for="(row, rowIndex) in statRows" :key="rowIndex" class="live-summary-stats-row">
-        <view v-for="item in row" :key="item.label" class="live-summary-stats-item">
-          <text class="live-summary-stats-value">{{ item.value }}</text>
-          <text class="live-summary-stats-label">{{ item.label }}</text>
+  <view class="summary-page">
+    <image class="summary-page-bg" :style="{ height: screenHeight + 'px' }" src="/static/images/live/background/summary-bg.png" mode="scaleToFill" />
+    <view class="summary-header" :style="{ paddingTop: statusBarHeight + 'px' }">
+      <view class="summary-header-row">
+        <view class="summary-back" @tap="emit('close')">
+          <image class="summary-back-icon" src="/static/images/live/icon/summary-back.png" mode="aspectFit" />
         </view>
+        <text class="summary-header-title">{{ t('anchor.summaryTitle') }}</text>
+        <view class="summary-header-spacer" />
       </view>
     </view>
+    <scroll-view class="summary-scroll" scroll-y :show-scrollbar="false">
+      <view class="summary-hero">
+        <view class="hero-ring">
+          <view class="hero-mark">
+            <view class="hero-check" />
+          </view>
+        </view>
+        <text class="hero-ended">{{ t('anchor.liveEnded') }}</text>
+        <text class="hero-time-range">{{ timeRangeText }}</text>
+        <text class="hero-duration-label">{{ t('anchor.summaryDuration') }}</text>
+        <text class="hero-duration">{{ durationText }}</text>
+        <view v-if="pausedSeconds > 0" class="hero-pause">
+          <text class="hero-pause-label">{{ t('anchor.pausedDuration') }}</text>
+          <text class="hero-pause-value">{{ pauseText }}</text>
+        </view>
+      </view>
+      <view class="summary-section">
+        <text class="summary-section-title">{{ t('anchor.sessionData') }}</text>
+      </view>
+      <view v-for="(row, rowIndex) in statRows" :key="rowIndex" class="summary-grid-row">
+        <view
+          v-for="item in row"
+          :key="item.key"
+          :class="['summary-stat', 'summary-stat--' + item.key]"
+        >
+          <view class="summary-stat-mark" />
+          <text class="summary-stat-label">{{ t(item.labelKey) }}</text>
+          <view class="summary-stat-value-row">
+            <text class="summary-stat-value">{{ formatCount(item.value) }}</text>
+            <text class="summary-stat-unit">{{ t(item.unitKey) }}</text>
+          </view>
+        </view>
+      </view>
+    </scroll-view>
   </view>
 </template>
 
-<script setup lang="ts">
+<script setup>
   import { computed } from 'vue';
   import { t } from '../../../../locales';
 
   const props = defineProps({
     summary: {
       type: Object,
-      default: () => null,
+      default: null,
     },
     liveDuration: {
       type: Number,
       default: 0,
     },
-  });
+    startTime: {
+      type: Number,
+      default: 0,
+    },
+    endedAt: {
+      type: Number,
+      default: 0,
+    },
+    pausedSeconds: {
+      type: Number,
+      default: 0,
+    },
+  })
 
-  const emit = defineEmits(['close']);
+  const emit = defineEmits(['close'])
 
-  const formatCount = (value: any) => {
-    const num = Number(value);
-    if (!Number.isFinite(num) || num < 0) return '--';
-    if (num >= 10000) return `${(num / 10000).toFixed(1)}${t('common.wanUnit')}`;
-    return String(num);
-  };
+  let statusBarHeight = 0;
+  let screenHeight = 0;
+  try {
+    const info = uni.getSystemInfoSync();
+    statusBarHeight = info?.statusBarHeight || 0;
+    screenHeight = info?.screenHeight || info?.windowHeight || 0;
+  } catch (e) {}
 
-  const formatDuration = (seconds: any) => {
+  const formatCount = (value = 0) => {
+    const n = Number(value) || 0;
+    return n >= 10000 ? `${(n / 10000).toFixed(1)}${t('common.wanUnit')}` : `${n}`;
+  }
+
+  const formatDuration = (seconds = 0) => {
     const total = Math.max(0, Math.floor(Number(seconds) || 0));
     const h = String(Math.floor(total / 3600)).padStart(2, '0');
     const m = String(Math.floor((total % 3600) / 60)).padStart(2, '0');
     const s = String(total % 60).padStart(2, '0');
     return `${h}:${m}:${s}`;
-  };
+  }
 
+  const formatHHmm = (ms = 0) => {
+    const v = Number(ms) || 0;
+    if (v <= 0) return '--:--';
+    const d = new Date(v);
+    const h = String(d.getHours()).padStart(2, '0');
+    const m = String(d.getMinutes()).padStart(2, '0');
+    return `${h}:${m}`;
+  }
+
+  const timeRangeText = computed(() => `${formatHHmm(props.startTime)} ~ ${formatHHmm(props.endedAt)}`);
   const durationText = computed(() => formatDuration(props.liveDuration));
+  const pauseText = computed(() => formatDuration(props.pausedSeconds));
 
-  const statItems = computed(() => [
-    { value: formatCount(props.summary?.totalViewers), label: t('anchor.summaryViewers') },
-    { value: formatCount(props.summary?.totalLikesReceived), label: t('anchor.summaryLikes') },
-    { value: formatCount(props.summary?.totalGiftCoins), label: t('anchor.summaryGiftCoins') },
-    { value: formatCount(props.summary?.totalGiftUniqueSenders), label: t('anchor.summaryGiftSenders') },
-  ]);
+  const STATS = [
+    { key: 'gifts', valueKey: 'totalGiftsSent', labelKey: 'anchor.summaryGifts', unitKey: 'anchor.unitItems' },
+    { key: 'coins', valueKey: 'totalGiftCoins', labelKey: 'anchor.summaryGiftCoins', unitKey: 'anchor.unitCoins' },
+    { key: 'viewers', valueKey: 'totalViewers', labelKey: 'anchor.summaryViewers', unitKey: 'anchor.unitPeople' },
+    { key: 'comments', valueKey: 'totalMessageSent', labelKey: 'anchor.summaryComments', unitKey: 'anchor.unitMessages' },
+    { key: 'senders', valueKey: 'totalGiftUniqueSenders', labelKey: 'anchor.summaryGiftSenders', unitKey: 'anchor.unitPeople' },
+    { key: 'likes', valueKey: 'totalLikesReceived', labelKey: 'anchor.summaryLikes', unitKey: 'anchor.unitTimes' },
+  ];
 
-  const statRows = computed(() => [statItems.value.slice(0, 2), statItems.value.slice(2)]);
+  const statRows = computed(() => {
+    const items = STATS.map(item => ({
+      ...item,
+      value: Number(props.summary?.[item.valueKey] || 0),
+    }));
+    return [items.slice(0, 2), items.slice(2, 4), items.slice(4, 6)];
+  });
+
 </script>
 
 <style lang="scss">

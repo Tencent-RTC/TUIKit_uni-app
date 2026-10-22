@@ -58,14 +58,17 @@
 <script setup>
   import { ref, computed } from 'vue';
   import { useGiftState } from '@/uni_modules/tuikit-atomic-x/state/GiftState';
+  import { useLiveListState } from '@/uni_modules/tuikit-atomic-x/state/LiveListState';
   import { t } from '../locales';
+
+  const { currentLive } = useLiveListState();
+  const liveID = computed(() => String(currentLive.value?.liveID || ''));
+  const { sendGift } = useGiftState(liveID.value);
 
   const emit = defineEmits(['comboSend', 'closed']);
 
   // 涟漪动画用 nvue 原生 animation 模块驱动（iOS weex 上 CSS transition + class 切换不生效）。
   const animation = uni.requireNativePlugin('animation');
-
-  const { sendGift } = useGiftState(uni?.$liveID);
 
   // ============ 连击参数（与 GiftPicker 保持一致） ============
   const COMBO_DURATION = 2000;       // 连击窗口 2s
@@ -138,7 +141,7 @@
     pendingSendGiftID = '';
     lastFlushAt = Date.now();
     sendGift({
-      liveID: uni.$liveID,
+      liveID: liveID.value,
       giftID: giftID,
       count: count,
       success: () => {

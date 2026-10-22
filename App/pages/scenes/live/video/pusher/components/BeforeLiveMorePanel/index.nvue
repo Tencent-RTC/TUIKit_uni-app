@@ -12,71 +12,33 @@
       <text class="title">{{ t('anchor.moreSettings') }}</text>
 
       <view class="setting-list">
-        <view class="cap" @tap="handleNotSupported">
-          <view class="cap-icon">
-            <image class="cap-icon-img" src="/static/images/live/prepare-sticker.png" mode="aspectFit" />
-          </view>
-          <text class="cap-label">{{ t('morePanel.sticker') }}</text>
-        </view>
         <view class="cap" @tap="openQualityPanel">
           <view class="cap-icon">
-            <image class="cap-icon-img" src="/static/images/live/prepare-quality.png" mode="aspectFit" />
+            <image class="cap-icon-img" src="/static/images/live/icon/prepare-quality.png" mode="aspectFit" />
           </view>
-          <text class="cap-label">{{ t('morePanel.quality') }}</text>
+          <text class="cap-label">{{ qualityLabel }}</text>
         </view>
         <view class="cap" @tap="handleMirror">
           <view class="cap-icon">
             <image
               class="cap-icon-img"
-              :src="mirrorEnabled
-                ? '/static/images/live/prepare-mirror-on.png'
-                : '/static/images/live/prepare-mirror-off.png'"
+              :style="{ transform: mirrorEnabled ? 'scaleX(1)' : 'scaleX(-1)' }"
+              src="/static/images/live/icon/prepare-mirror-on.png"
               mode="aspectFit"
             />
           </view>
           <text class="cap-label">{{ t('morePanel.mirror') }}</text>
         </view>
-        <view class="cap" @tap="handleNotSupported">
+        <view class="cap" @tap="handleAudioEffect">
           <view class="cap-icon">
-            <image class="cap-icon-img" src="/static/images/live/prepare-sound-effect.png" mode="aspectFit" />
+            <image class="cap-icon-img" src="/static/images/live/icon/prepare-sound-effect.png" mode="aspectFit" />
           </view>
           <text class="cap-label">{{ t('anchor.soundEffect') }}</text>
         </view>
       </view>
     </BaseDrawer>
-    <BaseDrawer
-      v-model="qualityVisible"
-      :height="qualityDrawerHeight"
-      :overlayOpacity="0.5"
-      bgImage="/uni_modules/tuikit-atomic-x/static/assets/live/drawer-bg.png"
-      :bgImageHeight="710"
-      padding="0 0 60rpx 0"
-      :useSafeBottom="true"
-    >
-      <view class="quality-panel">
-        <text class="quality-title">{{ t('morePanel.switchQuality') }}</text>
-        <view class="quality-list">
-          <view
-            class="quality-item"
-            :class="{ 'quality-item-active': item.quality === currentQuality }"
-            v-for="item in qualityList"
-            :key="item.quality"
-            @tap="onSelectQuality(item)"
-          >
-            <text
-              class="quality-item-label"
-              :class="{ 'quality-item-label-active': item.quality === currentQuality }"
-            >{{ item.label }}</text>
-            <image
-              v-if="item.quality === currentQuality"
-              class="quality-item-check"
-              src="/uni_modules/tuikit-atomic-x/static/icon/checked.png"
-              mode="aspectFit"
-            />
-          </view>
-        </view>
-      </view>
-    </BaseDrawer>
+    <QualityPanel v-model="qualityVisible" />
+    <AudioEffectPanel v-model="isShowAudioEffect" />
   </view>
 </template>
 
@@ -85,6 +47,8 @@
   import { MirrorType, VideoQuality, useDeviceState } from '@/uni_modules/tuikit-atomic-x/state/DeviceState';
   import { t } from '../../../../locales';
   import BaseDrawer from '@/components/live/BaseDrawer/index.nvue';
+  import QualityPanel from '../QualityPanel/index.nvue';
+  import AudioEffectPanel from '@/uni_modules/tuikit-atomic-x/components/AudioEffectPanel';
 
   const props = defineProps({
     modelValue: {
@@ -95,14 +59,10 @@
 
   const emit = defineEmits(['update:modelValue', 'tip']);
 
-  const { localMirrorType, isFrontCamera, switchMirror, localVideoQuality, updateVideoQuality } = useDeviceState();
-
-  const qualityList = [
-    { quality: VideoQuality.QUALITY_1080P, label: '1080P' },
-    { quality: VideoQuality.QUALITY_720P, label: '720P' },
-  ];
+  const { localMirrorType, isFrontCamera, switchMirror, localVideoQuality } = useDeviceState();
 
   const qualityVisible = ref(false);
+  const isShowAudioEffect = ref(false);
 
   const innerVisible = computed({
     get: () => props.modelValue,
@@ -114,16 +74,10 @@
       || localMirrorType.value === MirrorType.ENABLE;
   });
 
-  const currentQuality = computed(() => {
+  const qualityLabel = computed(() => {
     const q = Number(localVideoQuality.value);
-    return qualityList.some((item) => item.quality === q)
-      ? q
-      : VideoQuality.QUALITY_720P;
-  });
-
-  const qualityDrawerHeight = computed(() => {
-    const rows = Math.max(1, qualityList.length);
-    return 224 + rows * 104;
+    if (q === VideoQuality.QUALITY_1080P) return t('morePanel.qualityUltra');
+    return t('morePanel.qualityHD');
   });
 
   const handleMirror = () => {
@@ -136,21 +90,13 @@
     });
   };
 
-  const handleNotSupported = () => {
-    emit('tip', t('morePanel.notSupported'));
-  };
-
   const openQualityPanel = () => {
     qualityVisible.value = true;
   };
 
-  const onSelectQuality = (item: { quality: VideoQuality; label: string }) => {
-    if (item.quality === currentQuality.value) {
-      qualityVisible.value = false;
-      return;
-    }
-    updateVideoQuality({ quality: item.quality });
-    qualityVisible.value = false;
+  const handleAudioEffect = () => {
+    innerVisible.value = false;
+    isShowAudioEffect.value = true;
   };
 
   watch(qualityVisible, (val, oldVal) => {

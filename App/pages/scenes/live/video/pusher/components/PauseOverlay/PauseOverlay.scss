@@ -1,0 +1,50 @@
+@import '../../../../styles/tokens.scss';
+
+.pause-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: $live-mask-90;
+  z-index: 999;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+}
+
+.pause-content {
+  flex-direction: column;
+  align-items: center;
+}
+
+.pause-title {
+  color: $live-dark-text-primary;
+  font-size: 42rpx;
+  font-weight: 600;
+}
+
+.pause-timer {
+  color: $live-dark-text-primary;
+  font-size: 72rpx;
+  font-weight: 600;
+  margin-top: 40rpx;
+}
+
+.pause-resume {
+  position: absolute;
+  bottom: 120rpx;
+  left: 170rpx;
+  right: 170rpx;
+  height: 96rpx;
+  border-radius: 20rpx;
+  background-color: $live-surface-white;
+  justify-content: center;
+  align-items: center;
+}
+
+.pause-resume-text {
+  color: $live-light-text-inverse;
+  font-size: 34rpx;
+  font-weight: 600;
+}

@@ -67,6 +67,7 @@
       "style": {
         "backgroundColor": "#000000",
         "navigationBarTextStyle": "white",
+        "navigationStyle": "custom",
         "app-plus": {
           "disableSwipeBack": true,
           "titleNView": false
@@ -79,6 +80,7 @@
       "style": {
         "backgroundColor": "#000000",
         "navigationBarTextStyle": "white",
+        "navigationStyle": "custom",
         "disableSwipeBack": true,
         "app-plus": {
           "titleNView": false

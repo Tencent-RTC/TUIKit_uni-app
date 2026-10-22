@@ -1,6 +1,6 @@
 <template>
   <view class="before-live-view">
-    <view class="navigate-back-arrow" @tap="goBack" :style="{ visibility: countdownVisible ? 'hidden' : 'visible' }">
+    <view class="navigate-back-arrow" @tap="goBack" :style="concealStyle">
       <image class="navigate-back-arrow-image" src="/static/images/left-arrow.png"></image>
     </view>
     <view class="prepare-header" :style="concealStyle">
@@ -13,9 +13,7 @@
         class="room-title"
         v-model="liveTitle"
         @input="onInputTitle"
-        @focus="onInputFocus"
-        @blur="onInputBlur"
-        :focus="isInputFocused"
+        :focus="focusTrigger"
         :placeholder="t('anchor.defaultTitle')"
         :cursor-color="LIVE_TOKENS.colorTextInverse"
         :placeholder-style="placeholderStyle"
@@ -26,26 +24,27 @@
     <view class="prepare-actions" :style="concealStyle">
       <view class="prepare-action" @tap="handleBeauty">
         <view class="pa-icon">
-          <image class="pa-img" src="/static/images/live/prepare-beauty.png" mode="aspectFit" />
+          <image class="pa-img" src="/static/images/live/icon/prepare-beauty.png" mode="aspectFit" />
         </view>
         <text class="pa-label">{{ t('anchor.beauty') }}</text>
       </view>
       <view class="prepare-action" @tap="handleCamera">
         <view class="pa-icon">
-          <image class="pa-img" src="/static/images/live/prepare-flip.png" mode="aspectFit" />
+          <image class="pa-img" src="/static/images/live/icon/prepare-flip.png" mode="aspectFit" />
         </view>
         <text class="pa-label">{{ t('anchor.flipCamera') }}</text>
       </view>
       <view class="prepare-action" @tap="handleSettings">
         <view class="pa-icon">
-          <image class="pa-img" src="/static/images/live/prepare-grid4.png" mode="aspectFit" />
+          <image class="pa-img" src="/static/images/live/icon/prepare-grid4.png" mode="aspectFit" />
         </view>
         <text class="pa-label">{{ t('anchor.more') }}</text>
       </view>
     </view>
     <view class="start-btn" :style="[concealStyle, { bottom: startBtnBottomPx + 'px' }]" @tap="startLive">
-      <image class="start-btn-bg" src="/static/images/live/start-btn-bg.png" resize="stretch" />
-      <image class="start-dot" src="/static/images/live/start-dot.png" mode="aspectFit" />
+      <image class="start-btn-bg" src="/static/images/live/background/start-btn-bg.png" mode="scaleToFill" />
+      <view class="start-btn-ring" />
+      <image class="start-dot" src="/static/images/live/icon/start-dot.png" mode="aspectFit" />
       <text class="start-btn-text">{{ t('anchor.startLive') }}</text>
     </view>
     <BeautyPanel v-model="isShowBeautyPanel" />
@@ -55,8 +54,9 @@
 </template>
 
 <script setup lang="ts">
-  import { ref, computed, onMounted, nextTick } from 'vue';
+  import { ref, computed, nextTick } from 'vue';
   import { BeautyPanel } from '@/uni_modules/tuikit-atomic-x/components/Beauty';
+  import { useBaseBeautyState } from '@/uni_modules/tuikit-atomic-x/state/BaseBeautyState';
   import { useDeviceState } from '@/uni_modules/tuikit-atomic-x/state/DeviceState';
   import { TakeSeatMode, useLiveListState } from '@/uni_modules/tuikit-atomic-x/state/LiveListState';
   import { LIVE_TOKENS, livePlaceholderStyle } from '../../../../styles/tokens.js';
@@ -64,14 +64,17 @@
   import BeforeLiveMorePanel from '../../components/BeforeLiveMorePanel/index.nvue';
   import CountdownOverlay from '../../components/CountdownOverlay/index.nvue';
   import CoverPickerPanel from '../../components/CoverPickerPanel/index.nvue';
+  import { getLiveErrorMessage } from '@/uni_modules/tuikit-atomic-x/utils/liveErrorHandler';
 
   const props = defineProps({
     templateLayout: { type: Number, default: 600 },
+    liveID: { type: String, default: '' },
   });
   const emit = defineEmits(['update:templateLayout', 'back', 'tip', 'started']);
 
   const { createLive, fetchLiveList, callExperimentalAPI } = useLiveListState();
   const { openLocalCamera, openLocalMicrophone, isFrontCamera, switchCamera } = useDeviceState();
+  const { smoothLevel, whitenessLevel, ruddyLevel, setSmoothLevel, setWhitenessLevel, setRuddyLevel } = useBaseBeautyState();
 
   const placeholderStyle = livePlaceholderStyle(LIVE_TOKENS.darkText50);
 
@@ -82,13 +85,22 @@
   const liveMode = ref(t('anchor.defaultLiveMode'));
 
   const countdownVisible = ref(false);
+  const isStarting = ref(false);
   const isShowMorePanel = ref(false);
   const isShowCoverPicker = ref(false);
   const isShowBeautyPanel = ref(false);
-  const isInputFocused = ref(false);
+  const focusTrigger = ref(false);
   const lastValidTitle = ref(liveTitle.value);
   const titleInputRef = ref<any>(null);
-  const startBtnBottomPx = ref(25);
+  let startBtnBottomPx = 25;
+  try {
+    const sys = uni.getSystemInfoSync();
+    const bottomPanelHeight = sys.platform === 'ios' ? 60 : 80;
+    const safeArea = sys.safeArea || { top: 0, height: sys.windowHeight };
+    const videoBottomGap = (sys.windowHeight - (safeArea.top || 0) - safeArea.height) + bottomPanelHeight;
+    const btnHeightPx = 104 * (sys.windowWidth / 750);
+    startBtnBottomPx = Math.max(0, Math.round((videoBottomGap - btnHeightPx) / 2));
+  } catch (e) {}
 
   const showTip = (title: string) => {
     emit('tip', title);
@@ -112,7 +124,7 @@
   };
 
   const isPublicVisible = computed(() => liveMode.value === t('anchor.defaultLiveMode'));
-  const concealStyle = computed(() => ({ visibility: countdownVisible.value ? 'hidden' : 'visible' }));
+  const concealStyle = computed(() => ({ visibility: (countdownVisible.value || isStarting.value) ? 'hidden' : 'visible' }));
 
   const goBack = () => {
     emit('back');
@@ -143,22 +155,13 @@
   };
 
   const onEditTitle = () => {
-    if (isInputFocused.value) return;
-    isInputFocused.value = false;
+    focusTrigger.value = false;
     nextTick(() => {
-      isInputFocused.value = true;
+      focusTrigger.value = true;
       setTimeout(() => {
         titleInputRef.value?.focus?.();
-      }, 100);
+      }, 60);
     });
-  };
-
-  const onInputFocus = () => {
-    isInputFocused.value = true;
-  };
-
-  const onInputBlur = () => {
-    isInputFocused.value = false;
   };
 
   const handleBeauty = () => {
@@ -182,7 +185,7 @@
   };
 
   const setLocalVideoMuteImage = () => {
-    const tempFilePath = '/static/images/live-mute-local-video.png';
+    const tempFilePath = '/static/images/live/icon/mute-local-video.png';
     let imageFilePath = '';
     uni.saveFile({
       tempFilePath: tempFilePath,
@@ -202,9 +205,15 @@
   }
 
   const doStartLive = () => {
+    isStarting.value = true;
+    const beautySnapshot = {
+      smoothLevel: smoothLevel.value,
+      whitenessLevel: whitenessLevel.value,
+      ruddyLevel: ruddyLevel.value,
+    };
     createLive({
       liveInfo: {
-        liveID: uni?.$liveID,
+        liveID: props.liveID,
         liveName: liveTitle.value,
         totalViewerCount: 4,
         coverURL: coverURL.value,
@@ -216,6 +225,7 @@
         seatLayoutTemplateID: props.templateLayout,
       },
       success: () => {
+        emit('started');
         const params = {
           cursor: "",
           count: 20,
@@ -225,26 +235,27 @@
         openLocalCamera({ isFront: isFrontCamera.value });
         openLocalMicrophone();
         setLocalVideoMuteImage();
+
+        smoothLevel.value = beautySnapshot.smoothLevel;
+        whitenessLevel.value = beautySnapshot.whitenessLevel;
+        ruddyLevel.value = beautySnapshot.ruddyLevel;
+        if (beautySnapshot.smoothLevel > 0) {
+          setSmoothLevel({ smoothLevel: beautySnapshot.smoothLevel });
+        }
+        if (beautySnapshot.whitenessLevel > 0) {
+          setWhitenessLevel({ whitenessLevel: beautySnapshot.whitenessLevel });
+        }
+        if (beautySnapshot.ruddyLevel > 0) {
+          setRuddyLevel({ ruddyLevel: beautySnapshot.ruddyLevel });
+        }
       },
       fail: (errCode, errMsg) => {
-        showTip(t('anchor.createFailed'));
+        isStarting.value = false;
+        console.error(`createLive fail errCode: ${errCode}, errMsg: ${errMsg}`);
+        emit('tip', `${t('anchor.createFailed')}: ${getLiveErrorMessage(errCode)}`);
       },
     });
-    emit('started');
   };
-
-  onMounted(() => {
-    try {
-      const sys = uni.getSystemInfoSync();
-      const bottomPanelHeight = sys.platform === 'ios' ? 60 : 80;
-      const safeArea = sys.safeArea || { top: 0, height: sys.windowHeight };
-      const videoBottomGap = (sys.windowHeight - (safeArea.top || 0) - safeArea.height) + bottomPanelHeight;
-      const btnHeightPx = 104 * (sys.windowWidth / 750);
-      startBtnBottomPx.value = Math.max(0, Math.round((videoBottomGap - btnHeightPx) / 2));
-    } catch (e) {
-      startBtnBottomPx.value = 25;
-    }
-  });
 </script>
 
 <style lang="scss">

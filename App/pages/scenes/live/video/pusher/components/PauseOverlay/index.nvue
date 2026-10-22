@@ -1,0 +1,37 @@
+<template>
+  <view v-if="visible" class="pause-overlay">
+    <view class="pause-content">
+      <text class="pause-title">{{ t('morePanel.livePaused') }}</text>
+      <text class="pause-timer">{{ timerText }}</text>
+    </view>
+    <view class="pause-resume" @tap="handleResume">
+      <text class="pause-resume-text">{{ t('morePanel.resumeLive') }}</text>
+    </view>
+  </view>
+</template>
+
+<script setup lang="ts">
+  import { computed } from 'vue';
+  import { t } from '../../../../locales';
+
+  const props = defineProps({
+    visible: { type: Boolean, default: false },
+    seconds: { type: Number, default: 0 },
+  });
+
+  const emit = defineEmits(['resume']);
+
+  const timerText = computed(() => {
+    const m = String(Math.floor(props.seconds / 60)).padStart(2, '0');
+    const s = String(props.seconds % 60).padStart(2, '0');
+    return `${m}:${s}`;
+  });
+
+  const handleResume = () => {
+    emit('resume');
+  };
+</script>
+
+<style lang="scss">
+  @import './PauseOverlay.scss';
+</style>

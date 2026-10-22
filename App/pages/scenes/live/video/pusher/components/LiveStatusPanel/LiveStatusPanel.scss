@@ -8,25 +8,25 @@
   position: fixed;
   top: 220rpx;
   right: 0;
-  height: 38rpx;
+  height: 44rpx;
   flex-direction: row;
   align-items: center;
   padding-left: 20rpx;
   padding-right: 18rpx;
-  border-top-left-radius: 19rpx;
+  border-top-left-radius: 22rpx;
   border-top-right-radius: 0;
-  border-bottom-left-radius: 19rpx;
+  border-bottom-left-radius: 22rpx;
   border-bottom-right-radius: 0;
   background-color: $live-dark-bg-overlay-22;
 }
 
 .live-status-trigger-network {
-  height: 26rpx;
+  height: 28rpx;
   margin-right: 10rpx;
 }
 
 .live-status-trigger-label {
-  font-size: 20rpx;
+  font-size: 24rpx;
   font-weight: 500;
   color: $live-dark-text-96;
   margin-right: 10rpx;
@@ -37,10 +37,10 @@
   height: 11rpx;
   border-top-width: 2rpx;
   border-top-style: solid;
-  border-top-color: rgba(255, 255, 255, 0.8);
+  border-top-color: $live-dark-border-90;
   border-right-width: 2rpx;
   border-right-style: solid;
-  border-right-color: rgba(255, 255, 255, 0.8);
+  border-right-color: $live-dark-border-90;
   transform: rotate(45deg);
   opacity: 0.86;
 }
@@ -49,12 +49,27 @@
   color: $live-color-net-poor;
 }
 
-.live-status-trigger--very-poor .live-status-trigger-label {
+.live-status-trigger--bad .live-status-trigger-label {
   color: $live-color-net-very-poor;
 }
 
 .live-status-trigger--disconnected .live-status-trigger-label {
   color: $live-color-net-disconnected;
+}
+
+.live-status-trigger--poor .live-status-chevron {
+  border-top-color: $live-color-net-poor;
+  border-right-color: $live-color-net-poor;
+}
+
+.live-status-trigger--bad .live-status-chevron {
+  border-top-color: $live-color-net-very-poor;
+  border-right-color: $live-color-net-very-poor;
+}
+
+.live-status-trigger--disconnected .live-status-chevron {
+  border-top-color: $live-color-net-disconnected;
+  border-right-color: $live-color-net-disconnected;
 }
 
 .live-status-heading {
@@ -279,6 +294,21 @@
   background-color: $live-color-net-warn-soft;
 }
 
+.live-status-health-icon--warn {
+  border-color: $live-color-net-warn-line;
+  background-color: $live-color-net-warn-soft;
+}
+
+.live-status-health-icon--danger {
+  border-color: $live-color-net-danger-line;
+  background-color: $live-color-net-danger-soft;
+}
+
+.live-status-health-icon--bad {
+  border-color: $live-color-net-danger-line;
+  background-color: $live-color-net-danger-soft;
+}
+
 .live-status-health-icon--disconnected {
   border-color: $live-color-net-danger-line;
   background-color: $live-color-net-danger-soft;
@@ -325,11 +355,6 @@
   align-items: center;
 }
 
-.live-status-volume {
-  flex: 1;
-  height: 32rpx;
-}
-
 .live-status-volume-value {
   width: 52rpx;
   font-size: 20rpx;
@@ -363,6 +388,10 @@
 
 .live-status-network-card--poor .live-status-network-value {
   color: $live-color-net-metric-warn;
+}
+
+.live-status-network-card--bad .live-status-network-value {
+  color: $live-color-net-metric-danger;
 }
 
 .live-status-network-card--disconnected .live-status-network-value {

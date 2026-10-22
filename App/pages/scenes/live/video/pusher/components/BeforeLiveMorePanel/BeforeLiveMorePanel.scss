@@ -8,7 +8,6 @@
   padding-top: 0rpx;
 }
 
-/* 列表在「标题 ↔ 抽屉底部」之间垂直居中: flex:1 占满剩余高度。 */
 .setting-list {
   flex: 1;
   flex-direction: row;
@@ -45,57 +44,4 @@
   lines: 1;
   text-overflow: ellipsis;
   overflow: hidden;
-}
-
-.quality-panel {
-  width: 750rpx;
-  flex-direction: column;
-}
-
-.quality-title {
-  color: $live-dark-text-94;
-  font-size: 32rpx;
-  font-weight: 700;
-  text-align: center;
-  line-height: 88rpx;
-  height: 88rpx;
-}
-
-.quality-list {
-  flex-direction: column;
-  padding: 0 32rpx;
-}
-
-.quality-item {
-  flex-direction: row;
-  align-items: center;
-  justify-content: space-between;
-  height: 88rpx;
-  padding: 0 28rpx;
-  margin-bottom: 16rpx;
-  border-radius: 16rpx;
-  border-width: 2rpx;
-  border-color: $live-dark-border-12;
-  background-color: $live-dark-surface-04;
-}
-
-.quality-item-active {
-  border-color: $live-color-brand-light;
-  background-image: linear-gradient(to bottom, $live-color-brand-light-soft, $live-color-brand-deep-soft);
-}
-
-.quality-item-label {
-  color: $live-dark-text-72;
-  font-size: 28rpx;
-  font-weight: 500;
-}
-
-.quality-item-label-active {
-  color: $live-dark-text-primary;
-  font-weight: 600;
-}
-
-.quality-item-check {
-  width: 32rpx;
-  height: 32rpx;
 }
