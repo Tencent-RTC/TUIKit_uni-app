@@ -1,14 +1,14 @@
 <template>
-  <view class="audio-message-wrapper" :class="{ 'audio-message-wrapper--self': message.isSentBySelf }">
+  <view class="audio-message-wrapper" :class="{ 'audio-message-wrapper--self': message.isSentBySelf && !plain }">
     <view 
       class="audio-message" 
-      :class="'content-'+ (message.isSentBySelf ? 'out' : 'in')" 
+      :class="plain ? 'content-plain' : 'content-'+ (message.isSentBySelf ? 'out' : 'in')" 
       :style="{ width: audioWidth + 'rpx' }"
       @touchstart="handleTouchStart"
       @tap="handlePlayTap"
     >
       <view class="audio-highlight">
-        <view class="audio-wave-container" :class="'wave-'+ (message.isSentBySelf ? 'out' : 'in')">
+        <view class="audio-wave-container" :class="'wave-'+ (message.isSentBySelf && !plain ? 'out' : 'in')">
           <view class="audio-wave-clip" :style="{ width: '12rpx', opacity: waveOpacity0 }">
             <image src="/uni_modules/tuikit-atomic-x/static/icon/audio.png" class="audio-wave-icon" mode="aspectFit" />
           </view>
@@ -86,7 +86,9 @@ export default {
   name: 'AudioMessage',
   props: {
     message: { type: Object, required: true },
-    conversationID: { type: String, default: '' }
+    conversationID: { type: String, default: '' },
+    // 无气泡模式（合并转发详情）：不按 isSentBySelf 反向排列
+    plain: { type: Boolean, default: false }
   },
   data: function() {
     // 初值从本地存储恢复：仅当显式标记为 false 时才隐藏，否则默认 true
@@ -607,6 +609,8 @@ export default {
 .audio-message { min-width: 200rpx; }
 .content-in { background-color: #F0F2F7; border-radius: 4rpx 20rpx 20rpx 20rpx; }
 .content-out { background-color: #CCE2FF; border-radius: 20rpx 4rpx 20rpx 20rpx; }
+/* 只读模式（合并转发详情）：语音保留气泡底色，统一用"对方"样式，不区分是否自己发送 */
+.content-plain { background-color: #F0F2F7; border-radius: 4rpx 20rpx 20rpx 20rpx; }
 .audio-highlight { flex: 1; flex-direction: row; align-items: center; padding: 20rpx; background-color: transparent; }
 .content-out .audio-highlight { flex-direction: row-reverse; }
 .audio-wave-container { position: relative; width: 40rpx; height: 40rpx; }

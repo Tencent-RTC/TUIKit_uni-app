@@ -1,14 +1,14 @@
 <template>
-  <view class="audio-message-wrapper" :class="{ 'audio-message-wrapper--self': message.isSentBySelf }">
+  <view class="audio-message-wrapper" :class="{ 'audio-message-wrapper--self': message.isSentBySelf && !plain }">
     <view 
       class="audio-message" 
-      :class="'content-'+ (message.isSentBySelf ? 'out' : 'in')" 
+      :class="plain ? 'content-plain' : 'content-'+ (message.isSentBySelf ? 'out' : 'in')" 
       :style="{ width: audioWidth + 'rpx' }"
       @touchstart="handleTouchStart"
       @tap="handlePlayTap"
     >
       <view class="audio-highlight">
-        <view class="audio-wave-container" :class="'wave-'+ (message.isSentBySelf ? 'out' : 'in')">
+        <view class="audio-wave-container" :class="'wave-'+ (message.isSentBySelf && !plain ? 'out' : 'in')">
           <view class="audio-wave-clip" :style="{ width: '12rpx', opacity: waveOpacity[0] }">
             <image
               src="../../../../static/icon/audio.png"
@@ -64,9 +64,13 @@ const animation = uni.requireNativePlugin('animation')
 interface Props {
   message: MessageInfo
   conversationID: string
+  // 无气泡模式（合并转发详情）：透明底、直角，且不按 isSentBySelf 反向排列
+  plain?: boolean
 }
 
-const props = defineProps<Props>()
+const props = withDefaults(defineProps<Props>(), {
+  plain: false
+})
 
 // 获取消息列表状态，用于下载资源
 // downloadMessageResource 已迁到 MessageActionState.downloadMedia
@@ -692,6 +696,12 @@ onUnmounted(() => {
 .content-out {
   background-color: #CCE2FF;
   border-radius: 20rpx 4rpx 20rpx 20rpx;
+}
+
+/* 只读模式（合并转发详情）：语音保留气泡底色，统一用"对方"样式，不区分是否自己发送 */
+.content-plain {
+  background-color: #F0F2F7;
+  border-radius: 4rpx 20rpx 20rpx 20rpx;
 }
 
 .audio-highlight {

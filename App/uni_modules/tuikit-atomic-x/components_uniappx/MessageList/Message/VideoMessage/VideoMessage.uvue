@@ -40,6 +40,7 @@ import { ref, computed, watch, nextTick } from 'vue'
 import { MediaQuality } from '../../../../types/message'
 import { useMessageActionState } from '../../../../state/MessageActionState'
 import { useMessageListState } from '../../../../state/MessageListState'
+import { MERGED_DETAIL_REFRESH_EVENT } from '../../../../constants/messageEvents'
 import { stopGlobalAudioPlayer, RECORDING_PSEUDO_ID } from '../../../../hooks/useAudioPlayer'
 
 const PLACEHOLDER_PREFIX = 'placeholder_video_';
@@ -103,7 +104,7 @@ const videoSnapshotHeight = computed((): number => {
 // 下载进度
 const downloadProgress = computed((): number => {
   const messageObj: UTSJSONObject = props.message as UTSJSONObject
-  const v: any | null = messageObj['progress']
+  const v: any | null = messageObj['downloadMediaProgress']
   return typeof v == 'number' ? (v as number) : 0
 })
 
@@ -184,6 +185,7 @@ const checkAndDownloadVideo = async () => {
   try {
     const msgForAction: UTSJSONObject = props.message as UTSJSONObject
     await useMessageActionState({ message: msgForAction }).downloadMedia(MediaQuality.ORIGINAL);
+    uni.$emit(MERGED_DETAIL_REFRESH_EVENT, new UTSJSONObject())
   } catch (error: any) {
     console.error('[VideoMessage] downloadMedia video failed:', error);
     uni.showToast({ title: '视频下载失败', icon: 'none' });
@@ -240,6 +242,7 @@ const checkAndDownloadSnapshot = async () => {
     try {
       const msgForAction: UTSJSONObject = props.message as UTSJSONObject
       await useMessageActionState({ message: msgForAction }).downloadMedia(MediaQuality.THUMBNAIL)
+      uni.$emit(MERGED_DETAIL_REFRESH_EVENT, new UTSJSONObject())
     } catch (error: any) {
       console.error('[VideoMessage] downloadMedia snapshot failed:', error)
       coverError.value = true

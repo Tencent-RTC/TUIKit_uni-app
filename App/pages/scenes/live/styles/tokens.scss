@@ -23,10 +23,10 @@ $live-color-purple-border:         rgba(211, 174, 255, 0.2); /* 紫描边 */
 $live-color-net-poor:              #FFD08A; /* 网络较差：trigger 文字/图标 */
 $live-color-net-very-poor:         #FF927D; /* 网络非常差 */
 $live-color-net-disconnected:      #FF6978; /* 网络断开 */
-$live-color-net-warn-soft:        rgba(255, 154, 38, 0.12); /* 网络警示图标底 */
-$live-color-net-warn-line:        rgba(255, 181, 74, 0.22); /* 网络警示图标描边 */
-$live-color-net-danger-soft:      rgba(255, 75, 92, 0.12); /* 网络异常图标底 */
-$live-color-net-danger-line:      rgba(255, 102, 118, 0.22); /* 网络异常图标描边 */
+$live-color-net-warn-soft:        rgba(255, 138, 61, 0.14); /* 网络警示图标底（iOS warning #FF8A3D 14%） */
+$live-color-net-warn-line:        rgba(255, 138, 61, 0.22); /* 网络警示图标描边（iOS warning #FF8A3D 22%） */
+$live-color-net-danger-soft:      rgba(255, 91, 98, 0.14); /* 网络异常图标底（iOS critical #FF5B62 14%） */
+$live-color-net-danger-line:      rgba(255, 91, 98, 0.22); /* 网络异常图标描边（iOS critical #FF5B62 22%） */
 $live-color-net-metric-warn:      #FFBD5C; /* 网络指标数字（较差） */
 $live-color-net-metric-danger:    #FF7180; /* 网络指标数字（断开） */
 $live-color-brand-tab-active:     rgba(210, 231, 255, 0.3); /* tab 激活底：brand-2 25% 混白 7% */
@@ -35,6 +35,13 @@ $live-color-brand-icon-soft:      rgba(230, 241, 255, 0.17); /* 品牌图标底�
 $live-color-brand-icon-line:      rgba(74, 158, 255, 0.22); /* 品牌图标描边 */
 $live-color-brand-tint-soft:      rgba(74, 158, 255, 0.15); /* 品牌浅底 */
 $live-color-black:                 #000000; /* 纯黑 */
+$live-color-stat-gift:             #F0BC5F;
+$live-color-stat-coin:             #FF6E9D;
+$live-color-stat-viewer:           #69A8FF;
+$live-color-stat-comment:          #BE83FF;
+$live-color-stat-sender:           #57D5BF;
+$live-color-stat-like:             #FF7B72;
+$live-color-summary-mark:          #193E6B;
 
 /* ==================== 深色主题：面 / 底 ==================== */
 $live-dark-bg-page:                rgba(15, 16, 20, 1); /* 页面最底 */
@@ -56,11 +63,18 @@ $live-dark-bg-overlay-34:          rgba(10, 10, 15, 0.34); /* 蒙版底（紫调
 $live-dark-bg-control:             rgba(79, 88, 107, 0.3); /* 控件灰底 */
 $live-dark-bg-control-solid:       #4F586B; /* 控件灰底（实） */
 $live-dark-bg-control-strong:      rgba(174, 187, 205, 0.68); /* 控件灰底（深） */
+$live-dark-bg-summary:             #09090D;
+$live-dark-bg-input:               rgba(12, 13, 18, 0.88);
 
 /* ==================== 深色主题：文字（白 + 透明度） ==================== */
 $live-dark-text-primary:           #FFFFFF; /* 主文字 */
 $live-dark-text-96:                rgba(255, 255, 255, 0.96); /* 强文字 */
+$live-dark-text-95:                rgba(255, 255, 255, 0.95);
 $live-dark-text-42:                rgba(255, 255, 255, 0.42); /* 角标文字 */
+$live-dark-text-40:                rgba(255, 255, 255, 0.4);
+$live-dark-text-45:                rgba(255, 255, 255, 0.45);
+$live-dark-text-46:                rgba(255, 255, 255, 0.46);
+$live-dark-text-48:                rgba(255, 255, 255, 0.48);
 $live-dark-text-38:                rgba(255, 255, 255, 0.38); /* 说明文字 */
 $live-dark-text-36:                rgba(255, 255, 255, 0.36); /* 单位文字 */
 $live-dark-text-34:                rgba(255, 255, 255, 0.34); /* 弱化标签 */
@@ -74,7 +88,9 @@ $live-dark-text-75:                rgba(255, 255, 255, 0.75); /* 弱化文字 */
 $live-dark-text-72:                rgba(255, 255, 255, 0.72); /* 弱化文字 */
 $live-dark-text-70:                rgba(255, 255, 255, 0.7); /* 更弱文字 */
 $live-dark-text-68:                rgba(255, 255, 255, 0.68); /* 更弱文字 */
+$live-dark-text-62:                rgba(255, 255, 255, 0.62);
 $live-dark-text-60:                rgba(255, 255, 255, 0.6); /* 占位文字 */
+$live-dark-text-58:                rgba(255, 255, 255, 0.58);
 $live-dark-text-55:                rgba(255, 255, 255, 0.55); /* 占位文字 */
 $live-dark-text-50:                rgba(255, 255, 255, 0.5); /* 辅助标签 / tab 未激活文字 */
 $live-dark-text-muted:             rgba(79, 88, 107, 1); /* 禁用 / 极弱文字 */
@@ -82,6 +98,7 @@ $live-dark-text-soft:              rgba(213, 224, 242, 1); /* 淡蓝白文字 */
 
 /* ==================== 深色主题：面（白 + 透明度） ==================== */
 $live-dark-surface-04:             rgba(255, 255, 255, 0.04); /* 极浅面 */
+$live-dark-surface-045:            rgba(255, 255, 255, 0.045);
 $live-dark-surface-06:             rgba(255, 255, 255, 0.06); /* 浅面：tab 容器 */
 $live-dark-surface-065:            rgba(255, 255, 255, 0.065); /* 浅面：状态卡 */
 $live-dark-surface-055:            rgba(255, 255, 255, 0.055); /* 极浅面 */
@@ -96,6 +113,8 @@ $live-surface-white:               #FFFFFF; /* 白色面：与主题无关的按
 $live-dark-border-10:              rgba(255, 255, 255, 0.1); /* 极浅描边 */
 $live-dark-border-065:             rgba(255, 255, 255, 0.065); /* 分割线（状态卡内） */
 $live-dark-border-07:              rgba(255, 255, 255, 0.07); /* 状态卡描边 */
+$live-dark-border-08:              rgba(255, 255, 255, 0.08);
+$live-dark-border-085:             rgba(255, 255, 255, 0.085);
 $live-dark-border-12:              rgba(255, 255, 255, 0.12); /* 浅描边 */
 $live-dark-border-24:              rgba(255, 255, 255, 0.24); /* 描边 */
 $live-dark-border-42:              rgba(255, 255, 255, 0.42); /* 描边（强） */
@@ -110,14 +129,17 @@ $live-light-text-primary:          #333333; /* 主文字 */
 $live-light-text-heading:          #222222; /* 标题文字 */
 $live-light-text-placeholder:      #999999; /* 占位文字 */
 $live-light-text-muted:            #BDBDBD; /* 弱化文字 */
+$live-light-text-inverse:          #111111;
 
 /* ==================== 遮罩 ==================== */
 $live-mask:                        rgba(0, 0, 0, 0.4); /* 遮罩 */
 $live-mask-light:                  rgba(0, 0, 0, 0.3); /* 遮罩（弱） */
 $live-mask-strong:                 rgba(0, 0, 0, 0.7); /* 遮罩（强） */
+$live-mask-90:                     rgba(0, 0, 0, 0.9);
 $live-mask-60:                     rgba(0, 0, 0, 0.6); /* 遮罩 60% */
 $live-mask-55:                     rgba(0, 0, 0, 0.55); /* 遮罩 55% */
 $live-mask-50:                     rgba(0, 0, 0, 0.5); /* 遮罩 50% */
+$live-mask-32:                     rgba(0, 0, 0, 0.32);
 $live-mask-25:                     rgba(0, 0, 0, 0.25); /* 遮罩 25% */
 $live-mask-20:                     rgba(0, 0, 0, 0.2); /* 遮罩 20% */
 $live-mask-12:                     rgba(0, 0, 0, 0.12); /* 遮罩 12% */

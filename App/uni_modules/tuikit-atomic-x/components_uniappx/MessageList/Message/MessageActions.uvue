@@ -58,6 +58,7 @@ import copyIcon from '../assets/msg_copy.png'
 import deleteIcon from '../assets/msg_delete.png'
 import forwardIcon from '../assets/msg_forward.png'
 import hideIcon from '../assets/msg_hide.png'
+import multiSelectIcon from '../../../static/assets/message-list/msg_multi_select.png'
 import quoteIcon from '../assets/msg_quote.png'
 import reactionIcon from '../../../static/assets/message-list/msg_reaction.png'
 import recallIcon from '../assets/msg_recall.png'
@@ -233,6 +234,11 @@ const canForward = computed((): boolean => {
   if (mt == MSG_TYPE_TIPS) return false
   if (mt == MSG_TYPE_CUSTOM && isCallMessage(props.message)) return false
   return true
+})
+
+// 多选入口：已撤回 / 已删除的消息本身不会走到长按菜单，这里只兜底过滤
+const canMultiSelect = computed((): boolean => {
+  return !isDeadMessage.value
 })
 
 // 消息是否可被引用：撤回/删除、系统提示不支持
@@ -679,6 +685,12 @@ const handleForward = (_arg: any | null): void => {
   safeClose()
 }
 
+/** 多选：交给 Message.uvue 抛给 MessageList 进入多选模式 */
+const handleMultiSelect = (_arg: any | null): void => {
+  emit('action', { key: 'multiSelect', text: '多选' })
+  safeClose()
+}
+
 /** 引用：交给 Message.uvue 广播 atomicx-quote，MessageInput 接管 */
 const handleQuote = (_arg: any | null): void => {
   emit('action', { key: 'quote', text: '引用' })
@@ -713,8 +725,6 @@ type ActionItem = {
   visible: boolean
 }
 
-// 引用功能开关：false 时只隐藏长按面板入口，气泡内引用块渲染 / 已引用消息的发送都不受影响
-const QUOTE_ENTRY_ENABLED = false
 
 // 统一在此配置每个操作项的 key / 文案 / 图标 / 显隐条件，处理函数在 handleActionTap 按 key 分发
 const actionConfig = computed((): ActionItem[] => {
@@ -724,8 +734,9 @@ const actionConfig = computed((): ActionItem[] => {
   list.push({ key: 'voiceToText', label: voiceActionLabel.value, icon: voiceToTextIcon, visible: canConvertVoice.value } as ActionItem)
   list.push({ key: 'recall', label: '撤回', icon: recallIcon, visible: canRecall.value } as ActionItem)
   list.push({ key: 'forward', label: '转发', icon: forwardIcon, visible: canForward.value } as ActionItem)
+  list.push({ key: 'multiSelect', label: '多选', icon: multiSelectIcon, visible: canMultiSelect.value } as ActionItem)
   list.push({ key: 'reaction', label: '贴表情', icon: reactionIcon, visible: showReactionPicker.value } as ActionItem)
-  list.push({ key: 'quote', label: '引用', icon: quoteIcon, visible: QUOTE_ENTRY_ENABLED && canQuote.value } as ActionItem)
+  list.push({ key: 'quote', label: '引用', icon: quoteIcon, visible: canQuote.value } as ActionItem)
   list.push({
     key: 'translate',
     label: translateActionLabel.value,
@@ -767,27 +778,6 @@ const actionRows = computed((): ActionItem[][] => {
   }
   return rows
 })
-
-const handleActionTap = (item: ActionItem): void => {
-  const key: string = item.key
-  if (key == 'copy') {
-    handleCopy(null)
-  } else if (key == 'delete') {
-    handleDelete(null)
-  } else if (key == 'voiceToText') {
-    handleVoiceToText(null)
-  } else if (key == 'recall') {
-    handleRecall(null)
-  } else if (key == 'forward') {
-    handleForward(null)
-  } else if (key == 'quote') {
-    handleQuote(null)
-  } else if (key == 'translate') {
-    handleTranslate(null)
-  } else if (key == 'reaction') {
-    handleReactionEntry()
-  }
-}
 
 /**
  * 测量真实 panel 尺寸 + 判定上下方向
@@ -850,6 +840,30 @@ const handleReactionEntry = (): void => {
       measureAndPosition()
     }, 30)
   })
+}
+
+// 必须在 handleReactionEntry 之后定义（UTS 不提升 const 箭头函数）
+const handleActionTap = (item: ActionItem): void => {
+  const key: string = item.key
+  if (key == 'copy') {
+    handleCopy(null)
+  } else if (key == 'delete') {
+    handleDelete(null)
+  } else if (key == 'voiceToText') {
+    handleVoiceToText(null)
+  } else if (key == 'recall') {
+    handleRecall(null)
+  } else if (key == 'forward') {
+    handleForward(null)
+  } else if (key == 'multiSelect') {
+    handleMultiSelect(null)
+  } else if (key == 'quote') {
+    handleQuote(null)
+  } else if (key == 'translate') {
+    handleTranslate(null)
+  } else if (key == 'reaction') {
+    handleReactionEntry()
+  }
 }
 
 /** 收起表情面板 → 返回操作菜单（重新测量定位） */

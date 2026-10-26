@@ -12,12 +12,17 @@
 import { MediaQuality } from '../../../../types/message'
 import { useMessageListState } from '../../../../state/MessageListState'
 import { useMessageActionState } from '../../../../state/MessageActionState'
+import { MERGED_DETAIL_REFRESH_INJECTION_KEY } from '../../../../constants/messageInjectionKeys'
 
 // 长按判定阈值，与 Message.nvue 中保持一致
 var LONG_PRESS_THRESHOLD = 350
 
 export default {
   name: 'ImageMessage',
+  // 合并转发详情页提供的刷新入口；普通会话里没有提供者，为 null
+  inject: {
+    refreshMergedDetail: { from: MERGED_DETAIL_REFRESH_INJECTION_KEY, default: null }
+  },
   props: {
     message: { type: Object, required: true },
     conversationID: { type: String, default: '' }
@@ -73,7 +78,11 @@ export default {
     async checkAndDownloadResource() {
       if (this.message && this.message.msgID && !this.imageUrl) {
         this.loadingState = 'loading'
-        try { await useMessageActionState({ message: this.message }).downloadMedia(MediaQuality.ORIGINAL) }
+        try {
+          await useMessageActionState({ message: this.message }).downloadMedia(MediaQuality.ORIGINAL)
+          // 合并转发详情里的消息不会被 SDK 推送更新，需主动刷新才能拿到本地路径
+          if (this.refreshMergedDetail) await this.refreshMergedDetail()
+        }
         catch (e) { this.loadingState = 'error' }
       }
     }

@@ -27,11 +27,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, inject } from 'vue'
 import type { MessageInfo } from '../../../../types/message'
 import { MediaQuality } from '../../../../types/message'
 import { useMessageActionState } from '../../../../state/MessageActionState'
 import { useMessageListState } from '../../../../state/MessageListState'
+import { MERGED_DETAIL_REFRESH_INJECTION_KEY } from '../../../../constants/messageInjectionKeys'
 
 interface Props {
   message: MessageInfo
@@ -46,6 +47,9 @@ const actualSize = ref({ width: 0, height: 0 })
 // 长按判定阈值，与 Message.nvue 中保持一致
 const LONG_PRESS_THRESHOLD = 350
 const touchStartTime = ref(0)
+
+// 合并转发详情页提供的刷新入口；普通会话里没有提供者，为 null
+const refreshMergedDetail = inject<(() => Promise<void>) | null>(MERGED_DETAIL_REFRESH_INJECTION_KEY, null)
 
 // 获取消息列表状态，用于下载资源
 // downloadMedia 已迁到 MessageActionState.downloadMedia
@@ -164,6 +168,8 @@ const checkAndDownloadResource = async () => {
     loadingState.value = 'loading'
     try {
       await useMessageActionState({ message: props.message }).downloadMedia(MediaQuality.ORIGINAL)
+      // 合并转发详情里的消息不会被 SDK 推送更新，需主动刷新才能拿到本地路径
+      if (refreshMergedDetail) await refreshMergedDetail()
     } catch (error) {
       console.error('[ImageMessage] downloadMedia failed:', error)
       loadingState.value = 'error'

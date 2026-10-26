@@ -4,6 +4,7 @@ export const zhCN : Record<string, string> = {
 	'al.cannotFollowSelf': '无法关注自己',
 	'al.kickOut': '踢出房间',
 	'al.confirmKickOut': '确认踢出{name}吗?',
+	'al.kickedOut': '已踢出{name}',
 	'al.follow': '关注',
 	'al.followed': '已关注',
 	'al.roomManagement': '直播间管理',

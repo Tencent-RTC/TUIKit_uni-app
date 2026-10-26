@@ -1,7 +1,7 @@
 <template>
   <view class="countdown-layer" v-if="visible">
     <view class="countdown-circle">
-      <text class="countdown-num" ref="numRef">{{ count }}</text>
+      <text :key="count" ref="numRef" class="countdown-num" :style="numStartStyle">{{ count }}</text>
     </view>
     <view class="countdown-cancel" @tap="onCancel">
       <text class="countdown-cancel-text">{{ t('common.cancel') }}</text>
@@ -48,36 +48,39 @@
     emit('update:modelValue', false);
   };
 
-  const playNumTick = () => {
-    const el = numRef.value;
-    if (!el) return;
-    animation.transition(el, {
-      styles: { transform: 'scale(1.6)', opacity: 0 },
-      duration: 0,
-      timingFunction: 'linear',
-    });
-    animation.transition(el, {
-      styles: { transform: 'scale(1)', opacity: 1 },
-      duration: 200,
-      timingFunction: 'cubic-bezier(0.22, 1, 0.36, 1)',
-    });
-    if (fadeOutTimer != null) clearTimeout(fadeOutTimer);
-    fadeOutTimer = setTimeout(() => {
+  const numStartStyle = { transform: 'scale(1.6)', opacity: 0 };
+
+  const showNum = (value: number) => {
+    if (fadeOutTimer != null) {
+      clearTimeout(fadeOutTimer);
       fadeOutTimer = null;
+    }
+    count.value = value;
+    nextTick(() => {
+      const el = numRef.value;
+      if (!el) return;
       animation.transition(el, {
-        styles: { transform: 'scale(0.85)', opacity: 0 },
-        duration: 200,
-        timingFunction: 'ease-in',
+        styles: { transform: 'scale(1)', opacity: 1 },
+        duration: 180,
+        timingFunction: 'cubic-bezier(0.22, 1, 0.36, 1)',
       });
-    }, 800);
+      fadeOutTimer = setTimeout(() => {
+        fadeOutTimer = null;
+        animation.transition(el, {
+          styles: { transform: 'scale(0.85)', opacity: 0 },
+          duration: 200,
+          timingFunction: 'cubic-bezier(0.22, 1, 0.36, 1)',
+        });
+      }, 800);
+    });
   };
 
   const startCountdown = () => {
     clearTimers();
-    visible.value = true;
     count.value = 3;
+    visible.value = true;
     nextTick(() => {
-      playNumTick();
+      showNum(3);
     });
     let n = 3;
     tickTimer = setInterval(() => {
@@ -89,8 +92,7 @@
         emit('finished');
         return;
       }
-      count.value = n;
-      playNumTick();
+      showNum(n);
     }, 1000);
   };
 

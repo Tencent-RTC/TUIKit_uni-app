@@ -1,6 +1,6 @@
 <template>
   <view class="live-status-root">
-    <view :class="['live-status-trigger', 'live-status-trigger--' + networkStatus]" @tap="open">
+    <view :class="['live-status-trigger', 'live-status-trigger--' + networkStatus]" :style="{ top: triggerTopPx + 'px' }" @tap="open">
       <image
         v-if="networkIcon"
         class="live-status-trigger-network"
@@ -8,7 +8,7 @@
         :src="networkIcon"
         mode="aspectFit"
       />
-      <text class="live-status-trigger-label">{{ t('liveStatus.title') }}</text>
+      <text class="live-status-trigger-label">{{ triggerLabel }}</text>
       <view class="live-status-trigger-chevron"></view>
     </view>
 
@@ -65,10 +65,10 @@
               </view>
             </view>
             <view class="live-status-metric live-status-metric--divider">
-              <text class="live-status-metric-label">{{ t('liveStatus.newFollowers') }}</text>
+              <text class="live-status-metric-label">{{ t('liveStatus.giftCount') }}</text>
               <view class="live-status-metric-value-row">
-                <text class="live-status-metric-value">0</text>
-                <text class="live-status-metric-unit">{{ t('common.personUnit') }}</text>
+                <text class="live-status-metric-value" :style="metricValueStyle(giftCountText)">{{ giftCountText }}</text>
+                <text class="live-status-metric-unit">{{ t('common.countUnit') }}</text>
               </view>
             </view>
           </view>
@@ -90,8 +90,8 @@
             <view class="live-status-metric">
               <text class="live-status-metric-label">{{ t('liveStatus.commenterCount') }}</text>
               <view class="live-status-metric-value-row">
-                <text class="live-status-metric-value">0</text>
-                <text class="live-status-metric-unit">{{ t('common.personUnit') }}</text>
+                <text class="live-status-metric-value" :style="metricValueStyle(messageCountText)">{{ messageCountText }}</text>
+                <text class="live-status-metric-unit">{{ t('common.messageUnit') }}</text>
               </view>
             </view>
           </view>
@@ -108,8 +108,8 @@
       <view v-else class="live-status-page">
         <view class="live-status-health-list">
           <view class="live-status-health-item">
-            <view class="live-status-health-icon">
-              <image class="live-status-health-icon-img" :src="ICON_VIDEO" mode="aspectFit" />
+            <view :class="['live-status-health-icon', isVideoStreamError ? 'live-status-health-icon--danger' : ((isVideoDeviceError || isVideoOff) ? 'live-status-health-icon--warn' : '')]">
+              <image class="live-status-health-icon-img" :src="videoIcon" mode="aspectFit" />
             </view>
             <view class="live-status-health-copy">
               <text class="live-status-health-title">{{ videoStateText }}</text>
@@ -119,36 +119,25 @@
           </view>
 
           <view class="live-status-health-item live-status-audio-item">
-            <view class="live-status-health-icon">
-              <image class="live-status-health-icon-img" :src="ICON_AUDIO" mode="aspectFit" />
+            <view :class="['live-status-health-icon', (isAudioDeviceError || isAudioOff) ? 'live-status-health-icon--warn' : '']">
+              <image class="live-status-health-icon-img" :src="audioIcon" mode="aspectFit" />
             </view>
             <view class="live-status-health-copy">
               <text class="live-status-health-title">{{ audioStateText }}</text>
               <text class="live-status-health-sub">{{ audioStateCopy }}</text>
               <view class="live-status-volume-row">
-                <slider
-                  class="live-status-volume"
-                  :value="volume"
+                <Slider
+                  :modelValue="volume"
                   :min="0"
                   :max="100"
-                  activeColor="#4A9EFF"
-                  backgroundColor="rgba(255, 255, 255, 0.16)"
-                  blockSize="14"
-                  blockColor="#FFFFFF"
+                  :trackWidth="540"
+                  :activeColor="LIVE_TOKENS.colorBrandLight"
+                  :inactiveColor="LIVE_TOKENS.darkSurface16"
+                  @input="onVolumeInput"
                   @change="onVolumeChange"
                 />
                 <text class="live-status-volume-value">{{ volume }}</text>
               </view>
-            </view>
-          </view>
-
-          <view class="live-status-health-item">
-            <view class="live-status-health-icon">
-              <image class="live-status-health-icon-img" :src="ICON_TEMPERATURE" mode="aspectFit" />
-            </view>
-            <view class="live-status-health-copy">
-              <text class="live-status-health-title">{{ t('liveStatus.temperatureNormal') }}</text>
-              <text class="live-status-health-sub">{{ t('liveStatus.temperatureCopy') }}</text>
             </view>
           </view>
 
@@ -158,7 +147,7 @@
             </view>
             <view class="live-status-health-copy">
               <text class="live-status-health-title">{{ networkStateText }}</text>
-              <text class="live-status-health-sub">{{ t('liveStatus.networkCopy') }}</text>
+              <text class="live-status-health-sub">{{ networkStateCopy }}</text>
             </view>
           </view>
         </view>
@@ -214,11 +203,13 @@
 <script setup lang="ts">
   import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
   import { useLiveAudienceState } from '@/uni_modules/tuikit-atomic-x/state/LiveAudienceState';
-  import { useDeviceState, DeviceStatus, NetworkQuality } from '@/uni_modules/tuikit-atomic-x/state/DeviceState';
+  import { useDeviceState, DeviceStatus, DeviceError, NetworkQuality } from '@/uni_modules/tuikit-atomic-x/state/DeviceState';
   import { useLiveListState } from '@/uni_modules/tuikit-atomic-x/state/LiveListState';
   import { useLiveSummaryState } from '@/uni_modules/tuikit-atomic-x/state/LiveSummaryState';
   import { t } from '@/pages/scenes/live/locales';
+  import { LIVE_TOKENS } from '@/pages/scenes/live/styles/tokens.js';
   import BaseDrawer from '@/components/live/BaseDrawer/index.nvue';
+  import Slider from '@/uni_modules/tuikit-atomic-x/components/Slider.nvue';
 
   const props = defineProps({
     liveID: { type: String, default: '' },
@@ -226,18 +217,22 @@
 
   const { audienceList, audienceCount } = useLiveAudienceState(props.liveID);
   const { currentLive } = useLiveListState(props.liveID);
-  const { cameraStatus, microphoneStatus, captureVolume, setCaptureVolume, networkInfo } = useDeviceState();
+  const { cameraStatus, cameraLastError, microphoneStatus, microphoneLastError, captureVolume, setCaptureVolume, networkInfo } = useDeviceState();
   const { summaryData } = useLiveSummaryState(props.liveID);
 
-  const ICON_DIR = '/static/images/live';
-  const ICON_VIDEO = `${ICON_DIR}/live-status-video.png`;
-  const ICON_AUDIO = `${ICON_DIR}/live-status-audio.png`;
-  const ICON_TEMPERATURE = `${ICON_DIR}/live-status-temperature.png`;
-  const ICON_NETWORK_GOOD = `${ICON_DIR}/live-status-network.png`;
-  const ICON_NETWORK_WARN = `${ICON_DIR}/live-status-network-warn.png`;
-  const ICON_NETWORK_DANGER = `${ICON_DIR}/live-status-network-danger.png`;
-  const ICON_TRIGGER_POOR = `${ICON_DIR}/live-status-network-poor.png`;
-  const ICON_TRIGGER_DISCONNECTED = `${ICON_DIR}/live-status-network-disconnected.png`;
+  const ICON_DIR = '/static/images/live/icon';
+  const ICON_VIDEO = `${ICON_DIR}/status-video.png`;
+  const ICON_VIDEO_OFF = `${ICON_DIR}/status-video-off.png`;
+  const ICON_VIDEO_ERROR = `${ICON_DIR}/status-video-error.png`;
+  const ICON_AUDIO = `${ICON_DIR}/status-audio.png`;
+  const ICON_AUDIO_OFF = `${ICON_DIR}/status-audio-off.png`;
+  const ICON_NETWORK = `${ICON_DIR}/status-network.png`;
+  const ICON_NETWORK_POOR = `${ICON_DIR}/status-network-poor.png`;
+  const ICON_NETWORK_BAD = `${ICON_DIR}/status-network-bad.png`;
+  const ICON_NETWORK_DISCONNECTED = `${ICON_DIR}/status-network-disconnected.png`;
+  const ICON_TRIGGER_POOR = `${ICON_DIR}/status-network-trigger-poor.png`;
+  const ICON_TRIGGER_BAD = `${ICON_DIR}/status-network-trigger-bad.png`;
+  const ICON_TRIGGER_DISCONNECTED = `${ICON_DIR}/status-network-trigger-disconnected.png`;
   const drawerHeight = 1050;
 
   const visible = ref(false);
@@ -245,7 +240,14 @@
   const liveDuration = ref(0);
   const volume = ref(0);
   const systemNetworkConnected = ref(true);
-  const systemNetworkWeak = ref(false);
+  const triggerTopPx = (() => {
+    try {
+      const statusBarTop = (uni.getSystemInfoSync().safeArea as any)?.top || 0;
+      return uni.upx2px(220) - statusBarTop + 16;
+    } catch (e) {
+      return uni.upx2px(220);
+    }
+  })();
 
   let liveStartAt = 0;
   let durationTimer: ReturnType<typeof setInterval> | null = null;
@@ -290,16 +292,14 @@
     return `${Math.round(n)}${suffix}`;
   };
 
-  const networkStatus = computed<'good' | 'poor' | 'disconnected'>(() => {
+  const networkStatus = computed<'good' | 'poor' | 'bad' | 'disconnected' | 'checking'>(() => {
     if (!systemNetworkConnected.value) return 'disconnected';
     const quality = Number(networkInfo.value?.quality);
-    if (quality === NetworkQuality.Poor || quality === NetworkQuality.Bad || quality === NetworkQuality.VeryBad) {
-      return 'poor';
-    }
-    if (quality === NetworkQuality.Excellent || quality === NetworkQuality.Good) {
-      return 'good';
-    }
-    return systemNetworkWeak.value ? 'poor' : 'good';
+    if (quality === NetworkQuality.Down) return 'disconnected';
+    if (quality === NetworkQuality.Bad || quality === NetworkQuality.VeryBad) return 'bad';
+    if (quality === NetworkQuality.Poor) return 'poor';
+    if (quality === NetworkQuality.Excellent || quality === NetworkQuality.Good) return 'good';
+    return 'checking';
   });
 
   const durationText = computed(() => {
@@ -316,62 +316,113 @@
   const giftCoins = computed(() => Math.max(0, Math.floor(Number(summaryData.value?.totalGiftCoins) || 0)));
   const gifterCount = computed(() => Math.max(0, Math.floor(Number(summaryData.value?.totalGiftUniqueSenders) || 0)));
   const likeCount = computed(() => Math.max(0, Math.floor(Number(summaryData.value?.totalLikesReceived) || 0)));
+  const giftCount = computed(() => Math.max(0, Math.floor(Number(summaryData.value?.totalGiftsSent) || 0)));
+  const messageCount = computed(() => Math.max(0, Math.floor(Number(summaryData.value?.totalMessageSent) || 0)));
   const onlineCountText = computed(() => formatCount(onlineCount.value));
   const giftCoinsText = computed(() => formatCount(giftCoins.value));
   const gifterCountText = computed(() => formatCount(gifterCount.value));
   const likeCountText = computed(() => formatCount(likeCount.value));
+  const giftCountText = computed(() => formatCount(giftCount.value));
+  const messageCountText = computed(() => formatCount(messageCount.value));
 
   const networkIcon = computed(() => {
     if (networkStatus.value === 'poor') return ICON_TRIGGER_POOR;
+    if (networkStatus.value === 'bad') return ICON_TRIGGER_BAD;
     if (networkStatus.value === 'disconnected') return ICON_TRIGGER_DISCONNECTED;
     return '';
   });
 
   const networkIconWidth = computed(() =>
-    networkStatus.value === 'disconnected' ? 34 : 26
+    networkStatus.value === 'poor' ? 26 : 34
   );
 
+  const triggerLabel = computed(() => {
+    if (networkStatus.value === 'poor') return t('liveStatus.networkPoorLabel');
+    if (networkStatus.value === 'bad') return t('liveStatus.networkVeryBadLabel');
+    if (networkStatus.value === 'disconnected') return t('liveStatus.networkDisconnectedLabel');
+    return t('liveStatus.title');
+  });
+
   const networkHealthIcon = computed(() => {
-    if (networkStatus.value === 'poor') return ICON_NETWORK_WARN;
-    if (networkStatus.value === 'disconnected') return ICON_NETWORK_DANGER;
-    return ICON_NETWORK_GOOD;
+    if (networkStatus.value === 'poor') return ICON_NETWORK_POOR;
+    if (networkStatus.value === 'bad') return ICON_NETWORK_BAD;
+    if (networkStatus.value === 'disconnected') return ICON_NETWORK_DISCONNECTED;
+    return ICON_NETWORK;
   });
 
   const networkStateText = computed(() => {
     if (networkStatus.value === 'poor') return t('liveStatus.networkPoorLabel');
+    if (networkStatus.value === 'bad') return t('liveStatus.networkBadLabel');
     if (networkStatus.value === 'disconnected') return t('liveStatus.networkDisconnectedLabel');
+    if (networkStatus.value === 'checking') return t('liveStatus.networkCheckingLabel');
     return t('liveStatus.networkExcellent');
+  });
+
+  const networkStateCopy = computed(() => {
+    if (networkStatus.value === 'poor') return t('liveStatus.networkFluctuatingCopy');
+    if (networkStatus.value === 'bad') return t('liveStatus.networkSwitchCopy');
+    if (networkStatus.value === 'disconnected') return t('liveStatus.networkDisconnectedCopy');
+    if (networkStatus.value === 'checking') return t('liveStatus.networkCheckingCopy');
+    return t('liveStatus.networkCopy');
   });
 
   const rttText = computed(() => formatNetworkMetric(networkInfo.value?.delay, 'ms'));
   const downLossText = computed(() => formatNetworkMetric(networkInfo.value?.downLoss, '%'));
   const upLossText = computed(() => formatNetworkMetric(networkInfo.value?.upLoss, '%'));
 
-  const videoStateText = computed(() =>
-    cameraStatus.value === DeviceStatus.ON ? t('liveStatus.videoNormal') : t('liveStatus.videoOff')
+  const isVideoDeviceError = computed(() => cameraLastError.value !== DeviceError.NO_ERROR);
+  const isVideoOff = computed(() =>
+    !isVideoDeviceError.value && cameraStatus.value !== DeviceStatus.ON
   );
-  const videoStateCopy = computed(() =>
-    cameraStatus.value === DeviceStatus.ON ? t('liveStatus.videoNormalCopy') : t('liveStatus.videoOffCopy')
+  const isVideoStreamError = computed(() => {
+    if (isVideoDeviceError.value || isVideoOff.value) return false;
+    return Number(networkInfo.value?.quality) === NetworkQuality.Down;
+  });
+  const videoIcon = computed(() => {
+    if (isVideoStreamError.value) return ICON_VIDEO_ERROR;
+    return isVideoDeviceError.value || isVideoOff.value ? ICON_VIDEO_OFF : ICON_VIDEO;
+  });
+  const videoStateText = computed(() => {
+    if (isVideoDeviceError.value || isVideoStreamError.value) return t('liveStatus.videoError');
+    return isVideoOff.value ? t('liveStatus.videoOff') : t('liveStatus.videoNormal');
+  });
+  const videoStateCopy = computed(() => {
+    if (isVideoDeviceError.value) return t('liveStatus.videoErrorCopy');
+    if (isVideoStreamError.value) return t('liveStatus.videoStreamErrorCopy');
+    return isVideoOff.value ? t('liveStatus.videoOffCopy') : t('liveStatus.videoNormalCopy');
+  });
+  const isAudioDeviceError = computed(() => microphoneLastError.value !== DeviceError.NO_ERROR);
+  const isAudioOff = computed(() =>
+    !isAudioDeviceError.value && (microphoneStatus.value !== DeviceStatus.ON || volume.value <= 0)
   );
-  const audioStateText = computed(() =>
-    microphoneStatus.value === DeviceStatus.ON ? t('liveStatus.audioNormal') : t('liveStatus.audioOff')
+  const audioIcon = computed(() =>
+    isAudioDeviceError.value || isAudioOff.value ? ICON_AUDIO_OFF : ICON_AUDIO
   );
-  const audioStateCopy = computed(() =>
-    microphoneStatus.value === DeviceStatus.ON ? t('liveStatus.audioNormalCopy') : t('liveStatus.audioOffCopy')
-  );
+  const audioStateText = computed(() => {
+    if (isAudioDeviceError.value) return t('liveStatus.audioError');
+    return isAudioOff.value ? t('liveStatus.audioOff') : t('liveStatus.audioNormal');
+  });
+  const audioStateCopy = computed(() => {
+    if (isAudioDeviceError.value) return t('liveStatus.audioErrorCopy');
+    return isAudioOff.value ? t('liveStatus.audioOffCopy') : t('liveStatus.audioNormalCopy');
+  });
 
   const open = () => {
     visible.value = true;
   };
 
-  const onVolumeChange = (e: any) => {
-    volume.value = Math.round(Number(e?.detail?.value) || 0);
+  const onVolumeInput = (v: number) => {
+    volume.value = Math.max(0, Math.round(Number(v) || 0));
+    setCaptureVolume({ volume: volume.value });
+  };
+
+  const onVolumeChange = (v: number) => {
+    volume.value = Math.max(0, Math.round(Number(v) || 0));
     setCaptureVolume({ volume: volume.value });
   };
 
   const applyNetworkType = (networkType?: string, isConnected?: boolean) => {
     systemNetworkConnected.value = !(isConnected === false || !networkType || networkType === 'none');
-    systemNetworkWeak.value = networkType === '2g' || networkType === '3g';
   };
 
   const onNetworkChange = (res: any) => {
@@ -387,6 +438,28 @@
     liveStartAt = toMsTimestamp(createTime);
   }, { immediate: true });
 
+  let pauseStartAt = 0;
+
+  const onPauseChanged = (paused: boolean) => {
+    if (paused) {
+      pauseStartAt = Date.now();
+      if (durationTimer != null) {
+        clearInterval(durationTimer);
+        durationTimer = null;
+      }
+    } else {
+      if (pauseStartAt > 0) {
+        liveStartAt += Date.now() - pauseStartAt;
+        pauseStartAt = 0;
+      }
+      if (durationTimer == null) {
+        durationTimer = setInterval(() => {
+          liveDuration.value = Math.floor(localElapsedSeconds());
+        }, 1000);
+      }
+    }
+  };
+
   onMounted(() => {
     durationTimer = setInterval(() => {
       liveDuration.value = Math.floor(localElapsedSeconds());
@@ -395,6 +468,7 @@
       success: (res: any) => applyNetworkType(res?.networkType),
     });
     uni.onNetworkStatusChange(onNetworkChange);
+    uni.$on('pusher:pauseChanged', onPauseChanged);
   });
 
   onUnmounted(() => {
@@ -403,6 +477,7 @@
       durationTimer = null;
     }
     uni.offNetworkStatusChange(onNetworkChange);
+    uni.$off('pusher:pauseChanged', onPauseChanged);
   });
 </script>
 

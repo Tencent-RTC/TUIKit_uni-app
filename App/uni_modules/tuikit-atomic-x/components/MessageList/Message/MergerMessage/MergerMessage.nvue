@@ -1,7 +1,7 @@
 <template>
   <view 
     class="merger-message"
-    :class="'merger-message-' + (message.isSentBySelf ? 'out' : 'in')"
+    :class="plain ? 'merger-container--plain' : 'merger-message-' + (message.isSentBySelf ? 'out' : 'in')"
     @tap="handleTap"
   >
     <view class="merger-highlight">
@@ -21,22 +21,46 @@
         <text class="merger-label">聊天记录</text>
       </view>
     </view>
+
+    <!-- 点击查看完整聊天记录：整页覆盖，内部消息点击「合并转发消息」可继续向下钻取 -->
+    <MergedMessageDetail
+      v-if="showDetail"
+      :visible="showDetail"
+      :message="message"
+      :conversationID="conversationID"
+      @update:visible="(v) => (showDetail = v)"
+      @close="handleDetailClose"
+    />
   </view>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, inject } from 'vue'
+import MergedMessageDetail from './MergedMessageDetail.nvue'
 import type { MessageInfo } from '../../../../types/message'
+import { MESSAGE_LONG_PRESSED_INJECTION_KEY } from '../../../../constants/messageInjectionKeys'
 
 interface Props {
   message: MessageInfo
+  conversationID?: string
+  // 无气泡模式（详情页内再套一层合并转发时）：透明底、直角、不按 isSentBySelf 靠右
+  plain?: boolean
 }
 
-const props = defineProps<Props>()
+const props = withDefaults(defineProps<Props>(), {
+  conversationID: '',
+  plain: false
+})
 
 const emit = defineEmits<{
   tap: [message: MessageInfo]
 }>()
+
+// 详情页可见性：组件内部自洽，是否放开查看由业务方通过长按菜单等入口控制
+const showDetail = ref(false)
+
+// 外层 Message 提供的“本次触摸是否已长按”；不在 Message 内使用（如详情页递归渲染的只读场景）时恒为 false
+const isLongPressed = inject<() => boolean>(MESSAGE_LONG_PRESSED_INJECTION_KEY, () => false)
 
 const mergedMessage = computed(() => {
   return props.message.messagePayload
@@ -51,8 +75,21 @@ const abstractList = computed(() => {
   return abstracts.slice(0, 4)
 })
 
+// iOS 暂时禁用点击打开聊天记录详情；恢复时把该值改为 false 即可
+const isDetailDisabled = (() => {
+  try { return uni.getSystemInfoSync().platform === 'ios' } catch (e) { return false }
+})()
+
 const handleTap = () => {
+  if (isDetailDisabled) return
+  // 长按（弹出操作菜单）松手后会补发 tap，此时不应进入详情
+  if (isLongPressed()) return
+  showDetail.value = true
   emit('tap', props.message)
+}
+
+const handleDetailClose = () => {
+  showDetail.value = false
 }
 </script>
 
@@ -80,6 +117,14 @@ const handleTap = () => {
   border-radius: 20rpx;
   padding: 20rpx 24rpx;
   flex-direction: column;
+}
+
+/* 无气泡模式（合并转发详情）：透明底，用细边框圈出卡片，避免内容裸露显得突兀 */
+.merger-container--plain {
+  max-width: 602rpx;
+  background-color: transparent;
+  border: 1rpx solid #E6E9F0;
+  border-radius: 12rpx;
 }
 
 .merger-title {

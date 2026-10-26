@@ -66,11 +66,15 @@ export default {
   flex: 1;
   flex-direction: row;
   flex-wrap: wrap;
+  /* 父级 .msg__main 是 column 且 align-items: flex-start，子项宽度默认按内容自适应，
+     没有上界时 flex-wrap 永远不换行、整行向右溢出（多选时左侧勾选列占宽后直接被裁掉）。
+     stretch 让 .rb 宽度跟随父容器，chip 才能按可用宽度换行 */
+  align-self: stretch;
 }
 
 .rb--out {
+  /* .rb 已经是 stretch（撑满父宽），这里只需把 chip 内容右对齐 */
   justify-content: flex-end;
-  align-self: flex-end;
 }
 
 .rb__chip {

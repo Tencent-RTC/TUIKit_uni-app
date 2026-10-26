@@ -1,0 +1,393 @@
+<template>
+  <view v-if="visible" class="merged-detail">
+    <CustomNavbar
+      :title="detailTitle"
+      :showBack="true"
+      :showShadow="true"
+      @back="handleBack"
+    />
+
+    <scroll-view
+      class="merged-detail__scroll"
+      :scroll-y="true"
+      :show-scrollbar="false"
+    >
+      <view v-if="isLoading" class="merged-detail__hint">
+        <text class="merged-detail__hint-text">加载中…</text>
+      </view>
+
+      <view v-else-if="detailItems.length == 0" class="merged-detail__hint">
+        <text class="merged-detail__hint-text">暂无消息</text>
+      </view>
+
+      <view v-else class="merged-detail__list">
+        <view
+          v-for="(item, index) in detailItems"
+          :key="item.key"
+          class="merged-detail__item"
+        >
+          <!-- 系统提示：居中展示，不套消息气泡 -->
+          <view v-if="item.centerText.length > 0" class="merged-detail__center">
+            <text class="merged-detail__center-text">{{ item.centerText }}</text>
+          </view>
+
+          <!-- 聊天记录里所有消息统一固定左对齐：头像 + 昵称/时间 + 无气泡正文 -->
+          <view v-else class="merged-detail__row">
+            <Avatar :src="item.avatar" :name="item.name" :size="64" defaultAvatarType="user" class="merged-detail__avatar" />
+            <view class="merged-detail__main">
+              <view class="merged-detail__header">
+                <text class="merged-detail__name" :lines="1">{{ item.name }}</text>
+                <text class="merged-detail__time">{{ item.timeText }}</text>
+              </view>
+              <view class="merged-detail__content">
+                <TextMessage v-if="item.type == 1" :message="item.message" :plain="true" />
+                <ImageMessage v-else-if="item.type == 2" :message="item.message" :conversationID="conversationID" />
+                <VideoMessage v-else-if="item.type == 3" :message="item.message" :conversationID="conversationID" />
+                <AudioMessage v-else-if="item.type == 4" :message="item.message" :conversationID="conversationID" />
+                <FileMessage v-else-if="item.type == 5" :message="item.message" :conversationID="conversationID" :plain="true" />
+                <FaceMessage v-else-if="item.type == 6" :message="item.message" />
+                <CustomMessage v-else-if="item.type == 8" :message="item.message" :conversationID="conversationID" :plain="true" />
+                <!-- 嵌套的合并转发：点击后在本页内向下钻取，返回时回到上一层 -->
+                <view v-else-if="item.type == 9" @tap.stop="handleNestedTap(item.message)">
+                  <MergerMessage :message="item.message" :plain="true" />
+                </view>
+                <TextMessage v-else :message="item.message" :plain="true" />
+              </view>
+            </view>
+          </view>
+
+          <!-- 消息之间用分割线隔开（最后一条除外） -->
+          <view v-if="index < detailItems.length - 1" class="merged-detail__divider"></view>
+        </view>
+      </view>
+    </scroll-view>
+  </view>
+</template>
+
+<script setup lang="uts">
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
+import CustomNavbar from '../../../CustomNavbar/CustomNavbar.uvue'
+import Avatar from '../../../Avatar/Avatar.uvue'
+import TextMessage from '../TextMessage/TextMessage.uvue'
+import ImageMessage from '../ImageMessage/ImageMessage.uvue'
+import VideoMessage from '../VideoMessage/VideoMessage.uvue'
+import AudioMessage from '../AudioMessage/AudioMessage.uvue'
+import FileMessage from '../FileMessage/FileMessage.uvue'
+import FaceMessage from '../FaceMessage/FaceMessage.uvue'
+import CustomMessage from '../CustomMessage/CustomMessage.uvue'
+import MergerMessage from './MergerMessage.uvue'
+import { useMessageActionState } from '../../../../state/MessageActionState'
+import { formatTime } from '../../../../utils/timeUtils'
+import { MERGED_DETAIL_REFRESH_EVENT } from '../../../../constants/messageEvents'
+
+type Props = {
+  visible: boolean
+  // 被点击的合并转发消息：其 messagePayload 携带 title / abstractList
+  message: any | null
+  // 宿主会话 ID，透传给内部内容组件
+  conversationID?: string
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  conversationID: ''
+})
+
+type Emits = {
+  'update:visible': boolean
+  close: void
+}
+
+const emit = defineEmits<Emits>()
+
+/** 详情页里的一行：由原始合并消息整理出的展示模型，避免模板里直接读 UTSJSONObject */
+type DetailItem = {
+  key: string
+  type: number
+  message: UTSJSONObject
+  name: string
+  avatar: string
+  timeText: string
+  // 非空表示按系统提示居中展示
+  centerText: string
+}
+
+const isLoading = ref<boolean>(false)
+// 合并转发内的消息不属于任何会话的消息列表，只能整包下载后在前端持有
+const mergedList = ref<any[]>([])
+// 当前展示的合并转发消息（嵌套钻取时会切换到内层）
+const currentMessage = ref<any | null>(null)
+// 钻取历史栈：返回时弹出上一层；为空时返回即关闭
+const history: any[] = []
+
+function toUTSJSONObject(value: any | null): UTSJSONObject {
+  return JSON.parse<UTSJSONObject>(JSON.stringify(value ?? new UTSJSONObject())) ?? new UTSJSONObject()
+}
+
+function readString(obj: UTSJSONObject | null, key: string): string {
+  if (obj == null) return ''
+  const v: any | null = obj[key]
+  return typeof v == 'string' ? (v as string) : ''
+}
+
+const detailTitle = computed((): string => {
+  const cur: any | null = currentMessage.value
+  if (cur == null) return '聊天记录'
+  const payloadRaw: any | null = toUTSJSONObject(cur)['messagePayload']
+  if (payloadRaw == null) return '聊天记录'
+  const title: string = readString(payloadRaw as UTSJSONObject, 'title')
+  return title.length > 0 ? title : '聊天记录'
+})
+
+function resolveSenderName(sender: UTSJSONObject | null): string {
+  const nameCard: string = readString(sender, 'nameCard')
+  if (nameCard.length > 0) return nameCard
+  const friendRemark: string = readString(sender, 'friendRemark')
+  if (friendRemark.length > 0) return friendRemark
+  const nickname: string = readString(sender, 'nickname')
+  if (nickname.length > 0) return nickname
+  return readString(sender, 'userID')
+}
+
+const detailItems = computed((): DetailItem[] => {
+  const result: DetailItem[] = []
+  const list: any[] = mergedList.value
+  for (let i = 0; i < list.length; i++) {
+    const raw: any | null = list[i]
+    if (raw == null) continue
+    // 展示用的副本：统一把 isSentBySelf 置为 false（内容组件各自按它决定左右样式），不影响原始数据
+    const m: UTSJSONObject = toUTSJSONObject(raw)
+    const statusRaw: any | null = m['status']
+    // 已撤回的消息不展示，与 iOS 详情页一致
+    if (statusRaw == 4) continue
+    m['isSentBySelf'] = false
+    // 详情页只展示消息内容：去掉引用块和表情回应
+    m['quoteInfo'] = null
+    m['reactionList'] = new Array<any>()
+
+    const typeRaw: any | null = m['messageType']
+    const type: number = typeof typeRaw == 'number' ? (typeRaw as number) : 0
+    const msgIDRaw: any | null = m['msgID']
+    const msgID: string = msgIDRaw != null ? `${msgIDRaw}` : ''
+
+    let centerText: string = ''
+    if (type == 7) {
+      const payloadRaw: any | null = m['messagePayload']
+      const content: string = payloadRaw != null ? readString(payloadRaw as UTSJSONObject, 'content') : ''
+      centerText = content.length > 0 ? content : '系统消息'
+    }
+
+    const fromRaw: any | null = m['from']
+    const sender: UTSJSONObject | null = fromRaw != null ? (fromRaw as UTSJSONObject) : null
+    const tsRaw: any | null = m['timestamp']
+    const ts: number = typeof tsRaw == 'number' ? (tsRaw as number) : 0
+
+    result.push({
+      key: msgID + '_' + i,
+      type: type,
+      message: m,
+      name: resolveSenderName(sender),
+      avatar: readString(sender, 'avatarURL'),
+      timeText: ts > 0 ? formatTime(ts, true) : '',
+      centerText: centerText
+    } as DetailItem)
+  }
+  return result
+})
+
+const loadMergedList = async (): Promise<void> => {
+  const target: any | null = currentMessage.value
+  if (target == null) return
+  isLoading.value = true
+  mergedList.value = []
+  try {
+    const state = useMessageActionState({ message: toUTSJSONObject(target) })
+    const list: any[] = await state.downloadMergedMessageList()
+    mergedList.value = list
+  } catch (error: any) {
+    console.error('[MergedMessageDetail] downloadMergedMessageList failed:', `${error}`)
+    mergedList.value = []
+  }
+  isLoading.value = false
+}
+
+// 静默刷新：重新拉取列表替换副本，不切 loading 态（避免整页闪成“加载中”）。
+// 子消息不在会话消息列表里，SDK 不会推送其下载结果，下载完成后靠它拿到最新的本地路径。
+// 一屏多张图片/视频会同时完成下载：进行中的刷新只再补跑一次（合并），避免 N 次整表重拉
+let refreshInflight: boolean = false
+let refreshRerun: boolean = false
+
+const refreshMergedListSilently = async (): Promise<void> => {
+  if (refreshInflight) {
+    refreshRerun = true
+    return
+  }
+  refreshInflight = true
+  do {
+    refreshRerun = false
+    const target: any | null = currentMessage.value
+    if (target == null) break
+    try {
+      const state = useMessageActionState({ message: toUTSJSONObject(target) })
+      const list: any[] = await state.downloadMergedMessageList()
+      mergedList.value = list
+    } catch (error: any) {
+      console.error('[MergedMessageDetail] refresh failed:', `${error}`)
+    }
+  } while (refreshRerun)
+  refreshInflight = false
+}
+
+const handleRefreshEvent = (_data: any): void => {
+  if (!props.visible) return
+  refreshMergedListSilently()
+}
+
+onMounted((): void => {
+  uni.$on(MERGED_DETAIL_REFRESH_EVENT, handleRefreshEvent)
+})
+
+onBeforeUnmount((): void => {
+  uni.$off(MERGED_DETAIL_REFRESH_EVENT, handleRefreshEvent)
+})
+
+const handleNestedTap = (nested: any | null): void => {
+  if (nested == null) return
+  const cur: any | null = currentMessage.value
+  if (cur != null) history.push(cur)
+  currentMessage.value = nested
+  loadMergedList()
+}
+
+const handleClose = (): void => {
+  emit('update:visible', false)
+  emit('close')
+}
+
+const handleBack = (): void => {
+  if (history.length > 0) {
+    currentMessage.value = history.pop()
+    loadMergedList()
+    return
+  }
+  handleClose()
+}
+
+watch(
+  (): boolean => props.visible,
+  (isVisible: boolean): void => {
+    if (!isVisible) return
+    while (history.length > 0) {
+      history.pop()
+    }
+    currentMessage.value = props.message
+    loadMergedList()
+  },
+  { immediate: true }
+)
+</script>
+
+<style>
+.merged-detail {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #FFFFFF;
+  flex-direction: column;
+  z-index: 9990;
+}
+
+.merged-detail__scroll {
+  flex: 1;
+}
+
+.merged-detail__list {
+  flex-direction: column;
+  padding-bottom: 40rpx;
+}
+
+.merged-detail__item {
+  flex-direction: column;
+}
+
+/* 消息之间的分割线：与头像右侧的正文区左边缘对齐 */
+.merged-detail__divider {
+  height: 1rpx;
+  margin-left: 116rpx;
+  margin-right: 32rpx;
+  margin-top: 24rpx;
+  background-color: #EDEFF3;
+}
+
+/* 固定左对齐：头像 64rpx + 间距 20rpx，左右各 32rpx，正文区 602rpx */
+.merged-detail__row {
+  flex-direction: row;
+  align-items: flex-start;
+  width: 750rpx;
+  padding: 24rpx 32rpx 0;
+}
+
+.merged-detail__avatar {
+  margin-right: 20rpx;
+}
+
+.merged-detail__main {
+  width: 602rpx;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.merged-detail__header {
+  width: 602rpx;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.merged-detail__name {
+  max-width: 430rpx;
+  font-size: 24rpx;
+  line-height: 34rpx;
+  color: rgba(0, 0, 0, 0.5);
+  lines: 1;
+  text-overflow: ellipsis;
+}
+
+.merged-detail__time {
+  margin-left: 16rpx;
+  font-size: 22rpx;
+  line-height: 34rpx;
+  color: rgba(0, 0, 0, 0.35);
+}
+
+.merged-detail__content {
+  width: 602rpx;
+  margin-top: 8rpx;
+  align-items: flex-start;
+}
+
+.merged-detail__center {
+  flex-direction: row;
+  justify-content: center;
+  padding: 12rpx 32rpx;
+}
+
+.merged-detail__center-text {
+  font-size: 24rpx;
+  line-height: 34rpx;
+  color: rgba(0, 0, 0, 0.4);
+  text-align: center;
+}
+
+.merged-detail__hint {
+  align-items: center;
+  justify-content: center;
+  padding-top: 200rpx;
+}
+
+.merged-detail__hint-text {
+  font-size: 28rpx;
+  color: rgba(0, 0, 0, 0.4);
+}
+</style>

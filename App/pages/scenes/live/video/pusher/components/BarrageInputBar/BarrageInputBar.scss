@@ -1,0 +1,60 @@
+@import '../../../../styles/tokens.scss';
+
+.comment-bar {
+  position: fixed;
+  left: 24rpx;
+  right: 24rpx;
+  bottom: 0;
+  height: 72rpx;
+  flex-direction: row;
+  align-items: center;
+  padding: 0 12rpx;
+  border-width: 1rpx;
+  border-style: solid;
+  border-color: $live-dark-border-08;
+  border-radius: 36rpx;
+  background-color: $live-dark-bg-input;
+  z-index: 900;
+}
+
+.comment-cancel {
+  width: 48rpx;
+  height: 48rpx;
+  justify-content: center;
+  align-items: center;
+}
+
+.comment-cancel-text {
+  color: $live-dark-text-58;
+  font-size: 40rpx;
+  line-height: 44rpx;
+}
+
+.comment-input {
+  flex: 1;
+  height: 68rpx;
+  color: $live-dark-text-primary;
+  font-size: 26rpx;
+  font-weight: 600;
+  padding-left: 8rpx;
+  padding-right: 8rpx;
+}
+
+.comment-input-placeholder {
+  color: $live-dark-text-40;
+}
+
+.comment-send {
+  height: 56rpx;
+  padding: 0 28rpx;
+  border-radius: 28rpx;
+  background-image: linear-gradient(135deg, $live-color-brand-light, $live-color-brand-deep);
+  justify-content: center;
+  align-items: center;
+}
+
+.comment-send-text {
+  color: $live-dark-text-primary;
+  font-size: 24rpx;
+  font-weight: 600;
+}

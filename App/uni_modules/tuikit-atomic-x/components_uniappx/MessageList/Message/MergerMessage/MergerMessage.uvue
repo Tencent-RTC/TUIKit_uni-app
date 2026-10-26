@@ -1,8 +1,7 @@
 <template>
   <view
     class="merger-message"
-    :class="'merger-message-' + (isSelf ? 'out' : 'in')"
-    @tap="handleTap"
+    :class="plain == true ? 'merger-container--plain' : 'merger-message-' + (isSelf ? 'out' : 'in')"
   >
     <view class="merger-highlight">
       <view class="merger-container">
@@ -28,13 +27,14 @@
 import { computed } from 'vue'
 
 type Props = {
-  message: any | null}
+  message: any | null
+  // 无气泡模式（合并转发详情内的合并转发卡片）：透明底、细边框、不按 isSentBySelf 靠右
+  plain?: boolean
+}
 
-const props = defineProps<Props>()
-
-const emit = defineEmits<{
-  tap: [message: UTSJSONObject]
-}>()
+const props = withDefaults(defineProps<Props>(), {
+  plain: false
+})
 
 const mergedMessage = computed((): any | null => {
   const messageObj: UTSJSONObject = props.message as UTSJSONObject
@@ -69,10 +69,6 @@ const abstractList = computed((): string[] => {
   }
   return result
 })
-
-const handleTap = () => {
-  emit('tap', props.message)
-}
 </script>
 
 <style scoped>
@@ -99,6 +95,16 @@ const handleTap = () => {
   border-radius: 20rpx;
   padding: 20rpx 24rpx;
   flex-direction: column;
+}
+
+/* 无气泡模式（合并转发详情）：用细边框圈出卡片，避免内容裸露显得突兀 */
+.merger-container--plain {
+  max-width: 602rpx;
+  background-color: transparent;
+  border-width: 1rpx;
+  border-style: solid;
+  border-color: #E6E9F0;
+  border-radius: 12rpx;
 }
 
 .merger-title {

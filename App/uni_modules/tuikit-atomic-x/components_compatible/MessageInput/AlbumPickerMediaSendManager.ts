@@ -1,8 +1,8 @@
 import { MessageType, MessageStatus } from '../../types/message';
 import { AlbumMediaType, createAlbumPicker } from '../AlbumPicker/AlbumPicker';
-import { useMessageInputState } from '../../state_compatible/MessageInputState';
-import { useMessageListState } from '../../state_compatible/MessageListState';
-import { useLoginState } from '../../state_compatible/LoginState';
+import { useMessageInputState } from '../../state/MessageInputState';
+import { useMessageListState } from '../../state/MessageListState';
+import { useLoginState } from '../../state/LoginState';
 
 var TAG = '[AlbumPickerMediaSendManager]';
 var PLACEHOLDER_PREFIX = 'placeholder_video_';

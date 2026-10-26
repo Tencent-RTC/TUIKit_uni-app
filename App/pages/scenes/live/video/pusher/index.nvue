@@ -4,9 +4,17 @@
                                           width: systemInfo?.safeArea?.width + 'px',
                                        }">
     <LiveStreamView v-if="liveID && liveID.length > 0 && !isLiveEnded" :liveID="liveID || ''" :isAnchor="true" :templateLayout="templateLayout" :isLiving="isStartLive" :onStreamViewClick="ShowAnchorViewClickPanel"></LiveStreamView>
-    <BeforeLiveView v-if="!isStartLive && !isLiveEnded" v-model:templateLayout="templateLayout" @back="goBackToTabBar" @tip="showTip" @started="onStartLive" />
+    <BeforeLiveView v-if="!isStartLive && !isLiveEnded" v-model:templateLayout="templateLayout" :liveID="liveID" @back="goBackToTabBar" @tip="showTip" @started="onStartLive" />
     <LivingView v-if="isStartLive" :liveID="liveID" :safeArea="safeArea" @tip="showTip" @ended="onLiveEnded" @receiveGift="onBarrageReceiveGift" />
-    <LiveSummaryView v-if="isLiveEnded" :summary="liveSummary" :liveDuration="endedElapsedSeconds" @close="goBackToTabBar" />
+    <LiveSummaryView
+      v-if="isLiveEnded"
+      :summary="liveSummary"
+      :liveDuration="endedElapsedSeconds"
+      :startTime="liveStartAt"
+      :endedAt="endedAt"
+      :pausedSeconds="endedPausedSeconds"
+      @close="goBackToTabBar"
+    />
     <GiftPlayer ref="giftPlayerRef" v-model="isLargeSizeGiftPlayer" :url="giftInfo?.resourceURL" :safeArea="safeArea" @finished="svgaPlayerFinished" />
     <LiveToast
       v-if="tipVisible"
@@ -34,17 +42,17 @@
   import LiveToast from '@/uni_modules/tuikit-atomic-x/components/LiveToast.nvue';
 
   const { loginUserInfo } = useLoginState();
-  uni.$liveID = `live_${uni.$userID}`
+  const liveID = ref(`live_${uni.$userID}`);
   uni.$localGuestStatus = 'IDLE'
   const { setVoiceEarMonitorEnable,
     setVoiceEarMonitorVolume,
     setAudioChangerType,
     setAudioReverbType,
   } = useAudioEffectState()
-  const { setSmoothLevel, setWhitenessLevel, setRuddyLevel } = useBaseBeautyState()
+  const { setSmoothLevel, setWhitenessLevel, setRuddyLevel, resetRealUiValues } = useBaseBeautyState()
   const { openLocalCamera, openLocalMicrophone, closeLocalMicrophone, closeLocalCamera } = useDeviceState();
-  const { currentLive } = useLiveListState(uni?.$liveID);
-  const { summaryData } = useLiveSummaryState(uni?.$liveID);
+  const { currentLive } = useLiveListState(liveID.value);
+  const { summaryData } = useLiveSummaryState(liveID.value);
 
   enum PusherStatus {
     PREPARE = 'PREPARE',
@@ -65,17 +73,18 @@
     width: 375,
     height: 750,
   });
-  const liveID = ref(uni?.$liveID);
   const templateLayout = ref(600);
   const liveStartAt = ref(0);
   const endedElapsedSeconds = ref(0);
+  const endedAt = ref(0);
+  const endedPausedSeconds = ref(0);
 
   const giftInfo = ref({});
   const isLargeSizeGiftPlayer = ref(false);
   const liveSummary = ref(null);
   const giftPlayerRef = ref();
   const { showGift, onGiftFinished } = giftService({
-    roomId: uni?.$liveID,
+    roomId: liveID.value,
     giftPlayerRef,
   })
 
@@ -110,6 +119,7 @@
     setSmoothLevel({ smoothLevel: 0 })
     setWhitenessLevel({ whitenessLevel: 0 })
     setRuddyLevel({ ruddyLevel: 0 })
+    resetRealUiValues();
   }
 
   const handleHideInput = () => {
@@ -151,15 +161,25 @@
     liveStartAt.value = toMsTimestamp(createTime);
   }, { immediate: true });
 
+  watch(() => currentLive.value?.seatLayoutTemplateID, (templateID) => {
+    const n = Number(templateID);
+    if (n > 0 && n !== templateLayout.value) {
+      templateLayout.value = n;
+    }
+  }, { immediate: true });
+
   const onStartLive = () => {
     pusherState.liveStatus = PusherStatus.PUSHER;
   };
 
-  const onLiveEnded = () => {
+  const onLiveEnded = (pausedSeconds = 0) => {
+    if (pusherState.liveStatus !== PusherStatus.PUSHER) return;
     clearAudioEffectSet();
     clearBeautyPanelSet();
+    endedAt.value = Date.now();
+    endedPausedSeconds.value = pausedSeconds || 0;
     endedElapsedSeconds.value = liveStartAt.value > 0
-      ? Math.max(0, Math.round((Date.now() - liveStartAt.value) / 1000))
+      ? Math.max(0, Math.round((Date.now() - liveStartAt.value - pausedSeconds * 1000) / 1000))
       : 0;
     pusherState.liveStatus = PusherStatus.SUMMARY;
   };
@@ -183,8 +203,7 @@
 
   watch(() => loginUserInfo.value?.userID, (newUserId, oldUserId) => {
     if (newUserId) {
-      uni.$liveID = `live_${newUserId}`;
-      liveID.value = uni.$liveID;
+      liveID.value = `live_${newUserId}`;
     }
   }, { immediate: true, deep: true });
 

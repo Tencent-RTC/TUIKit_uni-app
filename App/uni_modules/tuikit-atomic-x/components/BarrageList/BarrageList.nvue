@@ -55,7 +55,7 @@
       <cell ref="ListBottom" style="height: 10rpx;"></cell>
     </list>
 
-    <view class="new-message-pill" v-if="unreadCount > 0 && !pillHiddenByOverlay" :style="{ top: pillTopPx + 'px' }" @tap="onNewMessagePillTap">
+    <view class="new-message-pill" :style="{ top: pillTopPx + 'px', opacity: unreadCount > 0 ? 1 : 0 }" :userInteractionEnabled="unreadCount > 0" @tap="onNewMessagePillTap">
       <text class="new-message-pill-count">{{ unreadCount }}</text>
       <text class="new-message-pill-text">{{ t('bl.newMessages') }}</text>
     </view>
@@ -100,11 +100,11 @@
     resolveMsgLevel(message, uni.$userID, Number(loginUserInfo.value?.level));
   const msgLevelBadge = (message: any): string => levelBadgeUrl(msgLevel(message));
 
-  const liveID = computed(() => props.liveID || uni?.$liveID);
+  const { currentLive } = useLiveListState();
+  const liveID = computed(() => props.liveID || String(currentLive.value?.liveID || ''));
 
   const { messageList } = useBarrageState(liveID.value);
-  const { addGiftListener, removeGiftListener } = useGiftState(uni?.$liveID);
-  const { currentLive } = useLiveListState(liveID.value);
+  const { addGiftListener, removeGiftListener } = useGiftState(liveID.value);
 
   const isOwner = (message: any): boolean =>
     !!(message?.sender?.userID && currentLive.value?.liveOwner?.userID
@@ -218,9 +218,10 @@
   const NEAR_BOTTOM_THRESHOLD = 16; // px
   const following = ref(true);
 
-  // 弹层打开期间隐藏提示条(z-index 跨组件树不可靠,由宿主经事件联动)。
-  const pillHiddenByOverlay = ref(false);
-  const onPillHidden = (hidden: boolean) => { pillHiddenByOverlay.value = !!hidden; };
+  // 提示条层级:nvue 下 fixed 元素的实际层级由原生视图创建顺序决定(跨组件 z-index 不可靠)。
+  // 故提示条与 chat-list 一样常驻(用 opacity 切显隐、不用 v-if 销毁重建,nvue 也不支持 v-show),
+  // 在组件挂载时即创建,层级固定在聊天列表附近,任何后打开的弹层都能自然盖住它,无需宿主事件联动隐藏。
+  // 隐藏时同步关闭 userInteractionEnabled,避免透明视图在 nvue iOS 上仍拦截底部消息点击。
 
   // 顶部对齐垫片:nvue 的 cell 不支持 margin-top:auto,改用纯 JS 估算撑高——
   // spacer = 容器高 - (欢迎语高 + 消息数 × 单行高);不满屏时垫到贴底,满屏后由 onListScroll 精确修正。
@@ -442,8 +443,12 @@
     }
 
   onMounted(() => {
+    watch(liveID, (id, _, onCleanup) => {
+      if (!id) return;
+      addGiftListener(id, 'onReceiveGift', handleReceiveGift);
+      onCleanup(() => removeGiftListener(id, 'onReceiveGift', handleReceiveGift));
+    }, { immediate: true });
     initRuler();
-    uni.$on('barrageList:setPillHidden', onPillHidden);
     measureListHeight();
     measureWelcomeHeight();
     listContentHeight = (welcomeHeightPx.value > 0 ? welcomeHeightPx.value : WELCOME_EST_PX)
@@ -462,13 +467,10 @@
       measureListHeight();
     }, 300);
     later(() => { listReady.value = true; }, 600);
-    addGiftListener(uni.$liveID, 'onReceiveGift', handleReceiveGift)
   });
   onUnmounted(() => {
     isDestroyed = true;
     clearPendingTimers();
-    uni.$off('barrageList:setPillHidden', onPillHidden);
-    removeGiftListener(uni.$liveID, 'onReceiveGift', handleReceiveGift)
     pendingGiftMessages.forEach(p => clearTimeout(p.timer));
     pendingGiftMessages.clear();
   });
@@ -479,7 +481,6 @@
     position: relative;
   }
 
-  /* 文字尺子:移到屏外,只为拿到 measureText 上下文,不可见、不占布局视觉。 */
   .barrage-ruler {
     position: fixed;
     left: -1000px;

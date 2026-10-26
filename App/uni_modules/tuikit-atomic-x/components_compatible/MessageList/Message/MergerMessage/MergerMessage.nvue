@@ -1,5 +1,5 @@
 <template>
-  <view class="merger-message" :class="'merger-message-' + (message.isSentBySelf ? 'out' : 'in')" @tap="handleTap">
+  <view class="merger-message" :class="plain ? 'merger-container--plain' : 'merger-message-' + (message.isSentBySelf ? 'out' : 'in')" @tap="handleTap">
     <view class="merger-highlight"><view class="merger-container">
       <text class="merger-title">{{ mergerTitle }}</text>
       <view class="merger-abstract-list">
@@ -11,15 +11,39 @@
 </template>
 
 <script>
+import { MESSAGE_LONG_PRESSED_INJECTION_KEY, OPEN_MERGED_DETAIL_INJECTION_KEY } from '../../../../constants/messageInjectionKeys'
+
 export default {
   name: 'MergerMessage',
-  props: { message: { type: Object, required: true } },
-  computed: {
-    mergedMessage() { return this.message.messagePayload && this.message.messagePayload },
-    mergerTitle() { return (this.mergedMessage && this.mergedMessage.title) || '聊天记录' },
-    abstractList() { var a = (this.mergedMessage && this.mergedMessage.abstractList) || []; return a.slice(0, 4) }
+  // 外层 Message 提供的“本次触摸是否已长按”；不在 Message 内使用（如详情页递归渲染的只读场景）时恒为 false
+  inject: {
+    isLongPressed: { from: MESSAGE_LONG_PRESSED_INJECTION_KEY, default: function() { return function() { return false } } },
+    // 由 MessageList 提供；详情浮层在 list 外承载，详情内再点合并转发消息会继续叠加一层
+    openMergedDetail: { from: OPEN_MERGED_DETAIL_INJECTION_KEY, default: null }
   },
-  methods: { handleTap() { this.$emit('tap', this.message) } }
+  props: {
+    message: { type: Object, required: true },
+    conversationID: { type: String, default: '' },
+    // 无气泡模式（详情页内再套一层合并转发时）：透明底、直角、不按 isSentBySelf 靠右
+    plain: { type: Boolean, default: false }
+  },
+  computed: {
+    mergedMessage: function() { return this.message.messagePayload && this.message.messagePayload },
+    mergerTitle: function() { return (this.mergedMessage && this.mergedMessage.title) || '聊天记录' },
+    abstractList: function() { var a = (this.mergedMessage && this.mergedMessage.abstractList) || []; return a.slice(0, 4) }
+  },
+  methods: {
+    handleTap: function() {
+      // iOS 暂时禁用点击打开聊天记录详情；恢复时把 isDetailDisabled 改为 false 即可
+      var isDetailDisabled = false
+      try { isDetailDisabled = uni.getSystemInfoSync().platform === 'ios' } catch (e) { isDetailDisabled = false }
+      if (isDetailDisabled) return
+      // 长按（弹出操作菜单）松手后会补发 tap，此时不应进入详情
+      if (this.isLongPressed()) return
+      if (this.openMergedDetail) this.openMergedDetail(this.message, this.conversationID)
+      this.$emit('tap', this.message)
+    }
+  }
 }
 </script>
 
@@ -29,6 +53,8 @@ export default {
 .merger-message-out { justify-content: flex-end; }
 .merger-highlight { background-color: transparent; border-radius: 20rpx; }
 .merger-container { max-width: 500rpx; background-color: #FFFFFF; border-radius: 20rpx; padding: 20rpx 24rpx; flex-direction: column; }
+/* 无气泡模式（合并转发详情）：用细边框圈出卡片，避免内容裸露显得突兀 */
+.merger-container--plain { max-width: 602rpx; background-color: transparent; border: 1rpx solid #E6E9F0; border-radius: 12rpx; }
 .merger-title { font-size: 32rpx; line-height: 42rpx; font-weight: 400; color: rgba(0, 0, 0, 0.9); margin-bottom: 10rpx; }
 .merger-abstract-list { flex-direction: column; margin-bottom: 18rpx; }
 .merger-abstract-item { flex-direction: row; margin-bottom: 8rpx; }

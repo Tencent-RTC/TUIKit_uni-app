@@ -12,15 +12,47 @@
       <text class="beauty-title">{{ t('beauty_title') }}</text>
     </view>
 
-    <BeautySliders :trackWidth="420" />
+    <view class="beauty-row" :class="{ 'beauty-row-disabled': !beautyOn }">
+      <text class="beauty-row-label">{{ activeLabel }}</text>
+      <Slider
+        class="beauty-slider"
+        :modelValue="activeLevel"
+        :min="0"
+        :max="9"
+        :trackWidth="460"
+        :disabled="!beautyOn"
+        @input="onLevelInput"
+        @change="onLevelChange"
+      />
+      <text class="beauty-row-value">{{ activeLevel }}</text>
+    </view>
+
+    <view class="beauty-footer">
+      <view class="beauty-switch-wrap">
+        <view class="beauty-switch-row">
+          <SwitchButton :modelValue="beautyOn" @change="toggleBeauty" />
+        </view>
+        <text class="beauty-switch-label">{{ t('beauty_switch_label') }}</text>
+      </view>
+      <view v-for="tab in tabs" :key="tab.key" class="beauty-tab" @tap="activeKey = tab.key">
+        <view class="beauty-tab-icon-wrap" :class="{ 'beauty-tab-icon-wrap-on': activeKey === tab.key }">
+          <image class="beauty-tab-icon" :src="tab.icon" mode="aspectFit" />
+        </view>
+        <text class="beauty-tab-text" :class="{ 'beauty-tab-text-active': activeKey === tab.key }">{{ tab.label }}</text>
+      </view>
+    </view>
   </BaseDrawer>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import BaseDrawer from '@/components/live/BaseDrawer/index.nvue'
-import BeautySliders from '../BeautySliders/index.nvue'
+import Slider from '@/uni_modules/tuikit-atomic-x/components/Slider.nvue'
+import SwitchButton from '@/components/live/SwitchButton/index.nvue'
 import { t } from '../../locales'
+import { useBaseBeautyState } from '@/uni_modules/tuikit-atomic-x/state/BaseBeautyState'
+
+type BeautyKey = 'smooth' | 'whiteness' | 'ruddy'
 
 const props = defineProps({
   modelValue: {
@@ -35,6 +67,77 @@ const innerVisible = computed({
   get: () => props.modelValue,
   set: (v) => emit('update:modelValue', v)
 })
+
+const {
+  smoothLevel,
+  whitenessLevel,
+  ruddyLevel,
+  setSmoothLevel,
+  setWhitenessLevel,
+  setRuddyLevel,
+  getRealUiValue,
+  setRealUiValue,
+} = useBaseBeautyState()
+
+const tabs: Array<{ key: BeautyKey; label: string; icon: string }> = [
+  { key: 'smooth', label: t('smoothing'), icon: '/uni_modules/tuikit-atomic-x/static/assets/live/beauty-smooth.png' },
+  { key: 'whiteness', label: t('whitening'), icon: '/uni_modules/tuikit-atomic-x/static/assets/live/beauty-whiten.png' },
+  { key: 'ruddy', label: t('rosy'), icon: '/uni_modules/tuikit-atomic-x/static/assets/live/beauty-rosy.png' },
+]
+
+const activeKey = ref<BeautyKey>('smooth')
+
+const activeLabel = computed(() => tabs.find(tab => tab.key === activeKey.value)?.label || '')
+
+const activeLevel = computed(() => {
+  if (!beautyOn.value) {
+    return getRealUiValue(activeKey.value as 'smooth' | 'whiteness' | 'ruddy')
+  }
+  if (activeKey.value === 'whiteness') return whitenessLevel.value
+  if (activeKey.value === 'ruddy') return ruddyLevel.value
+  return smoothLevel.value
+})
+
+const beautyOn = ref(false)
+
+watch(innerVisible, (v) => {
+  if (v) {
+    beautyOn.value = smoothLevel.value > 0 || whitenessLevel.value > 0 || ruddyLevel.value > 0
+  }
+})
+
+const applyLevel = (key: BeautyKey, value: number) => {
+  if (key === 'smooth') {
+    smoothLevel.value = value
+    setSmoothLevel({ smoothLevel: value })
+  } else if (key === 'whiteness') {
+    whitenessLevel.value = value
+    setWhitenessLevel({ whitenessLevel: value })
+  } else {
+    ruddyLevel.value = value
+    setRuddyLevel({ ruddyLevel: value })
+  }
+}
+
+const onLevelInput = (v: number) => applyLevel(activeKey.value, v)
+const onLevelChange = (v: number) => applyLevel(activeKey.value, v)
+
+const toggleBeauty = () => {
+  if (beautyOn.value) {
+    setRealUiValue('smooth', smoothLevel.value)
+    setRealUiValue('whiteness', whitenessLevel.value)
+    setRealUiValue('ruddy', ruddyLevel.value)
+    applyLevel('smooth', 0)
+    applyLevel('whiteness', 0)
+    applyLevel('ruddy', 0)
+    beautyOn.value = false
+  } else {
+    applyLevel('smooth', getRealUiValue('smooth'))
+    applyLevel('whiteness', getRealUiValue('whiteness'))
+    applyLevel('ruddy', getRealUiValue('ruddy'))
+    beautyOn.value = true
+  }
+}
 </script>
 
 <style lang="scss">

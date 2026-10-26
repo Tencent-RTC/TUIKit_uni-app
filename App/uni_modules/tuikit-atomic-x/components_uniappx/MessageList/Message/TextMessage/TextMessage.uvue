@@ -1,9 +1,9 @@
 <template>
   <view
     class="text-msg text-msg--no-select"
-    :class="['text-msg__content', 'text-msg__content--'+ (isSelf ? 'out' : 'in')]"
+    :class="['text-msg__content', plain == true ? 'text-msg__content--plain' : 'text-msg__content--'+ (isSelf ? 'out' : 'in')]"
   >
-    <view class="text-msg__highlight">
+    <view class="text-msg__highlight" :class="plain == true ? 'text-msg__highlight--plain' : ''">
       <view
         v-if="quoteMessage != null"
         class="text-msg__quote text-msg__quote--no-select"
@@ -78,9 +78,13 @@ const MSG_STATUS_DELETED = 5
 
 type Props = {
   message: any | null
+  // 无气泡模式（合并转发详情）：去掉气泡底色与圆角，内容按容器宽度自然铺满
+  plain?: boolean
 }
 
-const props = defineProps<Props>()
+const props = withDefaults(defineProps<Props>(), {
+  plain: false
+})
 
 function getCurrentMessage(): any | null {
   const raw: any | null = props.message
@@ -451,10 +455,23 @@ onUnmounted(() => {
   border-radius: 20rpx 4rpx 20rpx 20rpx;
 }
 
+/* 无气泡模式：透明底、直角、铺满父容器（写在 --in/--out 之后，保证覆盖底色） */
+.text-msg__content--plain {
+  background-color: transparent;
+  border-radius: 0;
+  max-width: 602rpx;
+}
+
 .text-msg__highlight {
   flex: 1;
   padding: 20rpx 24rpx;
   background-color: transparent;
+}
+
+/* plain 的内边距用修饰类（写在基础样式之后以覆盖） */
+.text-msg__highlight--plain {
+  padding-left: 0;
+  padding-right: 0;
 }
 
 /* 气泡内引用块：左侧竖条 + 发送者 + 单行内容摘要 */

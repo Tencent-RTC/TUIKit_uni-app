@@ -33,7 +33,7 @@
         </view>
       </view>
       <view class="control-icons" @click.stop="emit('exit')">
-        <image class="control-icon" src="/static/images/close.png" />
+        <image class="control-icon" src="/static/images/live/icon/close.png" />
       </view>
     </view>
   </view>
@@ -48,9 +48,10 @@
   import { useLikeState } from '@/uni_modules/tuikit-atomic-x/state/LikeState';
 
   const emit = defineEmits(['exit', 'audienceTap']);
-  const { currentLive } = useLiveListState(uni?.$liveID);
-  const { audienceList, audienceCount } = useLiveAudienceState(uni?.$liveID);
-  const { totalLikeCount } = useLikeState(uni?.$liveID);
+  const { currentLive } = useLiveListState();
+  const liveID = computed(() => String(currentLive.value?.liveID || ''));
+  const { audienceList, audienceCount } = useLiveAudienceState(liveID.value);
+  const { totalLikeCount } = useLikeState(liveID.value);
 
   const defaultAvatarURL = '/uni_modules/tuikit-atomic-x/static/assets/live/default-avatar.png';
   const hostAvatarSrc = ref(defaultAvatarURL);

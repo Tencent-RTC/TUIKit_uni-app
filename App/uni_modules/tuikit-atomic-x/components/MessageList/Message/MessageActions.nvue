@@ -53,6 +53,7 @@ import copyIcon from '../assets/msg_copy.png'
 import deleteIcon from '../assets/msg_delete.png'
 import forwardIcon from '../assets/msg_forward.png'
 import hideIcon from '../assets/msg_hide.png'
+import multiSelectIcon from '../../../static/assets/message-list/msg_multi_select.png'
 import quoteIcon from '../assets/msg_quote.png'
 import reactionIcon from '../../../static/assets/message-list/msg_reaction.png'
 import recallIcon from '../assets/msg_recall.png'
@@ -157,6 +158,12 @@ const canForward = computed(() => {
     return false
   }
   return true
+})
+
+// 多选入口：已撤回 / 已删除的消息本身不会走到长按菜单，这里只兜底过滤
+const canMultiSelect = computed(() => {
+  if (!props.message) return false
+  return props.message.status !== MessageStatus.REVOKED && props.message.status !== MessageStatus.DELETED
 })
 
 const canQuote = computed(() => {
@@ -394,6 +401,11 @@ const handleForward = throttle(() => {
   safeClose()
 }, ACTION_THROTTLE_WAIT, { leading: true, trailing: false })
 
+const handleMultiSelect = throttle(() => {
+  emit('action', { key: 'multiSelect', text: '多选' })
+  safeClose()
+}, ACTION_THROTTLE_WAIT, { leading: true, trailing: false })
+
 const handleQuote = throttle(() => {
   emit('action', { key: 'quote', text: '引用' })
   safeClose()
@@ -503,7 +515,6 @@ interface ActionItem {
   handler: (...args: any[]) => void
 }
 
-const QUOTE_ENTRY_ENABLED = false
 
 const actionConfig = computed<ActionItem[]>(() => [
   { key: 'copy', label: '复制', icon: copyIcon, visible: canCopy.value, handler: handleCopy },
@@ -511,8 +522,9 @@ const actionConfig = computed<ActionItem[]>(() => [
   { key: 'voiceToText', label: voiceActionLabel.value, icon: voiceToTextIcon, visible: canConvertVoice.value, handler: handleVoiceToText },
   { key: 'recall', label: '撤回', icon: recallIcon, visible: canRecall.value, handler: handleRecall },
   { key: 'forward', label: '转发', icon: forwardIcon, visible: canForward.value, handler: handleForward },
+  { key: 'multiSelect', label: '多选', icon: multiSelectIcon, visible: canMultiSelect.value, handler: handleMultiSelect },
   { key: 'reaction', label: '贴表情', icon: reactionIcon, visible: showReactionPicker.value, handler: handleReactionEntry },
-  { key: 'quote', label: '引用', icon: quoteIcon, visible: QUOTE_ENTRY_ENABLED && canQuote.value, handler: handleQuote },
+  { key: 'quote', label: '引用', icon: quoteIcon, visible: canQuote.value, handler: handleQuote },
   { key: 'translate', label: translateActionLabel.value, icon: translateVisible.value ? hideIcon : translateIcon, visible: canTranslate.value, handler: handleTranslate },
 ])
 

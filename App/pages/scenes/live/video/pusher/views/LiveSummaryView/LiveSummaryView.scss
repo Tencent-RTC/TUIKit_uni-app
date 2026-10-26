@@ -1,77 +1,266 @@
-@import '../../../../styles/tokens.scss';
+  @import '../../../../styles/tokens.scss';
 
-.live-summary-view {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: $live-dark-bg-base;
-  align-items: center;
-  justify-content: flex-start;
-  flex-direction: column;
-}
+  .summary-page {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    background-color: $live-dark-bg-summary;
+    flex-direction: column;
+  }
 
-.live-summary-header {
-  margin-top: 220rpx;
-  align-items: center;
-}
+  .summary-page-bg {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 750rpx;
+  }
 
-.live-summary-back-btn {
-  width: 48rpx;
-  height: 48rpx;
-  position: absolute;
-  top: 100rpx;
-  right: 80rpx;
-  z-index: 99;
-}
+  .summary-header {
+    width: 750rpx;
+  }
 
-.live-summary-title {
-  color: $live-dark-text-primary;
-  font-size: 36rpx;
-  font-weight: bold;
-}
+  .summary-header-row {
+    width: 750rpx;
+    height: 116rpx;
+    padding: 0 24rpx;
+    flex-direction: row;
+    align-items: center;
+  }
 
-.live-summary-duration {
-  color: $live-light-text-muted;
-  font-size: 26rpx;
-  margin-top: 16rpx;
-}
+  .summary-back {
+    width: 76rpx;
+    height: 76rpx;
+    border-radius: 38rpx;
+    justify-content: center;
+    align-items: center;
+  }
 
-.live-summary-stats-card {
-  width: 700rpx;
-  background-color: $live-dark-bg-surface;
-  border-radius: 24rpx;
-  padding: 40rpx 0;
-  margin-top: 80rpx;
-}
+  .summary-back-icon {
+    width: 42rpx;
+    height: 42rpx;
+  }
 
-.live-summary-stats-row {
-  width: 700rpx;
-  flex-direction: row;
-  justify-content: space-around;
-  margin: 24rpx;
-}
+  .summary-header-title {
+    flex: 1;
+    color: $live-dark-text-90;
+    font-size: 30rpx;
+    font-weight: 600;
+    text-align: center;
+  }
 
-.live-summary-stats-row:last-child {
-  margin-bottom: 0;
-}
+  .summary-header-spacer {
+    width: 76rpx;
+    height: 76rpx;
+  }
 
-.live-summary-stats-item {
-  flex: 1;
-  align-items: center;
-}
+  .summary-scroll {
+    flex: 1;
+    width: 750rpx;
+  }
 
-.live-summary-stats-value {
-  color: $live-dark-text-primary;
-  font-size: 36rpx;
-  font-weight: bold;
-  text-align: center;
-}
+  .summary-hero {
+    width: 686rpx;
+    margin-top: 20rpx;
+    margin-left: 32rpx;
+    padding: 38rpx 24rpx 36rpx 24rpx;
+    border-radius: 44rpx;
+    border-width: 1rpx;
+    border-color: $live-dark-border-085;
+    background-color: rgba($live-color-brand-light, 0.09);
+    align-items: center;
+    flex-direction: column;
+  }
 
-.live-summary-stats-label {
-  color: $live-light-text-muted;
-  font-size: 22rpx;
-  margin-top: 8rpx;
-  text-align: center;
-}
+  .hero-ring {
+    width: 120rpx;
+    height: 120rpx;
+    border-radius: 60rpx;
+    background-color: rgba($live-color-brand-light, 0.08);
+    justify-content: center;
+    align-items: center;
+  }
+
+  .hero-mark {
+    width: 96rpx;
+    height: 96rpx;
+    border-radius: 48rpx;
+    background-color: $live-color-summary-mark;
+    border-width: 1rpx;
+    border-color: $live-color-brand-light;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .hero-check {
+    width: 36rpx;
+    height: 18rpx;
+    border-left-width: 4rpx;
+    border-left-color: $live-dark-border-solid;
+    border-bottom-width: 4rpx;
+    border-bottom-color: $live-dark-border-solid;
+    transform: translateY(-4rpx) rotate(-45deg);
+  }
+
+  .hero-ended {
+    margin-top: 26rpx;
+    color: $live-dark-text-95;
+    font-size: 38rpx;
+    font-weight: 700;
+  }
+
+  .hero-time-range {
+    margin-top: 12rpx;
+    color: $live-dark-text-45;
+    font-size: 22rpx;
+  }
+
+  .hero-duration-label {
+    margin-top: 34rpx;
+    color: $live-dark-text-48;
+    font-size: 20rpx;
+    font-weight: 600;
+  }
+
+  .hero-duration {
+    margin-top: 10rpx;
+    color: $live-color-brand-text-strong;
+    font-size: 60rpx;
+    font-weight: 700;
+    letter-spacing: 3rpx;
+  }
+
+  .hero-pause {
+    margin-top: 24rpx;
+    padding: 10rpx 18rpx;
+    border-radius: 40rpx;
+    border-width: 1rpx;
+    border-color: $live-dark-border-07;
+    background-color: $live-dark-surface-045;
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .hero-pause-label {
+    color: $live-dark-text-50;
+    font-size: 20rpx;
+  }
+
+  .hero-pause-value {
+    margin-left: 10rpx;
+    color: $live-dark-text-62;
+    font-size: 20rpx;
+    font-weight: 600;
+  }
+
+  .summary-section {
+    width: 686rpx;
+    margin-top: 40rpx;
+    margin-left: 32rpx;
+  }
+
+  .summary-section-title {
+    color: $live-dark-text-90;
+    font-size: 30rpx;
+    font-weight: 650;
+  }
+
+  .summary-grid-row {
+    width: 686rpx;
+    margin-top: 20rpx;
+    margin-left: 32rpx;
+    flex-direction: row;
+  }
+
+  .summary-stat {
+    width: 333rpx;
+    min-height: 176rpx;
+    margin-right: 20rpx;
+    padding: 26rpx;
+    border-radius: 32rpx;
+    border-width: 1rpx;
+    border-color: $live-dark-border-065;
+    background-color: $live-dark-surface-04;
+    flex-direction: column;
+  }
+
+  .summary-stat-mark {
+    width: 32rpx;
+    height: 8rpx;
+    border-radius: 4rpx;
+  }
+
+  .summary-stat-label {
+    margin-top: 18rpx;
+    color: $live-dark-text-46;
+    font-size: 20rpx;
+    font-weight: 600;
+  }
+
+  .summary-stat-value-row {
+    margin-top: 8rpx;
+    flex-direction: row;
+    align-items: flex-end;
+  }
+
+  .summary-stat-value {
+    color: $live-dark-text-94;
+    font-size: 46rpx;
+    font-weight: 700;
+  }
+
+  .summary-stat-unit {
+    margin-left: 8rpx;
+    margin-bottom: 8rpx;
+    color: $live-dark-text-38;
+    font-size: 18rpx;
+  }
+
+  .summary-stat--gifts {
+    background-color: rgba($live-color-stat-gift, 0.085);
+  }
+
+  .summary-stat--gifts .summary-stat-mark {
+    background-color: $live-color-stat-gift;
+  }
+
+  .summary-stat--coins {
+    background-color: rgba($live-color-stat-coin, 0.085);
+  }
+
+  .summary-stat--coins .summary-stat-mark {
+    background-color: $live-color-stat-coin;
+  }
+
+  .summary-stat--viewers {
+    background-color: rgba($live-color-stat-viewer, 0.085);
+  }
+
+  .summary-stat--viewers .summary-stat-mark {
+    background-color: $live-color-stat-viewer;
+  }
+
+  .summary-stat--comments {
+    background-color: rgba($live-color-stat-comment, 0.085);
+  }
+
+  .summary-stat--comments .summary-stat-mark {
+    background-color: $live-color-stat-comment;
+  }
+
+  .summary-stat--senders {
+    background-color: rgba($live-color-stat-sender, 0.085);
+  }
+
+  .summary-stat--senders .summary-stat-mark {
+    background-color: $live-color-stat-sender;
+  }
+
+  .summary-stat--likes {
+    background-color: rgba($live-color-stat-like, 0.085);
+  }
+
+  .summary-stat--likes .summary-stat-mark {
+    background-color: $live-color-stat-like;
+  }

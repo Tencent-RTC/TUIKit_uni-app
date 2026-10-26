@@ -78,35 +78,27 @@
   import { t } from '../locales';
 
   defineProps({
-    // 距底部像素（避开底部操作栏 / 礼物面板上方 / 消息列表上方）
     bottomPx: {
       type: Number,
       default: 240
     },
-    // 是否提升层级：礼物选择 drawer 打开时置 true，让入场条(z-index 3000)浮在礼物面板之上。
-    // 常态 false 时 z-index 2400，低于 drawer，被普通 drawer 遮住。
     elevated: {
       type: Boolean,
       default: false
     },
-    // 是否隐藏入场条：非礼物 drawer 打开时置 true。因为 nvue 跨组件 fixed 的 z-index 在动态
-    // 挂载/重渲染后不可靠(偶现入场条盖过 drawer)，而普通 drawer 打开时入场条本就应被遮住不可见，
-    // 故直接隐藏，从根上规避层级不确定性。
     hidden: {
       type: Boolean,
       default: false
     }
   });
 
-  // nvue 原生 animation 模块：直接对元素 ref 执行 transform/opacity 动画，不依赖 CSS transition。
   const animation = uni.requireNativePlugin('animation');
 
   const HOLD_DURATION = 2000;
+  const DEFAULT_AVATAR_URL = '/uni_modules/tuikit-atomic-x/static/assets/live/default-avatar.png';
   const EXIT_DURATION = 320;
-  // Bump 动画：上冲 scale 1→1.24 + 变蓝，回落 1.24→1 + 变白。
   const BUMP_UP_DURATION = 120;
 
-  // 两个槽位的 item 和 count 元素 ref（animation 模块需要直接操作元素 ref）
   const itemRefs = { 0: ref(null), 1: ref(null) };
   const countRefs = { 0: ref(null), 1: ref(null) };
 
@@ -148,7 +140,6 @@
   const queue = [];
   const anyActive = computed(() => slot0.active || slot1.active);
 
-  // 礼物图加载失败：切到"礼"字占位块，避免图标挂掉时区域空白。
   function onGiftIconError(slot) {
     if (slot) slot.giftIconFailed = true;
   }
@@ -161,18 +152,11 @@
     const senderId = sender.userID || '';
     const recipientId = recipient && recipient.userID ? recipient.userID : '';
     const giftId = gift.giftID || gift.name || '';
-    // 发送者名：无昵称时统一显示为"直播间观众"。
-    const name = sender.userName || t('gift.senderFallback');
+    const name = sender.userName || sender.userID || t('gift.senderFallback');
     const giftName = gift.name || t('gift.giftNameFallback');
-    // 详情文案：当前只支持【非 PK】场景，固定为 "送出 {礼物名}"。
-    // 不做"送给 XX"分支（若接收者昵称存在就显示送给），也不保留 showName 开关；
-    // 后续若需支持 PK 指定收礼人，再另行扩展此处的文案分支。
     const detailText = t('gift.sent', { name: giftName });
-    // 本次事件携带的礼物数量（聚合增量）：收礼事件一次可能推 N 个礼物（连击打包），
-    // 不读会把 ×N 丢成 ×1，导致入场条计数比消息列表少。默认 1。
     const count = Math.max(1, Math.round(Number(giftData.count) || 1));
 
-    // 同发送者+同接收者+同礼物且未退场：仅累加计数、重置计时
     const active = slots.find(s =>
       s.active && !s.leaving &&
       s.giftId === giftId && s.senderId === senderId && s.recipientId === recipientId
@@ -184,7 +168,6 @@
       return;
     }
 
-    // 队列里已有：累加待用
     const queued = queue.find(e =>
       e.giftId === giftId && e.senderId === senderId && e.recipientId === recipientId
     );
@@ -199,7 +182,7 @@
       recipientId,
       name,
       nameFirst: (name || t('gift.senderCharFallback')).slice(0, 1),
-      avatar: sender.avatarURL || '',
+      avatar: sender.avatarURL || DEFAULT_AVATAR_URL,
       giftName,
       giftIcon: gift.iconURL || '',
       detailText,
@@ -224,13 +207,12 @@
     slot.avatar = data.avatar;
     slot.giftName = data.giftName;
     slot.giftIcon = data.giftIcon;
-    slot.giftIconFailed = false; // 新礼物：重置失败态，重新尝试加载图标
+    slot.giftIconFailed = false;
     slot.detailText = data.detailText;
     slot.count = data.count;
     slot.leaving = false;
     slot.active = true;
     slot.visible = false;
-    // 用 nvue 原生 animation 模块执行滑入动画：延迟一帧确保离屏起点先渲染。
     const idx = slot.index;
     setTimeout(() => {
       if (!slot.active || slot.leaving) return;
@@ -253,7 +235,6 @@
     slot.expireTimer = setTimeout(() => leave(slot), HOLD_DURATION);
   }
 
-  // 数字变化反馈：用 animation 模块执行 scale 弹跳（上冲→回落）。
   function triggerBump(slot) {
     clearTimeout(slot.bumpTimer);
     if (!slot.active) return;
@@ -297,7 +278,6 @@
     slot.hideTimer = setTimeout(() => release(slot), EXIT_DURATION);
   }
 
-  // 释放槽位并从队列补位（不销毁节点，只置空字段）
   function release(slot) {
     clearTimeout(slot.expireTimer);
     clearTimeout(slot.hideTimer);
@@ -346,21 +326,14 @@
 </script>
 
 <style>
-  /* 入场条层级：介于 drawer 蒙层(mask, z-index 2000) 之上、drawer 主体(z-index 2600) 之下——
-     即弹层打开时入场条盖住 mask、但被 drawer 面板盖住。userInteractionEnabled=false 不拦截点击，
-     mask 点击可正常穿透关闭 drawer。 */
   .gift-entry-layer {
     position: fixed;
     left: 24rpx;
-    /* 常态 z-index 2400（可被外部 elevated 提升至 3000）：低于 drawer 容器(2600)，
-       故普通 drawer 打开时被 mask/面板盖住；礼物 drawer 打开时由外部提升层级浮在礼物面板之上。 */
     z-index: 2400;
     flex-direction: column-reverse;
     align-items: flex-start;
   }
 
-  /* 单条：初始离屏起点（opacity:0 + translateX(-600rpx)），动画由 animation 模块驱动。
-     不再使用 CSS transition 和 is-visible/is-leaving class 切换。 */
   .gift-entry-item {
     flex-direction: row;
     align-items: center;
@@ -370,7 +343,6 @@
     transform: translateX(-600rpx);
   }
 
-  /* 宽度不固定，随礼物名/主播名长度自然伸缩 */
   .gift-entry-capsule {
     flex-direction: row;
     align-items: center;
@@ -378,12 +350,6 @@
     padding: 6rpx;
     border-radius: 44rpx;
     background-color: rgba(8, 10, 15, 0.28);
-    /* 胶囊宽度上限:超长用户名/礼物名时【条本身不被拉长】,内部文本截断。
-       本层是 column-reverse + align-items:flex-start(【纵向堆叠、靠左】),
-       每条独立占一行,宽度不受"并排"限制 => 可给到较宽。
-       屏幕 750 - left 24 - 右侧余量 ≈ 560rpx;
-       固定部分 = 头像 76 + 礼物图 82 + 间距 8 + padding 12 ≈ 178,
-       右侧 ×数量约 70 => 文本列可达 ~300rpx,正常礼物名/昵称基本不截断。 */
     max-width: 560rpx;
   }
 
@@ -463,15 +429,12 @@
     height: 74rpx;
   }
 
-  /* 连击数：×小号 + 数字大号，flex-end 让底边对齐（nvue baseline 支持不稳定）。
-     min-width 52px=104rpx(×N 宽度稳定,数字增长时不抖动)、
-     margin-left 4px=8rpx、文字投影;参考无 padding-right,已移除。
-     transform-origin: left center 让 bump 缩放只向右扩展。 */
   .gift-entry-count {
     flex-direction: row;
     align-items: flex-end;
     min-width: 104rpx;
     margin-left: 8rpx;
+    padding-right: 56rpx;
     transform: scale(1);
     transform-origin: left center;
   }
@@ -494,8 +457,6 @@
     text-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.55);
   }
 
-  /* 礼物图加载失败兜底：显示"礼"字占位块。
-     注：nvue 不支持 ::before 伪元素，故用真实 text 节点渲染而非伪元素。 */
   .gift-entry-image-fallback {
     width: 68rpx;
     height: 52rpx;
@@ -508,9 +469,6 @@
     line-height: 52rpx;
   }
 
-  /* 数字 bump 时变蓝（中间态 color:#78d8ff）。
-     bump 上冲期间（slot.bumping=true）文字变亮蓝，回落时移除 class 恢复白色，
-     与 scale 弹跳配合形成「放大+闪蓝」的连击反馈。 */
   .gift-entry-count-bump {
     color: #78d8ff;
   }

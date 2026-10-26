@@ -1,8 +1,5 @@
 @import '../../../../styles/tokens.scss';
 
-/* 根容器:fixed 全屏锚点,供内部面板的 fixed 弹层取参考系。
-   【必须有 0.01 背景色】nvue/Android 上完全透明的 view 不拦截触摸,
-   点击会穿透到下层 LiveCoreView(原生组件),表现为全部按钮点不动。 */
 .before-live-view {
   position: fixed;
   top: 0;
@@ -64,7 +61,6 @@
   lines: 1;
 }
 
-/* padding 扩大命中区:nvue text 的触摸命中区默认只有文字笔画本身。 */
 .room-topic {
   margin-top: 8rpx;
   padding: 16rpx 32rpx;
@@ -119,7 +115,7 @@
 .start-btn {
   position: fixed;
   left: 40rpx;
-  right: 40rpx;
+  width: 670rpx;
   height: 104rpx;
   display: flex;
   flex-direction: row;
@@ -131,11 +127,21 @@
   position: absolute;
   top: 0;
   left: 0;
-  right: 0;
+  width: 670rpx;
   height: 104rpx;
 }
 
-/* 白点光晕已烘进 start-dot.png(nvue 不支持 box-shadow)。 */
+.start-btn-ring {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 670rpx;
+  height: 102rpx;
+  border-radius: 52rpx;
+  border-width: 3rpx;
+  border-color: $live-color-brand-light;
+}
+
 .start-dot {
   width: 48rpx;
   height: 48rpx;

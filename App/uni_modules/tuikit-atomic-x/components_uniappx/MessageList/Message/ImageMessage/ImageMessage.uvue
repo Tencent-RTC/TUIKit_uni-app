@@ -32,6 +32,7 @@ import { ref, computed, watch } from 'vue'
 import { MediaQuality } from '../../../../types/message'
 import { useMessageActionState } from '../../../../state/MessageActionState'
 import { useMessageListState } from '../../../../state/MessageListState'
+import { MERGED_DETAIL_REFRESH_EVENT } from '../../../../constants/messageEvents'
 
 type Props = {
   message: any | null
@@ -197,6 +198,8 @@ const checkAndDownloadResource = async () => {
     try {
       const msgForAction: UTSJSONObject = props.message as UTSJSONObject
       await useMessageActionState({ message: msgForAction }).downloadMedia(MediaQuality.ORIGINAL)
+      // 合并转发详情里的消息不会被 SDK 推送更新，通知详情页重新拉取以拿到本地路径
+      uni.$emit(MERGED_DETAIL_REFRESH_EVENT, new UTSJSONObject())
     } catch (error: any) {
       console.error('[ImageMessage] downloadMedia failed:', error)
       loadingState.value = 'error'

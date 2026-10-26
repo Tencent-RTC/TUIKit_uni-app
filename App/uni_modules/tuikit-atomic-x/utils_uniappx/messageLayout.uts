@@ -1,0 +1,73 @@
+/**
+ * 消息版式判定：哪些消息按“居中”渲染（撤回、系统提示、建群提示、群通话、业务自定义居中）。
+ * 居中消息不带头像 / 气泡 / 勾选圈。这是唯一的判定来源：
+ * Message（渲染分支）、MessageList（头像昵称、多选批量选择）都引用这里，不要各写一份。
+ *
+ * 注意：从 UTSJSONObject 读出的 messageType / status 是原始 Number，与 enum 实例比较恒不相等，
+ * 这里一律用数值常量比较。MessageType: TIPS=7 CUSTOM=8 / MessageStatus: REVOKED=4
+ */
+import { isGroupCallMessage } from './callMessageUtils'
+
+export type CustomCenterChecker = (message: any, conversationID: string) => boolean
+
+const MSG_STATUS_REVOKED: number = 4
+const MSG_TYPE_TIPS: number = 7
+const MSG_TYPE_CUSTOM: number = 8
+
+function readNumberField(message: any | null, key: string): number {
+  if (message == null) return -1
+  const obj: UTSJSONObject = message as UTSJSONObject
+  const v: any | null = obj[key]
+  return typeof v == 'number' ? (v as number) : -1
+}
+
+/** 系统提示（群成员变动等 TIPS 消息） */
+export function isSystemTipMessage(message: any | null): boolean {
+  return readNumberField(message, 'messageType') == MSG_TYPE_TIPS
+}
+
+/** 建群提示（自定义消息，businessID 为 group_create） */
+export function isGroupCreateMessage(message: any | null): boolean {
+  if (message == null) return false
+  if (readNumberField(message, 'messageType') != MSG_TYPE_CUSTOM) return false
+  const obj: UTSJSONObject = message as UTSJSONObject
+  const payloadRaw: any | null = obj['messagePayload']
+  if (payloadRaw == null) return false
+  const payload: UTSJSONObject = payloadRaw as UTSJSONObject
+  const cdRaw: any | null = payload['customData']
+  const cd: string = typeof cdRaw == 'string' ? (cdRaw as string) : ''
+  if (cd.length == 0) return false
+  try {
+    const dataRaw: any | null = JSON.parse(cd)
+    const dataObj: UTSJSONObject = (dataRaw ?? new UTSJSONObject()) as UTSJSONObject
+    const businessID: any | null = dataObj['businessID']
+    return businessID == 'group_create'
+  } catch (_e: any) {
+    return false
+  }
+}
+
+/** 业务自定义居中规则；未传则默认群聊里的通话消息居中 */
+export function isCustomCenterMessage(
+  message: any | null,
+  conversationID: string,
+  customCenterChecker: CustomCenterChecker | null
+): boolean {
+  if (message == null) return false
+  if (customCenterChecker != null) {
+    return customCenterChecker(message, conversationID)
+  }
+  return isGroupCallMessage(message, conversationID)
+}
+
+/** 是否按居中消息渲染 */
+export function isCenterLayoutMessage(
+  message: any | null,
+  conversationID: string,
+  customCenterChecker: CustomCenterChecker | null
+): boolean {
+  if (readNumberField(message, 'status') == MSG_STATUS_REVOKED) return true
+  if (isSystemTipMessage(message)) return true
+  if (isGroupCreateMessage(message)) return true
+  return isCustomCenterMessage(message, conversationID, customCenterChecker)
+}

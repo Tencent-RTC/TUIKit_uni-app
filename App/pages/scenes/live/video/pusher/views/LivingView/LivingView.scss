@@ -60,23 +60,17 @@
   flex: 1;
   position: fixed;
   bottom: 40rpx;
-  left: 20rpx;
+  left: 24rpx;
+  right: 24rpx;
+  padding: 0 16rpx;
   flex-direction: row;
   align-items: center;
   justify-content: space-between;
 }
 
-.action-buttons {
-  flex-direction: row;
-  align-items: center;
-  padding-right: 70rpx;
-}
-
 .action-button-item {
-  width: 64rpx;
-  height: 92rpx;
-  margin-left: 24rpx;
-  justify-content: center;
+  position: relative;
+  justify-content: flex-start;
   align-items: center;
 }
 
@@ -87,21 +81,30 @@
 }
 
 .action-button-icon {
-  width: 56rpx;
-  height: 56rpx;
-  margin-bottom: 4rpx;
+  width: 68rpx;
+  height: 52rpx;
+  margin-bottom: 6rpx;
 }
 
-.co-mic-btn,
-.action-btn-bg {
-  background-color: $live-dark-bg-float;
-  border-radius: 50%;
-  border: 2rpx solid $live-dark-surface-055;
+.more-action .action-button-icon {
+  width: 56rpx;
+  height: 56rpx;
 }
 
 .action-button-text {
-  color: $live-dark-text-primary;
-  font-size: 20rpx;
+  text-align: center;
+  color: $live-dark-text-90;
+  font-size: 22rpx;
+}
+
+.co-mic-request-dot {
+  position: absolute;
+  top: 0;
+  right: 2rpx;
+  width: 12rpx;
+  height: 12rpx;
+  border-radius: 6rpx;
+  background-color: $live-color-danger-solid;
 }
 
 .custom-modal-overlay {

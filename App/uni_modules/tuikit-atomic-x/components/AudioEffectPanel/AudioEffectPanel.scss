@@ -1,0 +1,130 @@
+/*
+ * AudioEffectPanel styles (aligned with the reference sound-effect-sheet).
+ * NOTE: this component ships with uni_modules, so colors are hardcoded
+ * (value-aligned with the reference css) instead of importing demo tokens.
+ */
+
+.ae-heading {
+  flex-direction: column;
+  align-items: center;
+  margin-top: -12rpx;
+}
+
+.ae-title {
+  color: rgba(255, 255, 255, 0.94);
+  font-size: 30rpx;
+  font-weight: 600;
+  letter-spacing: 0.6rpx;
+}
+
+/* 卡片:浅白渐变面 + 浅描边(参考 .sound-control-card)。
+   align-self: stretch 覆盖 BaseDrawer 内容区的居中收缩,使卡片撑满左右(padding 内) */
+.ae-card {
+  align-self: stretch;
+  flex-direction: column;
+  border-width: 1rpx;
+  border-style: solid;
+  border-color: rgba(255, 255, 255, 0.09);
+  border-radius: 28rpx;
+  background-color: rgba(255, 255, 255, 0.045);
+  padding: 0 24rpx;
+  margin-top: 24rpx;
+}
+
+.ae-row {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  height: 96rpx;
+}
+
+.ae-divider {
+  height: 1rpx;
+  background-color: rgba(255, 255, 255, 0.09);
+}
+
+.ae-row-label {
+  color: rgba(255, 255, 255, 0.84);
+  font-size: 24rpx;
+  font-weight: 500;
+}
+
+.ae-row-slider {
+  flex: 1;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.ae-row-value {
+  width: 54rpx;
+  color: rgba(255, 255, 255, 0.74);
+  font-size: 22rpx;
+  text-align: right;
+}
+
+/* 分组标题(参考 .sound-section-title)。
+   align-self: stretch 使 section 撑满,否则其内卡片随内容宽度收缩 */
+.ae-section {
+  align-self: stretch;
+  flex-direction: column;
+  margin-top: 28rpx;
+}
+
+.ae-section-title {
+  color: rgba(255, 255, 255, 0.48);
+  font-size: 22rpx;
+  font-weight: 500;
+  margin: 0 8rpx 14rpx;
+}
+
+/* 五列等宽选项栅格(参考 .sound-option-grid) */
+.ae-option-grid {
+  flex-direction: row;
+}
+
+.ae-option {
+  width: 134rpx;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* 选项 icon 容器:圆角方底 + 浅描边(参考 .sound-option-icon) */
+.ae-option-icon-wrap {
+  width: 96rpx;
+  height: 96rpx;
+  border-radius: 28rpx;
+  border-width: 1rpx;
+  border-style: solid;
+  border-color: rgba(255, 255, 255, 0.08);
+  background-color: rgba(255, 255, 255, 0.045);
+  justify-content: center;
+  align-items: center;
+  margin-bottom: 12rpx;
+}
+
+/* 选中态:品牌描边 + 品牌渐变浅底(参考 .sound-option.is-selected) */
+.ae-option-icon-on {
+  border-color: rgba(74, 158, 255, 0.6);
+  background-color: rgba(74, 158, 255, 0.22);
+}
+
+.ae-option-icon {
+  width: 48rpx;
+  height: 48rpx;
+  opacity: 0.68;
+}
+
+.ae-option-icon-img-on {
+  opacity: 1;
+}
+
+.ae-option-label {
+  color: rgba(255, 255, 255, 0.68);
+  font-size: 21rpx;
+  text-align: center;
+}
+
+.ae-option-label-on {
+  color: #FFFFFF;
+}

@@ -1,0 +1,11 @@
+/**
+ * 合并转发详情页的静默刷新事件。
+ *
+ * 合并转发里的子消息不在任何会话的消息列表里，SDK 不会推送其下载结果；
+ * 图片 / 视频 / 文件组件下载成功后 uni.$emit 这个事件，详情页收到后重新拉取合并消息列表，
+ * 才能让界面反映最新的本地路径。
+ *
+ * uni-app x 里没有 provide/inject 的先例，这里用 uni.$emit / uni.$on 全局事件代替；
+ * 不在详情页内使用时没有监听者，emit 无副作用。
+ */
+export const MERGED_DETAIL_REFRESH_EVENT: string = 'atomicx-merged-detail-refresh'

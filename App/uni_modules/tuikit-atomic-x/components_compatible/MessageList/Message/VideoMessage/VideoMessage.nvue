@@ -22,6 +22,7 @@ import { MediaQuality } from '../../../../types/message'
 import { useMessageListState } from '../../../../state/MessageListState'
 import { useMessageActionState } from '../../../../state/MessageActionState'
 import { stopGlobalAudioPlayer, RECORDING_PSEUDO_ID } from '../../../../hooks/useAudioPlayer'
+import { MERGED_DETAIL_REFRESH_INJECTION_KEY } from '../../../../constants/messageInjectionKeys'
 
 var PLACEHOLDER_PREFIX = 'placeholder_video_'
 
@@ -30,6 +31,10 @@ var LONG_PRESS_THRESHOLD = 350
 
 export default {
   name: 'VideoMessage',
+  // 合并转发详情页提供的刷新入口；普通会话里没有提供者，为 null
+  inject: {
+    refreshMergedDetail: { from: MERGED_DETAIL_REFRESH_INJECTION_KEY, default: null }
+  },
   props: {
     message: { type: Object, required: true },
     conversationID: { type: String, default: '' }
@@ -43,7 +48,8 @@ export default {
     videoUrl() { var url = (this.message.messagePayload && this.message.messagePayload.videoPath) || ''; if (url && url.startsWith('/') && !url.startsWith('file://')) url = 'file://' + url; return url },
     videoSnapshotWidth() { return (this.message.messagePayload && this.message.messagePayload.videoSnapshotWidth) || 0 },
     videoSnapshotHeight() { return (this.message.messagePayload && this.message.messagePayload.videoSnapshotHeight) || 0 },
-    downloadProgress() { return (this.message && this.message.progress != null) ? this.message.progress : 0 },
+    // 下载进度（0-100）：SDK 拆分后的 downloadMediaProgress（旧 progress 已废弃）
+    downloadProgress() { return (this.message && this.message.downloadMediaProgress != null) ? this.message.downloadMediaProgress : 0 },
     videoContainerStyle() {
       var w = this.actualSize.width || this.videoSnapshotWidth || 400
       var h = this.actualSize.height || this.videoSnapshotHeight || 400
@@ -92,7 +98,11 @@ export default {
     async checkAndDownloadSnapshot() {
       if (this.message && this.message.msgID && !this.videoSnapshotUrl && !this.isDownloadingSnapshot) {
         this.isDownloadingSnapshot = true
-        try { await useMessageActionState({ message: this.message }).downloadMedia(MediaQuality.THUMBNAIL) } catch (e) { this.coverError = true } finally { this.isDownloadingSnapshot = false }
+        try {
+          await useMessageActionState({ message: this.message }).downloadMedia(MediaQuality.THUMBNAIL)
+          // 合并转发详情里的消息不会被 SDK 推送更新，需主动刷新才能拿到封面路径
+          if (this.refreshMergedDetail) await this.refreshMergedDetail()
+        } catch (e) { this.coverError = true } finally { this.isDownloadingSnapshot = false }
       }
     },
     async checkAndDownloadVideo() {
@@ -101,6 +111,7 @@ export default {
       this.isDownloadingVideo = true
       try {
         await useMessageActionState({ message: this.message }).downloadMedia(MediaQuality.ORIGINAL)
+        if (this.refreshMergedDetail) await this.refreshMergedDetail()
       } catch (e) {
         uni.showToast({ title: '视频下载失败', icon: 'none' })
       } finally {
