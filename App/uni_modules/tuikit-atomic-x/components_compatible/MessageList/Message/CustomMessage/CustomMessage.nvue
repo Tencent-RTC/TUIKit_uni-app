@@ -1,5 +1,5 @@
 <template>
-  <view class="custom-message" :class="{ 'custom-message--center': isCustomCenter }">
+  <view class="custom-message" :class="{ 'custom-message--center': isCustomCenter, 'custom-message--plain': plain }">
     <CallMessage v-if="isCallMsg" :message="message" :isGroupCall="isCustomCenter" />
     <view v-else class="custom-highlight"><view class="default-custom"><text class="custom-text">{{ customText }}</text></view></view>
   </view>
@@ -15,7 +15,9 @@ export default {
   components: { CallMessage },
   props: {
     message: { type: Object, required: true },
-    conversationID: { type: String, default: '' }
+    conversationID: { type: String, default: '' },
+    // 无气泡模式（合并转发详情）：去掉半透明白底与圆角
+    plain: { type: Boolean, default: false }
   },
   computed: {
     customMessage() { return this.message.messagePayload },
@@ -42,6 +44,8 @@ export default {
 <style>
 .custom-message { background-color: rgba(255, 255, 255, 0.8); border-radius: 12rpx; min-width: 160rpx; max-width: 480rpx; }
 .custom-message--center { background-color: transparent; max-width: 750rpx; min-width: auto; }
+/* 无气泡模式（合并转发详情）：透明底、直角、铺满正文区 */
+.custom-message--plain { background-color: transparent; border-radius: 0; max-width: 602rpx; min-width: auto; }
 .custom-highlight { flex: 1; padding: 20rpx; background-color: transparent; border-radius: 12rpx; }
 .default-custom { flex-direction: row; align-items: flex-start; }
 .custom-text { font-size: 28rpx; color: #333; flex: 1; lines: 0; word-wrap: break-word; white-space: pre-wrap; }

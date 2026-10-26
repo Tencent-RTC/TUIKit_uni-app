@@ -1,7 +1,7 @@
 <template>
   <view
     class="file-message"
-    :class="['content-'+ (isSelf ? 'out' : 'in')]"
+    :class="[plain == true ? 'content-plain content-in' : 'content-'+ (isSelf ? 'out' : 'in')]"
     @touchstart="handleTouchStart"
     @touchend="handleTouchEnd"
     @tap="handleFileTap"
@@ -29,7 +29,7 @@
     <view
       v-if="isDownloading"
       class="downloading"
-      :class="['content-'+ (isSelf ? 'out' : 'in')]"
+      :class="[plain == true ? 'content-plain' : 'content-'+ (isSelf ? 'out' : 'in')]"
     >
     </view>
   </view>
@@ -40,6 +40,7 @@ import { ref, computed } from 'vue'
 import { MediaQuality } from '../../../../types/message'
 import { useMessageActionState } from '../../../../state/MessageActionState'
 import { useMessageListState } from '../../../../state/MessageListState'
+import { MERGED_DETAIL_REFRESH_EVENT } from '../../../../constants/messageEvents'
 
 import wordIcon from '../../../../static/icon/file-types/word_icon.png'
 import excelIcon from '../../../../static/icon/file-types/excel_icon.png'
@@ -52,9 +53,14 @@ import unknownIcon from '../../../../static/icon/file-types/unknown_icon.png'
 
 type Props = {
   message: any | null
-  conversationID: string}
+  conversationID: string
+  // 无气泡模式（合并转发详情）：去掉白底与圆角、细边框
+  plain?: boolean
+}
 
-const props = defineProps<Props>()
+const props = withDefaults(defineProps<Props>(), {
+  plain: false
+})
 
 // downloadMessageResource 已迁到 MessageActionState.downloadMedia
 const isDownloading = ref(false)
@@ -95,10 +101,10 @@ const isSelf = computed((): boolean => {
 
 const isDownloaded = computed((): boolean => filePath.value.length > 0)
 
-// 下载进度（0-100），与 VideoMessage 一致：SDK 下载时通过 message.progress 推送
+// 下载进度（0-100）：SDK 拆分后的 downloadMediaProgress（旧 progress 已废弃）
 const downloadProgress = computed((): number => {
   const messageObj: UTSJSONObject = props.message as UTSJSONObject
-  const v: any | null = messageObj['progress']
+  const v: any | null = messageObj['downloadMediaProgress']
   return typeof v == 'number' ? (v as number) : 0
 })
 
@@ -196,6 +202,8 @@ const handleFileTap = async (e: any) => {
     const msgForAction: UTSJSONObject = props.message as UTSJSONObject
     const state = useMessageActionState({ message: msgForAction })
     await state.downloadMedia(MediaQuality.ORIGINAL)
+    // 合并转发详情里的消息不会被 SDK 推送更新，通知详情页重新拉取以显示“已下载”
+    uni.$emit(MERGED_DETAIL_REFRESH_EVENT, new UTSJSONObject())
     uni.showToast({ title: '下载完成', icon: 'success', duration: 1500 })
   } catch (error: any) {
     console.error('[FileMessage] download failed:', error)
@@ -224,6 +232,11 @@ const handleFileTap = async (e: any) => {
 
 .content-in {
   border-radius: 4rpx 20rpx 20rpx 20rpx;
+}
+
+/* 无气泡模式（合并转发详情）：透明底、直角 */
+.content-plain {
+  background-color: transparent;
 }
 
 .content-out {

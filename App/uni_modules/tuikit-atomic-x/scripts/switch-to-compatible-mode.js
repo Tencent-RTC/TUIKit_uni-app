@@ -15,7 +15,7 @@
  *   2. 文件：utils/setSdkLanguageFromSystem_compatible.ts -> utils/setSdkLanguageFromSystem.ts
  *   3. 内容替换：扫描转换后的目录，将文件中的 _compatible 引用路径替换为正式路径
  *   4. 删除：__tests__、quickstart_room 目录（兼容模式不需要）
- *   5. 删除文件：utils/roomScheduleUtils.ts、hooks/useRoomTips.ts
+ *   5. 删除文件：utils/roomScheduleUtils.ts、utils/roomErrorHandler.ts、hooks/useRoomTips.ts
  *      （仅被旧 quickstart_room 引用，且为 Vue3 写法，转化后无人引用，保留会导致编译报错）
  */
 
@@ -48,6 +48,7 @@ const DIRS_TO_DELETE = [
 // 需要删除的文件（Vue3 写法且转化后无人引用，保留会导致 Vue2 编译报错）
 const FILES_TO_DELETE = [
   'utils/roomScheduleUtils.ts',
+  'utils/roomErrorHandler.ts',
   'hooks/useRoomTips.ts',
 ];
 

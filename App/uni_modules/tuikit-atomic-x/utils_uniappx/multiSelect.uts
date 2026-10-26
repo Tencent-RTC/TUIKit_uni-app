@@ -1,0 +1,22 @@
+/**
+ * 消息多选的公共判定：哪些消息不支持被多选。
+ * Message（勾选圈置灰）与 MessageList（长按进多选、批量选择）共用，避免两处各写一份规则。
+ *
+ * 从 UTSJSONObject 读出的 status 是原始 Number，与 enum 实例比较恒不相等，这里用数值常量。
+ * MessageStatus: SEND_FAIL=3
+ */
+import { isCallMessage } from './callMessageUtils'
+
+const MSG_STATUS_SEND_FAIL: number = 3
+
+/**
+ * 消息是否可以被多选。发送失败的消息、通话消息不可选（界面只置灰，不另外提示）。
+ */
+export function isMessageMultiSelectable(message: any | null): boolean {
+  if (message == null) return false
+  const obj: UTSJSONObject = message as UTSJSONObject
+  const statusRaw: any | null = obj['status']
+  if (statusRaw == MSG_STATUS_SEND_FAIL) return false
+  if (isCallMessage(message)) return false
+  return true
+}

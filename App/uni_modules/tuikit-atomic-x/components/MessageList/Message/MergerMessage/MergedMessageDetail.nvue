@@ -1,0 +1,266 @@
+<template>
+  <view v-if="visible" class="merged-detail" @tap.stop="noop">
+    <CustomNavbar
+      position="fixed"
+      :title="detailTitle"
+      :showBack="true"
+      :showShadow="true"
+      @back="handleClose"
+    >
+      <template #right>
+        <view class="merged-detail__nav-right" @tap.stop="noop"></view>
+      </template>
+    </CustomNavbar>
+
+    <scroll-view
+      class="merged-detail__scroll"
+      :style="{ paddingTop: navbarHeightPx + 'px' }"
+      scroll-y="true"
+      :show-scrollbar="false"
+    >
+      <view v-if="isLoading" class="merged-detail__hint">
+        <text class="merged-detail__hint-text">加载中…</text>
+      </view>
+
+      <view v-else-if="messageList.length === 0" class="merged-detail__hint">
+        <text class="merged-detail__hint-text">暂无消息</text>
+      </view>
+
+      <view v-else class="merged-detail__list">
+        <view
+          v-for="(item, index) in messageList"
+          :key="item.msgID + '_' + index"
+          class="merged-detail__item"
+        >
+          <!-- 详情页要递归渲染 Message 本体：通过 inject 拿到祖先 Message 提供的组件定义 -->
+          <template v-if="isBubbleMessage(item)">
+            <component
+              v-if="MessageComponent"
+              :is="MessageComponent"
+              :message="item"
+              :conversationID="conversationID"
+              :showAvatar="true"
+              :showNickname="true"
+              :showTime="true"
+              :readonly="true"
+            />
+          </template>
+          <view v-else class="merged-detail__center">
+            <text class="merged-detail__center-text">{{ buildCenterText(item) }}</text>
+          </view>
+          <!-- 消息之间用分割线隔开（最后一条除外） -->
+          <view v-if="index < messageList.length - 1" class="merged-detail__divider"></view>
+        </view>
+      </view>
+    </scroll-view>
+  </view>
+</template>
+
+<script setup lang="ts">
+import { computed, inject, provide, ref, watch } from 'vue'
+import CustomNavbar from '../../../CustomNavbar/CustomNavbar.nvue'
+import { useMessageActionState } from '../../../../state/MessageActionState'
+import { MessageStatus, MessageType } from '../../../../types/message'
+import { MESSAGE_COMPONENT_INJECTION_KEY, MERGED_DETAIL_REFRESH_INJECTION_KEY } from '../../../../constants/messageInjectionKeys'
+import type { MessageInfo } from '../../../../types/message'
+
+// 由祖先 Message 组件 provide 进来的 Message 自身；不直接 import 以避开循环依赖
+const MessageComponent = inject<any>(MESSAGE_COMPONENT_INJECTION_KEY, null)
+
+interface Props {
+  visible: boolean
+  // 被点击的合并转发消息：其 messagePayload 携带 title / abstractList
+  message: MessageInfo
+  // 宿主会话 ID，透传给内部 Message，用于群昵称等上下文判断
+  conversationID?: string
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  conversationID: ''
+})
+
+const emit = defineEmits<{
+  (e: 'update:visible', value: boolean): void
+  (e: 'close'): void
+}>()
+
+const NAVBAR_CONTENT_HEIGHT_PX = 44
+const navbarHeightPx = ref(NAVBAR_CONTENT_HEIGHT_PX)
+
+const isLoading = ref(false)
+// 合并转发内的消息不属于任何会话的消息列表，只能整包下载后在前端持有
+const mergedMessageList = ref<MessageInfo[]>([])
+
+const detailTitle = computed(() => {
+  const payload = props.message?.messagePayload as { title?: string } | undefined
+  return payload?.title || '聊天记录'
+})
+
+// 聊天记录详情里所有消息（含自己发的）统一靠左展示：
+// 内容组件（文本气泡、语音、文件等）各自按 message.isSentBySelf 决定左右样式，
+// 只改 Message 外层无法覆盖，因此给展示用的副本把 isSentBySelf 置为 false，不影响原始数据
+const toLeftAlignedMessage = (message: MessageInfo): MessageInfo => {
+  if (!message.isSentBySelf) return message
+  return { ...message, isSentBySelf: false }
+}
+
+// 详情页只展示消息内容：副本上去掉引用块（TextMessage 读 quoteInfo）和表情回应
+const toContentOnlyMessage = (message: MessageInfo): MessageInfo => {
+  return { ...toLeftAlignedMessage(message), quoteInfo: undefined, reactionList: [] } as MessageInfo
+}
+
+// 已撤回的消息不展示，与 iOS 详情页一致；副本在 computed 中一次生成，避免每次渲染产生新对象
+const messageList = computed(() =>
+  mergedMessageList.value
+    .filter(item => item.status !== MessageStatus.REVOKED)
+    .map(toContentOnlyMessage)
+)
+
+const loadMergedMessageList = async () => {
+  if (!props.message) return
+  isLoading.value = true
+  mergedMessageList.value = []
+  try {
+    const state = useMessageActionState({ message: props.message })
+    const list = await state.downloadMergedMessageList()
+    mergedMessageList.value = Array.isArray(list) ? list : []
+  } catch (error) {
+    console.error('[MergedMessageDetail] downloadMergedMessageList failed:', error)
+    mergedMessageList.value = []
+  } finally {
+    isLoading.value = false
+  }
+}
+
+// 静默刷新：重新拉取列表替换副本，不切 loading 态（避免整页闪成“加载中”）。
+// 子消息不在会话消息列表里，SDK 不会推送其下载结果，下载完成后靠它拿到最新的本地路径。
+// 一屏多张图片/视频会同时完成下载：进行中的刷新只再补跑一次（合并），避免 N 次整表重拉
+let refreshInflight: Promise<void> | null = null
+let refreshRerun = false
+
+const fetchMergedMessageListSilently = async () => {
+  try {
+    const state = useMessageActionState({ message: props.message })
+    const list = await state.downloadMergedMessageList()
+    if (Array.isArray(list)) mergedMessageList.value = list
+  } catch (error) {
+    console.error('[MergedMessageDetail] refresh failed:', error)
+  }
+}
+
+const refreshMergedMessageList = (): Promise<void> => {
+  if (!props.message) return Promise.resolve()
+  if (refreshInflight) {
+    refreshRerun = true
+    return refreshInflight
+  }
+  refreshInflight = (async () => {
+    do {
+      refreshRerun = false
+      await fetchMergedMessageListSilently()
+    } while (refreshRerun)
+  })().then(() => {
+    refreshInflight = null
+  })
+  return refreshInflight
+}
+provide(MERGED_DETAIL_REFRESH_INJECTION_KEY, refreshMergedMessageList)
+
+// 系统提示 / 群创建提示 / 已撤回：居中展示，不套消息气泡
+const isBubbleMessage = (message: MessageInfo): boolean => {
+  if (message.messageType === MessageType.TIPS) return false
+  if (message.status === MessageStatus.REVOKED) return false
+  return true
+}
+
+const buildCenterText = (message: MessageInfo): string => {
+  if (message.status === MessageStatus.REVOKED) {
+    return message.isSentBySelf ? '你撤回了一条消息' : '对方撤回了一条消息'
+  }
+  const payload = message.messagePayload as { content?: string } | undefined
+  return payload?.content || '系统消息'
+}
+
+const handleClose = () => {
+  emit('update:visible', false)
+  emit('close')
+}
+
+const noop = () => {}
+
+watch(
+  () => props.visible,
+  (isVisible) => {
+    if (!isVisible) return
+    // CustomNavbar 为 fixed 定位，内容区需要自行让出「状态栏 + 导航栏 44px」的高度
+    const statusBarHeight = uni.getSystemInfoSync().statusBarHeight || 44
+    navbarHeightPx.value = statusBarHeight + NAVBAR_CONTENT_HEIGHT_PX
+    loadMergedMessageList()
+  },
+  { immediate: true }
+)
+</script>
+
+<style>
+.merged-detail {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #FFFFFF;
+  flex-direction: column;
+  z-index: 9990;
+}
+
+.merged-detail__nav-right {
+  width: 100rpx;
+  height: 88rpx;
+}
+
+.merged-detail__scroll {
+  flex: 1;
+}
+
+.merged-detail__list {
+  flex-direction: column;
+  padding-bottom: 40rpx;
+}
+
+.merged-detail__item {
+  flex-direction: column;
+}
+
+/* 消息之间的分割线：与头像右侧的正文区左边缘对齐 */
+.merged-detail__divider {
+  height: 1rpx;
+  margin-left: 116rpx;
+  margin-right: 32rpx;
+  margin-top: 24rpx;
+  background-color: #EDEFF3;
+}
+
+.merged-detail__center {
+  flex-direction: row;
+  justify-content: center;
+  padding: 12rpx 32rpx;
+}
+
+.merged-detail__center-text {
+  font-size: 24rpx;
+  line-height: 34rpx;
+  color: rgba(0, 0, 0, 0.4);
+  text-align: center;
+}
+
+.merged-detail__hint {
+  align-items: center;
+  justify-content: center;
+  padding-top: 200rpx;
+}
+
+.merged-detail__hint-text {
+  font-size: 28rpx;
+  color: rgba(0, 0, 0, 0.4);
+}
+</style>

@@ -1,5 +1,5 @@
 <template>
-  <view class="custom-message" :class="{ 'custom-message--center': isCustomCenter }">
+  <view class="custom-message" :class="{ 'custom-message--center': isCustomCenter, 'custom-message--plain': plain == true }">
     <CallMessage v-if="isCallMsg" :message="message" :isGroupCall="isCustomCenter" />
     <view v-else class="custom-highlight">
       <view class="default-custom">
@@ -17,10 +17,14 @@ import CallMessage from './CallMessage.uvue'
 
 type Props = {
   message: any | null
-  conversationID?: string}
+  conversationID?: string
+  // 无气泡模式（合并转发详情）：去掉半透明白底与圆角
+  plain?: boolean
+}
 
 const props = withDefaults(defineProps<Props>(), {
-  conversationID: ''
+  conversationID: '',
+  plain: false
 })
 
 const customMessage = computed((): any | null => {
@@ -79,6 +83,14 @@ const customText = computed((): string => {
 .custom-message--center {
   background-color: transparent;
   max-width: 750rpx;
+  min-width: 0;
+}
+
+/* 无气泡模式（合并转发详情）：透明底、直角、铺满正文区 */
+.custom-message--plain {
+  background-color: transparent;
+  border-radius: 0;
+  max-width: 602rpx;
   min-width: 0;
 }
 

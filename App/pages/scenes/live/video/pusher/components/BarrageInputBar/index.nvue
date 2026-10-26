@@ -1,0 +1,146 @@
+<template>
+  <view v-if="active" ref="barRef" class="comment-bar" :style="{ opacity: ready ? 1 : 0 }">
+    <view class="comment-cancel" @tap="close">
+      <text class="comment-cancel-text">×</text>
+    </view>
+    <input
+      ref="inputRef"
+      class="comment-input"
+      v-model="draft"
+      :maxlength="120"
+      :placeholder="t('morePanel.commentPlaceholder')"
+      placeholder-class="comment-input-placeholder"
+      :adjust-position="false"
+      :fixed="true"
+      :focus="focusTrigger"
+      :cursor-spacing="0"
+      confirm-type="send"
+      @confirm="submit"
+    />
+    <view class="comment-send" @tap="submit">
+      <text class="comment-send-text">{{ t('morePanel.send') }}</text>
+    </view>
+  </view>
+</template>
+
+<script setup lang="ts">
+  import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue';
+  import { t } from '../../../../locales';
+  import { useBarrageState } from '@/uni_modules/tuikit-atomic-x/state/BarrageState';
+  import { getLiveErrorMessage } from '@/uni_modules/tuikit-atomic-x/utils/liveErrorHandler';
+
+  const props = defineProps({
+    modelValue: {
+      type: Boolean,
+      default: false,
+    },
+    liveID: {
+      type: String,
+      default: '',
+    },
+  });
+
+  const emit = defineEmits(['update:modelValue', 'tip']);
+
+  const animation = (uni as any).requireNativePlugin('animation');
+
+  const active = computed({
+    get: () => props.modelValue,
+    set: (v) => emit('update:modelValue', v),
+  });
+
+  const { sendTextMessage } = useBarrageState(props.liveID);
+
+  const barRef = ref<any>(null);
+  const inputRef = ref<any>(null);
+  const focusTrigger = ref(false);
+  const ready = ref(false);
+  const draft = ref('');
+
+  const KEYBOARD_GAP_PX = 12;
+
+  let focusingProgrammatically = false;
+
+  const liftBar = (height: number) => {
+    const el = barRef.value;
+    if (!el) return;
+    animation.transition(el, {
+      styles: { transform: `translateY(${-(height + KEYBOARD_GAP_PX)}px)` },
+      duration: 160,
+      timingFunction: 'ease-out',
+    });
+  };
+
+  const focusInput = () => {
+    focusingProgrammatically = true;
+    focusTrigger.value = false;
+    nextTick(() => {
+      setTimeout(() => {
+        focusTrigger.value = true;
+        inputRef.value?.focus?.();
+        setTimeout(() => inputRef.value?.focus?.(), 120);
+        setTimeout(() => inputRef.value?.focus?.(), 300);
+        setTimeout(() => { focusingProgrammatically = false; }, 1000);
+      }, 0);
+    });
+  };
+
+  const onKeyboardHeightChange = (res: any) => {
+    const height = (res && res.height) || 0;
+    if (height > 0) {
+      ready.value = true;
+      liftBar(height);
+    } else if (!focusingProgrammatically && active.value) {
+      close();
+    }
+  };
+
+  const close = () => {
+    try { inputRef.value?.blur?.(); } catch (e) { /* ignore */ }
+    try { uni.hideKeyboard(); } catch (e) { /* ignore */ }
+    focusTrigger.value = false;
+    ready.value = false;
+    active.value = false;
+  };
+
+  const submit = () => {
+    const content = draft.value.trim();
+    if (!content) return;
+    sendTextMessage({
+      liveID: props.liveID,
+      text: content,
+      success: () => {
+        draft.value = '';
+        close();
+      },
+      fail: (code: any, msg: any) => {
+        console.error(`sendTextMessage fail code: ${code}, msg: ${msg}`);
+        emit('tip', `${t('morePanel.commentSendFailed')}: ${getLiveErrorMessage(code)}`);
+      },
+    });
+  };
+
+  watch(() => props.modelValue, (v) => {
+    if (v) {
+      ready.value = false;
+      draft.value = '';
+      nextTick(() => focusInput());
+    } else {
+      focusTrigger.value = false;
+      ready.value = false;
+    }
+  });
+
+  onMounted(() => {
+    uni.onKeyboardHeightChange(onKeyboardHeightChange);
+  });
+
+  onUnmounted(() => {
+    uni.offKeyboardHeightChange(onKeyboardHeightChange);
+    try { uni.hideKeyboard(); } catch (e) { /* ignore */ }
+  });
+</script>
+
+<style lang="scss">
+  @import './BarrageInputBar.scss';
+</style>

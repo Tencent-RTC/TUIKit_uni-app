@@ -36,12 +36,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, inject } from 'vue'
 import type { MessageInfo } from '../../../../types/message'
 import { MediaQuality } from '../../../../types/message'
 import { useMessageActionState } from '../../../../state/MessageActionState'
 import { useMessageListState } from '../../../../state/MessageListState'
 import { stopGlobalAudioPlayer, RECORDING_PSEUDO_ID } from '../../../../hooks/useAudioPlayer'
+import { MERGED_DETAIL_REFRESH_INJECTION_KEY } from '../../../../constants/messageInjectionKeys'
 
 const PLACEHOLDER_PREFIX = 'placeholder_video_';
 
@@ -60,6 +61,9 @@ const isDownloadingVideo = ref(false)
 // 长按判定阈值，与 Message.nvue 中保持一致
 const LONG_PRESS_THRESHOLD = 350
 const touchStartTime = ref(0)
+
+// 合并转发详情页提供的刷新入口；普通会话里没有提供者，为 null
+const refreshMergedDetail = inject<(() => Promise<void>) | null>(MERGED_DETAIL_REFRESH_INJECTION_KEY, null)
 
 // 获取消息列表状态，用于下载资源
 // downloadMedia 已迁到 MessageActionState.downloadMedia
@@ -88,9 +92,8 @@ const videoSnapshotHeight = computed(() => {
   return props.message.messagePayload?.videoSnapshotHeight || 0
 })
 
-// 下载进度
 const downloadProgress = computed(() => {
-  return props.message?.progress ?? 0
+  return props.message?.downloadMediaProgress ?? 0
 })
 
 const MAX_WIDTH = 400
@@ -195,6 +198,8 @@ const checkAndDownloadSnapshot = async () => {
     isDownloadingSnapshot.value = true
     try {
       await useMessageActionState({ message: props.message }).downloadMedia(MediaQuality.THUMBNAIL)
+      // 合并转发详情里的消息不会被 SDK 推送更新，需主动刷新才能拿到封面路径
+      if (refreshMergedDetail) await refreshMergedDetail()
     } catch (error) {
       console.error('[VideoMessage] downloadMedia snapshot failed:', error)
       coverError.value = true
@@ -217,6 +222,7 @@ const checkAndDownloadVideo = async () => {
   isDownloadingVideo.value = true;
   try {
     await useMessageActionState({ message: props.message }).downloadMedia(MediaQuality.ORIGINAL);
+    if (refreshMergedDetail) await refreshMergedDetail();
   } catch (error) {
     console.error('[VideoMessage] downloadMedia video failed:', error);
     uni.showToast({ title: '视频下载失败', icon: 'none' });

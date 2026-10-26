@@ -1,6 +1,6 @@
 <template>
-  <view class="text-msg text-msg--no-select" :class="['text-msg__content', 'text-msg__content--'+ (message.isSentBySelf ? 'out' : 'in')]">
-    <view class="text-msg__highlight">
+  <view class="text-msg text-msg--no-select" :class="['text-msg__content', plain ? 'text-msg__content--plain' : 'text-msg__content--'+ (message.isSentBySelf ? 'out' : 'in')]">
+    <view class="text-msg__highlight" :class="{ 'text-msg__highlight--plain': plain }">
       <view
         v-if="quoteMessage"
         class="text-msg__quote text-msg__quote--no-select"
@@ -59,7 +59,9 @@ var CURTAIN_TEXT_DURATION = 240
 export default {
   name: 'TextMessage',
   props: {
-    message: { type: Object, required: true }
+    message: { type: Object, required: true },
+    // 无气泡模式（合并转发详情）：去掉气泡底色与圆角，内容按容器宽度自然铺满
+    plain: { type: Boolean, default: false }
   },
   data: function() {
     var self = this
@@ -289,7 +291,11 @@ export default {
 .text-msg__content { flex: 1; }
 .text-msg__content--in { background-color: #F0F2F7; border-radius: 4rpx 20rpx 20rpx 20rpx; }
 .text-msg__content--out { background-color: #CCE2FF; border-radius: 20rpx 4rpx 20rpx 20rpx; }
+/* 无气泡模式：透明底、直角、铺满父容器（写在 --in/--out 之后，保证覆盖底色） */
+.text-msg__content--plain { background-color: transparent; border-radius: 0; max-width: 602rpx; }
 .text-msg__highlight { flex: 1; padding: 20rpx 24rpx; background-color: transparent; }
+/* nvue 不支持后代选择器，plain 的内边距用修饰类（写在基础样式之后以覆盖） */
+.text-msg__highlight--plain { padding-left: 0; padding-right: 0; }
 
 /* 气泡内引用块：左侧竖条 + 发送者 + 内容摘要 */
 .text-msg__quote { border-radius: 0 8rpx 8rpx 0; padding: 6rpx 12rpx; margin-bottom: 16rpx; border-left-width: 4rpx; border-left-style: solid; border-left-color: #D5D5D5; }

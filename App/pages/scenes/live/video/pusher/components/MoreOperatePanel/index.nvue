@@ -1,37 +1,78 @@
 <template>
-  <view class="bottom-drawer-container" v-if="modelValue">
-    <view class="drawer-overlay" @tap="close"></view>
-    <view class="bottom-drawer" :class="{ 'drawer-open': modelValue }">
-      <text class="title">{{ t('morePanel.title') }}</text>
-      <view class="drawer-content">
-        <view class="drawer-actions">
-          <view class="action-btn" @tap="handleBeauty">
-            <view class="action-btn-image-container">
-              <image class="action-btn-image" src="/static/images/live-beauty.png" mode="aspectFit" />
-            </view>
-            <text class="action-btn-content">{{ t('morePanel.beauty') }}</text>
+  <view>
+    <BaseDrawer
+      v-model="visible"
+      :height="drawerHeight"
+      :overlayOpacity="0.4"
+      bgImage="/uni_modules/tuikit-atomic-x/static/assets/live/drawer-bg.png"
+      :bgImageHeight="drawerHeight"
+      padding="20rpx 36rpx 48rpx"
+    >
+    <view class="setting-group">
+      <view class="setting-list">
+        <view class="cap" @tap="handlePause">
+          <view class="cap-icon">
+            <image class="cap-image" src="/static/images/live/icon/prepare-pause.png" mode="aspectFit" />
           </view>
-          <view class="action-btn" @tap="handleAudioEffect">
-            <view class="action-btn-image-container">
-              <image class="action-btn-image" src="/static/images/live-effects.png" mode="aspectFit" />
-            </view>
-            <text class="action-btn-content">{{ t('morePanel.soundEffect') }}</text>
+          <text class="cap-label">{{ t('morePanel.pauseLive') }}</text>
+        </view>
+        <view class="cap" @tap="handleMic">
+          <view class="cap-icon">
+            <image class="cap-image" :src="micEnabled ? '/static/images/live/icon/prepare-mic-on.png' : '/static/images/live/icon/prepare-mic-off.png'" mode="aspectFit" />
           </view>
-          <view class="action-btn" @tap="handleCamera">
-            <view class="action-btn-image-container">
-              <image class="action-btn-image" src="/static/images/live-flip.png" mode="aspectFit" />
-            </view>
-            <text class="action-btn-content">{{ t('morePanel.flip') }}</text>
-          </view>
-          <view class="action-btn" @tap="handleSwitchMirror">
-            <view class="action-btn-image-container">
-              <image class="action-btn-image" src="/static/images/mirror.png" mode="aspectFit" />
-            </view>
-            <text class="action-btn-content">{{ t('morePanel.mirror') }}</text>
-          </view>
+          <text class="cap-label">{{ micEnabled ? t('morePanel.mute') : t('morePanel.unmute') }}</text>
         </view>
       </view>
     </view>
+
+    <view class="setting-group">
+      <text class="setting-group-title">{{ t('morePanel.basicSettings') }}</text>
+      <view class="setting-list">
+        <view class="cap" @tap="handleBeauty">
+          <view class="cap-icon">
+            <image class="cap-image" src="/static/images/live/icon/prepare-beauty.png" mode="aspectFit" />
+          </view>
+          <text class="cap-label">{{ t('morePanel.beauty') }}</text>
+        </view>
+        <view class="cap" @tap="handleSwitchMirror">
+          <view class="cap-icon">
+            <image class="cap-image" :style="{ transform: mirrorEnabled ? 'scaleX(1)' : 'scaleX(-1)' }" src="/static/images/live/icon/prepare-mirror-on.png" mode="aspectFit" />
+          </view>
+          <text class="cap-label">{{ t('morePanel.mirror') }}</text>
+        </view>
+        <view class="cap" @tap="handleCamera">
+          <view class="cap-icon">
+            <image class="cap-image" src="/static/images/live/icon/prepare-flip.png" mode="aspectFit" />
+          </view>
+          <text class="cap-label">{{ t('morePanel.flip') }}</text>
+        </view>
+        <view class="cap" @tap="handleAudioEffect">
+          <view class="cap-icon">
+            <image class="cap-image" src="/static/images/live/icon/prepare-sound-effect.png" mode="aspectFit" />
+          </view>
+          <text class="cap-label">{{ t('morePanel.soundEffect') }}</text>
+        </view>
+      </view>
+    </view>
+
+    <view class="setting-group">
+      <text class="setting-group-title">{{ t('morePanel.interactiveFeatures') }}</text>
+      <view class="setting-list">
+        <view class="cap" @tap="handleComments">
+          <view class="cap-icon">
+            <image class="cap-image" src="/static/images/live/icon/prepare-comments.png" mode="aspectFit" />
+          </view>
+          <text class="cap-label">{{ t('morePanel.comments') }}</text>
+        </view>
+        <view class="cap" @tap="handleShare">
+          <view class="cap-icon">
+            <image class="cap-image" src="/static/images/live/icon/prepare-share.png" mode="aspectFit" />
+          </view>
+          <text class="cap-label">{{ t('morePanel.share') }}</text>
+        </view>
+      </view>
+    </view>
+    </BaseDrawer>
     <BeautyPanel v-model="isShowBeautyPanel"></BeautyPanel>
     <AudioEffectPanel v-model="isShowAudioEffect"></AudioEffectPanel>
   </view>
@@ -40,8 +81,10 @@
 <script setup>
   import { ref, computed } from 'vue';
   import { BeautyPanel } from '@/uni_modules/tuikit-atomic-x/components/Beauty';
-  import { MirrorType, useDeviceState } from '@/uni_modules/tuikit-atomic-x/state/DeviceState';
+  import { DeviceStatus, MirrorType, useDeviceState } from '@/uni_modules/tuikit-atomic-x/state/DeviceState';
+  import { useLiveListState } from '@/uni_modules/tuikit-atomic-x/state/LiveListState';
   import { t } from '../../../../locales';
+  import BaseDrawer from '@/components/live/BaseDrawer/index.nvue';
   import AudioEffectPanel from '@/uni_modules/tuikit-atomic-x/components/AudioEffectPanel';
 
   const props = defineProps({
@@ -51,22 +94,46 @@
     },
   });
 
-  const emit = defineEmits(['update:modelValue', 'tip']);
+  const emit = defineEmits(['update:modelValue', 'tip', 'pause', 'comment']);
 
-  const { isFrontCamera, switchCamera, switchMirror, localMirrorType } = useDeviceState();
+  const { isFrontCamera, switchCamera, switchMirror, localMirrorType, microphoneStatus, openLocalMicrophone, closeLocalMicrophone } = useDeviceState();
+  const { currentLive } = useLiveListState();
 
+  const drawerHeight = 750;
   const isShowBeautyPanel = ref(false);
   const isShowAudioEffect = ref(false);
+
+  const visible = computed({
+    get: () => props.modelValue,
+    set: (val) => emit('update:modelValue', val),
+  });
 
   const mirrorEnabled = computed(() =>
     localMirrorType.value === MirrorType.AUTO || localMirrorType.value === MirrorType.ENABLE
   );
 
+  const micEnabled = computed(() => microphoneStatus.value === DeviceStatus.ON);
+
+  const handlePause = () => {
+    visible.value = false;
+    emit('pause');
+  };
+
+  const handleMic = () => {
+    if (micEnabled.value) {
+      closeLocalMicrophone();
+    } else {
+      openLocalMicrophone();
+    }
+  };
+
   const handleBeauty = () => {
+    visible.value = false;
     isShowBeautyPanel.value = true;
   };
 
   const handleAudioEffect = () => {
+    visible.value = false;
     isShowAudioEffect.value = true;
   };
 
@@ -75,6 +142,7 @@
       isFront: !isFrontCamera.value
     })
   };
+
   const handleSwitchMirror = () => {
     if (!isFrontCamera.value) {
       emit('tip', t('morePanel.frontOnly'))
@@ -86,8 +154,22 @@
     })
   }
 
-  const close = () => {
-    emit('update:modelValue', false);
+  const handleComments = () => {
+    visible.value = false;
+    emit('comment');
+  };
+
+  const handleShare = () => {
+    const liveID = String(currentLive.value?.liveID || '');
+    if (!liveID) return;
+    uni.setClipboardData({
+      data: liveID,
+      showToast: false,
+      success: () => {
+        visible.value = false;
+        emit('tip', t('morePanel.shareCopied', { id: liveID }));
+      },
+    });
   };
 </script>
 

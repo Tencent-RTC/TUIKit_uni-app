@@ -70,14 +70,11 @@ const handleChipTap = (reactionID: string) => {
   flex: 1;
   flex-direction: row;
   flex-wrap: wrap;
+  align-self: stretch;
 }
 
 .rb--out {
   justify-content: flex-end;
-  /* nvue column flex 默认 align-items: flex-start（非 stretch），单 chip 时 .rb
-     宽度 = chip 宽度，justify-content 看不到效果（chip 撑满 .rb）。
-     align-self: flex-end 让 .rb 整体在父容器内靠右，chip 视觉上贴气泡右内壁。*/
-  align-self: flex-end;
 }
 .rb__chip {
   flex-direction: row;

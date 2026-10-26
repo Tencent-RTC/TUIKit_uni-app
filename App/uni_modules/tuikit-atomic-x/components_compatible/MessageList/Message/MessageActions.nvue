@@ -49,7 +49,6 @@ var ACTION_THROTTLE_WAIT = 1000
 var ACTIONS_PER_ROW = 4
 var TRANSLATE_TARGET_LANGUAGE = 'zh'
 var TRANSLATE_STORAGE_KEY = 'tuikit_message_translate_visible_v1'
-var QUOTE_ENTRY_ENABLED = false
 
 export default {
   name: 'MessageActions',
@@ -74,6 +73,7 @@ export default {
       recallIconSrc: '/uni_modules/tuikit-atomic-x/static/assets/message-list/msg_recall.png',
       voiceToTextIconSrc: '/uni_modules/tuikit-atomic-x/static/assets/message-list/msg_voice_to_text.png',
       forwardIconSrc: '/uni_modules/tuikit-atomic-x/static/assets/message-list/msg_forward.png',
+      multiSelectIconSrc: '/uni_modules/tuikit-atomic-x/static/assets/message-list/msg_multi_select.png',
       quoteIconSrc: '/uni_modules/tuikit-atomic-x/static/assets/message-list/msg_quote.png',
       translateIconSrc: '/uni_modules/tuikit-atomic-x/static/assets/message-list/msg_translate.png',
       hideIconSrc: '/uni_modules/tuikit-atomic-x/static/assets/message-list/msg_hide.png',
@@ -95,6 +95,11 @@ export default {
       if (this.message.messageType === MessageType.TIPS) return false
       if (this.message.messageType === MessageType.CUSTOM && isCallMessage(this.message)) return false
       return true
+    },
+    // 多选入口：已撤回 / 已删除的消息本身不会走到长按菜单，这里只兜底过滤
+    canMultiSelect() {
+      if (!this.message) return false
+      return this.message.status !== MessageStatus.REVOKED && this.message.status !== MessageStatus.DELETED
     },
     canQuote() {
       if (!this.message) return false
@@ -143,8 +148,9 @@ export default {
         { key: 'voiceToText', label: this.voiceActionLabel, icon: this.voiceToTextIconSrc, visible: this.canConvertVoice, handler: this.handleVoiceToText },
         { key: 'recall', label: '撤回', icon: this.recallIconSrc, visible: this.canRecall, handler: this.handleRecall },
         { key: 'forward', label: '转发', icon: this.forwardIconSrc, visible: this.canForward, handler: this.handleForward },
+        { key: 'multiSelect', label: '多选', icon: this.multiSelectIconSrc, visible: this.canMultiSelect, handler: this.handleMultiSelect },
         { key: 'reaction', label: '贴表情', icon: this.reactionIconSrc, visible: this.showReactionPicker, handler: this.handleReactionEntry },
-        { key: 'quote', label: '引用', icon: this.quoteIconSrc, visible: QUOTE_ENTRY_ENABLED && this.canQuote, handler: this.handleQuote },
+        { key: 'quote', label: '引用', icon: this.quoteIconSrc, visible: this.canQuote, handler: this.handleQuote },
         { key: 'translate', label: this.translateActionLabel, icon: this.translateVisible ? this.hideIconSrc : this.translateIconSrc, visible: this.canTranslate, handler: this.handleTranslate }
       ]
     },
@@ -252,6 +258,7 @@ export default {
     this.handleRecall = throttle(function() { self._handleRecallImpl() }, ACTION_THROTTLE_WAIT, { leading: true, trailing: false })
     this.handleVoiceToText = throttle(function() { self._handleVoiceToTextImpl() }, ACTION_THROTTLE_WAIT, { leading: true, trailing: false })
     this.handleForward = throttle(function() { self._handleForwardImpl() }, ACTION_THROTTLE_WAIT, { leading: true, trailing: false })
+    this.handleMultiSelect = throttle(function() { self._handleMultiSelectImpl() }, ACTION_THROTTLE_WAIT, { leading: true, trailing: false })
     this.handleQuote = throttle(function() { self._handleQuoteImpl() }, ACTION_THROTTLE_WAIT, { leading: true, trailing: false })
     this.handleTranslate = throttle(function() { self._handleTranslateImpl() }, ACTION_THROTTLE_WAIT, { leading: true, trailing: false })
   },
@@ -353,6 +360,10 @@ export default {
     },
     _handleForwardImpl() {
       this.$emit('action', { key: 'forward', text: '转发' })
+      this.safeClose()
+    },
+    _handleMultiSelectImpl() {
+      this.$emit('action', { key: 'multiSelect', text: '多选' })
       this.safeClose()
     },
     _handleQuoteImpl() {

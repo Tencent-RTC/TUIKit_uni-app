@@ -25,6 +25,8 @@
         v-for="(item, index) in messageItems"
         :key="item.key"
         :ref="el => setCellRef(el, index)"
+        @appear="onCellAppear(item.key)"
+        @disappear="onCellDisappear(item.key)"
       >
         <view>
           <MessageTimeDivider
@@ -43,8 +45,12 @@
             :customMessageRender="customMessageRender"
             :messageActionList="messageActionList"
             :inputPanelHeight="inputPanelHeight"
+            :multiSelectMode="isMultiSelectMode"
+            :selected="isMessageSelected(item.message)"
             @onMessageListTap="handleMessageListTap"
             @onMessageTap="handleMessageTap"
+            @onEnterMultiSelect="handleEnterMultiSelect"
+            @onToggleSelect="handleToggleSelect"
           />
         </view>
       </cell>
@@ -76,6 +82,66 @@
       confirmText="我知道了"
       cancelText=""
     />
+
+    <!-- 多选模式：顶部「取消」栏，盖住上层导航；标题用 multiSelectTitle（由业务方传入，默认空） -->
+    <CustomNavbar
+      v-if="isMultiSelectMode"
+      class="msg-list__multi-navbar"
+      position="fixed"
+      :title="multiSelectTitle"
+      :showBack="false"
+      :showShadow="false"
+      backgroundColor="#F9FAFC"
+    >
+      <template #left>
+        <view class="msg-list__multi-cancel" @tap.stop="handleExitMultiSelect">
+          <text class="msg-list__multi-cancel-text">取消</text>
+        </view>
+      </template>
+    </CustomNavbar>
+
+    <!-- 多选模式：内容超一屏时提供「选择以下消息」，点一下把按钮下方的消息全部选中 -->
+    <view
+      v-if="isMultiSelectMode && showSelectBelowEntry"
+      class="msg-list__select-below"
+      :style="{ top: selectBelowEntryTop + 'px' }"
+      @tap.stop="handleSelectBelow"
+    >
+      <text class="msg-list__select-below-text">选择以下消息</text>
+    </view>
+
+    <!-- 多选模式：底部操作栏（逐条转发 / 合并转发 / 删除），未选中任何消息时置灰 -->
+    <view v-if="isMultiSelectMode" class="msg-list__multi-bar">
+      <view class="msg-list__multi-item" :class="{ 'msg-list__multi-item--disabled': !hasSelection }" @tap.stop="handleMultiForwardSeparate">
+        <image class="msg-list__multi-icon" :src="multiForwardSeparateIcon" mode="aspectFit" />
+        <text class="msg-list__multi-text">逐条转发</text>
+      </view>
+      <view class="msg-list__multi-item" :class="{ 'msg-list__multi-item--disabled': !hasSelection }" @tap.stop="handleMultiForwardMerge">
+        <image class="msg-list__multi-icon" :src="multiForwardMergeIcon" mode="aspectFit" />
+        <text class="msg-list__multi-text">合并转发</text>
+      </view>
+      <view class="msg-list__multi-item" :class="{ 'msg-list__multi-item--disabled': !hasSelection }" @tap.stop="handleMultiDelete">
+        <image class="msg-list__multi-icon" :src="multiDeleteIcon" mode="aspectFit" />
+        <text class="msg-list__multi-text">删除</text>
+      </view>
+    </view>
+
+    <!-- 多选模式：删除二次确认 -->
+    <ConfirmDialog
+      v-model="multiDeleteDialogVisible"
+      title="确定删除已选消息"
+      confirmText="删除"
+      :confirmButtonDanger="true"
+      @confirm="confirmMultiDelete"
+    />
+
+    <!-- 多选模式：转发目标选择器（逐条 / 合并共用，选中后按 pendingForwardType 执行） -->
+    <ForwardPicker
+      v-if="multiForwardPickerVisible"
+      :excludeConversationID="conversationID"
+      @select="handleMultiForwardSelect"
+      @close="multiForwardPickerVisible = false"
+    />
   </view>
 </template>
 
@@ -83,15 +149,23 @@
 import { ref, computed, watch, onMounted, onBeforeMount, onBeforeUnmount, nextTick, getCurrentInstance } from 'vue'
 import Message from './Message/Message.nvue'
 import MessageTimeDivider from './MessageTimeDivider/MessageTimeDivider.nvue'
+import ForwardPicker from './Message/ForwardPicker.nvue'
 import ConfirmDialog from '../ConfirmDialog/ConfirmDialog.nvue'
+import CustomNavbar from '../CustomNavbar/CustomNavbar.nvue'
 import { PREMIUM_REQUIRED_EVENT } from '../../utils/premiumRequired'
 import { useMessageListState } from '../../state/MessageListState'
+import { isMessageMultiSelectable } from '../../utils/multiSelect'
+import { isCenterLayoutMessage } from '../../utils/messageLayout'
 import { useConversationListState } from '../../state/ConversationListState'
 import { useListTransform } from './useListTransform'
-import { MessageStatus, MessageType, MessageListType, MessageLoadDirection } from '../../types/message'
+import { MessageStatus, MessageListType, MessageLoadDirection, MessageForwardType } from '../../types/message'
 import { rpxToPx } from '../../utils/unitUtils'
-import type { MessageInfo } from '../../types/message'
-import type { CustomCenterChecker } from '../../utils/callMessageUtils'
+import { getMessageAbstract } from '../ConversationList/utils'
+import multiForwardSeparateIcon from '../../static/assets/message-list/msg_multi_forward_separate.png'
+import multiForwardMergeIcon from '../../static/assets/message-list/msg_multi_forward_merge.png'
+import multiDeleteIcon from '../../static/assets/message-list/msg_multi_delete.png'
+import type { MessageInfo, MergedForwardInfo } from '../../types/message'
+import type { CustomCenterChecker } from '../../utils/messageLayout'
 
 const instance = getCurrentInstance();
 
@@ -108,11 +182,14 @@ interface Props {
   inputPanelHeight?: number
   customCenterChecker?: CustomCenterChecker | null
   customMessageRender?: any
+  // 多选模式顶部栏的标题（通常传会话名称），默认空
+  multiSelectTitle?: string
 }
 
 interface MessageListExpose {
   scrollToBottom: (animated?: boolean) => void;
   scrollToMessage: (message: MessageInfo, animated?: boolean) => void;
+  exitMultiSelect: () => void;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -126,12 +203,15 @@ const props = withDefaults(defineProps<Props>(), {
   inputToolbarHeight: 0,
   inputPanelHeight: 0,
   customCenterChecker: null,
-  customMessageRender: null
+  customMessageRender: null,
+  multiSelectTitle: ''
 })
 
 const emit = defineEmits<{
   onMessageListTap: []
   onMessageTap: [message: MessageInfo]
+  // 多选模式开关变化：业务页据此隐藏输入框等（多选时输入栏被底部操作栏取代）
+  onMultiSelectModeChange: [isMultiSelectMode: boolean]
 }>()
 
 const navbarHeightPx = ref(0);
@@ -183,7 +263,7 @@ const setCellRef = (el: any, index: number) => {
   }
 }
 
-const { messageList, loadMessages, loadOlderMessages, loadNewerMessages, hasOlderMessages, hasNewerMessages, destroyStore } = useMessageListState({
+const { messageList, loadMessages, loadOlderMessages, loadNewerMessages, hasOlderMessages, hasNewerMessages, forwardMessages, deleteMessages, destroyStore } = useMessageListState({
   conversationID: props.conversationID,
   initialLoadOption: (props.locateMessage && props.locateMessage.msgID)
     ? { cursor: props.locateMessage, direction: MessageLoadDirection.BOTH, pageCount: 20 }
@@ -245,8 +325,8 @@ const messageItems = computed<MessageItem[]>(() => {
   filteredMessages.forEach((message, index) => {
     const prevMessage = index > 0 ? filteredMessages[index - 1] : null
     
-    const isCenterMessage = message.status === MessageStatus.REVOKED || 
-      message.messageType === MessageType.TIPS
+    const isCenterMessage = isCenterLayoutMessage(message, props.conversationID, props.customCenterChecker)
+
     
     const showTimeDivider = index === 0 || 
       (prevMessage && message.timestamp && prevMessage.timestamp &&
@@ -368,6 +448,11 @@ const handleScrollToBottomTap = () => {
 }
 
 let locatingMessageID: string = ''
+let highlightClearTimer: number | null = null
+// Android 等位置校正基本稳定（见 ANDROID_SCROLL_SETTLE_DELAYS）后再亮高亮
+const HIGHLIGHT_START_DELAY_MS = (() => {
+  try { return uni.getSystemInfoSync().platform === 'android' ? 150 : 250 } catch (e) { return 250 }
+})()
 
 const scrollToMessage = async (message: MessageInfo, animated = true) => {
   const messageID = message?.msgID
@@ -375,7 +460,7 @@ const scrollToMessage = async (message: MessageInfo, animated = true) => {
   if (locatingMessageID === messageID) return
 
   if (isMessageInList(messageID)) {
-    doScrollToMessage(messageID, animated)
+    scrollToMessageWithSettle(messageID, animated)
     return
   }
 
@@ -385,7 +470,7 @@ const scrollToMessage = async (message: MessageInfo, animated = true) => {
 
     await nextTick()
     const timer = addTimer(setTimeout(() => {
-      doScrollToMessage(messageID, animated)
+      scrollToMessageWithSettle(messageID, animated)
       clearTimer(timer)
     }, 100))
   } finally {
@@ -393,15 +478,38 @@ const scrollToMessage = async (message: MessageInfo, animated = true) => {
   }
 }
 
-const doScrollToMessage = (messageID: string, animated = true, highlight = true) => {
-  if (messageItems.value.length === 0) return
+// Android：list 的 cell 高度（图片 / 富文本）是渲染后才逐步测量的，一次性 scrollToElement 会因后续高度变化
+// 停在目标之前或之后；且动画滚动跨越大量未测量 cell 时容易中途停下。
+// 因此 Android 上改为非动画定位，并在布局稳定的窗口内补几次静默校正（只校正位置，不重复高亮）
+const isAndroid = (() => {
+  try { return uni.getSystemInfoSync().platform === 'android' } catch (e) { return false }
+})()
+const ANDROID_SCROLL_SETTLE_DELAYS = [200, 450, 800]
+
+const scrollToMessageWithSettle = (messageID: string, animated = true) => {
+  if (!isAndroid) {
+    doScrollToMessage(messageID, animated)
+    return
+  }
+  let highlighted = doScrollToMessage(messageID, false)
+  ANDROID_SCROLL_SETTLE_DELAYS.forEach(delay => {
+    const timer = addTimer(setTimeout(() => {
+      // 首次因 cell 尚未绑定而没滚成功时，由第一次成功的校正补上高亮
+      if (doScrollToMessage(messageID, false, !highlighted)) highlighted = true
+      clearTimer(timer)
+    }, delay))
+  })
+}
+
+const doScrollToMessage = (messageID: string, animated = true, highlight = true): boolean => {
+  if (messageItems.value.length === 0) return false
   
   const targetIndex = messageItems.value.findIndex(
     item => item.type === 'message' && item.message?.msgID === messageID
   )
   
   if (targetIndex === -1) {
-    return
+    return false
   }
   
   const targetCell = cellRefs[targetIndex]
@@ -418,14 +526,27 @@ const doScrollToMessage = (messageID: string, animated = true, highlight = true)
     }
     
     if (highlight) {
-      currentHighlightID.value = messageID
-      
-      const timer = addTimer(setTimeout(() => {
-        currentHighlightID.value = ''
-        clearTimer(timer)
-      }, 3000))
+      // 先清掉上一次高亮及其定时器，再重新赋值：同一条消息连续跳转时 ID 不变，
+      // 不先置空的话 Message 的 highlight watch 不会触发，旧定时器还会提前把高亮清掉
+      if (highlightClearTimer !== null) {
+        clearTimer(highlightClearTimer)
+        highlightClearTimer = null
+      }
+      currentHighlightID.value = ''
+      // 等滚动落位后再亮：Android 的 scrollToElement 动画明显比 iOS 慢，延迟需更长；
+      // 非动画滚动（首屏定位）几乎瞬间完成
+      const startDelay = isAndroid ? HIGHLIGHT_START_DELAY_MS : (animated === true ? HIGHLIGHT_START_DELAY_MS : 100)
+      highlightClearTimer = addTimer(setTimeout(() => {
+        currentHighlightID.value = messageID
+        highlightClearTimer = addTimer(setTimeout(() => {
+          currentHighlightID.value = ''
+          highlightClearTimer = null
+        }, 3000))
+      }, startDelay))
     }
+    return true
   }
+  return false
 }
 
 const isBottomAnchorVisible = ref(true)
@@ -449,6 +570,22 @@ const handleScroll = (e: any) => {
 
   lastScrollTop.value = e.contentOffset.y
 
+  // 多选快捷入口依赖内容高度：scroll 事件只在这里给出 contentSize。
+  // 只在数值变化时写 ref，避免每帧都触发重算（不做任何原生测量）
+  if (e.contentSize && e.contentSize.height && e.contentSize.height !== listContentHeight.value) {
+    listContentHeight.value = e.contentSize.height
+  }
+
+  if (isMultiSelectMode.value) {
+    hasScrolledInMultiSelect.value = true
+    // 首次滚动时补一次视口高度与越界判定，用于和 contentSize 比较；
+    // 一次多选会话只做一次，避免滚动中反复做原生测量
+    if (!hasMeasuredInMultiSelect && listViewportHeight.value <= 0) {
+      hasMeasuredInMultiSelect = true
+      measureCellOverflow()
+    }
+  }
+
   if (e.isDragging) {
     firstScreenUserScrolled = true
     if (!isBottomAnchorVisible.value) userLeftBottom.value = true
@@ -462,6 +599,301 @@ const handleMessageListTap = () => {
 
 const handleMessageTap = (message: MessageInfo) => {
   emit('onMessageTap', message)
+}
+
+// ==================== 多选（逐条转发 / 合并转发 / 删除）====================
+// 对齐 iOS 的限制与文案：逐条转发最多 30 条；合并转发摘要最多 4 条、标题最多取 2 个发送者
+const FORWARD_SEPARATE_COUNT_LIMIT = 30
+const MERGED_ABSTRACT_MAX_COUNT = 4
+const MERGED_TITLE_MAX_SENDER_COUNT = 2
+const MERGED_COMPATIBLE_TEXT = 'Merged messages'
+
+const isMultiSelectMode = ref(false)
+// 用数组而非 Set：nvue 下 ref<Set> 的响应式在部分版本不可靠
+const selectedMsgIDList = ref<string[]>([])
+const multiDeleteDialogVisible = ref(false)
+const multiForwardPickerVisible = ref(false)
+const pendingForwardType = ref<MessageForwardType>(MessageForwardType.SEPARATE)
+
+const hasSelection = computed(() => selectedMsgIDList.value.length > 0)
+
+const isMessageSelected = (message?: MessageInfo): boolean => {
+  if (!message || !message.msgID) return false
+  return selectedMsgIDList.value.indexOf(message.msgID) !== -1
+}
+
+// 按列表顺序（时间正序）取出已选消息，转发 / 合并摘要都依赖这个顺序
+const getSelectedMessageList = (): MessageInfo[] => {
+  const selectedIDs = selectedMsgIDList.value
+  return (messageList.value || []).filter(message => selectedIDs.indexOf(message.msgID) !== -1)
+}
+
+// ==================== 多选：选择以下消息 ====================
+// 内容超过一屏才给快捷入口；判定用 list 的 scroll 事件里 contentSize.height 与可视高度比较
+const listContentHeight = ref(0)
+const listViewportHeight = ref(0)
+// scroll 事件没触发过（刚进多选、没有滚动）时 contentSize 还是 0，
+// 此时用已挂载 cell 是否越出可视区来兜底判断“内容超过一屏”
+const hasCellOverflow = ref(false)
+// 进入多选后是否已经滚动过：入口只在滚动后才出现，避免刚进多选闪一下
+const hasScrolledInMultiSelect = ref(false)
+// 一次多选会话内只做一次全量测量（量视口高度 + 越界判定）
+let hasMeasuredInMultiSelect = false
+// 快捷按钮的 top（px）：贴在多选导航栏下沿
+const selectBelowEntryTop = ref(0)
+const SELECT_BELOW_ENTRY_HEIGHT_RPX = 64
+
+const showSelectBelowEntry = computed(() => {
+  // 进入多选时不展示，滚动后才有意义
+  if (!isMultiSelectMode.value || !hasScrolledInMultiSelect.value) return false
+  // 视口高度还没量到之前不做判断，否则会用 0 比出“超一屏”而误显示
+  if (listViewportHeight.value <= 0) return false
+  if (listContentHeight.value > 0) {
+    return listContentHeight.value > listViewportHeight.value + 1
+  }
+  return hasCellOverflow.value
+})
+
+// 当前处于可视区的 cell key 集合（非响应式：只在点击“选择以下消息”时读取）。
+// 不能直接量所有 cell 再按坐标找：nvue 里滚出可视区、视图已被回收的 cell，getComponentRect 返回的是
+// 相对父容器的布局坐标（不含滚动偏移），会和视口坐标重叠；有历史消息、列表滚动过之后，
+// 起点会被误判到很靠上的位置，把按钮以上的消息也选中。只信任在可视区里的 cell。
+const visibleCellKeys = new Set<string>()
+const onCellAppear = (key: string) => { visibleCellKeys.add(key) }
+const onCellDisappear = (key: string) => { visibleCellKeys.delete(key) }
+
+// nvue 不支持 uni.createSelectorQuery，统一用 dom.getComponentRect + ref 测量
+const getRect = (el: any): Promise<any | null> => {
+  return new Promise((resolve) => {
+    if (!el) { resolve(null); return }
+    try {
+      const dom = uni.requireNativePlugin('dom')
+      dom.getComponentRect(el, (res: any) => {
+        resolve(res && res.result && res.size ? res.size : null)
+      })
+    } catch (e) {
+      resolve(null)
+    }
+  })
+}
+
+// 进多选时才做的全量判定：任一 cell 越过可视区上下边界即视为内容超过一屏
+const measureCellOverflow = async () => {
+  const size = await getRect(messageListRef.value)
+  if (!size || !size.height) return
+  listViewportHeight.value = size.height
+  const offsets = await Promise.all(cellRefs.map((el: any) => getRect(el)))
+  const top = size.top || 0
+  const bottom = top + size.height
+  hasCellOverflow.value = offsets.some((r: any) =>
+    r && r.height > 0 && (r.top < top - 1 || r.bottom > bottom + 1)
+  )
+}
+
+const handleSelectBelow = async () => {
+  const total = messageItems.value.length
+  if (total === 0) return
+
+  // 当前在可视区里的 cell 下标（升序）。已被移除的 cell 可能没触发 disappear，按当前列表过滤掉
+  const visibleIndexes: number[] = []
+  messageItems.value.forEach((item, index) => {
+    if (visibleCellKeys.has(item.key)) visibleIndexes.push(index)
+  })
+  if (visibleIndexes.length === 0) {
+    console.warn('[MessageList] handleSelectBelow: no visible cell recorded')
+    return
+  }
+
+  // 按钮下沿（视口坐标）：下边缘越过它的第一个可视 cell 作为起点。
+  // 不能用 top >= 下沿：按钮悬浮覆盖在内容上，列表在最顶端时第一条消息只比导航栏低一个时间分隔行的高度，
+  // top 小于“按钮高度 + 间距”，会被误判成在按钮上方而漏选
+  const boundary = selectBelowEntryTop.value + rpxToPx(SELECT_BELOW_ENTRY_HEIGHT_RPX)
+  const sizes = await Promise.all(visibleIndexes.map(i => getRect(cellRefs[i])))
+
+  let startIndex = -1
+  for (let n = 0; n < visibleIndexes.length; n++) {
+    const size = sizes[n]
+    if (!size || !size.height) continue
+    const cellBottom = size.bottom ?? (size.top + size.height)
+    if (cellBottom > boundary) {
+      startIndex = visibleIndexes[n]
+      break
+    }
+  }
+  if (startIndex < 0) return
+
+  // 从起点到最后一条消息全部选中（时间分隔行没有 msgID，天然被跳过）
+  const ids: string[] = []
+  for (let i = startIndex; i < total; i++) {
+    const item = messageItems.value[i]
+    if (item.type !== 'message' || !item.message?.msgID) continue
+    // 居中消息（撤回 / 系统提示 / 建群提示 / 群通话）没有勾选圈，手动选不到，批量选择也要跳过，
+    // 否则它们会混进已选列表，转发时因状态不是 SEND_SUCCESS 被误报“发送失败的消息不支持转发”
+    if (isCenterLayoutMessage(item.message, props.conversationID, props.customCenterChecker)) continue
+    // 通话消息、发送失败的消息不支持多选，批量选择时跳过
+    if (!isMessageMultiSelectable(item.message)) continue
+    ids.push(item.message.msgID)
+  }
+  if (ids.length === 0) return
+
+  // 并集：保留用户此前已勾选的，不覆盖
+  const merged = selectedMsgIDList.value.slice()
+  ids.forEach(id => { if (merged.indexOf(id) === -1) merged.push(id) })
+  selectedMsgIDList.value = merged
+}
+
+const enterMultiSelectMode = () => {
+  if (isMultiSelectMode.value) return
+  isMultiSelectMode.value = true
+  // 每次进入多选都重置：入口要等这次多选里的第一次滚动才出现
+  hasScrolledInMultiSelect.value = false
+  hasMeasuredInMultiSelect = false
+  emit('onMultiSelectModeChange', true)
+}
+
+const exitMultiSelectMode = () => {
+  if (!isMultiSelectMode.value) return
+  isMultiSelectMode.value = false
+  selectedMsgIDList.value = []
+  multiDeleteDialogVisible.value = false
+  multiForwardPickerVisible.value = false
+  emit('onMultiSelectModeChange', false)
+}
+
+const handleEnterMultiSelect = (message: MessageInfo) => {
+  enterMultiSelectMode()
+  // 通话消息、发送失败的消息不支持多选
+  if (message && !isMessageMultiSelectable(message)) return
+  if (message && message.msgID && !isMessageSelected(message)) {
+    selectedMsgIDList.value = [...selectedMsgIDList.value, message.msgID]
+  }
+}
+
+const handleExitMultiSelect = () => {
+  exitMultiSelectMode()
+}
+
+const handleToggleSelect = (message: MessageInfo) => {
+  if (!message || !message.msgID) return
+  // 通话消息、发送失败的消息不支持多选
+  if (!isMessageMultiSelectable(message)) return
+  if (isMessageSelected(message)) {
+    selectedMsgIDList.value = selectedMsgIDList.value.filter(msgID => msgID !== message.msgID)
+  } else {
+    selectedMsgIDList.value = [...selectedMsgIDList.value, message.msgID]
+  }
+}
+
+const showMultiSelectToast = (title: string) => {
+  uni.showToast({ title, icon: 'none', duration: 2000 })
+}
+
+// 转发前置校验：发送失败 / 发送中的消息不支持转发；逐条转发数量超限
+const validateForward = (selectedList: MessageInfo[], forwardType: MessageForwardType): boolean => {
+  // 只对真正发送失败的消息提示。撤回、发送中等其它非成功态不是“发送失败”，
+  // 且多选规则（utils/multiSelect.ts）已不会让它们进入已选列表，这里仅作兜底
+  if (selectedList.some(message => message.status === MessageStatus.SEND_FAIL)) {
+    showMultiSelectToast('发送失败的消息不支持转发')
+    return false
+  }
+  if (forwardType === MessageForwardType.SEPARATE && selectedList.length > FORWARD_SEPARATE_COUNT_LIMIT) {
+    showMultiSelectToast('转发消息过多，暂不支持逐条转发')
+    return false
+  }
+  return true
+}
+
+const startMultiForward = (forwardType: MessageForwardType) => {
+  if (!hasSelection.value) return
+  if (!validateForward(getSelectedMessageList(), forwardType)) return
+  pendingForwardType.value = forwardType
+  multiForwardPickerVisible.value = true
+}
+
+const handleMultiForwardSeparate = () => startMultiForward(MessageForwardType.SEPARATE)
+
+const handleMultiForwardMerge = () => startMultiForward(MessageForwardType.MERGED)
+
+const getSenderDisplayName = (message: MessageInfo): string => {
+  const sender = message.from
+  return sender.nickname || sender.userID
+}
+
+// 合并转发标题：群聊固定文案；单聊取前两个发送者
+const buildMergedTitle = (selectedList: MessageInfo[]): string => {
+  if (props.conversationID.startsWith('group_')) return '群聊的聊天记录'
+
+  const senderNameList: string[] = []
+  const seenUserIDList: string[] = []
+  for (const message of selectedList) {
+    const userID = message.from.userID
+    if (seenUserIDList.indexOf(userID) === -1) {
+      seenUserIDList.push(userID)
+      senderNameList.push(getSenderDisplayName(message))
+    }
+    if (senderNameList.length >= MERGED_TITLE_MAX_SENDER_COUNT) break
+  }
+
+  if (senderNameList.length === MERGED_TITLE_MAX_SENDER_COUNT) {
+    return `${senderNameList[0]}和${senderNameList[1]}的聊天记录`
+  }
+  if (senderNameList.length === 1) {
+    return `${senderNameList[0]}的聊天记录`
+  }
+  return '聊天记录'
+}
+
+const buildMergedForwardInfo = (selectedList: MessageInfo[]): MergedForwardInfo => {
+  return {
+    title: buildMergedTitle(selectedList),
+    abstractList: selectedList
+      .slice(0, MERGED_ABSTRACT_MAX_COUNT)
+      .map(message => `${getSenderDisplayName(message)}: ${getMessageAbstract(message, false)}`),
+    compatibleText: MERGED_COMPATIBLE_TEXT
+  }
+}
+
+const handleMultiForwardSelect = async (targetConversationID: string) => {
+  multiForwardPickerVisible.value = false
+  if (!targetConversationID) return
+
+  const selectedList = getSelectedMessageList()
+  if (selectedList.length === 0) return
+
+  const forwardType = pendingForwardType.value
+  try {
+    if (forwardType === MessageForwardType.MERGED) {
+      await forwardMessages(
+        selectedList,
+        { forwardType, mergedForwardInfo: buildMergedForwardInfo(selectedList) },
+        targetConversationID
+      )
+    } else {
+      await forwardMessages(selectedList, { forwardType }, targetConversationID)
+    }
+    showMultiSelectToast('已转发')
+    exitMultiSelectMode()
+  } catch (error) {
+    console.error('[MessageList] multi forwardMessages failed:', error)
+    showMultiSelectToast('转发失败')
+  }
+}
+
+const handleMultiDelete = () => {
+  if (!hasSelection.value) return
+  multiDeleteDialogVisible.value = true
+}
+
+const confirmMultiDelete = async () => {
+  const selectedList = getSelectedMessageList()
+  if (selectedList.length === 0) return
+  try {
+    await deleteMessages(selectedList)
+    exitMultiSelectMode()
+  } catch (error) {
+    console.error('[MessageList] multi deleteMessages failed:', error)
+    showMultiSelectToast('删除失败')
+  }
 }
 
 const FIRST_SCREEN_SCROLL_RETRY_DELAYS = [60, 160, 320, 600]
@@ -610,6 +1042,8 @@ onBeforeMount(() => {
   } catch (e) {
     navbarHeightPx.value = 44 + rpxToPx(88);
   }
+  // 多选导航栏与消息列表同为 fixed + navbarHeightPx 内边距，快捷按钮贴在其下沿
+  selectBelowEntryTop.value = navbarHeightPx.value + 8;
 });
 
 const premiumDialogVisible = ref(false)
@@ -750,6 +1184,7 @@ watch(() => props.inputPanelHeight, async (newHeight, oldHeight) => {
 defineExpose<MessageListExpose>({
   scrollToBottom: scrollToBottom,
   scrollToMessage: scrollToMessage,
+  exitMultiSelect: exitMultiSelectMode,
 })
 </script>
 
@@ -812,5 +1247,76 @@ defineExpose<MessageListExpose>({
   font-size: 24rpx;
   font-weight: 400;
   color: #1C66E5;
+}
+
+/* 多选：顶部取消栏 */
+.msg-list__multi-navbar {
+  z-index: 100;
+}
+
+.msg-list__multi-cancel {
+  width: auto;
+  justify-content: flex-start;
+}
+
+.msg-list__multi-cancel-text {
+  font-size: 32rpx;
+  color: rgba(0, 0, 0, 0.9);
+}
+
+/* 多选：底部操作栏 */
+/* 多选快捷入口：悬浮在导航栏下方，左边缘与行首勾选圈对齐（.msg-select 的 padding-left = 32rpx） */
+.msg-list__select-below {
+  position: fixed;
+  padding: 12rpx 24rpx;
+  left: 32rpx;
+  flex-direction: row;
+  justify-content: center;
+  align-items: center;
+  background-color: #FFFFFF;
+  border-radius: 32rpx;
+  border-width: 1rpx;
+  border-style: solid;
+  border-color: #E6E9F0;
+  z-index: 90;
+}
+
+.msg-list__select-below-text {
+  font-size: 24rpx;
+  color: rgba(0, 0, 0, 0.4);
+}
+
+.msg-list__multi-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 32rpx 0 60rpx;
+  flex-direction: row;
+  justify-content: space-around;
+  align-items: flex-start;
+  background-color: #F0F2F7;
+  z-index: 100;
+}
+
+.msg-list__multi-item {
+  width: 200rpx;
+  align-items: center;
+}
+
+.msg-list__multi-item--disabled {
+  opacity: 0.4;
+}
+
+.msg-list__multi-icon {
+  width: 80rpx;
+  height: 80rpx;
+}
+
+.msg-list__multi-text {
+  margin-top: 12rpx;
+  font-size: 24rpx;
+  line-height: 32rpx;
+  color: rgba(0, 0, 0, 0.55);
 }
 </style>

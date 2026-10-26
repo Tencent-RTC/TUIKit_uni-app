@@ -80,6 +80,13 @@
         color="#FF3B30"
         @click="handleDeleteFriendClick"
       />
+
+      <!-- 清除聊天记录 -->
+      <SettingRowButton
+        label="清除聊天记录"
+        color="#FF3B30"
+        @click="handleClearMessageClick"
+      />
     </scroll-view>
 
     <!-- 备注编辑弹窗 -->
@@ -100,6 +107,16 @@
       confirmText="删除"
       @confirm="handleDeleteConfirm"
       @cancel="handleDeleteCancel"
+    />
+
+    <!-- 清除聊天记录确认弹窗 -->
+    <ConfirmDialog
+      v-model="showClearMessageConfirm"
+      title="确定清除聊天记录？"
+      description="清除后将无法恢复"
+      confirmText="确定清除"
+      @confirm="handleClearMessageConfirm"
+      @cancel="handleClearMessageCancel"
     />
   </view>
 </template>
@@ -243,6 +260,7 @@ const isInBlacklistValue = computed((): boolean => isInBlacklist.value)
 // 弹窗状态
 const showRemarkPopup = ref<boolean>(false)
 const showDeleteConfirm = ref<boolean>(false)
+const showClearMessageConfirm = ref<boolean>(false)
 
 // 导航栏标题
 const normalizedShowType = computed((): number => {
@@ -429,6 +447,29 @@ const handleDeleteConfirm = async (): Promise<void> => {
 
 const handleNavBack = (): void => {
 	uni.navigateBack()
+}
+
+// 点击清除聊天记录
+const handleClearMessageClick = (): void => {
+	showClearMessageConfirm.value = true
+}
+
+// 取消清除聊天记录
+const handleClearMessageCancel = (): void => {
+	showClearMessageConfirm.value = false
+}
+
+// 确认清除聊天记录
+const handleClearMessageConfirm = async (): Promise<void> => {
+	showClearMessageConfirm.value = false
+	if (props.conversationID.length == 0) return
+	try {
+		await conversationListState.clearConversationMessages(props.conversationID)
+		uni.showToast({ title: '已清除', icon: 'none' })
+	} catch (error: any) {
+		console.error('[C2CChatSetting] clearConversationMessages failed:', `${error}`)
+		uni.showToast({ title: '清除失败', icon: 'none' })
+	}
 }
 </script>
 

@@ -15,13 +15,13 @@
 
 <script>
 import { UserPickerType } from '../../types/userpicker'
-import { useMessageInputState } from '../../state_compatible/MessageInputState'
+import { useMessageInputState } from '../../state/MessageInputState'
 import { MessageType } from '../../types/message'
 import { buildOfflinePushInfo } from '../../utils/buildOfflinePushInfo'
 import { chooseFile } from '../../hooks/useFilePicker'
 import { DEFAULT_TOOLS } from './types'
-import { useCallState, CallErrorCode } from '../../state_compatible/CallState'
-import { useDeviceState } from '../../state_compatible/DeviceState'
+import { useCallState, CallErrorCode } from '../../state/CallState'
+import { useDeviceState } from '../../state/DeviceState'
 import { getCurrentPageFullPath, isNavigating, isCallEnding } from '../../server_compatible/callService'
 import { checkCallPermissionWithDialog } from '../../utils/callPermission'
 import { AlbumPickerMediaFilter } from '../AlbumPicker/AlbumPicker'

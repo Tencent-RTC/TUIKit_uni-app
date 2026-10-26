@@ -61,9 +61,9 @@
     userInfo: { type: Object },
     liveID: { type: String },
   });
-  const emit = defineEmits(['update:modelValue']);
+  const emit = defineEmits(['update:modelValue', 'tip']);
 
-  const { kickUserOutOfRoom, disableSendMessage, messageBannedUserList } = useLiveAudienceState(uni?.$liveID);
+  const { kickUserOutOfRoom, disableSendMessage, messageBannedUserList } = useLiveAudienceState(props.liveID);
 
   const defaultAvatarURL = '/uni_modules/tuikit-atomic-x/static/assets/live/default-avatar.png';
 
@@ -121,7 +121,7 @@
     const next = !isMuted.value;
     pendingMute.value = next;
     disableSendMessage({
-      liveID: uni?.$liveID,
+      liveID: props.liveID,
       userID: uid,
       isDisable: next,
       success: () => {},
@@ -133,22 +133,19 @@
   };
 
   const kickOut = () => {
-    uni.showModal({
-      content: t('al.confirmKickOut', { name: userName.value }),
-      success: (res) => {
-        if (res.confirm) {
-          kickUserOutOfRoom({
-            liveID: uni?.$liveID,
-            userID: props?.userInfo?.userID,
-            success: () => {
-              close();
-            },
-            fail: (errCode, errMsg) => {
-              console.log(`kickUserOutOfRoom fail errCode: ${errCode}, errMsg: ${errMsg}`);
-            },
-          });
-        }
-      }
+    const uid = props?.userInfo?.userID;
+    if (!uid) return;
+    const name = userName.value;
+    kickUserOutOfRoom({
+      liveID: props.liveID,
+      userID: uid,
+      success: () => {
+        close();
+        emit('tip', t('al.kickedOut', { name: name }));
+      },
+      fail: (errCode, errMsg) => {
+        console.error(`kickUserOutOfRoom fail errCode: ${errCode}, errMsg: ${errMsg}`);
+      },
     });
   };
 </script>

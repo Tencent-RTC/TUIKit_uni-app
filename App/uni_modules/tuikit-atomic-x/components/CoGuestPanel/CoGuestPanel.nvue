@@ -1,149 +1,150 @@
 <template>
-  <view class="bottom-drawer-container" v-if="mounted">
-    <view class="drawer-overlay" ref="overlayRef" @tap="close"></view>
-    <view class="bottom-drawer" ref="drawerRef">
-      <view class="audience-header">
-        <view class="tab-container">
-          <!-- <view
-            class="tab-item"
-            :class="activeTab === 'invite' ? 'active' : 'inactive'"
-            @tap="activeTab = 'invite'"
+  <BaseDrawer
+    v-model="innerVisible"
+    :height="drawerHeight"
+    :overlayOpacity="0.4"
+    bgImage="/uni_modules/tuikit-atomic-x/static/assets/live/drawer-bg.png"
+    :bgImageHeight="drawerHeight"
+    padding="0 32rpx 32rpx 32rpx"
+    :preload="false"
+  >
+    <view class="panel-header">
+      <text class="panel-title">{{ t('manage_tab') }}</text>
+    </view>
+
+    <view class="card">
+      <text class="section-title">{{ t('layout_title') }}</text>
+      <view class="layout-grid">
+        <view class="layout-row" v-for="(row, rowIndex) in layoutRows" :key="rowIndex">
+          <view
+            v-for="opt in row"
+            :key="opt.id"
+            class="layout-option"
+            :class="{ 'is-active': selectedTemplateID === opt.id }"
+            @tap="selectLayout(opt.id)"
           >
-            <text :class="activeTab === 'invite' ? 'active-text' : 'inactive-text'">邀请连麦</text>
-						<view class="active-line-container" v-if="activeTab === 'invite'">
-							<view class="active-line"></view>
-						</view>
-          </view> -->
-          <view class="tab-item" :class="activeTab === 'requests' ? 'active' : 'inactive'"
-            @tap="activeTab = 'requests'">
-            <text :class="activeTab === 'requests' ? 'active-text' : 'inactive-text'">{{ t('manage_tab') }}</text>
-            <!-- 						<view class="active-line-container" v-if="activeTab === 'requests'">
-							<view class="active-line"></view>
-						</view> -->
+            <image class="layout-icon" :src="selectedTemplateID === opt.id ? opt.iconActive : opt.icon" mode="aspectFit" />
+            <text class="layout-label" :class="{ 'is-active-label': selectedTemplateID === opt.id }">{{ t(opt.key) }}</text>
           </view>
         </view>
       </view>
+    </view>
 
-      <scroll-view class="audience-content" scroll-y @scroll="handleScroll" :scroll-top="scrollTop">
-        <!-- 连麦申请列表 -->
-        <view v-if="activeTab === 'requests'">
-          <view v-if="(applicants || []).length > 0" class="audience-grid">
-            <view v-for="audience in applicants || []" :key="audience?.userID" class="audience-item"
-              :class="{ 'is-admin': audience?.userRole === 'administrator' }">
-              <view class="audience-info">
-                <view class="audience-avatar-container">
-                  <image class="audience-avatar" :src="audience?.avatarURL || defaultAvatarURL" mode="aspectFill" />
-                </view>
-                <view class="audience-item-right">
-                  <view class="audience-detail">
-                    <text class="audience-name" :numberOfLines="1">{{ audience?.userName || audience?.userID}}</text>
-                  </view>
-                  <view class="request-actions">
-                    <view class="action-btn accept" @tap="handleRequest(audience, 'accept')">
-                      <text class="btn-text">{{ t('agree') }}</text>
-                    </view>
-                    <view class="action-btn reject" @tap="handleRequest(audience, 'reject')">
-                      <text class="btn-text">{{ t('reject') }}</text>
-                    </view>
-                  </view>
-                </view>
-              </view>
-
-              <!-- <view class="audience-info">
-                <view class="audience-avatar-container">
-                  <image class="audience-avatar" :src="audience.avatarURL || defaultAvatarURL" mode="aspectFill" />
-                </view>
-                <view class="audience-item-right">
-                  <view class="audience-detail">
-                    <text class="audience-name" :numberOfLines="1">{{ audience.userName }}</text>
-                  </view>
-                  <view
-                    class="start-link"
-                    :class="audience?.isMessageDisabled ? 'start' : 'waiting'"
-                    @tap="startLink(audience)"
-                  >
-                    <text class="link-text">{{ audience?.isMessageDisabled ? '发起连线' : '邀请中(30)s' }}</text>
-                  </view>
-                </view>
-              </view>-->
-              <view class="audience-item-bottom-line"></view>
+    <view class="card">
+      <text class="section-title">{{ connectedCount > 0 ? t('connected_viewers_count', { count: connectedCount }) : t('connected_viewers') }}</text>
+      <scroll-view
+        v-if="connectedCount > 0"
+        class="list-scroll"
+        :style="{ height: listContentH(connectedCount) + 'rpx' }"
+        scroll-y
+        :show-scrollbar="false"
+      >
+        <view
+          v-for="(audience, index) in connectedGuests"
+          :key="audience?.userID"
+          class="audience-row"
+          :class="{ 'row-divider': index > 0 }"
+        >
+          <view class="audience-identity">
+            <view class="audience-avatar-wrap">
+              <image class="audience-avatar" :src="audience?.avatarURL || defaultAvatarURL" mode="aspectFill" />
+            </view>
+            <text class="audience-name" :numberOfLines="1">{{ audience?.userName || audience?.userID }}</text>
+          </view>
+          <view class="audience-actions">
+            <view class="row-btn danger" @tap="handleEndConnection(audience)">
+              <text class="row-btn-text danger-text">{{ t('end') }}</text>
             </view>
           </view>
-        </view>
-
-        <!-- 邀请连麦列表 -->
-        <!--        <view v-if="activeTab === 'invite'">
-          <view v-if="(invitableGuests || []).length > 0" class="audience-grid">
-            <view v-for="request in invitableGuests || []" :key="request.userID" class="audience-item">
-              <view class="audience-info">
-                <view class="audience-avatar-container">
-                  <image class="audience-avatar"
-                    src="https://sdk-web-1252463788.cos.ap-hongkong.myqcloud.com/trtc/live/assets/Icon/defaultAvatar.png"
-                    mode="aspectFill" />
-                </view>
-                <view class="audience-item-right">
-                  <view class="audience-detail">
-                    <text class="audience-name" :numberOfLines="1">{{ request.userName || request.userID}}</text>
-                  </view>
-                  <view class="request-actions">
-                    <view class="action-btn accept" @tap="handleRequest(request, 'accept')">
-                      <text class="btn-text">同意</text>
-                    </view>
-                    <view class="action-btn reject" @tap="handleRequest(request, 'reject')">
-                      <text class="btn-text">拒绝</text>
-                    </view>
-                  </view>
-                </view>
-              </view>
-              <view class="audience-item-bottom-line"></view>
-            </view>
-          </view>
-          <view v-else class="empty-state">
-            <text class="empty-text">暂无邀请连麦</text>
-          </view> -->
-        <!-- </view> -->
-
-        <view v-if="isLoading" class="loading-state">
-          <image src="/static/images/more.png" mode="aspectFit" class="loading-image" />
         </view>
       </scroll-view>
-
-      <!-- <view class="drawer-content">
-        <view class="divider-line-container">
-          <view class="divider-line"></view>
-        </view>
-      </view> -->
+      <view v-else class="list-empty">
+        <text class="list-empty-text">{{ t('no_participants') }}</text>
+      </view>
     </view>
-  </view>
+
+    <view class="card" v-if="applicantCount > 0">
+      <text class="section-title">{{ t('applicants_count', { count: applicantCount }) }}</text>
+      <scroll-view
+        class="list-scroll"
+        :style="{ height: listContentH(applicantCount) + 'rpx' }"
+        scroll-y
+        :show-scrollbar="false"
+      >
+        <view
+          v-for="(audience, index) in applicants || []"
+          :key="audience?.userID"
+          class="audience-row"
+          :class="{ 'row-divider': index > 0 }"
+        >
+          <view class="audience-identity">
+            <view class="audience-avatar-wrap">
+              <image class="audience-avatar" :src="audience?.avatarURL || defaultAvatarURL" mode="aspectFill" />
+            </view>
+            <text class="audience-name" :numberOfLines="1">{{ audience?.userName || audience?.userID }}</text>
+          </view>
+          <view class="audience-actions">
+            <view class="row-btn" @tap="handleRequest(audience, 'accept')">
+              <text class="row-btn-text">{{ t('agree') }}</text>
+            </view>
+            <view class="row-btn danger" @tap="handleRequest(audience, 'reject')">
+              <text class="row-btn-text danger-text">{{ t('reject') }}</text>
+            </view>
+          </view>
+        </view>
+      </scroll-view>
+    </view>
+
+    <view class="card" v-if="availableCount > 0">
+      <text class="section-title">{{ t('available_count', { count: availableCount }) }}</text>
+      <scroll-view
+        class="list-scroll"
+        :style="{ height: listContentH(availableCount) + 'rpx' }"
+        scroll-y
+        :show-scrollbar="false"
+      >
+        <view
+          v-for="(audience, index) in availableList"
+          :key="audience?.userID"
+          class="audience-row"
+          :class="{ 'row-divider': index > 0 }"
+        >
+          <view class="audience-identity">
+            <view class="audience-avatar-wrap">
+              <image class="audience-avatar" :src="audience?.avatarURL || defaultAvatarURL" mode="aspectFill" />
+            </view>
+            <text class="audience-name" :numberOfLines="1">{{ audience?.userName || audience?.userID }}</text>
+          </view>
+          <view class="audience-actions">
+            <view
+              class="row-btn"
+              :class="{ 'is-disabled': isInvited(audience) }"
+              @tap="handleInvite(audience)"
+            >
+              <text class="row-btn-text" :class="{ 'disabled-text': isInvited(audience) }">{{ isInvited(audience) ? t('invited') : t('invite') }}</text>
+            </view>
+          </view>
+        </view>
+      </scroll-view>
+    </view>
+  </BaseDrawer>
+  <LiveToast
+    v-if="tipVisible"
+    :key="tipSeq"
+    v-model="tipVisible"
+    :title="tipTitle"
+    :duration="2000"
+  />
 </template>
 
 <script setup>
-  import {
-    ref,
-    reactive,
-    onMounted,
-    computed,
-    watch,
-    nextTick
-  } from 'vue'
-
-  import {
-    useCoGuestState
-  } from "@/uni_modules/tuikit-atomic-x/state/CoGuestState";
+  import { ref, computed, watch } from 'vue'
+  import BaseDrawer from '@/components/live/BaseDrawer/index.nvue';
+  import { useCoGuestState } from '@/uni_modules/tuikit-atomic-x/state/CoGuestState';
+  import { useLiveSeatState } from '@/uni_modules/tuikit-atomic-x/state/LiveSeatState';
+  import { useLiveListState } from '@/uni_modules/tuikit-atomic-x/state/LiveListState';
   import { t } from '../locales';
-  const {
-    applicants,
-    invitableGuests,
-    acceptApplication,
-    cancelApplication,
-    rejectApplication
-  } = useCoGuestState(uni?.$liveID);
-
-  const defaultAvatarURL = '/uni_modules/tuikit-atomic-x/static/assets/live/default-avatar.png';
-
-  // nvue 原生 animation / dom 模块
-  const animation = uni.requireNativePlugin('animation');
-  const dom = uni.requireNativePlugin('dom');
+  import LiveToast from '@/uni_modules/tuikit-atomic-x/components/LiveToast.nvue';
 
   const props = defineProps({
     modelValue: {
@@ -152,117 +153,129 @@
     },
     activeTab: {
       type: String,
-      default: 'invite',
+      default: 'requests',
     },
   })
 
-  const isLoading = ref(false);
-  const currentCursor = ref(0);
-  const scrollTop = ref(0);
-  const mounted = ref(false);
-  const drawerRef = ref(null);
-  const overlayRef = ref(null);
-  let closeTimer = null;
-
-  const ANIM_DURATION = 300;
-  const ANIM_TIMING = 'cubic-bezier(0.32, 0.72, 0, 1)';
-
   const emit = defineEmits(['update:modelValue'])
 
-  function close() {
-    emit('update:modelValue', false);
-  }
+  const tipVisible = ref(false);
+  const tipSeq = ref(0);
+  const tipTitle = ref('');
+  const showTip = (title) => {
+    tipTitle.value = title;
+    tipSeq.value++;
+    tipVisible.value = true;
+  };
 
-  // 确认 drawer 已布局完成后执行滑入动画（用 dom.getComponentRect 检测，不依赖延时）
-  function tryOpenAnimation(retries = 0) {
-    const drawer = drawerRef.value;
-    if (!drawer) {
-      if (retries < 10) setTimeout(() => tryOpenAnimation(retries + 1), 16);
-      return;
-    }
-    dom.getComponentRect(drawer, (res) => {
-      const ready = (res?.size?.height || res?.height || 0) > 0;
-      if (!ready) {
-        if (retries < 10) setTimeout(() => tryOpenAnimation(retries + 1), 16);
-        return;
-      }
-      // 先强制设到隐藏位置，再执行滑入
-      animation.transition(drawer, {
-        styles: { transform: 'translateY(100%)' },
-        duration: 0,
-        timingFunction: 'linear'
-      }, () => {
-        animation.transition(drawer, {
-          styles: { transform: 'translateY(0)' },
-          duration: ANIM_DURATION,
-          timingFunction: ANIM_TIMING
-        });
-      });
-      const overlay = overlayRef.value;
-      if (overlay) {
-        animation.transition(overlay, {
-          styles: { backgroundColor: 'rgba(0, 0, 0, 0.4)' },
-          duration: ANIM_DURATION,
-          timingFunction: 'ease'
-        });
-      }
-    });
-  }
+  const innerVisible = computed({
+    get: () => props.modelValue,
+    set: (val) => emit('update:modelValue', val)
+  })
 
-  // 监听 modelValue 变化，用 animation 模块驱动开关动画
+  const { currentLive, updateLiveInfo } = useLiveListState();
+  const liveID = computed(() => String(currentLive.value?.liveID || ''));
+  const {
+    connected,
+    invitees,
+    applicants,
+    candidates,
+    acceptApplication,
+    rejectApplication,
+    inviteToSeat,
+  } = useCoGuestState(liveID.value);
+  const { kickUserOutOfSeat } = useLiveSeatState();
+
+  const defaultAvatarURL = '/uni_modules/tuikit-atomic-x/static/assets/live/default-avatar.png';
+
+  const HANDLE_H = 76;
+  const HEADER_H = 72;
+  const BOTTOM_BASE_H = 32;
+  const CARD_GAP = 24;
+  const SECTION_PAD_H = 64;
+  const SECTION_TITLE_H = 54;
+  const LAYOUT_GRID_H = 208;
+  const ROW_H = 132;
+  const EMPTY_H = 184;
+  const MAX_ROWS = 3;
+
+  const LAYOUTS = [
+    { id: 601, key: 'layout_floating', icon: '/uni_modules/tuikit-atomic-x/static/assets/live/co-mic-layout-floating.png', iconActive: '/uni_modules/tuikit-atomic-x/static/assets/live/co-mic-layout-floating-active.png' },
+    { id: 600, key: 'layout_grid2', icon: '/uni_modules/tuikit-atomic-x/static/assets/live/co-mic-layout-grid2.png', iconActive: '/uni_modules/tuikit-atomic-x/static/assets/live/co-mic-layout-grid2-active.png' },
+    { id: 801, key: 'layout_fixed', icon: '/uni_modules/tuikit-atomic-x/static/assets/live/co-mic-layout-fixed.png', iconActive: '/uni_modules/tuikit-atomic-x/static/assets/live/co-mic-layout-fixed-active.png' },
+    { id: 800, key: 'layout_grid9', icon: '/uni_modules/tuikit-atomic-x/static/assets/live/co-mic-layout-grid9.png', iconActive: '/uni_modules/tuikit-atomic-x/static/assets/live/co-mic-layout-grid9-active.png' },
+  ];
+
+  const selectedTemplateID = ref(600);
+  const layoutUpdating = ref(false);
+
+  const layoutRows = computed(() => [LAYOUTS.slice(0, 2), LAYOUTS.slice(2, 4)]);
+
+  const anchorUserID = computed(() => currentLive.value?.liveOwner?.userID || uni.$userID || '');
+  const connectedGuests = computed(() =>
+    (connected.value || []).filter(user => user?.userID !== anchorUserID.value)
+  );
+  const connectedCount = computed(() => connectedGuests.value.length);
+  const applicantCount = computed(() => (applicants.value || []).length);
+  const availableList = computed(() => candidates.value || []);
+  const availableCount = computed(() => availableList.value.length);
+
+  const listContentH = (count) => (count > 0 ? Math.min(count, MAX_ROWS) * ROW_H : EMPTY_H);
+
+  const drawerHeight = computed(() => {
+    const layoutCardH = SECTION_PAD_H + SECTION_TITLE_H + LAYOUT_GRID_H;
+    const connectedCardH = SECTION_PAD_H + SECTION_TITLE_H + listContentH(connectedCount.value);
+    const applicantsCardH = applicantCount.value > 0
+      ? SECTION_PAD_H + SECTION_TITLE_H + listContentH(applicantCount.value)
+      : 0;
+    const availableCardH = availableCount.value > 0
+      ? SECTION_PAD_H + SECTION_TITLE_H + listContentH(availableCount.value)
+      : 0;
+    const cardCount = 2 + (applicantCount.value > 0 ? 1 : 0) + (availableCount.value > 0 ? 1 : 0);
+    return HANDLE_H + HEADER_H + BOTTOM_BASE_H
+      + layoutCardH + connectedCardH + applicantsCardH + availableCardH
+      + CARD_GAP * cardCount;
+  });
+
   watch(() => props.modelValue, (val) => {
     if (val) {
-      // 打开
-      if (closeTimer) { clearTimeout(closeTimer); closeTimer = null; }
-      mounted.value = true;
-      nextTick(() => {
-        tryOpenAnimation();
-      });
-    } else {
-      // 关闭
-      if (closeTimer) { clearTimeout(closeTimer); closeTimer = null; }
-      const drawer = drawerRef.value;
-      const overlay = overlayRef.value;
-      if (drawer) {
-        animation.transition(drawer, {
-          styles: { transform: 'translateY(100%)' },
-          duration: ANIM_DURATION,
-          timingFunction: ANIM_TIMING
-        });
-      }
-      if (overlay) {
-        animation.transition(overlay, {
-          styles: { backgroundColor: 'rgba(0, 0, 0, 0)' },
-          duration: ANIM_DURATION,
-          timingFunction: 'ease'
-        });
-      }
-      closeTimer = setTimeout(() => {
-        mounted.value = false;
-      }, ANIM_DURATION);
+      selectedTemplateID.value = Number(currentLive.value?.seatLayoutTemplateID) || 600;
     }
   });
 
-  const handleScroll = (e) => {
-    if (currentCursor.value === 0) return;
+  const selectLayout = (templateID) => {
+    if (templateID === selectedTemplateID.value || layoutUpdating.value) return;
+    const prev = selectedTemplateID.value;
+    layoutUpdating.value = true;
+    selectedTemplateID.value = templateID;
+    updateLiveInfo({
+      liveInfo: {
+        liveID: liveID.value,
+        seatLayoutTemplateID: templateID,
+      },
+      modifyFlagList: ['SEAT_LAYOUT_TEMPLATE_ID', 'seatLayoutTemplateID'],
+      success: () => {
+        layoutUpdating.value = false;
+        console.log('updateLiveInfo success.');
+      },
+      fail: (errCode, errMsg) => {
+        layoutUpdating.value = false;
+        selectedTemplateID.value = prev;
+        console.error(`updateLiveInfo fail errCode: ${errCode}, errMsg: ${errMsg}`);
+        showTip(t('layout_change_failed'));
+      },
+    });
+  };
 
-    const {
-      scrollHeight,
-      scrollTop: st
-    } = e.detail;
-    scrollTop.value = st;
-
-    if (scrollHeight - scrollTop.value < 100) {
-      // this.loadAudiences(this.currentCursor);
-    }
+  const isInvited = (audience) => {
+    if (!audience?.userID) return false;
+    return (invitees.value || []).some(user => user?.userID === audience.userID);
   };
 
   const handleRequest = (audience, action) => {
-    console.warn(`${action} request from ${JSON.stringify(audience)}`);
-
     if (action === 'accept') {
       acceptApplication({
-        liveID: uni?.$liveID,
+        liveID: liveID.value,
         userID: audience?.userID,
         success: () => {
           console.log('acceptApplication success.');
@@ -275,7 +288,7 @@
     }
     if (action === 'reject') {
       rejectApplication({
-        liveID: uni?.$liveID,
+        liveID: liveID.value,
         userID: audience?.userID,
         success: () => {
           console.log('rejectApplication success.');
@@ -288,220 +301,219 @@
     }
   };
 
-  const startLink = (audience) => {
-    console.warn('发起连线');
+  const handleInvite = (audience) => {
+    if (!audience?.userID || isInvited(audience)) return;
+    inviteToSeat({
+      liveID: liveID.value,
+      inviteeID: audience.userID,
+      seatIndex: -1,
+      timeout: 30,
+      success: () => {
+        console.log('inviteToSeat success.');
+      },
+      fail: (errCode, errMsg) => {
+        console.error(`inviteToSeat fail errCode: ${errCode}, errMsg: ${errMsg}`);
+      },
+    });
+  };
+
+  const handleEndConnection = (audience) => {
+    if (!audience?.userID) return;
+    kickUserOutOfSeat({
+      liveID: liveID.value,
+      userID: audience.userID,
+      success: () => {
+        console.log('kickUserOutOfSeat success.');
+      },
+      fail: (errCode, errMsg) => {
+        console.error(`kickUserOutOfSeat fail errCode: ${errCode}, errMsg: ${errMsg}`);
+      },
+    });
   };
 </script>
 
 <style>
-  .bottom-drawer-container {
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    top: 0;
-    z-index: 1000;
-  }
-
-  /* 遮罩层：背景色由 animation 模块驱动 */
-  .drawer-overlay {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background-color: rgba(0, 0, 0, 0);
-  }
-
-  /* drawer 主体：transform 由 animation 模块驱动，CSS 只保留初始隐藏状态 */
-  .bottom-drawer {
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    background: rgba(34, 38, 46, 1);
-    border-top-left-radius: 32rpx;
-    border-top-right-radius: 32rpx;
-    transform: translateY(100%);
-    flex-direction: column;
-    height: 1000rpx;
-  }
-
-  .audience-header {
-    padding: 40rpx 0;
-    background-color: rgba(34, 38, 46, 1);
-    position: relative;
-    z-index: 1;
-    flex-direction: column;
+  .panel-header {
+    width: 686rpx;
+    height: 40rpx;
+    margin-bottom: 32rpx;
+    justify-content: center;
     align-items: center;
+    flex-direction: row;
   }
 
-  .tab-container {
+  .panel-title {
+    color: #ffffff;
+    font-size: 30rpx;
+    font-weight: 600;
+  }
+
+  .card {
+    width: 686rpx;
+    margin-bottom: 24rpx;
+    padding: 32rpx;
+    border-radius: 32rpx;
+    background-color: rgba(0, 0, 0, 0.28);
+    border-width: 1rpx;
+    border-color: rgba(255, 255, 255, 0.05);
+    flex-direction: column;
+  }
+
+  .section-title {
+    color: rgba(255, 255, 255, 0.85);
+    font-size: 24rpx;
+    font-weight: 600;
+    margin-bottom: 24rpx;
+  }
+
+  .layout-grid {
+    width: 622rpx;
+    flex-direction: column;
+  }
+
+  .layout-row {
+    width: 622rpx;
+    height: 96rpx;
+    margin-bottom: 16rpx;
+    flex-direction: row;
+  }
+
+  .layout-option {
+    width: 303rpx;
+    height: 96rpx;
+    margin-right: 16rpx;
+    border-radius: 24rpx;
+    border-width: 1rpx;
+    border-color: rgba(255, 255, 255, 0.14);
+    background-color: rgba(0, 0, 0, 0.22);
     flex-direction: row;
     justify-content: center;
-    margin-top: 20rpx;
-  }
-
-  .tab-item {
-    padding: 20rpx 40rpx;
-    margin: 0 20rpx;
-    border-radius: 8rpx;
-  }
-
-  .tab-text {
-    font-size: 32rpx;
-  }
-
-  .active-text {
-    color: rgba(255, 255, 255, 0.9);
-  }
-
-  .active-line-container {
-    margin-top: 4rpx;
-    display: flex;
-    justify-content: center;
     align-items: center;
-    width: 128rpx;
   }
 
-  .active-line {
-    border-bottom: 4rpx solid rgba(255, 255, 255, 0.9);
-    width: 80rpx;
+  .layout-option.is-active {
+    border-color: rgba(74, 158, 255, 0.8);
+    background-color: rgba(74, 158, 255, 0.2);
   }
 
-  .inactive-text {
-    color: rgba(255, 255, 255, 0.3);
+  .layout-icon {
+    width: 40rpx;
+    height: 40rpx;
+    margin-right: 16rpx;
   }
 
-  .audience-content {
+  .layout-label {
+    color: rgba(255, 255, 255, 0.72);
+    font-size: 26rpx;
+  }
+
+  .layout-label.is-active-label {
+    color: #8ecfff;
+    font-weight: 600;
+  }
+
+  .list-scroll {
+    width: 622rpx;
+  }
+
+  .audience-row {
+    width: 622rpx;
+    height: 132rpx;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .row-divider {
+    border-top-width: 1rpx;
+    border-top-color: rgba(255, 255, 255, 0.07);
+  }
+
+  .audience-identity {
     flex: 1;
-    padding: 0 48rpx;
-  }
-
-  .audience-grid {
-    flex-direction: column;
-  }
-
-  .audience-item {
-    padding: 24rpx 0;
-    position: relative;
-  }
-
-  .audience-info {
     flex-direction: row;
     align-items: center;
   }
 
-  .audience-avatar-container {
-    width: 80rpx;
-    height: 80rpx;
-    border-radius: 40rpx;
-    margin-right: 24rpx;
+  .audience-avatar-wrap {
+    width: 68rpx;
+    height: 68rpx;
+    margin-right: 20rpx;
+    border-radius: 34rpx;
+    background-color: rgba(255, 255, 255, 0.06);
+    border-width: 1rpx;
+    border-color: rgba(74, 158, 255, 0.22);
+    overflow: hidden;
+    justify-content: center;
+    align-items: center;
   }
 
   .audience-avatar {
-    width: 80rpx;
-    height: 80rpx;
-    border-radius: 40rpx;
-  }
-
-  .audience-item-right {
-    flex: 1;
-    flex-direction: row;
-    justify-content: space-between;
-    align-items: center;
+    width: 68rpx;
+    height: 68rpx;
+    border-radius: 34rpx;
   }
 
   .audience-name {
-    font-size: 32rpx;
-    color: #ffffff;
-    max-width: 200rpx;
+    flex: 1;
+    font-size: 26rpx;
+    color: rgba(255, 255, 255, 0.88);
     lines: 1;
     overflow: hidden;
     text-overflow: ellipsis;
   }
 
-  .start-link {
-    padding: 12rpx 32rpx;
-    border-radius: 100rpx;
-    background-color: rgba(43, 106, 214, 1);
-  }
-
-  .start-link.waiting {
-    background-color: rgba(58, 60, 66, 1);
-  }
-
-  .link-text {
-    color: #ffffff;
-    font-size: 28rpx;
-  }
-
-  .request-actions {
+  .audience-actions {
     flex-direction: row;
-  }
-
-  .action-btn {
-    padding: 12rpx 32rpx;
-    border-radius: 100rpx;
+    align-items: center;
     margin-left: 16rpx;
   }
 
-  .action-btn.accept {
-    background-color: rgba(43, 106, 214, 1);
-  }
-
-  .action-btn.reject {
-    background-color: rgba(58, 60, 66, 1);
-  }
-
-  .btn-text {
-    color: #ffffff;
-    font-size: 28rpx;
-  }
-
-  .audience-item-bottom-line {
-    position: absolute;
-    border-bottom-width: 1rpx;
-    border-bottom-color: rgba(79, 88, 107, 0.3);
-    width: 550rpx;
-    height: 2rpx;
-    bottom: 0;
-    right: 0;
-  }
-
-  .empty-state,
-  .loading-state {
-    padding: 64rpx;
+  .row-btn {
+    width: 136rpx;
+    height: 72rpx;
+    margin-left: 16rpx;
+    border-radius: 20rpx;
+    background-color: rgba(74, 158, 255, 0.18);
+    border-width: 1rpx;
+    border-color: rgba(74, 158, 255, 0.42);
+    flex-direction: row;
     justify-content: center;
     align-items: center;
   }
 
-  .empty-text {
-    color: #999999;
-    font-size: 28rpx;
+  .row-btn.danger {
+    background-color: rgba(255, 79, 86, 0.1);
+    border-color: rgba(255, 79, 86, 0.22);
   }
 
-  .loading-image {
-    width: 48rpx;
-    height: 48rpx;
+  .row-btn.is-disabled {
+    background-color: rgba(255, 255, 255, 0.06);
+    border-color: rgba(255, 255, 255, 0.06);
   }
 
-  .drawer-content {
-    padding: 24rpx 0;
+  .row-btn-text {
+    color: #ffffff;
+    font-size: 24rpx;
   }
 
-  .divider-line-container {
-    height: 68rpx;
+  .row-btn-text.danger-text {
+    color: #ff7076;
+  }
+
+  .row-btn-text.disabled-text {
+    color: rgba(255, 255, 255, 0.4);
+  }
+
+  .list-empty {
+    width: 622rpx;
+    min-height: 184rpx;
     justify-content: center;
-    position: relative;
+    align-items: center;
   }
 
-  .divider-line {
-    width: 268rpx;
-    height: 10rpx;
-    border-radius: 200rpx;
-    background-color: #ffffff;
-    position: absolute;
-    bottom: 16rpx;
+  .list-empty-text {
+    color: rgba(255, 255, 255, 0.52);
+    font-size: 28rpx;
   }
 </style>

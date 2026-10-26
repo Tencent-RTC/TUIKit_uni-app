@@ -11,21 +11,24 @@
     
     <view
       class="message-list-container"
-      :style="{ paddingBottom: inputToolbarHeight + 'px' }"
+      :style="{ paddingBottom: messageListBottomPx + 'px' }"
       @tap="closeSoftKeyboard"
     >
       <MessageList
         v-if="conversationID"
+        ref="messageListRef"
         :conversationID="conversationID"
         :locateMessage="locateMessage"
         :inputToolbarHeight="inputToolbarHeight"
         :inputPanelHeight="inputPanelHeight"
+        :multiSelectTitle="navigationTitle"
         @onMessageListTap="closeSoftKeyboard"
+        @onMultiSelectModeChange="onMultiSelectModeChange"
       />
     </view>
     
     <MessageInput
-      v-if="conversationID"
+      v-if="conversationID && !isMultiSelectMode"
       ref="messageInputRef"
       :conversationID="conversationID"
       :setOfflinePushInfo="setOfflinePushInfo"
@@ -36,7 +39,7 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { onLoad, onShow } from '@dcloudio/uni-app'
+import { onLoad, onShow, onBackPress } from '@dcloudio/uni-app'
 import MessageList from '@/uni_modules/tuikit-atomic-x/components/MessageList/MessageList.nvue'
 import MessageInput, { DEFAULT_TOOLS } from '@/uni_modules/tuikit-atomic-x/components/MessageInput/MessageInput.nvue'
 import CustomNavbar from '@/uni_modules/tuikit-atomic-x/components/CustomNavbar/CustomNavbar.nvue'
@@ -45,8 +48,6 @@ import { useGroupState } from '@/uni_modules/tuikit-atomic-x/state/GroupState'
 import { useLoginState } from '@/uni_modules/tuikit-atomic-x/state/LoginState'
 import { MessageType } from '@/uni_modules/tuikit-atomic-x/types/message'
 import type { OfflinePushContext, OfflinePushInfo } from '@/uni_modules/tuikit-atomic-x/types/message'
-import voiceIcon from '@/uni_modules/tuikit-atomic-x/components/MessageList/assets/voice.png'
-import videoIcon from '@/uni_modules/tuikit-atomic-x/components/MessageList/assets/video.png'
 
 // ==================== State ====================
 const {
@@ -60,8 +61,18 @@ const conversationID = ref('')
 const locateMessage = ref(null)
 const isInGroup = ref(false)
 const messageInputRef = ref(null)
+const messageListRef = ref(null)
 const inputToolbarHeight = ref(0)
 const inputPanelHeight = ref(0)
+const isMultiSelectMode = ref(false)
+
+// 多选底部操作栏高度（px），与 MessageList 内 .msg-list__multi-bar 的实际高度保持一致
+// （padding 32rpx + 图标 80rpx + 间距 12rpx + 文字 32rpx + padding 60rpx = 216rpx）
+const MULTI_SELECT_BAR_HEIGHT_RPX = 216
+const messageListBottomPx = computed(() => {
+  if (!isMultiSelectMode.value) return inputToolbarHeight.value
+  return uni.upx2px(MULTI_SELECT_BAR_HEIGHT_RPX)
+})
 
 const { getConversationInfo, conversationList } = useConversationListState('chat')
 
@@ -98,6 +109,16 @@ const onMessageInputHeightChange = ({ inputToolbarHeight: toolbar, inputPanelHei
 }
 
 const closeSoftKeyboard = () => messageInputRef.value?.collapse()
+
+// 多选模式：输入框被底部操作栏取代；进入多选前先收起键盘 / 面板，并清零输入区高度
+const onMultiSelectModeChange = (isOn) => {
+  if (isOn) {
+    closeSoftKeyboard()
+    inputToolbarHeight.value = 0
+    inputPanelHeight.value = 0
+  }
+  isMultiSelectMode.value = isOn
+}
 
 // ==================== 离线推送 ====================
 const setOfflinePushInfo = (ctx: OfflinePushContext): OfflinePushInfo | null => {
@@ -161,6 +182,13 @@ onLoad((options) => {
 })
 
 onShow(() => getConversationInfo(conversationID.value))
+
+// 多选模式下，系统返回键先退出多选，而不是离开页面
+onBackPress(() => {
+  if (!isMultiSelectMode.value) return false
+  messageListRef.value?.exitMultiSelect()
+  return true
+})
 </script>
 
 <style>

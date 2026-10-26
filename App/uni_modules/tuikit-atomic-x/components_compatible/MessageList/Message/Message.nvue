@@ -3,16 +3,43 @@
     <RecalledMessage v-if="message.status === MessageStatus.REVOKED" :message="message" :conversationID="conversationID" />
     <GroupTipMessage v-else-if="isSystemMessage || isGroupCreateMessage" :message="message" />
     <component v-else-if="isCustomCenterMessage" :is="centerCustomComponent" :message="message" :conversationID="conversationID" />
-    <view v-if="highlight" ref="centerHighlightOverlayRef" class="msg__highlight-overlay"></view>
+    <view v-if="highlight" class="msg__highlight-overlay" :style="{ backgroundColor: highlightFlashOn ? '#FFE082' : 'transparent' }"></view>
   </view>
-  <view v-else class="msg msg--no-select" :class="messageClasses" :data-message-id="message.msgID" @touchstart="handleTouchStart" @touchend="handleTouchEnd" @tap.stop="handleTap" @touchmove.stop.prevent="handleTouchMove">
+  <!-- 只读模式（合并转发详情）：固定左对齐版式，不依赖 isSentBySelf，也不带气泡底色 -->
+  <view v-else-if="readonly" class="msg--readonly">
+    <Avatar :src="message.from.avatarURL" :name="displayName" :size="64" defaultAvatarType="user" class="msg-ro__avatar" />
+    <view class="msg-ro__main">
+      <view class="msg-ro__header">
+        <text class="msg-ro__name msg__text--no-select" :lines="1">{{ displayName }}</text>
+        <text class="msg-ro__time msg__text--no-select">{{ formatMessageTime(message.timestamp) }}</text>
+      </view>
+      <view class="msg-ro__content">
+        <component ref="messageContentRef" :is="currentMessageComponent" :message="message" :conversationID="conversationID" :id="message.msgID" v-bind="plainContentProps" />
+      </view>
+    </view>
+  </view>
+  <view v-else class="msg-select-row">
+    <!-- 多选模式：行首勾选圈（对方 / 自己的消息都显示） -->
+    <view v-if="multiSelectMode" class="msg-select" @tap.stop="handleSelectToggle">
+      <view
+        class="msg-select__circle"
+        :class="{
+          'msg-select__circle--checked': selectable && selected,
+          'msg-select__circle--disabled': !selectable
+        }"
+      >
+        <image v-if="selectable && selected" class="msg-select__tick" src="/uni_modules/tuikit-atomic-x/static/icon/checked.png" mode="aspectFit" />
+      </view>
+    </view>
+
+  <view class="msg msg--no-select" :class="messageClasses" :data-message-id="message.msgID" @touchstart="handleTouchStart" @touchend="handleTouchEnd" @tap.stop="handleTap" @touchmove.stop.prevent="handleTouchMove">
     <Avatar v-if="showAvatar" :src="message.from.avatarURL" :name="displayName" :size="80" defaultAvatarType="user" lazy class="msg__avatar" />
     <view class="msg__main msg__main--no-select" :class="'msg__main--'+ (message.isSentBySelf ? 'out' : 'in')">
       <view v-if="showNickname" class="msg__nickname">
         <text class="msg__nickname-text msg__text--no-select">{{ displayName }}</text>
       </view>
 
-      <view class="msg__bubble msg__bubble--no-select" :class="'msg__bubble--'+ (message.isSentBySelf ? 'out' : 'in')" @longpress="handleLongPress" @tap.stop="handleMessageContentTap" @touchstart.stop="handleBubbleTouchStart" @touchmove.stop="">
+      <view class="msg__bubble msg__bubble--no-select" :class="'msg__bubble--'+ (message.isSentBySelf ? 'out' : 'in')" @longpress="handleLongPress" @tap.stop="handleBubbleTap" @touchstart.stop="handleBubbleTouchStart" @touchmove.stop="">
         <component ref="messageContentRef" :is="currentMessageComponent" :message="message" :conversationID="conversationID" :id="message.msgID" />
 
         <view v-if="showStatus" :class="['msg__status', 'msg__status--'+ (message.isSentBySelf ? 'out' : 'in')]">
@@ -24,13 +51,17 @@
         </view>
         <!-- 定位到原消息时的闪烁层：只盖消息体（气泡），不闪头像/昵称/时间；
              无手势绑定，不拦截气泡的 tap / longpress -->
-        <view v-if="highlight" ref="highlightOverlayRef" class="msg__highlight-overlay"></view>
+        <view v-if="highlight" class="msg__highlight-overlay" :style="{ backgroundColor: highlightFlashOn ? '#FFE082' : 'transparent' }"></view>
       </view>
       <MessageReactionBar v-if="showStandaloneReaction" :message="message" @showDetail="handleShowReactionDetail" />
       <view v-if="showTime" class="msg__time" @tap.stop="handleMessageContentTap" style="background-color: black;">
         <text class="msg__time-text msg__text--no-select">{{ formatMessageTime(message.timestamp) }}</text>
       </view>
     </view>
+    <!-- 多选模式：透明遮罩吞掉气泡内部点击（图片预览 / 语音播放 / 通话回拨等），整行点击统一切换选中 -->
+    <view v-if="multiSelectMode" class="msg__select-mask" @tap.stop="handleSelectToggle"></view>
+  </view>
+
     <MessageActions v-if="showActions" ref="messageActionsRef" :message="message" :actions="messageActionList" @close="handleActionsClose" @action="handleAction" @showAll="handleReactionShowAll" />
 
     <!-- 转发目标选择器：组件内部自洽，选中后直接调 forwardMessages，不抛给业务层 -->
@@ -77,14 +108,27 @@ import ForwardPicker from './ForwardPicker.nvue'
 import { MessageType, MessageStatus, MessageForwardType } from '../../../types/message'
 import { useMessageListState } from '../../../state/MessageListState'
 import { formatTime } from '../../../utils/timeUtils'
-import { isGroupCallMessage, isCallMessage, isVideoCall, parseCallMessageData, CallType } from '../../../utils/callMessageUtils'
-import { useCallState, CallErrorCode } from '../../../state_compatible/CallState'
-import { useDeviceState } from '../../../state_compatible/DeviceState'
-import { getCurrentPageFullPath, isNavigating, isCallEnding } from '../../../server_compatible/callService'
+import { isCallMessage, isVideoCall, parseCallMessageData, CallType } from '../../../utils/callMessageUtils'
+import { isSystemTipMessage, isGroupCreateMessage as checkGroupCreateMessage, isCustomCenterMessage as checkCustomCenterMessage, isCenterLayoutMessage } from '../../../utils/messageLayout'
+import { isMessageMultiSelectable } from '../../../utils/multiSelect'
+import { MESSAGE_COMPONENT_INJECTION_KEY, MESSAGE_LONG_PRESSED_INJECTION_KEY } from '../../../constants/messageInjectionKeys'
+import { useCallState, CallErrorCode } from '../../../state/CallState'
+import { useDeviceState } from '../../../state/DeviceState'
+import { getCurrentPageFullPath, isNavigating, isCallEnding } from '../../../server/callService'
 import { checkCallPermissionWithDialog } from '../../../utils/callPermission'
 
-export default {
+// 具名常量：provide 时把自身定义交给后代（合并转发详情页 inject 后递归渲染消息）。
+// 详情页由 MessageList 承载，递归渲染用的 Message 由 MessageList provide 给它
+var MessageComponent = {
   name: 'Message',
+  provide: function() {
+    var self = this
+    var provided = {}
+    provided[MESSAGE_COMPONENT_INJECTION_KEY] = MessageComponent
+    // 气泡本次触摸是否已触发长按：nvue 长按松手后仍会补发 tap，子组件（合并转发卡片）据此屏蔽自己的点击
+    provided[MESSAGE_LONG_PRESSED_INJECTION_KEY] = function() { return self.bubbleLongPressed }
+    return provided
+  },
   components: {
     Avatar,
     RecalledMessage,
@@ -114,7 +158,13 @@ export default {
     customCenterChecker: { type: Function, default: null },
     customMessageRender: { type: Function, default: null },
     // >0 表示键盘/EMOJI/TOOLS 面板正展开（MessageInput.updateSpacer：NONE/VOICE 时为 0）
-    inputPanelHeight: { type: Number, default: 0 }
+    inputPanelHeight: { type: Number, default: 0 },
+    // 多选模式：由 MessageList 持有并下发；开启后显示勾选圈、屏蔽长按菜单与气泡内点击
+    multiSelectMode: { type: Boolean, default: false },
+    // 当前消息是否已被勾选（仅 multiSelectMode 下有意义）
+    selected: { type: Boolean, default: false },
+    // 只读展示（合并转发详情页）：禁用长按菜单、通话回拨、状态与回应条
+    readonly: { type: Boolean, default: false }
   },
   data: function() {
     var callStateInstance = useCallState();
@@ -127,6 +177,8 @@ export default {
       // 表情回应详情选择器
       showReactionDetail: false,
       reactionDetailReactionID: '',
+      // 表情回应完整面板（此前漏声明，导致 data 外赋值不触发视图更新）
+      showReactionFullPicker: false,
       longPressPosition: { x: 0, y: 0 },
       lastTouchPosition: { x: 0, y: 0 },
       isLongPressing: false,
@@ -136,34 +188,29 @@ export default {
       loadingStartTimer: null,
       isCalling: false,
       animation: uni.requireNativePlugin('animation'),
+      // 高亮遮罩当前是否处于“亮”态（响应式样式驱动闪烁，见 startHighlight）
+      highlightFlashOn: false,
       callStateInstance: callStateInstance,
       deviceStateInstance: deviceStateInstance,
     }
   },
   computed: {
+    // 居中判断的规则只在 utils/messageLayout.ts 一处维护，这里只做响应式封装，供模板选择渲染分支
     isSystemMessage() {
-      return this.message.messageType === MessageType.TIPS
+      return isSystemTipMessage(this.message)
     },
     isGroupCreateMessage() {
-      if (this.message.messageType === MessageType.CUSTOM) {
-        try {
-          var data = JSON.parse((this.message.messagePayload && this.message.messagePayload.customData) || '{}')
-          if (data.businessID === 'group_create') return true
-        } catch (e) {}
-      }
-      return false
+      return checkGroupCreateMessage(this.message)
     },
     isCustomCenterMessage() {
-      if (this.customCenterChecker) {
-        return this.customCenterChecker(this.message, this.conversationID)
-      }
-      return isGroupCallMessage(this.message, this.conversationID)
+      return checkCustomCenterMessage(this.message, this.conversationID, this.customCenterChecker)
     },
     isCenterMessage() {
-      return this.message.status === MessageStatus.REVOKED
-        || this.isSystemMessage
-        || this.isGroupCreateMessage
-        || this.isCustomCenterMessage
+      return isCenterLayoutMessage(this.message, this.conversationID, this.customCenterChecker)
+    },
+    // 通话消息、发送失败的消息不支持多选，勾选圈置灰（规则见 utils/multiSelect.ts）
+    selectable() {
+      return isMessageMultiSelectable(this.message)
     },
     messageClasses() {
       return [
@@ -171,19 +218,22 @@ export default {
         'msg--type-' + this.message.messageType
       ]
     },
+    // 只读模式（合并转发详情页）：不展示发送 / 已读状态，也不展示表情回应条
     showStatus() {
-      return this.message.isSentBySelf &&
+      return !this.readonly &&
+        this.message.isSentBySelf &&
         (this.message.status === MessageStatus.SENDING ||
           this.message.status === MessageStatus.SEND_FAIL)
     },
     showReadStatus() {
-      return this.message.isSentBySelf &&
+      return !this.readonly &&
+        this.message.isSentBySelf &&
         this.message.status === MessageStatus.SEND_SUCCESS &&
         this.message.needReadReceipt
     },
     // 非文本消息的 reaction 条独立渲染在气泡下方；文本消息的 reaction 条在 TextMessage 气泡内
     showStandaloneReaction() {
-      return (this.message.reactionList || []).length > 0
+      return !this.readonly && (this.message.reactionList || []).length > 0
     },
     readStatusText() {
       if (!this.message.receipt) return '未读'
@@ -225,6 +275,13 @@ export default {
       map[MessageType.CUSTOM] = CustomMessage
       map[MessageType.MERGED] = MergerMessage
       return map[this.message.messageType] || TextMessage
+    },
+    // 只读模式（合并转发详情）下下发给内容组件的 plain：去气泡底色。
+    // 仅这几类内容组件声明了 plain prop；业务自定义渲染组件不注入，避免污染其 attrs
+    plainContentProps() {
+      if (this.customComponent) return {}
+      var supported = [MessageType.TEXT, MessageType.AUDIO, MessageType.FILE, MessageType.CUSTOM, MessageType.MERGED]
+      return supported.indexOf(this.message.messageType) !== -1 ? { plain: true } : {}
     }
   },
   watch: {
@@ -233,8 +290,10 @@ export default {
     highlight: {
       handler: function(newVal) {
         if (newVal) {
-          var self = this
-          this.$nextTick(function() { self.playHighlightAnimation() })
+          this.startHighlight()
+        } else {
+          this._highlightRunId = (this._highlightRunId || 0) + 1
+          this.highlightFlashOn = false
         }
       },
       immediate: true
@@ -251,14 +310,18 @@ export default {
       immediate: true
     }
   },
+  created() {
+    // 非响应式：只在同一次触摸里读写，不需要触发视图更新
+    this.bubbleLongPressed = false
+  },
   mounted() {
     if (this.message.status === MessageStatus.SENDING) {
       var self = this
       this.$nextTick(function() { self.startLoadingAnimation() })
     }
   },
-  beforeDestroy() { this.stopLoadingAnimation() },
-  beforeUnmount() { this.stopLoadingAnimation() },
+  beforeDestroy() { this._highlightRunId = (this._highlightRunId || 0) + 1; this.stopLoadingAnimation() },
+  beforeUnmount() { this._highlightRunId = (this._highlightRunId || 0) + 1; this.stopLoadingAnimation() },
   methods: {
     getMessagePosition(messageId) {
       var self = this
@@ -272,44 +335,30 @@ export default {
     },
     formatMessageTime(timestamp) {
       if (!timestamp) return ''
-      return formatTime(timestamp * 1000)
+      return formatTime(timestamp, true)
     },
     /**
-     * 高亮闪烁：动画作用在气泡内独立的遮罩层，不改消息内容元素的背景色。
-     * 通话等自定义消息的内容卡片自带不透明背景，直接改内容元素会被挡住；
-     * 且动画收尾会把该元素背景写成 transparent，破坏气泡原本的底色。
-     * 遮罩层没有手势绑定，不会拦截气泡的 tap / longpress。
-     *
-     * @param retry 已重试次数：原消息不在列表内时先拉上下文再滚动，
-     *              cell 挂载可能晚于 highlight 置位，此时 ref 还没就位，需要补一次
+     * 高亮闪烁：用响应式样式驱动气泡内独立遮罩层的背景色（遮罩层没有手势绑定，不拦截 tap / longpress）。
+     * 不用 animation.transition：iOS 的 list 只给视口内 cell 创建原生 view，
+     * 二次跳转时目标 cell 还在屏外，对未创建的原生节点调 transition 会静默失败；
+     * 响应式样式在节点创建时按当前值渲染。渐变由 CSS transition 完成。
+     * 每次启动递增 _highlightRunId，旧闪烁链发现 id 变了就终止。
+     * 起始延迟（等滚动落位）由 MessageList 在置位 highlight 前处理。
      */
-    playHighlightAnimation(retry) {
-      var retryCount = retry || 0
-      // 高亮期已过（MessageList 3s 后清掉）就不必再补
-      if (!this.highlight) return
-      var highlightEl = this.$refs.highlightOverlayRef || this.$refs.centerHighlightOverlayRef
-      if (!highlightEl) {
-        if (retryCount < 10) {
-          var self = this
-          setTimeout(function() { self.playHighlightAnimation(retryCount + 1) }, 100)
-        }
-        return
-      }
+    startHighlight() {
+      var self = this
+      this._highlightRunId = (this._highlightRunId || 0) + 1
+      var runId = this._highlightRunId
+      this.highlightFlashOn = false
       var count = 0
-      var maxCount = 6
-      var animation = this.animation
-      var flash = function() {
-        if (count >= maxCount) {
-          animation.transition(highlightEl, { styles: { backgroundColor: 'transparent' }, duration: 150, timingFunction: 'ease-out' })
-          return
-        }
-        var isHighlight = count % 2 === 0
-        animation.transition(highlightEl, {
-          styles: { backgroundColor: isHighlight ? '#FFD54F' : 'transparent' },
-          duration: 200, timingFunction: 'ease-in-out'
-        }, function() { count++; flash() })
+      var tick = function() {
+        if (runId !== self._highlightRunId) return
+        if (count >= 4) { self.highlightFlashOn = false; return }
+        self.highlightFlashOn = count % 2 === 0
+        count++
+        setTimeout(tick, 300)
       }
-      flash()
+      tick()
     },
     startLoadingAnimation() {
       var self = this
@@ -357,6 +406,7 @@ export default {
     },
     handleTouchMove(e) {},
     handleBubbleTouchStart(e) {
+      this.bubbleLongPressed = false
       if (e && e.preventDefault) e.preventDefault()
       if (e && e.stopPropagation) e.stopPropagation()
     },
@@ -364,7 +414,8 @@ export default {
       if (e && e.preventDefault) e.preventDefault()
       if (e && e.stopPropagation) e.stopPropagation()
       this.isLongPressing = true
-      if (this.isCenterMessage) return
+      this.bubbleLongPressed = true
+      if (this.isCenterMessage || this.multiSelectMode || this.readonly) return
       this.longPressPosition = { x: this.lastTouchPosition.x, y: this.lastTouchPosition.y }
       var self = this
       var settleDelay = this.inputPanelHeight > 0 ? 450 : 0
@@ -393,6 +444,11 @@ export default {
       }, settleDelay)
     },
     handleTap: function() {
+      // 多选模式下，点击整行 = 切换选中
+      if (this.multiSelectMode) {
+        this.handleSelectToggle()
+        return
+      }
       if (this.isLongPressing) {
         var self = this
         setTimeout(function() { self.isLongPressing = false }, 100)
@@ -476,10 +532,23 @@ export default {
       }
       return true
     },
+    // 气泡点击：长按松手补发的 tap 直接忽略
+    handleBubbleTap: function() {
+      if (this.bubbleLongPressed) return
+      this.handleMessageContentTap()
+    },
     handleMessageContentTap: function() {
       this.$emit('onMessageListTap')
-      this.handleC2CCallMessageTap()
+      // 只读模式（合并转发详情）里的通话消息只是历史记录，点击不应回拨
+      if (!this.readonly) {
+        this.handleC2CCallMessageTap()
+      }
       this.$emit('onMessageTap', this.message)
+    },
+    handleSelectToggle: function() {
+      // 不可选的消息只置灰，不弹提示
+      if (!this.selectable) return
+      this.$emit('onToggleSelect', this.message)
     },
     handleResend: function() {},
     handleActionsClose: function() {
@@ -500,6 +569,11 @@ export default {
     handleAction: function(action) {
       if (!action || !action.key) return
       var self = this
+
+      if (action.key === 'multiSelect') {
+        this.$emit('onEnterMultiSelect', this.message)
+        return
+      }
 
       if (action.key === 'forward') {
         // MessageActions 在 iOS 上关闭有 300ms 动画，等其收起后再弹选择器，避免浮层叠在一起
@@ -561,9 +635,26 @@ export default {
     }
   }
 }
+
+export default MessageComponent
 </script>
 
 <style>
+  /* 多选包装行：勾选列 + 消息本体并排；非多选模式下勾选列不渲染，布局与原先一致 */
+  .msg-select-row { flex-direction: row; align-items: flex-start; width: 750rpx; }
+  .msg-select { width: 88rpx; height: 120rpx; padding-top: 36rpx; padding-left: 32rpx; }
+  .msg-select__circle {
+    width: 40rpx; height: 40rpx; border-radius: 20rpx;
+    border-width: 2rpx; border-style: solid; border-color: #C9CDD4;
+    background-color: #FFFFFF; justify-content: center; align-items: center;
+  }
+  /* 不可选（通话 / 发送失败）：勾选圈置灰 */
+  .msg-select__circle--disabled { border-color: #E6E9F0; background-color: #F0F2F7; }
+  .msg-select__circle--checked { border-color: #1C66E5; background-color: #1C66E5; }
+  .msg-select__tick { width: 24rpx; height: 24rpx; }
+  /* 多选模式下盖住整个消息本体，吞掉气泡内部点击 */
+  .msg__select-mask { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background-color: transparent; z-index: 20; }
+
   .msg {
     position: relative;
     flex-direction: row;
@@ -582,6 +673,10 @@ export default {
     bottom: 0;
     background-color: transparent;
     z-index: 10;
+    /* 颜色渐变交给原生 transition，开关切换时淡入淡出，避免硬切 */
+    transition-property: background-color;
+    transition-duration: 0.2s;
+    transition-timing-function: ease-in-out;
   }
 
   .msg--no-select {
@@ -611,6 +706,17 @@ export default {
 
   .msg__nickname { margin-bottom: 8rpx; }
   .msg__nickname-text { font-size: 24rpx; line-height: 34rpx; color: rgba(0, 0, 0, 0.4); }
+
+  /* ==================== 只读版式（合并转发详情） ====================
+     固定左对齐：头像 64rpx + 间距 20rpx，左右各 32rpx，正文区 602rpx。
+     不使用 msg--in / msg--out，避免受 message.isSentBySelf 影响。 */
+  .msg--readonly { flex-direction: row; align-items: flex-start; width: 750rpx; padding: 24rpx 32rpx 0; }
+  .msg-ro__avatar { margin-right: 20rpx; }
+  .msg-ro__main { width: 602rpx; flex-direction: column; align-items: flex-start; }
+  .msg-ro__header { width: 602rpx; flex-direction: row; align-items: center; justify-content: space-between; }
+  .msg-ro__name { max-width: 430rpx; font-size: 24rpx; line-height: 34rpx; color: rgba(0, 0, 0, 0.5); lines: 1; text-overflow: ellipsis; }
+  .msg-ro__time { margin-left: 16rpx; font-size: 22rpx; line-height: 34rpx; color: rgba(0, 0, 0, 0.35); }
+  .msg-ro__content { width: 602rpx; margin-top: 8rpx; align-items: flex-start; }
 
   .msg__bubble { position: relative; justify-content: center; align-items: flex-end; }
   .msg__bubble--no-select { user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }

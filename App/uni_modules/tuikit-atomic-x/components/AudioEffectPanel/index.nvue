@@ -1,129 +1,107 @@
 <template>
-  <view class="bottom-drawer-container" v-if="modelValue">
-    <view class="drawer-overlay" @tap="close"></view>
-    <view class="bottom-drawer" :class="{ 'drawer-open': modelValue }" @click.stop>
-      <view class="drawer-header">
-        <text class="drawer-title">{{ t('ae.title') }}</text>
-        <text class="drawer-done" @tap="close">{{ t('ae.done') }}</text>
+  <BaseDrawer
+    v-model="innerVisible"
+    :height="990"
+    :overlayOpacity="0.5"
+    bgImage="/uni_modules/tuikit-atomic-x/static/assets/live/drawer-bg.png"
+    :bgImageHeight="1200"
+    padding="20rpx 36rpx 48rpx"
+    :useSafeBottom="true"
+  >
+    <view class="ae-heading">
+      <text class="ae-title">{{ t('ae.title') }}</text>
+    </view>
+
+    <view class="ae-card">
+      <view class="ae-row">
+        <text class="ae-row-label">{{ t('ae.earback') }}</text>
+        <SwitchButton :modelValue="isEarMonitorOpened" @change="handleEarMonitorChange" />
       </view>
-
-      <!-- 耳返开关 -->
-      <view class="setting-item">
-        <text class="setting-label">{{ t('ae.earback') }}</text>
-        <switch :checked="earMonitor" @change="handleEarMonitorChange" class="setting-switch" color="#2B65FB"
-          style="transform:scale(0.7)" />
-      </view>
-
-      <!-- 背景音乐 -->
-      <!--      <view class="setting-item">
-        <text class="setting-label">{{ t('ae.bgm') }}</text>
-        <view class="setting-value" @tap="handleSelectMusic">
-          <text class="setting-text">{{ t('ae.chooseMusic') }}</text>
-          <image class="setting-arrow" src="/static/images/right-arrow.png" mode="aspectFit" />
-        </view>
-      </view> -->
-
-      <!-- 音频设置 -->
-      <view class="volume-settings">
-        <text class="section-title">{{ t('ae.audioSettings') }}</text>
-
-        <view class="slider-item">
-          <text class="slider-label">{{ t('ae.earbackVolume') }}</text>
-          <view class="custom-slider">
-            <!-- 减号按钮 -->
-            <view class="control-btn minus-btn" @tap="decreaseMusicVolume">
-              <text class="btn-text">-</text>
-            </view>
-
-            <!-- 进度条区域 -->
-            <view class="progress-section">
-              <!-- 进度条背景 -->
-              <view class="progress-bar">
-                <view class="progress-fill" :style="{ width: (musicVolume / 100 * 400) + 'rpx' }"></view>
-              </view>
-              <!-- 当前数值显示 -->
-              <text class="current-value">{{ musicVolume }}</text>
-            </view>
-
-            <!-- 加号按钮 -->
-            <view class="control-btn plus-btn" @tap="increaseMusicVolume">
-              <text class="btn-text">+</text>
-            </view>
-          </view>
-        </view>
-
-
-        <!--        <view class="slider-item">
-          <text class="slider-label">{{ t('ae.musicPitch') }}</text>
-          <text class="slider-value">{{ pitchValue }}</text>
-          <slider
-            :value="pitchValue"
-            @change="handlePitchChange"
-            min="-12"
-            max="12"
-            show-value
-            activeColor="#2B65FB"
-            backgroundColor="rgba(255, 255, 255, 0.1)"
-            block-color="#FFFFFF"
-            block-size="24"
+      <view class="ae-divider"></view>
+      <view class="ae-row">
+        <text class="ae-row-label">{{ t('ae.earbackVolume') }}</text>
+        <view class="ae-row-slider">
+          <Slider
+            :modelValue="earMonitorVolume"
+            :min="0"
+            :max="100"
+            :trackWidth="340"
+            @input="onEarVolumeInput"
+            @change="onEarVolumeChange"
           />
-        </view> -->
-      </view>
-
-      <!-- 变声效果 -->
-      <view class="voice-effects">
-        <text class="section-title">{{ t('ae.voiceChange') }}</text>
-        <view class="effects-grid">
-          <view v-for="(effect, index) in voiceEffects" :key="index" class="effect-item"
-            @tap="handleEffectChange(effect.key)">
-            <view class="effect-icon-container" :class="{ 'effect-active': currentEffect === effect.key }">
-              <image class="effect-icon" :src="effect.icon" mode="aspectFit" />
-            </view>
-            <text class="effect-name">{{ effect.name }}</text>
-          </view>
+          <text class="ae-row-value">{{ earMonitorVolume }}</text>
         </view>
       </view>
+    </view>
 
-      <!-- 混响效果 -->
-      <view class="reverb-effects" style="margin-bottom: 40rpx;">
-        <text class="section-title">{{ t('ae.reverb') }}</text>
-        <view class="effects-grid">
-          <view v-for="(effect, index) in reverbEffects" :key="index" class="effect-item"
-            @tap="handleReverbChange(effect.key)">
-            <view class="effect-icon-container" :class="{ 'effect-active': currentReverb === effect.key }">
-              <image class="effect-icon" :src="effect.icon" mode="aspectFit" />
-            </view>
-            <text class="effect-name">{{ effect.name }}</text>
+    <view class="ae-section">
+      <text class="ae-section-title">{{ t('ae.audioSettings') }}</text>
+      <view class="ae-card">
+        <view class="ae-row">
+          <text class="ae-row-label">{{ t('ae.voiceVolume') }}</text>
+          <view class="ae-row-slider">
+            <Slider
+              :modelValue="voiceVolume"
+              :min="0"
+              :max="100"
+              :trackWidth="340"
+              @input="onVoiceVolumeInput"
+              @change="onVoiceVolumeChange"
+            />
+            <text class="ae-row-value">{{ voiceVolume }}</text>
           </view>
         </view>
       </view>
     </view>
-  </view>
+
+    <view class="ae-section">
+      <text class="ae-section-title">{{ t('ae.voiceChange') }}</text>
+      <view class="ae-option-grid">
+        <view
+          v-for="option in voiceOptions"
+          :key="option.key"
+          class="ae-option"
+          @tap="handleVoiceChange(option.key)"
+        >
+          <view class="ae-option-icon-wrap" :class="{ 'ae-option-icon-on': audioChangerType === option.key }">
+            <image class="ae-option-icon" :class="{ 'ae-option-icon-img-on': audioChangerType === option.key }" :src="option.icon" mode="aspectFit" />
+          </view>
+          <text class="ae-option-label" :class="{ 'ae-option-label-on': audioChangerType === option.key }">{{ option.label }}</text>
+        </view>
+      </view>
+    </view>
+
+    <view class="ae-section">
+      <text class="ae-section-title">{{ t('ae.reverb') }}</text>
+      <view class="ae-option-grid">
+        <view
+          v-for="option in reverbOptions"
+          :key="option.key"
+          class="ae-option"
+          @tap="handleReverbChange(option.key)"
+        >
+          <view class="ae-option-icon-wrap" :class="{ 'ae-option-icon-on': audioReverbType === option.key }">
+            <image class="ae-option-icon" :class="{ 'ae-option-icon-img-on': audioReverbType === option.key }" :src="option.icon" mode="aspectFit" />
+          </view>
+          <text class="ae-option-label" :class="{ 'ae-option-label-on': audioReverbType === option.key }">{{ option.label }}</text>
+        </view>
+      </view>
+    </view>
+  </BaseDrawer>
 </template>
 
 <script setup>
+  import { ref, computed } from 'vue';
   import { t } from '../locales';
-  import {
-    ref,
-    onMounted,
-    watch
-  } from 'vue';
+  import BaseDrawer from '@/components/live/BaseDrawer/index.nvue';
+  import SwitchButton from '@/components/live/SwitchButton/index.nvue';
+  import Slider from '@/uni_modules/tuikit-atomic-x/components/Slider.nvue';
   import {
     AudioChangerType,
     AudioReverbType,
     useAudioEffectState
-  } from '@/uni_modules/tuikit-atomic-x/state/AudioEffectState'
-
-  const {
-    setVoiceEarMonitorEnable,
-    setVoiceEarMonitorVolume,
-    setAudioChangerType,
-    setAudioReverbType,
-    isEarMonitorOpened,
-    earMonitorVolume,
-    audioChangerType,
-    audioReverbType
-  } = useAudioEffectState()
+  } from '@/uni_modules/tuikit-atomic-x/state/AudioEffectState';
+  import { useDeviceState } from '@/uni_modules/tuikit-atomic-x/state/DeviceState';
 
   const props = defineProps({
     modelValue: {
@@ -134,438 +112,75 @@
 
   const emit = defineEmits(['update:modelValue']);
 
-  const earMonitor = ref(false);
-  const musicVolume = ref(0);
-  const voiceVolume = ref(0);
-  const pitchValue = ref(0);
-  const safeArea = ref({
-    left: 0,
-    right: 0,
-    top: 0,
-    bottom: 0,
-    width: 375,
-    height: 750,
+  const innerVisible = computed({
+    get: () => props.modelValue,
+    set: (v) => emit('update:modelValue', v)
   });
-  const currentEffect = ref(AudioChangerType.NONE);
-  const currentReverb = ref(AudioReverbType.NONE);
 
-  const voiceEffects = [{
-      key: AudioChangerType.NONE,
-      name: t('ae.original'),
-      icon: '/static/images/no-effect.png'
-    },
-    {
-      key: AudioChangerType.CHILD,
-      name: t('ae.child'),
-      icon: '/static/images/voice-wild.png'
-    },
-    {
-      key: AudioChangerType.LITTLE_GIRL,
-      name: t('ae.loli'),
-      icon: '/static/images/voice-loli.png'
-    },
-    {
-      key: AudioChangerType.MAN,
-      name: t('ae.uncle'),
-      icon: '/static/images/voice-uncle.png'
-    },
-    {
-      key: AudioChangerType.ETHEREAL,
-      name: t('ae.ethereal'),
-      icon: '/static/images/voice-ghost.png'
-    }
+  const {
+    isEarMonitorOpened,
+    earMonitorVolume,
+    audioChangerType,
+    audioReverbType,
+    setVoiceEarMonitorEnable,
+    setVoiceEarMonitorVolume,
+    setAudioChangerType,
+    setAudioReverbType,
+  } = useAudioEffectState();
+
+  const { setCaptureVolume } = useDeviceState();
+
+  const voiceVolume = ref(100);
+
+  const voiceOptions = [
+    { key: AudioChangerType.NONE, label: t('ae.original'), icon: '/uni_modules/tuikit-atomic-x/static/assets/live/sound-voice-original.png' },
+    { key: AudioChangerType.CHILD, label: t('ae.child'), icon: '/uni_modules/tuikit-atomic-x/static/assets/live/sound-voice-child.png' },
+    { key: AudioChangerType.LITTLE_GIRL, label: t('ae.loli'), icon: '/uni_modules/tuikit-atomic-x/static/assets/live/sound-voice-loli.png' },
+    { key: AudioChangerType.MAN, label: t('ae.uncle'), icon: '/uni_modules/tuikit-atomic-x/static/assets/live/sound-voice-uncle.png' },
+    { key: AudioChangerType.ETHEREAL, label: t('ae.ethereal'), icon: '/uni_modules/tuikit-atomic-x/static/assets/live/sound-voice-spirit.png' },
   ];
 
-  const reverbEffects = [{
-      key: AudioReverbType.NONE,
-      name: t('ae.none'),
-      icon: '/static/images/no-effect.png'
-    },
-    {
-      key: AudioReverbType.KTV,
-      name: 'Karaoke',
-      icon: '/static/images/reverb-ktv.png'
-    },
-    {
-      key: AudioReverbType.METALLIC,
-      name: t('ae.metal'),
-      icon: '/static/images/reverb-metal.png'
-    },
-    {
-      key: AudioReverbType.DEEP,
-      name: t('ae.deep'),
-      icon: '/static/images/reverb-bass.png'
-    },
-    {
-      key: AudioReverbType.LOUD,
-      name: t('ae.loud'),
-      icon: '/static/images/reverb-bright.png'
-    }
+  const reverbOptions = [
+    { key: AudioReverbType.NONE, label: t('ae.none'), icon: '/uni_modules/tuikit-atomic-x/static/assets/live/sound-reverb-none.png' },
+    { key: AudioReverbType.KTV, label: t('ae.ktv'), icon: '/uni_modules/tuikit-atomic-x/static/assets/live/sound-reverb-ktv.png' },
+    { key: AudioReverbType.METALLIC, label: t('ae.metal'), icon: '/uni_modules/tuikit-atomic-x/static/assets/live/sound-reverb-metal.png' },
+    { key: AudioReverbType.DEEP, label: t('ae.deep'), icon: '/uni_modules/tuikit-atomic-x/static/assets/live/sound-reverb-deep.png' },
+    { key: AudioReverbType.LOUD, label: t('ae.loud'), icon: '/uni_modules/tuikit-atomic-x/static/assets/live/sound-reverb-bright.png' },
   ];
 
-  const close = () => {
-    emit('update:modelValue', false);
+  const handleEarMonitorChange = (next) => {
+    setVoiceEarMonitorEnable({ enable: next });
   };
 
-  // 同步状态数据到UI
-  const syncStateToUI = () => {
-    try {
-      console.log('开始同步状态数据...');
-      console.log('状态管理器中的值:', {
-        isEarMonitorOpened: isEarMonitorOpened.value,
-        earMonitorVolume: earMonitorVolume.value,
-        audioChangerType: audioChangerType.value,
-        audioReverbType: audioReverbType.value
-      });
-
-      // 同步耳返状态
-      earMonitor.value = isEarMonitorOpened.value;
-
-      // 同步耳返音量
-      musicVolume.value = earMonitorVolume.value;
-
-      // 同步变声类型 - 确保值有效
-      if (audioChangerType.value !== undefined && typeof audioChangerType.value === 'number') {
-        currentEffect.value = audioChangerType.value;
-        console.log('变声类型同步:', audioChangerType.value);
-      } else {
-        console.warn('变声类型无效:', audioChangerType.value);
-        currentEffect.value = AudioChangerType.NONE;
-      }
-
-      // 同步混响类型 - 确保值有效
-      if (audioReverbType.value !== undefined && typeof audioReverbType.value === 'number') {
-        currentReverb.value = audioReverbType.value;
-        console.log('混响类型同步:', audioReverbType.value);
-      } else {
-        console.warn('混响类型无效:', audioReverbType.value);
-        currentReverb.value = AudioReverbType.NONE;
-      }
-
-      console.log('同步后的本地状态:', {
-        earMonitor: earMonitor.value,
-        musicVolume: musicVolume.value,
-        voiceVolume: voiceVolume.value,
-        currentEffect: currentEffect.value,
-        currentReverb: currentReverb.value
-      });
-    } catch (error) {
-      console.error('同步状态数据失败:', error);
-    }
+  const onEarVolumeInput = (v) => {
+    earMonitorVolume.value = v;
+    setVoiceEarMonitorVolume({ volume: v });
+  };
+  const onEarVolumeChange = (v) => {
+    earMonitorVolume.value = v;
+    setVoiceEarMonitorVolume({ volume: v });
   };
 
-  onMounted(() => {
-    console.log('AudioEffectPanel mounted');
-
-    uni.getSystemInfo({
-      success: (res) => {
-        safeArea.value = res.safeArea;
-      }
-    });
-
-    // 延迟同步状态数据，确保状态管理器已初始化
-    setTimeout(() => {
-      syncStateToUI();
-    }, 100);
-  });
-
-  // 监听抽屉打开状态，每次打开时同步数据
-  watch(() => props.modelValue, (newVal) => {
-    if (newVal) {
-      console.log('抽屉打开，同步状态数据');
-      // 抽屉打开时同步状态数据
-      setTimeout(() => {
-        syncStateToUI();
-      }, 50);
-    }
-  });
-
-  const handleEarMonitorChange = (e) => {
-    earMonitor.value = e.detail.value;
-    setVoiceEarMonitorEnable({
-      enable: earMonitor.value
-    })
+  const onVoiceVolumeInput = (v) => {
+    voiceVolume.value = v;
+    setCaptureVolume({ volume: v });
+  };
+  const onVoiceVolumeChange = (v) => {
+    voiceVolume.value = v;
+    setCaptureVolume({ volume: v });
   };
 
-  const handleSelectMusic = () => {
-    // TODO: 实现选择音乐逻辑
-    console.log('选择音乐');
+  const handleVoiceChange = (key) => {
+    audioChangerType.value = key;
+    setAudioChangerType({ changerType: key });
   };
 
-  const handleMusicVolumeChange = (e) => {
-    musicVolume.value = e.detail.value;
-    setVoiceEarMonitorVolume({
-      volume: musicVolume.value
-    })
+  const handleReverbChange = (key) => {
+    audioReverbType.value = key;
+    setAudioReverbType({ reverbType: key });
   };
-
-  const handlePitchChange = (e) => {
-    pitchValue.value = e.detail.value;
-  };
-
-  const handleEffectChange = (effect) => {
-    console.log('选择效果:', effect, '当前效果:', currentEffect.value);
-    currentEffect.value = effect;
-    setAudioChangerType({
-      changerType: currentEffect.value
-    })
-  };
-
-  const handleReverbChange = (reverb) => {
-    console.log('选择混响:', reverb, '当前混响:', currentReverb.value);
-    currentReverb.value = reverb;
-    setAudioReverbType({
-      reverbType: currentReverb.value
-    })
-  };
-
-  // 音量控制方法
-  const decreaseMusicVolume = () => {
-    const newValue = Math.max(0, musicVolume.value - 10)
-    handleMusicVolumeChange({
-      detail: {
-        value: newValue
-      }
-    })
-  }
-
-  const increaseMusicVolume = () => {
-    const newValue = Math.min(100, musicVolume.value + 10)
-    handleMusicVolumeChange({
-      detail: {
-        value: newValue
-      }
-    })
-  }
 </script>
 
-<style>
-  .bottom-drawer-container {
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    top: 0;
-    z-index: 1000;
-  }
-
-  .drawer-overlay {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background-color: rgba(0, 0, 0, 0.4);
-  }
-
-  .bottom-drawer {
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    background: rgba(34, 38, 46, 1);
-    border-top-left-radius: 32rpx;
-    border-top-right-radius: 32rpx;
-    transform: translateY(100%);
-    transition-property: transform;
-    transition-duration: 0.3s;
-    transition-timing-function: ease;
-    padding: 32rpx;
-  }
-
-  .drawer-open {
-    transform: translateY(0);
-  }
-
-  .drawer-header {
-    flex-direction: row;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 32rpx;
-  }
-
-  .drawer-title {
-    font-size: 32rpx;
-    color: #FFFFFF;
-    font-weight: 500;
-  }
-
-  .drawer-done {
-    font-size: 32rpx;
-    color: #2B65FB;
-  }
-
-  .setting-item {
-    flex-direction: row;
-    justify-content: space-between;
-    align-items: center;
-    height: 88rpx;
-    border-bottom-width: 1px;
-    border-bottom-color: rgba(255, 255, 255, 0.1);
-  }
-
-  .setting-label {
-    font-size: 28rpx;
-    color: #FFFFFF;
-  }
-
-  .setting-value {
-    flex-direction: row;
-    align-items: center;
-  }
-
-  .setting-text {
-    font-size: 28rpx;
-    color: rgba(255, 255, 255, 0.5);
-    margin-right: 8rpx;
-  }
-
-  .setting-arrow {
-    width: 24rpx;
-    height: 24rpx;
-  }
-
-  .volume-settings {
-    margin-top: 32rpx;
-  }
-
-  .section-title {
-    font-size: 28rpx;
-    color: rgba(255, 255, 255, 0.5);
-    margin-bottom: 24rpx;
-  }
-
-  .slider-item {
-    margin-bottom: 24rpx;
-    display: flex;
-    flex-direction: column;
-  }
-
-  .slider-label {
-    font-size: 28rpx;
-    color: #FFFFFF;
-    margin-bottom: 16rpx;
-  }
-
-  /* 自定义控制区域样式 */
-  .custom-slider {
-    flex: 1;
-    flex-direction: row;
-    align-items: center;
-    margin: 0 20rpx;
-  }
-
-  .control-btn {
-    width: 60rpx;
-    height: 60rpx;
-    border-radius: 30rpx;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    border: 2rpx solid #2b6ad6;
-  }
-
-  .minus-btn {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    background-color: rgba(43, 106, 214, 0.1);
-  }
-
-  .plus-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background-color: #2b6ad6;
-  }
-
-  .btn-text {
-    font-size: 32rpx;
-    font-weight: bold;
-    color: #ffffff;
-  }
-
-  .plus-btn .btn-text {
-    color: #ffffff;
-  }
-
-  .progress-section {
-    flex: 1;
-    margin: 0 20rpx;
-    align-items: center;
-    flex-direction: row;
-    justify-content: center;
-  }
-
-  .progress-bar {
-    width: 400rpx;
-    height: 8rpx;
-    background-color: rgba(255, 255, 255, 0.3);
-    border-radius: 4rpx;
-    position: relative;
-    overflow: hidden;
-    margin-right: 16rpx;
-  }
-
-  .progress-fill {
-    height: 8rpx;
-    background-color: #2b6ad6;
-    border-radius: 4rpx;
-  }
-
-  .current-value {
-    font-size: 24rpx;
-    color: #ffffff;
-    font-weight: 600;
-    text-align: center;
-    z-index: 10;
-  }
-
-  .voice-effects,
-  .reverb-effects {
-    margin-top: 32rpx;
-  }
-
-  .effects-grid {
-    flex-direction: row;
-    flex-wrap: wrap;
-    margin: 0 -8rpx;
-  }
-
-  .effect-item {
-
-    margin: 8rpx;
-    /* background-color: rgba(255, 255, 255, 0.1); */
-
-    justify-content: center;
-    align-items: center;
-  }
-
-  .effect-active {
-    background-color: rgba(43, 101, 251, 0.2);
-    border-width: 2rpx;
-    border-color: #2B65FB;
-  }
-
-  .effect-icon-container {
-    width: 112rpx;
-    height: 112rpx;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    border-radius: 16rpx;
-    background-color: rgba(255, 255, 255, 0.1);
-    margin-bottom: 12rpx;
-  }
-
-  .effect-icon {
-    width: 48rpx;
-    height: 48rpx;
-    margin-bottom: 8rpx;
-  }
-
-  .effect-name {
-    font-size: 24rpx;
-    color: #FFFFFF;
-  }
+<style lang="scss">
+  @import './AudioEffectPanel.scss';
 </style>

@@ -70,8 +70,8 @@
 
 import Avatar from '../../../Avatar/Avatar.nvue'
 import Drawer from '../../../Drawer/index.nvue'
-import { useMessageActionState } from '../../../../state_compatible/MessageActionState'
-import { useLoginState } from '../../../../state_compatible/LoginState'
+import { useMessageActionState } from '../../../../state/MessageActionState'
+import { useLoginState } from '../../../../state/LoginState'
 import { buildReactionEmojiSrc } from '../../../../utils/reactionEmoji'
 import { removeMessageReaction } from '../../../../utils/messageReaction'
 

@@ -16,16 +16,19 @@
     >
       <MessageList
         v-if="conversationID"
+        ref="messageListRef"
         :conversationID="conversationID"
         :locateMessage="locateMessage"
         :inputToolbarHeight="inputToolbarHeight"
         :inputPanelHeight="inputPanelHeight"
+        :multiSelectTitle="navigationTitle"
         @onMessageListTap="closeSoftKeyboard"
+        @onMultiSelectModeChange="onMultiSelectModeChange"
       />
     </view>
     
     <MessageInput
-      v-if="conversationID"
+      v-if="conversationID && !isMultiSelectMode"
       ref="messageInputRef"
       :conversationID="conversationID"
       :setOfflinePushInfo="setOfflinePushInfo"
@@ -42,6 +45,10 @@ import { useConversationListState } from '@/uni_modules/tuikit-atomic-x/state/Co
 import { useGroupState } from '@/uni_modules/tuikit-atomic-x/state/GroupState'
 import { useLoginState } from '@/uni_modules/tuikit-atomic-x/state/LoginState'
 import { MessageType } from '@/uni_modules/tuikit-atomic-x/types/message'
+
+// 多选底部操作栏高度，与 MessageList 内 .msg-list__multi-bar 的实际高度保持一致
+// （padding 32rpx + 图标 80rpx + 间距 12rpx + 文字 32rpx + padding 60rpx = 216rpx）
+var MULTI_SELECT_BAR_HEIGHT_RPX = 216
 
 export default {
   components: {
@@ -60,6 +67,7 @@ export default {
       isInGroup: false,
       inputToolbarHeight: 0,
       inputPanelHeight: 0,
+      isMultiSelectMode: false,
       groupState: groupState,
       convState: convState,
       loginState: loginState,
@@ -79,6 +87,8 @@ export default {
       return (this.currentConversation && this.currentConversation.title) || '聊天'
     },
     messageListHeight() {
+      // 多选模式：输入框被底部操作栏取代，列表高度 = 屏幕高 - 操作栏高度
+      if (this.isMultiSelectMode) return this.screenHeight - uni.upx2px(MULTI_SELECT_BAR_HEIGHT_RPX)
       return this.screenHeight - this.inputToolbarHeight - this.inputPanelHeight
     }
   },
@@ -97,6 +107,14 @@ export default {
   },
   onShow() {
     this.convState.getConversationInfo(this.conversationID)
+  },
+  // 多选模式下，系统返回键先退出多选，而不是离开页面
+  onBackPress() {
+    if (!this.isMultiSelectMode) return false
+    var list = this.$refs.messageListRef
+    if (Array.isArray(list)) list = list[0]
+    if (list && list.exitMultiSelect) list.exitMultiSelect()
+    return true
   },
   methods: {
     onNavBack() {
@@ -124,6 +142,15 @@ export default {
     closeSoftKeyboard() {
       var ref = this.$refs.messageInputRef
       if (ref && ref.collapse) ref.collapse()
+    },
+    // 多选模式：输入框被底部操作栏取代；进入多选前先收起键盘 / 面板，并清零输入区高度
+    onMultiSelectModeChange(isOn) {
+      if (isOn) {
+        this.closeSoftKeyboard()
+        this.inputToolbarHeight = 0
+        this.inputPanelHeight = 0
+      }
+      this.isMultiSelectMode = isOn
     },
     setOfflinePushInfo(ctx) {
       // 群组会话用群名；C2C 会话用当前登录用户的昵称（消息发送者本人），fallback userID

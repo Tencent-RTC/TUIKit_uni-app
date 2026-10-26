@@ -1,5 +1,5 @@
 <template>
-  <view style="position: relative; height: 160rpx; padding-top: 80rpx;  background-color: #fff; display: flex; flex-direction: row; justify-content: center; align-items: center;">
+  <view class="list-header" style="position: relative; height: 160rpx; padding-top: 80rpx; display: flex; flex-direction: row; justify-content: center; align-items: center;">
     <image style="width: 21rpx; height: 34rpx; position: absolute; left: 60rpx;" src="/static/images/back-black.png" @tap="handleGoBack" />
     <text>{{ t('liveList.title') }}</text>
     <image style="width: 36rpx; height: 36rpx; position: absolute; right: 60rpx;" src="/static/images/refresh.png" @tap="handlePageRefresh" />
