@@ -1,0 +1,54 @@
+<template>
+  <view class="btn" @tap="handleSwitchCamera">
+    <image class="btn-img" :style="{ width: size + 'px', height: size + 'px' }" src="/uni_modules/tuikit-atomic-x/static/icon/switch-camera.png"></image>
+    <text class="btn-text" v-if="isShowText">
+      翻转
+    </text>
+  </view>
+</template>
+
+<script setup lang="uts">
+  import {
+    useDeviceState,
+    type UseDeviceStateReturn,
+    type SwitchCameraOptions
+  } from '@/uni_modules/tuikit-atomic-x/state/DeviceState.uts';
+
+  const ds: UseDeviceStateReturn = useDeviceState()
+
+  const props = defineProps({
+    size: {
+      type: Number,
+      default: 60,
+    },
+    isShowText: {
+      type: Boolean,
+      default: true,
+    },
+  });
+
+  const handleSwitchCamera = (): void => {
+    const opts: SwitchCameraOptions = { isFront: !ds.isFrontCamera.value }
+    ds.switchCamera(opts)
+  };
+</script>
+
+<style scoped>
+  .btn {
+    margin: 10px 20px;
+  }
+
+  .btn-img {
+    width: 60px;
+    height: 60px;
+    border-radius: 140px;
+  }
+
+  .btn-text {
+    font-size: 12px;
+    color: #d5e0f2;
+    font-weight: 400;
+    text-align: center;
+    margin-top: 10px;
+  }
+</style>

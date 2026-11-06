@@ -1,0 +1,29 @@
+.slider-hit {
+  position: relative;
+  width: 320rpx;
+  height: 60rpx;
+  justify-content: center;
+}
+
+.slider-track {
+  position: relative;
+  border-top-left-radius: 4rpx;
+  border-top-right-radius: 4rpx;
+  border-bottom-left-radius: 4rpx;
+  border-bottom-right-radius: 4rpx;
+  overflow: hidden;
+}
+
+.slider-track-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  border-top-left-radius: 4rpx;
+  border-top-right-radius: 4rpx;
+  border-bottom-left-radius: 4rpx;
+  border-bottom-right-radius: 4rpx;
+}
+
+.slider-thumb {
+  position: absolute;
+}

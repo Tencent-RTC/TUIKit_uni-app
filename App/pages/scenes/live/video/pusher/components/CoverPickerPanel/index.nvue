@@ -34,7 +34,7 @@
   import { computed, reactive } from 'vue';
   import { LIVE_TOKENS } from '../../../../styles/tokens.js';
   import { t } from '../../../../locales';
-  import BaseDrawer from '@/components/live/BaseDrawer/index.nvue';
+  import BaseDrawer from '@/uni_modules/tuikit-atomic-x/components/Common/BaseDrawer/index.nvue';
 
   const props = defineProps({
     modelValue: {

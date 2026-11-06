@@ -12,11 +12,6 @@
     font-weight: 400;
   }
 
-  .audience-grid {
-    flex-direction: column;
-    width: 686rpx;
-  }
-
   .audience-row-wrap {
     flex-direction: column;
     width: 686rpx;
@@ -30,19 +25,9 @@
   }
 
   .audience-divider {
-    flex-direction: row;
     width: 686rpx;
     height: 1rpx;
-  }
-  .audience-divider-left {
-    flex: 1;
-    height: 1rpx;
-    background-image: linear-gradient(to right, rgba(255, 255, 255, 0), rgba(255, 255, 255, 0.16));
-  }
-  .audience-divider-right {
-    flex: 1;
-    height: 1rpx;
-    background-image: linear-gradient(to right, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0));
+    background-image: linear-gradient(to right, rgba(255, 255, 255, 0), rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0));
   }
 
   .audience-marker {
@@ -51,6 +36,7 @@
     font-size: 30rpx;
     text-align: center;
     margin-right: 28rpx;
+    lines: 1;
   }
 
   .audience-avatar-container {

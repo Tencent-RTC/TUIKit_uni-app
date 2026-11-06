@@ -1,0 +1,76 @@
+.live-ended-view {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #06080d;
+}
+
+.live-ended-bg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 750rpx;
+}
+
+.live-ended-close {
+  position: absolute;
+  right: 36rpx;
+  width: 68rpx;
+  height: 68rpx;
+  border-radius: 34rpx;
+  justify-content: center;
+  align-items: center;
+}
+
+.live-ended-close-icon {
+  width: 46rpx;
+  height: 46rpx;
+}
+
+.live-ended-content {
+  position: absolute;
+  left: 56rpx;
+  right: 56rpx;
+  flex-direction: column;
+  align-items: center;
+}
+
+.live-ended-title {
+  color: #FFFFFF;
+  font-size: 54rpx;
+  font-weight: 650;
+  line-height: 68rpx;
+  letter-spacing: 0.8rpx;
+}
+
+.live-ended-avatar {
+  margin-top: 72rpx;
+  width: 172rpx;
+  height: 172rpx;
+  border-radius: 86rpx;
+  border-width: 6rpx;
+  border-style: solid;
+  border-color: rgba(255, 255, 255, 0.9);
+  justify-content: center;
+  align-items: center;
+  overflow: hidden;
+}
+
+.live-ended-host {
+  margin-top: 34rpx;
+  color: #FFFFFF;
+  font-size: 40rpx;
+  font-weight: 650;
+  line-height: 56rpx;
+  lines: 1;
+  text-overflow: ellipsis;
+}
+
+.live-ended-copy {
+  margin-top: 14rpx;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 28rpx;
+  line-height: 42rpx;
+}

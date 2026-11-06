@@ -95,9 +95,6 @@
   let comboTickTimer = null;
   let comboStartAt = 0;
 
-  // 本地演示余额（与 GiftPicker 一致，不阻断真实 sendGift）
-  const balance = ref(999999);
-
   // ============ 倒计时环（逐帧驱动两 leaf 的 rotate，不用 CSS transition） ============
   const rightLeafDeg = ref(-180);
   const leftLeafDeg = ref(-180);
@@ -224,14 +221,11 @@
   }
 
   // ============ 发送一次连击 ============
-  // 每次发送：扣余额、累加计数、涟漪、重启倒计时、节流合并真实发送、
+  // 每次发送：累加计数、涟漪、重启倒计时、节流合并真实发送、
   // 并通知 video 播一次 SVGA（每次连击都追加一次串行播放）。
   function doSend() {
     const gift = currentGift.value;
     if (!gift) return false;
-    const price = Math.max(0, Math.floor(Number(gift.coins) || 0));
-    if (price > balance.value) return false;
-    balance.value -= price;
     comboCount.value += 1;
     restartComboTimer();
     spawnRipple();

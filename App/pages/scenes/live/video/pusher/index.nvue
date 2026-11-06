@@ -1,11 +1,20 @@
 <template>
-  <view class="live-container" @click="handleHideInput" :style="{
-                                          height: systemInfo?.windowHeight + 'px',
-                                          width: systemInfo?.safeArea?.width + 'px',
-                                       }">
-    <LiveStreamView v-if="liveID && liveID.length > 0 && !isLiveEnded" :liveID="liveID || ''" :isAnchor="true" :templateLayout="templateLayout" :isLiving="isStartLive" :onStreamViewClick="ShowAnchorViewClickPanel"></LiveStreamView>
+  <view class="live-container" @click="handleHideInput" :style="{height: systemInfo?.windowHeight + 'px', width: systemInfo?.safeArea?.width + 'px'}">
+    <LiveStreamView ref="liveStreamRef" v-if="liveID && liveID.length > 0 && !isLiveEnded" :liveID="liveID || ''" :isAnchor="true" :templateLayout="templateLayout" :isLiving="isStartLive" :currentLoginUserId="loginUserInfo?.userID || ''" :enableClickPanel="true" :onStreamViewClick="ShowAnchorViewClickPanel"></LiveStreamView>
     <BeforeLiveView v-if="!isStartLive && !isLiveEnded" v-model:templateLayout="templateLayout" :liveID="liveID" @back="goBackToTabBar" @tip="showTip" @started="onStartLive" />
-    <LivingView v-if="isStartLive" :liveID="liveID" :safeArea="safeArea" @tip="showTip" @ended="onLiveEnded" @receiveGift="onBarrageReceiveGift" />
+    <LivingView
+      v-if="isStartLive"
+      :liveID="liveID"
+      :safeArea="safeArea"
+      :manageUser="coGuestManageTarget"
+      :showManage="isShowCoGuestManage"
+      @update:showManage="isShowCoGuestManage = $event"
+      @tip="showTip"
+      @ended="onLiveEnded"
+      @receiveGift="onBarrageReceiveGift"
+      @stageTap="onAnchorStageTap"
+    />
+
     <LiveSummaryView
       v-if="isLiveEnded"
       :summary="liveSummary"
@@ -15,43 +24,51 @@
       :pausedSeconds="endedPausedSeconds"
       @close="goBackToTabBar"
     />
-    <GiftPlayer ref="giftPlayerRef" v-model="isLargeSizeGiftPlayer" :url="giftInfo?.resourceURL" :safeArea="safeArea" @finished="svgaPlayerFinished" />
-    <LiveToast
-      v-if="tipVisible"
-      :key="tipSeq"
-      v-model="tipVisible"
-      :title="tipTitle"
-      :duration="2000"
-    />
+    <GiftPlayer v-if="isStartLive" ref="giftPlayerRef" v-model="isLargeSizeGiftPlayer" :url="giftInfo?.resourceURL" :safeArea="safeArea" @finished="svgaPlayerFinished" />
+    <LiveToast :duration="2000"/>
   </view>
 </template>
 
 <script setup lang="ts">
   import { reactive, ref, computed, watch, nextTick, onMounted } from 'vue';
-  import { onLoad, onBackPress } from '@dcloudio/uni-app';
+  import { onLoad, onBackPress, onShow } from '@dcloudio/uni-app';
   import { GiftPlayer, giftService } from '@/uni_modules/tuikit-atomic-x/components/Gift';
   import { AudioChangerType, AudioReverbType, useAudioEffectState } from '@/uni_modules/tuikit-atomic-x/state/AudioEffectState';
   import { useBaseBeautyState } from '@/uni_modules/tuikit-atomic-x/state/BaseBeautyState';
-  import { useDeviceState } from '@/uni_modules/tuikit-atomic-x/state/DeviceState';
+  import { DeviceStatus, MirrorType, useDeviceState } from '@/uni_modules/tuikit-atomic-x/state/DeviceState';
+  import { useLiveSeatState } from '@/uni_modules/tuikit-atomic-x/state/LiveSeatState';
   import { useLoginState } from '@/uni_modules/tuikit-atomic-x/state/LoginState';
+  import permission from '@/uni_modules/tuikit-atomic-x/utils/permission';
   import { useLiveListState } from '@/uni_modules/tuikit-atomic-x/state/LiveListState';
   import { useLiveSummaryState } from '@/uni_modules/tuikit-atomic-x/state/LiveSummaryState';
   import { setSdkLanguageFromSystem } from '@/uni_modules/tuikit-atomic-x/utils/setSdkLanguageFromSystem';
   import { BeforeLiveView, LiveSummaryView, LivingView } from './views';
   import LiveStreamView from '@/uni_modules/tuikit-atomic-x/components/LiveStreamView';
-  import LiveToast from '@/uni_modules/tuikit-atomic-x/components/LiveToast.nvue';
+  import LiveToast from '@/uni_modules/tuikit-atomic-x/components/Common/LiveToast/index.nvue';
+  import { showLiveToast } from '@/uni_modules/tuikit-atomic-x/components/Common/LiveToast/index.ts';
 
   const { loginUserInfo } = useLoginState();
-  const liveID = ref(`live_${uni.$userID}`);
+  const liveID = computed(() => {
+    const uid = loginUserInfo.value?.userID || '';
+    return uid ? `live_${uid}` : '';
+  });
   uni.$localGuestStatus = 'IDLE'
   const { setVoiceEarMonitorEnable,
     setVoiceEarMonitorVolume,
     setAudioChangerType,
     setAudioReverbType,
   } = useAudioEffectState()
-  const { setSmoothLevel, setWhitenessLevel, setRuddyLevel, resetRealUiValues } = useBaseBeautyState()
-  const { openLocalCamera, openLocalMicrophone, closeLocalMicrophone, closeLocalCamera } = useDeviceState();
-  const { currentLive } = useLiveListState(liveID.value);
+  const { setSmoothLevel, setWhitenessLevel, setRuddyLevel, resetRealUiValues, smoothLevel, whitenessLevel, ruddyLevel } = useBaseBeautyState()
+
+  // 对齐 iOS BeautyPreferences.restore():重新开摄像头后把当前美颜档位再下发一次。
+  const applyBeautyPrefs = () => {
+    setSmoothLevel({ smoothLevel: smoothLevel.value });
+    setWhitenessLevel({ whitenessLevel: whitenessLevel.value });
+    setRuddyLevel({ ruddyLevel: ruddyLevel.value });
+  };
+  const { openLocalCamera, openLocalMicrophone, closeLocalMicrophone, closeLocalCamera, switchMirror, setCaptureVolume, cameraStatus, isFrontCamera } = useDeviceState();
+  const { muteMicrophone, unmuteMicrophone } = useLiveSeatState(liveID.value);
+  const { currentLive } = useLiveListState();
   const { summaryData } = useLiveSummaryState(liveID.value);
 
   enum PusherStatus {
@@ -61,9 +78,6 @@
   }
 
   const pusherState = reactive({ liveStatus: PusherStatus.PREPARE });
-  const tipVisible = ref(false);
-  const tipSeq = ref(0);
-  const tipTitle = ref('');
   const systemInfo = ref({});
   const safeArea = ref({
     left: 0,
@@ -82,6 +96,7 @@
   const giftInfo = ref({});
   const isLargeSizeGiftPlayer = ref(false);
   const liveSummary = ref(null);
+  const endStatsViewers = ref(null);
   const giftPlayerRef = ref();
   const { showGift, onGiftFinished } = giftService({
     roomId: liveID.value,
@@ -90,17 +105,15 @@
 
   const isStartLive = computed(() => pusherState.liveStatus === PusherStatus.PUSHER);
   const isLiveEnded = computed(() => pusherState.liveStatus === PusherStatus.SUMMARY);
+  const isShowCoGuestManage = ref(false);
+  const coGuestManageTarget = ref({});
 
-  const showTip = (title: string) => {
-    tipTitle.value = title;
-    tipVisible.value = false;
-    nextTick(() => {
-      tipSeq.value++;
-      tipVisible.value = true;
-    });
-  };
+  const showTip = (title: string) => showLiveToast(title);
 
   const clearAudioEffectSet = () => {
+    setCaptureVolume({
+      volume: 100
+    })
     setVoiceEarMonitorEnable({
       enable: false
     })
@@ -122,16 +135,32 @@
     resetRealUiValues();
   }
 
+  const toMsTimestamp = (value: unknown): number => {
+    const n = Number(value);
+    if (!Number.isFinite(n) || n <= 0) return 0;
+    if (n > 1e12) return Math.floor(n);
+    if (n > 1e9) return Math.floor(n * 1000);
+    return 0;
+  };
+
   const handleHideInput = () => {
     uni.hideKeyboard()
   }
 
+  const liveStreamRef = ref<any>(null);
+
+  const onAnchorStageTap = (point: { x: number; y: number }) => {
+    liveStreamRef.value?.handleStageTap?.({ x: Number(point?.x), y: Number(point?.y) });
+  };
+
   const ShowAnchorViewClickPanel = (userInfo) => {
-    uni.$emit('anchorStreamViewClick', userInfo);
+    const uid = userInfo?.userID || '';
+    if (!uid || uid === (loginUserInfo.value?.userID || '')) return;
+    coGuestManageTarget.value = userInfo;
+    isShowCoGuestManage.value = true;
   };
 
   const goBackToTabBar = () => {
-    clearAudioEffectSet();
     clearBeautyPanelSet();
     closeLocalMicrophone();
     closeLocalCamera();
@@ -148,33 +177,74 @@
     });
   };
 
-  const toMsTimestamp = (value: unknown): number => {
-    const n = Number(value);
-    if (!Number.isFinite(n) || n <= 0) return 0;
-    if (n > 1e12) return Math.floor(n);
-    if (n > 1e9) return Math.floor(n * 1000);
-    return 0;
-  };
-
-  watch(() => currentLive.value?.createTime, (createTime) => {
-    if (liveStartAt.value > 0) return;
-    liveStartAt.value = toMsTimestamp(createTime);
-  }, { immediate: true });
-
-  watch(() => currentLive.value?.seatLayoutTemplateID, (templateID) => {
-    const n = Number(templateID);
-    if (n > 0 && n !== templateLayout.value) {
-      templateLayout.value = n;
-    }
-  }, { immediate: true });
-
   const onStartLive = () => {
+    uni.$pusherSelfMuted = false;
+    endStatsViewers.value = null;
     pusherState.liveStatus = PusherStatus.PUSHER;
   };
 
-  const onLiveEnded = (pausedSeconds = 0) => {
+  let mutedByBackground = false;
+  let cameraClosedByBackground = false;
+  let frontBeforeBackground = true;
+  let mirrorInitialized = false;
+
+  uni.$on('pusher:pauseChanged', (paused: boolean) => {
+    uni.$pusherPaused = !!paused;
+    if (paused) {
+      cameraClosedByBackground = false;
+      mutedByBackground = false;
+    }
+  });
+
+  const handleAppHide = () => {
+    if (permission.isPermissionPrompting()) return;
+    uni.$appIsActive = false;
+    if (!isStartLive.value) return;
+    if (cameraStatus.value === DeviceStatus.ON) {
+      cameraClosedByBackground = true;
+      frontBeforeBackground = isFrontCamera.value !== false;
+      closeLocalCamera();
+    }
+    if (uni.$pusherSelfMuted === true) return;
+    mutedByBackground = true;
+    muteMicrophone({ liveID: liveID.value });
+  };
+
+  const handleAppShow = () => {
+    uni.$appIsActive = true;
+    if (!cameraClosedByBackground && !mutedByBackground) return;
+    if (!isStartLive.value) {
+      cameraClosedByBackground = false;
+      mutedByBackground = false;
+      return;
+    }
+    if (cameraClosedByBackground) {
+      cameraClosedByBackground = false;
+      openLocalCamera({ isFront: frontBeforeBackground });
+      applyBeautyPrefs();
+    }
+    if (mutedByBackground) {
+      mutedByBackground = false;
+      if (uni.$pusherSelfMuted === true) {
+        muteMicrophone({ liveID: liveID.value });
+        return;
+      }
+      unmuteMicrophone({ liveID: liveID.value });
+      if (uni.$appIsActive === false || uni.$pusherPaused === true) {
+        muteMicrophone({ liveID: liveID.value });
+      }
+    }
+  };
+  uni.onAppHide?.(handleAppHide);
+  uni.onAppShow?.(handleAppShow);
+
+  const onLiveEnded = (pausedSeconds = 0, statisticsData = null) => {
+    const viewers = Number(statisticsData?.totalViewers);
+    if (Number.isFinite(viewers) && viewers > 0) {
+      endStatsViewers.value = viewers;
+      liveSummary.value = { ...(liveSummary.value || {}), totalViewers: viewers };
+    }
     if (pusherState.liveStatus !== PusherStatus.PUSHER) return;
-    clearAudioEffectSet();
     clearBeautyPanelSet();
     endedAt.value = Date.now();
     endedPausedSeconds.value = pausedSeconds || 0;
@@ -195,15 +265,23 @@
     onGiftFinished();
   }
 
+  watch(() => currentLive.value?.createTime, (createTime) => {
+    if (liveStartAt.value > 0) return;
+    liveStartAt.value = toMsTimestamp(createTime);
+  }, { immediate: true });
+
+  watch(() => currentLive.value?.seatLayoutTemplateID, (templateID) => {
+    const n = Number(templateID);
+    if (n > 0 && n !== templateLayout.value) {
+      templateLayout.value = n;
+    }
+  }, { immediate: true });
+
   watch(summaryData, (val) => {
     if (val) {
-      liveSummary.value = { ...val };
-    }
-  }, { immediate: true, deep: true });
-
-  watch(() => loginUserInfo.value?.userID, (newUserId, oldUserId) => {
-    if (newUserId) {
-      liveID.value = `live_${newUserId}`;
+      const next = { ...val };
+      if (endStatsViewers.value !== null) next.totalViewers = endStatsViewers.value;
+      liveSummary.value = next;
     }
   }, { immediate: true, deep: true });
 
@@ -220,19 +298,43 @@
       const pages = getCurrentPages();
       if (pages.length > 0) {
         const currentPage = pages[pages.length - 1];
-        currentPage.$page.style.disableSwipeBack = true;
+        if (currentPage && currentPage.$page && currentPage.$page.style) {
+          currentPage.$page.style.disableSwipeBack = true;
+        }
       }
     }
   });
 
+  const permissionBaseline = {
+    camera: !permission.isMediaPermissionDenied('camera'),
+    microphone: !permission.isMediaPermissionDenied('microphone'),
+  };
+
+  const redirectToEntryForPermission = () => {
+    const cameraRevoked = permissionBaseline.camera && permission.isMediaPermissionDenied('camera');
+    const micRevoked = permissionBaseline.microphone && permission.isMediaPermissionDenied('microphone');
+    if (!cameraRevoked && !micRevoked) return;
+    showTip(t('anchor.permissionRevoked'));
+    goBackToTabBar();
+  };
+
+  onShow(() => {
+    redirectToEntryForPermission();
+  });
+
   onMounted(() => {
     setSdkLanguageFromSystem()
+    clearAudioEffectSet();
     uni.setKeepScreenOn({
       keepScreenOn: true,
     });
     openLocalCamera({
       isFront: true,
     });
+    if (!mirrorInitialized) {
+      mirrorInitialized = true;
+      switchMirror({ mirrorType: MirrorType.ENABLE });
+    }
     openLocalMicrophone();
     uni.getSystemInfo({
       success: (res) => {

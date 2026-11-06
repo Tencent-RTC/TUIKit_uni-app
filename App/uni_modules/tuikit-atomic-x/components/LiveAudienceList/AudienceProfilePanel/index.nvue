@@ -23,7 +23,7 @@
 
 <script setup>
   import { ref, computed, watch } from 'vue';
-  import BaseDrawer from '@/components/live/BaseDrawer/index.nvue';
+  import BaseDrawer from '@/uni_modules/tuikit-atomic-x/components/Common/BaseDrawer/index.nvue';
   import { t } from '../../locales';
   import { isUserFollowed, toggleUserFollowed } from '@/uni_modules/tuikit-atomic-x/utils/followStore';
 

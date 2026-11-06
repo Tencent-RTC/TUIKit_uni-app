@@ -56,21 +56,13 @@
         </view>
       </view>
     </BaseDrawer>
-
-    <LiveToast
-      v-if="tipVisible"
-      :key="tipSeq"
-      v-model="tipVisible"
-      :title="tipTitle"
-      :duration="2000"
-    />
   </view>
 </template>
 
 <script setup>
   import { computed, ref, watch, nextTick } from 'vue';
-  import BaseDrawer from '@/components/live/BaseDrawer/index.nvue';
-  import LiveToast from '@/uni_modules/tuikit-atomic-x/components/LiveToast.nvue';
+  import BaseDrawer from '@/uni_modules/tuikit-atomic-x/components/Common/BaseDrawer/index.nvue';
+  import { showLiveToast } from '@/uni_modules/tuikit-atomic-x/components/Common/LiveToast/index.ts';
   import { t } from '../../../../locales';
   import { enableMultiPlaybackQuality, queryPlaybackQualityList, switchPlaybackQuality } from '@/uni_modules/tuikit-atomic-x';
   import { useLiveListState } from '@/uni_modules/tuikit-atomic-x/state/LiveListState';
@@ -104,9 +96,6 @@
   const qualityVisible = ref(false);
   const qualityList = ref([]);
   const currentQuality = ref(-1);
-  const tipVisible = ref(false);
-  const tipSeq = ref(0);
-  const tipTitle = ref(t('morePanel.notSupported'));
 
   const innerVisible = computed({
     get: () => props.modelValue,
@@ -124,14 +113,7 @@
     }
   });
 
-  const showTip = (title) => {
-    tipTitle.value = title;
-    tipVisible.value = false;
-    nextTick(() => {
-      tipSeq.value++;
-      tipVisible.value = true;
-    });
-  };
+  const showTip = (title) => showLiveToast(title);
 
   const onCapabilityTap = (item) => {
     if (item.id === 'quality') {

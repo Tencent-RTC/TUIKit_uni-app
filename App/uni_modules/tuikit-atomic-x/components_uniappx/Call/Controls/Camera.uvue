@@ -1,0 +1,60 @@
+<template>
+  <view class="btn" @tap="handleCamera">
+    <image class="btn-img" :src="cameraIcon"></image>
+    <text class="btn-text">
+      {{ cameraText }}
+    </text>
+  </view>
+</template>
+
+<script setup lang="uts">
+  import { computed } from "vue";
+  import {
+    useDeviceState,
+    DeviceStatus,
+    type UseDeviceStateReturn,
+    type OpenLocalCameraOptions
+  } from '@/uni_modules/tuikit-atomic-x/state/DeviceState.uts';
+
+  const ds: UseDeviceStateReturn = useDeviceState()
+
+  const cameraOnSrc: string = '/uni_modules/tuikit-atomic-x/static/icon/camera-on.png'
+  const cameraOffSrc: string = '/uni_modules/tuikit-atomic-x/static/icon/camera-off.png'
+
+  const cameraIcon = computed((): string => {
+    return ds.cameraStatus.value == DeviceStatus.ON ? cameraOnSrc : cameraOffSrc
+  })
+
+  const cameraText = computed((): string => {
+    return ds.cameraStatus.value == DeviceStatus.ON ? '摄像头已开' : '摄像头已关'
+  })
+
+  const handleCamera = (): void => {
+    if (ds.cameraStatus.value == DeviceStatus.ON) {
+      ds.closeLocalCamera()
+    } else {
+      const opts: OpenLocalCameraOptions = { isFront: ds.isFrontCamera.value }
+      ds.openLocalCamera(opts)
+    }
+  };
+</script>
+
+<style>
+  .btn {
+    margin: 10px 20px;
+  }
+
+  .btn-img {
+    width: 60px;
+    height: 60px;
+    border-radius: 140px;
+  }
+
+  .btn-text {
+    font-size: 12px;
+    color: #d5e0f2;
+    font-weight: 400;
+    text-align: center;
+    margin-top: 10px;
+  }
+</style>

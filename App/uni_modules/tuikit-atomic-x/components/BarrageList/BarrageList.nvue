@@ -1,17 +1,14 @@
 <template>
   <view class="barrage-container">
-    <!-- 隐藏的文字尺子：仅用于 canvas measureText 精确测宽，不显示、不参与绘制/转图。
-         nvue iOS 实测 measureText 可用（canvasToTempFilePath 不可用，故不走转图方案）。 -->
     <canvas canvas-id="barrageRuler" id="barrageRuler" class="barrage-ruler"></canvas>
 
-    <list class="chat-list" scroll-y :show-scrollbar="false" :style="{ top: topPx + 'px', opacity: listReady ? 1 : 0, width: barWidthRpx }" @scroll="onListScroll" ref="chatListRef">
+    <list class="chat-list" scroll-y :show-scrollbar="false" :style="{ top: topPx + 'px', opacity: listReady ? 1 : 0, width: barWidthRpx, visibility: hidden ? 'hidden' : 'visible' }" @scroll="onListScroll" @touchstart="onUserTouchList" ref="chatListRef">
       <cell class="top-spacer-cell" :style="{ height: topSpacerPx + 'px' }"></cell>
       <cell class="welcome-cell" ref="welcomeCellRef">
         <view class="welcome-content-wrapper" :style="{ maxWidth: barWidthRpx }">
           <text class="welcome-text">{{ welcomeText }}</text>
         </view>
       </cell>
-      <!-- 勿加 render-whole:会阻断 JS 对 cell 内子元素的 getComponentRect 实测 -->
       <cell class="chat-item" :style="{ maxWidth: barWidthRpx }" v-if="mixMessageList.length > 0" v-for="(message) in mixMessageList" :key="msgKey(message)" @tap="onItemTap(message)">
         <view class="message-content-wrapper" :style="{ opacity: enteringSeqs.includes(msgKey(message)) ? 0 : 1, maxWidth: barWidthRpx }" :ref="(el: any) => collectCellRef(el, msgKey(message))">
           <view class="nickname-content-gift" :style="{ maxWidth: barWidthRpx }" v-if="message?.gift">
@@ -19,15 +16,14 @@
               <image class="live-level-bg" :src="msgLevelBadge(message)" mode="scaleToFill" />
               <text class="live-level-num">{{ msgLevel(message) }}</text>
             </view>
-            <text class="chat-nickname" numberOfLines="1">{{ message?.sender?.userName || message?.sender?.userID }}</text>
+            <text class="chat-nickname" :style="{ maxWidth: nickMaxWidthRpx + 'rpx' }" numberOfLines="1">{{ nickTextOf(message) }}</text>
             <view class="gift-row">
               <text class="gift-prefix">{{ t('bl.giftPrefix') }}</text>
-              <text class="gift-name">{{ message?.textContent || '' }}</text>
+              <text class="gift-name" :style="{ maxWidth: giftNameWidthPx(message) + 'px' }">{{ giftNameText(message) }}</text>
               <image class="gift-icon" :src="message?.gift?.iconURL || ''" alt="" />
               <text class="gift-count">×{{ message?.count || '1' }}</text>
             </view>
           </view>
-          <!-- 文本消息:measureText 测宽 + 手动折行,逐行 nowrap(规避 weex flex-wrap bug);首行内联头部 -->
           <view class="nickname-content-wrapper" v-else>
             <view class="msg-line" v-for="(line, lidx) in msgLines(message)" :key="lidx">
               <template v-if="lidx === 0">
@@ -42,7 +38,7 @@
                     </view>
                   </view>
                 </view>
-                <text class="chat-nickname" numberOfLines="1">{{ (message?.sender?.userName || message?.sender?.userID) }}：</text>
+                <text class="chat-nickname" :style="{ maxWidth: nickMaxWidthRpx + 'rpx' }" numberOfLines="1">{{ nickTextOf(message) }}：</text>
               </template>
               <template v-for="(run, ridx) in line" :key="'r' + ridx">
                 <text v-if="run.type === 'text'" class="chat-content-char">{{ run.text }}</text>
@@ -55,7 +51,7 @@
       <cell ref="ListBottom" style="height: 10rpx;"></cell>
     </list>
 
-    <view class="new-message-pill" :style="{ top: pillTopPx + 'px', opacity: unreadCount > 0 ? 1 : 0 }" :userInteractionEnabled="unreadCount > 0" @tap="onNewMessagePillTap">
+    <view class="new-message-pill" :style="{ top: pillTopPx + 'px', opacity: unreadCount > 0 ? 1 : 0, visibility: hidden ? 'hidden' : 'visible' }" :userInteractionEnabled="unreadCount > 0" @tap="onNewMessagePillTap">
       <text class="new-message-pill-count">{{ unreadCount }}</text>
       <text class="new-message-pill-text">{{ t('bl.newMessages') }}</text>
     </view>
@@ -80,6 +76,7 @@
     topPx?: number,
     liveID?: string,
     width?: number,
+    hidden?: boolean,
   }>();
 
   const emit = defineEmits(['itemTap', 'receiveGift']);
@@ -96,8 +93,7 @@
   const barWidthRpx = computed(() => barWidth.value + 'rpx');
 
   const { loginUserInfo } = useLoginState();
-  const msgLevel = (message: any): number =>
-    resolveMsgLevel(message, uni.$userID, Number(loginUserInfo.value?.level));
+  const msgLevel = (message: any): number => resolveMsgLevel(message);
   const msgLevelBadge = (message: any): string => levelBadgeUrl(msgLevel(message));
 
   const { currentLive } = useLiveListState();
@@ -106,20 +102,39 @@
   const { messageList } = useBarrageState(liveID.value);
   const { addGiftListener, removeGiftListener } = useGiftState(liveID.value);
 
-  const isOwner = (message: any): boolean =>
-    !!(message?.sender?.userID && currentLive.value?.liveOwner?.userID
-      && message.sender.userID === currentLive.value.liveOwner.userID);
+  const isOwner = (message: any): boolean => !!message?.__owner;
 
   const isRenderableBarrage = (m: any): boolean => m?.messageType !== BarrageType.CUSTOM;
 
-  const mixMessageList = ref<any[]>((messageList.value || []).filter(isRenderableBarrage));
+  const snapshotMessage = (m: any) => {
+    const snap: any = {
+      ...m,
+      sender: m?.sender ? { ...m.sender } : m?.sender,
+      gift: m?.gift ? { ...m.gift } : m?.gift,
+      recipient: m?.recipient ? { ...m.recipient } : m?.recipient,
+    };
+    if (!(Number(snap?.sender?.level) > 0) && snap?.sender?.userID
+      && snap.sender.userID === uni.$userID) {
+      snap.sender = { ...(snap.sender || {}), level: Number(loginUserInfo.value?.level) || 0 };
+    }
+    snap.__owner = !!(snap?.sender?.userID && currentLive.value?.liveOwner?.userID
+      && snap.sender.userID === currentLive.value.liveOwner.userID);
+    return snap;
+  };
 
-  const FONT_PX = uni.upx2px(26);            // 内容字号
-  const EMOJI_PX = uni.upx2px(34);           // 单表情占宽(32 图 + 2 右边距)
-  const NICK_MAX_PX = uni.upx2px(100);       // 昵称最大宽(与 .chat-nickname max-width 一致)
-  const NICK_MARGIN_PX = uni.upx2px(8);      // 昵称右边距
-  const BADGE_PX = uni.upx2px(68 + 8);       // 等级徽章宽 + 右边距
-  const ANCHOR_PX = uni.upx2px(66);          // 主播标签整体占宽(略偏大,偏安全)
+  const mixMessageList = ref<any[]>((messageList.value || []).filter(isRenderableBarrage).map(snapshotMessage));
+
+  const FONT_PX = uni.upx2px(26);
+  const EMOJI_PX = uni.upx2px(34);
+  const NICK_MAX_CHARS = 20;
+  const NICK_MAX_RATIO = 0.45;
+  const nickMaxWidthRpx = computed(() =>
+    Math.max(160, Math.round((barWidth.value - 24) * NICK_MAX_RATIO))
+  );
+  const nickMaxWidthPx = computed(() => uni.upx2px(nickMaxWidthRpx.value));
+  const NICK_MARGIN_PX = uni.upx2px(8);
+  const BADGE_PX = uni.upx2px(68 + 8);
+  const ANCHOR_PX = uni.upx2px(66);
   const contentWidthPx = computed(() => uni.upx2px(barWidth.value - 24));
 
   let rulerCtx: any = null;
@@ -133,7 +148,6 @@
       return (m && m.width > 0) ? m.width : null;
     } catch (e) { return null; }
   };
-  // safety 1.05:抵消 600 字重与字距,宁可略偏大(提前换行)也不溢出。
   const ruler = createCharRuler({ fontPx: FONT_PX, safety: 1.05, measureRaw: rawMeasure });
 
   const initRuler = () => {
@@ -149,8 +163,8 @@
       rulerCtx = ctx;
       if (ok) {
         rulerReady.value = true;
-        ruler.reset();            // 清掉就绪前的估算缓存
-        rulerVersion.value++;     // 触发一次重排,让已渲染消息用上精确宽
+        ruler.reset();
+        rulerVersion.value++;
       }
     } catch (e) { /* ignore: 尺子不可用时全程走估算,CJK 仍精确 */ }
   };
@@ -161,8 +175,8 @@
     const cached = layoutCache.get(key);
     if (cached) return cached;
     const segs = parseTextToSegments(message?.textContent || '');
-    const nickText = (message?.sender?.userName || message?.sender?.userID || '') + '：';
-    const nickPx = Math.min(ruler.measureStrPx(nickText), NICK_MAX_PX) + NICK_MARGIN_PX;
+    const nickText = nickTextOf(message) + '：';
+    const nickPx = Math.min(ruler.measureStrPx(nickText), nickMaxWidthPx.value) + NICK_MARGIN_PX;
     const headerPx = BADGE_PX + (isOwner(message) ? ANCHOR_PX : 0) + nickPx;
     const line0AvailPx = Math.max(0, contentWidthPx.value - headerPx);
     const lines = wrapSegmentsIntoLines(segs, {
@@ -171,17 +185,52 @@
       emojiPx: EMOJI_PX,
       measureCharPx: ruler.measureCharPx,
     });
-    if (layoutCache.size > 600) layoutCache.clear(); // 简单防膨胀
+    if (layoutCache.size > 600) layoutCache.clear();
     layoutCache.set(key, lines);
     return lines;
+  };
+
+  const GIFT_NAME_MARGIN_PX = uni.upx2px(6);
+  const GIFT_ICON_PX = uni.upx2px(24);
+  const GIFT_COUNT_MAX_PX = uni.upx2px(110);
+
+  const giftNameWidthPx = (message: any): number => {
+    if (rulerVersion.value < 0) return 0;
+    const nickText = nickTextOf(message);
+    const nickPx = Math.min(ruler.measureStrPx(nickText), nickMaxWidthPx.value) + NICK_MARGIN_PX;
+    const prefixPx = ruler.measureStrPx(t('bl.giftPrefix')) + GIFT_NAME_MARGIN_PX;
+    const countStr = '×' + String(message?.count || '1');
+    const countPx = Math.min(ruler.measureStrPx(countStr), GIFT_COUNT_MAX_PX) + GIFT_NAME_MARGIN_PX;
+    const reservedPx = BADGE_PX + nickPx + prefixPx + GIFT_NAME_MARGIN_PX + GIFT_ICON_PX + countPx;
+    const avail = contentWidthPx.value - reservedPx;
+    return Math.max(0, Math.round(avail));
+  };
+
+  const nickTextOf = (message: any): string => {
+    const raw = String(message?.sender?.userName || message?.sender?.userID || '');
+    return raw.length > NICK_MAX_CHARS ? `${raw.slice(0, NICK_MAX_CHARS)}…` : raw;
+  };
+
+  const giftNameText = (message: any): string => {
+    const name = String(message?.textContent || '');
+    const avail = giftNameWidthPx(message);
+    if (avail <= 0 || ruler.measureStrPx(name) <= avail) return name;
+    const chars = Array.from(name);
+    const ellipsisPx = ruler.measureStrPx('…');
+    let acc = 0;
+    let kept = '';
+    for (let i = 0; i < chars.length; i++) {
+      const w = ruler.measureCharPx(chars[i]);
+      if (acc + w + ellipsisPx > avail) break;
+      acc += w;
+      kept += chars[i];
+    }
+    return kept + '…';
   };
 
   const dom = uni.requireNativePlugin('dom');
   const ListBottom = ref('ListBottom');
 
-  // nvue 的 dom / animation 是「向页面实例派发任务」:页面(如关闭直播后 redirectTo)已销毁还调用,
-  // 原生侧会报 [JS Framework] Failed to receiveTasks, instance (N) is not available。
-  // 这里统一登记延时任务,卸载时清空 + 置 isDestroyed,卸载后不再派发。
   const pendingTimers = new Set<any>();
   let isDestroyed = false;
   const later = (fn: () => void, ms: number): any => {
@@ -199,8 +248,8 @@
     pendingTimers.clear();
   };
 
-  // 延迟 100ms 等 weex 的 list 布局稳定后再滚,否则定位失败、新消息停在视口外。
   const scrollToBottom = () => {
+    programmaticScrollUntil = Date.now() + 600;
     nextTick(() => {
       later(() => {
         if (isDestroyed) return;
@@ -214,29 +263,18 @@
     });
   };
 
-  // 未读提示:离开底部(看历史)后新消息只累计未读、不自动滚底;点提示条或滚回底部即恢复跟随并清零。
-  const NEAR_BOTTOM_THRESHOLD = 16; // px
+  const NEAR_BOTTOM_THRESHOLD = 16;
   const following = ref(true);
-
-  // 提示条层级:nvue 下 fixed 元素的实际层级由原生视图创建顺序决定(跨组件 z-index 不可靠)。
-  // 故提示条与 chat-list 一样常驻(用 opacity 切显隐、不用 v-if 销毁重建,nvue 也不支持 v-show),
-  // 在组件挂载时即创建,层级固定在聊天列表附近,任何后打开的弹层都能自然盖住它,无需宿主事件联动隐藏。
-  // 隐藏时同步关闭 userInteractionEnabled,避免透明视图在 nvue iOS 上仍拦截底部消息点击。
-
-  // 顶部对齐垫片:nvue 的 cell 不支持 margin-top:auto,改用纯 JS 估算撑高——
-  // spacer = 容器高 - (欢迎语高 + 消息数 × 单行高);不满屏时垫到贴底,满屏后由 onListScroll 精确修正。
+  let hasUserTouchedList = false;
+  let programmaticScrollUntil = 0;
   const topSpacerPx = ref(0);
-  // 首帧 opacity:0 隐藏,等欢迎语实测 + spacer 就绪(listReady)再显示,避免看到欢迎语被推到底的下移过程。
   const listReady = ref(false);
-  const WELCOME_EST_PX = 95;             // 欢迎语高度估算兜底(实测到达前用,此时列表不可见)
+  const WELCOME_EST_PX = 95;
   const welcomeHeightPx = ref(0);
-  let listContentHeight = 0;             // 估算净内容高(欢迎语 + 消息 × 单行)
-  let listViewportPx = uni.upx2px(380);  // 容器视口高:CSS 固定 380rpx,可同步换算,首帧即有值
-  // 满屏锁定:弹幕只增不减,满屏后 spacer 永久锁 0。否则看历史时视口外新 cell 未渲染,
-  // 滚动上报的 contentH 偏小 → spacer 被错误撑起 → 滚回底部出现大片空白。
+  let listContentHeight = 0;
+  let listViewportPx = uni.upx2px(380);
   let spacerFrozen = false;
   const welcomeCellRef = ref<any>(null);
-  // 单条消息行高 ≈ 34rpx 行高 + 12rpx*2 padding + 8rpx margin ≈ 54rpx;≈ 0.88px/rpx
   const SINGLE_MSG_HEIGHT_PX = 54 * 0.88;
   const recomputeTopSpacer = () => {
     if (spacerFrozen) return;
@@ -284,6 +322,10 @@
     } catch (e) { /* ignore */ }
   };
 
+  const onUserTouchList = () => {
+    hasUserTouchedList = true;
+  };
+
   const onListScroll = (e: any) => {
     const rawY = (e?.contentOffset?.y ?? e?.detail?.scrollTop ?? e?.scrollY ?? 0) as number;
     const offsetY = Math.abs(rawY);
@@ -295,8 +337,18 @@
         listContentHeight = trueNetH;
       recomputeTopSpacer();
     }
+    if (!hasUserTouchedList) {
+      following.value = true;
+      if (unreadCount.value > 0) {
+        unreadCount.value = 0;
+      }
+      return;
+    }
     const bottomGap = contentH - offsetY - listViewportHeight;
     const nearBottom = bottomGap <= NEAR_BOTTOM_THRESHOLD;
+    if (!nearBottom && Date.now() < programmaticScrollUntil) {
+      return;
+    }
     following.value = nearBottom;
     if (nearBottom && unreadCount.value > 0) {
       unreadCount.value = 0;
@@ -341,17 +393,18 @@
 
   const appendMessages = (msgs: any[]) => {
     if (!msgs || msgs.length === 0) return;
-    const animate = firstAppendDone && msgs.length === 1 && enteringSeqs.value.length === 0;
-    const newSeqs = msgs.map((m: any) => msgKey(m));
+    const snaps = msgs.map(snapshotMessage);
+    const animate = firstAppendDone && snaps.length === 1 && enteringSeqs.value.length === 0;
+    const newSeqs = snaps.map((m: any) => msgKey(m));
     if (animate) {
       enteringSeqs.value = [...enteringSeqs.value, ...newSeqs];
     }
-    mixMessageList.value = [...mixMessageList.value, ...msgs];
+    mixMessageList.value = [...mixMessageList.value, ...snaps];
     firstAppendDone = true;
     if (animate) {
       nextTick(() => {
         later(() => {
-          msgs.forEach((m: any) => {
+          snaps.forEach((m: any) => {
             const seq = msgKey(m);
             const el = cellRefs.get(seq);
             if (el) {
@@ -579,7 +632,6 @@
     position: relative;
   }
 
-  /* 文本消息容器:列排布,每个 .msg-line 为手动折行后的一行(不用 flex-wrap) */
   .nickname-content-wrapper {
     flex: 1;
     flex-direction: column;
@@ -643,7 +695,6 @@
     margin-right: 8rpx;
     font-weight: 600;
     padding: 5rpx 0;
-    max-width: 100rpx;
     lines: 1;
     white-space: nowrap;
     overflow: hidden;
@@ -654,7 +705,6 @@
     display: flex;
     flex-direction: row;
     align-items: center;
-    max-width: 300rpx;
     flex: 1;
     justify-content: flex-start;
     flex-wrap: nowrap;
@@ -675,13 +725,8 @@
     z-index: 999;
     padding: 2rpx 0;
     margin-right: 6rpx;
-    max-width: 102rpx;
     lines: 1;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
     text-align: left;
-    min-width: 0;
   }
 
   .gift-prefix {

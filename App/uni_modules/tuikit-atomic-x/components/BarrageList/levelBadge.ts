@@ -5,12 +5,9 @@ const levelTier = (level: number): string => {
   return 'basic';
 };
 
-const resolveMsgLevel = (message: any, myUserID: any, myLevel: number): number => {
+const resolveMsgLevel = (message: any): number => {
   const lv = Number(message?.sender?.level);
   if (!isNaN(lv) && lv > 0) return lv;
-  if (message?.sender?.userID && message.sender.userID === myUserID) {
-    if (!isNaN(myLevel) && myLevel > 0) return myLevel;
-  }
   return 0;
 };
 

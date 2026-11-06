@@ -1,42 +1,498 @@
 
-/**
- * 标记当前是否正在 navigateTo 期间
- * stub: 始终 false（无防抖），SDK 接入后由真实 router 状态机控制
- */
+import { watch } from 'vue'
+import { playCallRingtone, stopCallRingtone } from '@/uni_modules/tuikit-atomic-x'
+import { useCallState, type UseCallStateReturn } from '../state/CallState.uts'
+import { useDeviceState, type UseDeviceStateReturn, type OpenLocalCameraOptions, type OpenLocalMicrophoneOptions } from '../state/DeviceState.uts'
+import { requestCallPermissions } from '../utils/callPermission.uts'
+
+// ==================== 模块级状态 ====================
+
+/** 导航状态锁，防止频繁 navigateTo/navigateBack 导致页面栈异常 */
 let _isNavigating: boolean = false
+/** 呼叫流程锁，防止频繁呼叫时资源竞争 */
+let _isCallEnding: boolean = false
+/** 铃声音频上下文（单例复用，避免 iOS AVAudioSession 崩溃） */
+let _innerAudioContext: InnerAudioContext | null = null
+/** 铃声播放意图标志，stop 时置 false，防止异步回调重新播放 */
+let _shouldPlayRingtone: boolean = false
+/** 上一页路径，通话结束后回跳用 */
+let _lastPage: string = '/pages/index/index'
+/** 通话来源标记 'caller' | 'callee' | 'float' | '' */
+let _callSource: string = ''
+
+const DEFAULT_PAGE: string = '/pages/index/index'
+
+/** 通话页面路由 */
+export const CALL_PAGE: string = '/uni_modules/tuikit-atomic-x/pages/call'
+
+/** 需要特殊处理回退的直播页面路由 */
+const REENTER_PAGES: string[] = [
+	'/pages/scenes/live/video/pusher/index',
+	'/pages/scenes/live/video/player/index'
+]
+
+/** 快速结束原因（忙线/不在线），跳过设备关闭 */
+const QUICK_END_REASONS: number[] = [4, 5]
+/** 自己触发的静默原因，不弹 toast */
+const SELF_SILENT_REASONS: number[] = [1, 2, 3, 6]
+
+// ==================== 工具函数 ====================
 
 /**
- * 标记上一次呼叫是否还在结束处理中
- * stub: 始终 false，SDK 接入后由通话结束回调控制
+ * 通话结束原因 → Toast 文案
  */
-let _isCallEnding: boolean = false
+function getCallEndReasonToast(reason: number): string {
+	if (reason == 1) return '对方已挂断，通话结束'
+	if (reason == 2) return '对方拒绝了你的通话请求'
+	if (reason == 3) return '对方未接听，请稍后再试'
+	if (reason == 4) return '对方不在线'
+	if (reason == 5) return '对方正在通话中，请稍后再试'
+	if (reason == 6) return '对方已取消通话'
+	if (reason == 7) return '其他设备已接听'
+	if (reason == 8) return '其他设备已拒绝'
+	if (reason == 9) return '服务端拒绝'
+	return ''
+}
 
 /**
  * 判断当前是否正在 navigateTo 跳转中
- * 用途：防止 navigateTo 期间重复触发导致 stack 异常
  */
 export const isNavigating = (): boolean => {
-  return _isNavigating
+	return _isNavigating
 }
 
 /**
  * 判断上一次呼叫是否还在结束处理中
- * 用途：防止上一次 call end 异步清理未完成时再次发起新呼叫
  */
 export const isCallEnding = (): boolean => {
-  return _isCallEnding
+	return _isCallEnding
 }
 
 /**
  * 获取当前页面全路径
- * 用途：发起呼叫前通过 callContextStore.setCallLastPage 存到模块级单例，
- *   通话结束后回跳用
  */
 export const getCurrentPageFullPath = (): string => {
-  const pages: UniPage[] = getCurrentPages()
-  if (pages.length == 0) return ''
-  const current: UniPage = pages[pages.length - 1]
-  const route: string = current.route
-  if (route.length == 0) return ''
-  return '/' + route
+	const pages: UniPage[] = getCurrentPages()
+	if (pages.length == 0) return DEFAULT_PAGE
+	const current: UniPage = pages[pages.length - 1]
+	const route: string = current.route
+	if (route.length == 0) return DEFAULT_PAGE
+	return '/' + route
+}
+
+/**
+ * 获取上一页路径（供外部模块读取）
+ */
+export function getLastPage(): string {
+	return _lastPage
+}
+
+/**
+ * 设置上一页路径（供外部模块写入）
+ */
+export function setLastPage(page: string): void {
+	_lastPage = page
+}
+
+/**
+ * 获取通话来源
+ */
+export function getCallSource(): string {
+	return _callSource
+}
+
+/**
+ * 设置通话来源
+ */
+export function setCallSource(source: string): void {
+	_callSource = source
+}
+
+// ==================== 音频管理 ====================
+
+/**
+ * 当前平台是否为 iOS
+ */
+function isIOS(): boolean {
+	return uni.getSystemInfoSync().osName == 'ios'
+}
+
+/**
+ * 确保全局单例 InnerAudioContext 存在（仅 Android 使用）
+ */
+function ensureAudioContext(): InnerAudioContext {
+	if (_innerAudioContext == null) {
+		const ctx: InnerAudioContext = uni.createInnerAudioContext()
+		ctx.obeyMuteSwitch = false
+		ctx.onError((res) => {
+			console.error('[CallService] innerAudioContext onError:', JSON.stringify(res))
+		})
+		ctx.onCanplay(() => {
+			if (_shouldPlayRingtone) {
+				try {
+					ctx.play()
+				} catch (_e: any) { }
+			}
+		})
+		_innerAudioContext = ctx
+	}
+	return _innerAudioContext!
+}
+
+/**
+ * 播放铃声
+ * iOS：走 TRTC 音效混音器（原生），与麦克风共用 AVAudioSession，避免开麦后无声；
+ * Android：用 InnerAudioContext 播放。
+ */
+export function playRingtone(src: string): void {
+	_shouldPlayRingtone = true
+	if (isIOS()) {
+		playCallRingtone(src, true)
+		return
+	}
+	const ctx: InnerAudioContext = ensureAudioContext()
+	try {
+		ctx.stop()
+	} catch (_e: any) { }
+	ctx.autoplay = true
+	ctx.loop = true
+	ctx.src = src
+}
+
+/**
+ * 停止铃声播放
+ */
+export function stopAndResetAudio(): void {
+	_shouldPlayRingtone = false
+	if (isIOS()) {
+		stopCallRingtone()
+		return
+	}
+	if (_innerAudioContext != null) {
+		try {
+			_innerAudioContext!.autoplay = false
+			_innerAudioContext!.loop = false
+			_innerAudioContext!.stop()
+		} catch (e: any) {
+			console.warn('[CallService] stopAndResetAudio error:', e)
+		}
+	}
+}
+
+// ==================== 导航管理 ====================
+
+/**
+ * 判断通话结束后是否会返回到需要特殊处理的直播页面（如主播/观众直播间）
+ * 这些页面需要保持设备状态或恢复直播连接
+ */
+function isReturningToReenterPage(): boolean {
+	const pages: UniPage[] = getCurrentPages()
+	const currentRoute: string = pages.length > 0 ? ('/' + pages[pages.length - 1].route) : ''
+
+	// 场景1: 当前在 call 页面，检查页面栈中上一页是否是需要重新进入的页面
+	if (currentRoute == CALL_PAGE && pages.length > 1) {
+		const prevPage: UniPage = pages[pages.length - 2]
+		const prevRoute: string = '/' + prevPage.route
+		if (REENTER_PAGES.indexOf(prevRoute) != -1) {
+			return true
+		}
+	}
+
+	// 场景2: 悬浮窗模式下用户已经不在 call 页，检查当前页是否需要保持设备状态
+	if (REENTER_PAGES.indexOf(currentRoute) != -1) {
+		return true
+	}
+
+	// 场景3: 检查 _lastPage 是否指向需要重新进入的页面
+	const lastPageRoute: string = _lastPage.split('?')[0]
+	if (REENTER_PAGES.indexOf(lastPageRoute) != -1) {
+		return true
+	}
+
+	return false
+}
+
+/**
+ * 安全回退导航
+ * 只有栈顶是 call 页面时才执行，含导航锁、直播页特殊处理、fallback 到 redirectTo
+ */
+function navigateBack(): void {
+	if (_isNavigating) {
+		console.warn('[CallService] navigateBack skipped: navigation already in progress')
+		return
+	}
+	const pages: UniPage[] = getCurrentPages()
+	const currentRoute: string = pages.length > 0 ? ('/' + pages[pages.length - 1].route) : 'empty'
+	console.log('[CallService] navigateBack, currentRoute:', currentRoute, 'lastPage:', _lastPage, 'callSource:', _callSource, 'pageStackLen:', pages.length)
+	_callSource = ''
+
+	// 只有当栈顶是 call 页面时才执行回退
+	if (currentRoute != CALL_PAGE) {
+		console.log('[CallService] navigateBack skipped: current page is not call page')
+		return
+	}
+
+	_isNavigating = true
+	const unlockNavigation = (): void => {
+		setTimeout(() => { _isNavigating = false }, 500)
+	}
+
+	if (pages.length > 1) {
+		const prevPage: UniPage = pages[pages.length - 2]
+		const prevRoute: string = '/' + prevPage.route
+		// 上一页是直播间 → navigateBack 并通知恢复直播状态
+		if (REENTER_PAGES.indexOf(prevRoute) != -1) {
+			console.log('[CallService] navigateBack: prev page is', prevRoute, ', emit callEndedBackToLive')
+			uni.$emit('callEndedBackToLive')
+			uni.navigateBack({
+				delta: 1,
+				success: (_res) => { unlockNavigation() },
+				fail: (_err) => {
+					uni.redirectTo({
+						url: prevRoute + '?isLiving=true',
+						complete: (_res) => { unlockNavigation() }
+					})
+				}
+			})
+			return
+		}
+		// 普通页面 → navigateBack
+		uni.navigateBack({
+			delta: 1,
+			success: (_res) => { unlockNavigation() },
+			fail: (_err) => {
+				const fallbackUrl: string = _lastPage.length > 0 ? _lastPage : DEFAULT_PAGE
+				uni.redirectTo({
+					url: fallbackUrl,
+					complete: (_res) => { unlockNavigation() }
+				})
+			}
+		})
+	} else {
+		// 页面栈只有 call 页 → redirectTo 回首页
+		const fallbackUrl: string = _lastPage.length > 0 ? _lastPage : DEFAULT_PAGE
+		uni.redirectTo({
+			url: fallbackUrl,
+			complete: (_res) => { unlockNavigation() }
+		})
+	}
+}
+
+// ==================== 核心初始化 ====================
+
+/**
+ * 初始化通话服务
+ * 在 App.vue onLaunch 中调用，注册音频上下文、状态监听、悬浮窗回调、通话事件
+ */
+export function initCallService(): void {
+	const cs: UseCallStateReturn = useCallState()
+	const ds: UseDeviceStateReturn = useDeviceState()
+
+
+	// 初始化默认值
+	if (_lastPage.length == 0) {
+		_lastPage = DEFAULT_PAGE
+	}
+	_callSource = ''
+
+	// 监听 selfInfo 状态变化：接通时停止铃声/振动，空闲时关闭悬浮窗
+	watch((): any | null => { return cs.selfInfo.value }, (newVal: any | null, _oldVal: any | null) => {
+		if (newVal != null) {
+			const obj: UTSJSONObject = newVal as UTSJSONObject
+			const status: number | null = obj["status"] as number | null
+			if (status != null && status == 2) {
+				// 已接通 → 停止铃声和振动
+				cs.stopVibrate()
+				stopAndResetAudio()
+			} else if (status != null && status == 0) {
+				// 空闲/结束 → 停止铃声、振动和悬浮窗
+				cs.stopVibrate()
+				cs.stopFloatWindow()
+				stopAndResetAudio()
+			}
+		}
+		console.log('[CallService] selfInfo changed:', JSON.stringify(newVal))
+	}, { immediate: true, deep: true })
+
+	// 悬浮窗点击回调 → 回到通话页
+	let isFloatWindowClicking: boolean = false
+	cs.addFloatWindowListener(() => {
+		if (isFloatWindowClicking) {
+			console.warn('[CallService] floatWindow click throttled, ignoring')
+			return
+		}
+		isFloatWindowClicking = true
+		setTimeout(() => { isFloatWindowClicking = false }, 500)
+
+		// 记录当前页为 lastPage，通话结束后回跳用
+		_lastPage = getCurrentPageFullPath()
+		_callSource = 'float'
+		// 延迟等待 App 回到前台后再执行页面导航
+		setTimeout(() => {
+			cs.stopFloatWindow()
+			const navPages: UniPage[] = getCurrentPages()
+			const curRoute: string = navPages.length > 0 ? ('/' + navPages[navPages.length - 1].route) : ''
+			if (curRoute == CALL_PAGE) {
+				console.log('[CallService] floatWindow: already on call page, skip navigation')
+				return
+			}
+			uni.navigateTo({
+				url: CALL_PAGE,
+				fail: (_err) => {
+					console.error('[CallService] floatWindow navigateTo failed:', _err)
+					// 降级：使用 redirectTo 强制跳转
+					uni.redirectTo({ url: CALL_PAGE })
+				}
+			})
+		}, 500)
+	})
+
+	// 通话开始 → 启动前台服务
+	cs.addCallListener('onCallStarted', (_event: string): void => {
+		cs.startForegroundService()
+	}, null)
+
+	// 收到来电 → 请求权限、打开摄像头(视频)、跳转通话页
+	cs.addCallListener('onCallReceived', (event: string): void => {
+		let res: UTSJSONObject | null = null
+		try {
+			res = JSON.parse<UTSJSONObject>(event)
+		} catch (error: any) {
+			console.error('[CallService] onCallReceived parse error:', error, 'event:', event)
+		}
+		if (res == null) return
+
+		const mediaType: number = (res["mediaType"] as number | null) ?? 0
+		// 响铃阶段提前请求权限，并在"授权成功后"才打开本地设备（摄像头 + 麦克风）。
+		// 关键：必须等权限结果，否则 Android 上权限未授予时 openLocalCamera 会失败且不会自动重试，
+		// 导致用户接听后本地画面无流渲染。提前开麦也能避免接听瞬间开麦撞上 -1104 设备占用竞争。
+		requestCallPermissions(mediaType).then((granted: boolean): void => {
+			if (!granted) {
+				console.warn('[CallService] onCallReceived: permission not granted, skip open devices')
+				return
+			}
+			if (mediaType == 1) {
+				const camOpts: OpenLocalCameraOptions = { isFront: true }
+				ds.openLocalCamera(camOpts)
+			}
+			const micOpts: OpenLocalMicrophoneOptions = {
+				fail: (errCode: number, _errMsg: string): void => {
+					if (errCode == -1104) {
+						setTimeout((): void => { ds.openLocalMicrophone(null) }, 200)
+					}
+				}
+			}
+			ds.openLocalMicrophone(micOpts)
+		})
+		// 页面跳转/前台服务不等待权限结果，保证接听界面立即弹出（权限弹窗叠加其上）
+		cs.startForegroundService()
+		_lastPage = getCurrentPageFullPath()
+		_callSource = 'callee'
+		uni.navigateTo({ url: CALL_PAGE })
+	}, null)
+
+	// 通话结束 → 关设备、停铃声、导航回退、弹 toast
+	cs.addCallListener('onCallEnded', (event: string): void => {
+		if (_isCallEnding) {
+			console.warn('[CallService] onCallEnded skipped: previous call end still processing')
+			return
+		}
+		_isCallEnding = true
+
+		let res: UTSJSONObject | null = null
+		try {
+			res = JSON.parse<UTSJSONObject>(event)
+		} catch (error: any) {
+			console.error('[CallService] onCallEnded parse error:', error, 'event:', event)
+			_isCallEnding = false
+			return
+		}
+		if (res == null) {
+			_isCallEnding = false
+			return
+		}
+
+		const reason: number = (res["reason"] as number | null) ?? 0
+		const userId: string = (res["userId"] as string | null) ?? ''
+		console.log('[CallService] onCallEnded, reason:', reason, 'data:', event)
+
+		// 忙线/不在线等快速结束场景，跳过设备关闭
+		const isQuickEnd: boolean = reason == 4 || reason == 5
+		// 是否返回到需要保持设备状态的直播页面
+		const shouldKeepDevice: boolean = isReturningToReenterPage()
+		if (!shouldKeepDevice && !isQuickEnd) {
+			ds.closeLocalCamera()
+			ds.closeLocalMicrophone()
+		} else {
+			console.log('[CallService] onCallEnded: skip close device, shouldKeepDevice:', shouldKeepDevice, 'isQuickEnd:', isQuickEnd)
+		}
+		cs.stopForegroundService()
+		stopAndResetAudio()
+		cs.enableVirtualBackground(false)
+
+		const endPages: UniPage[] = getCurrentPages()
+		const endCurrentRoute: string = endPages.length > 0 ? ('/' + endPages[endPages.length - 1].route) : 'empty'
+		console.log('[CallService] onCallEnded currentRoute:', endCurrentRoute, 'lastPage:', _lastPage, 'pageStackLen:', endPages.length)
+
+		const doNavigateBack = (): void => {
+			navigateBack()
+			// 延迟释放呼叫结束锁，确保导航完成后才允许下一次呼叫
+			setTimeout(() => { _isCallEnding = false }, 600)
+		}
+
+		// 忙线等快速结束场景添加短暂延迟，等待页面栈稳定后再执行导航
+		const navigationDelay: number = isQuickEnd ? 300 : 0
+
+		// 判断 reason 是否为自己触发的静默原因（避免 indexOf 的 Kotlin 数值类型不匹配）
+		const isSelfSilentReason: boolean = reason == 1 || reason == 2 || reason == 3 || reason == 6
+
+		try {
+			// 群通话不弹任何 toast，直接返回
+			const callInfo: any | null = cs.activeCall.value
+			let isGroupCall: boolean = false
+			if (callInfo != null) {
+				const callObj: UTSJSONObject = callInfo as UTSJSONObject
+				const chatGroupId: string = (callObj["chatGroupId"] as string | null) ?? ''
+				const inviteeIds = callObj["inviteeIds"]
+				const isMultiInvitee: boolean = inviteeIds != null && Array.isArray(inviteeIds) && (inviteeIds as any[]).length > 1
+				isGroupCall = chatGroupId.length > 0 || isMultiInvitee
+			}
+
+			if (isGroupCall) {
+				console.log('[CallService] Group call ended, skip toast')
+				setTimeout(doNavigateBack, navigationDelay)
+				return
+			}
+
+			// 自己触发的挂断/拒绝/超时/取消，不弹 toast 直接返回
+			if (isSelfSilentReason && userId.length > 0) {
+				let selfId: string = ''
+				const selfInfoVal: any | null = cs.selfInfo.value
+				if (selfInfoVal != null) {
+					selfId = ((selfInfoVal as UTSJSONObject)["id"] as string | null) ?? ''
+				}
+				if (userId == selfId || selfId.length == 0) {
+					console.log('[CallService] Reason', reason, 'self-initiated, skip toast')
+					setTimeout(doNavigateBack, navigationDelay)
+					return
+				}
+			}
+
+			// 其他原因，弹 toast 并返回
+			const toastMsg: string = getCallEndReasonToast(reason)
+			setTimeout(doNavigateBack, navigationDelay)
+			if (toastMsg.length > 0) {
+				uni.showToast({
+					title: toastMsg,
+					icon: 'none',
+					duration: 2000
+				})
+			}
+		} catch (err: any) {
+			const errMsg: string = err instanceof Error ? (err as Error).message : `${err}`
+			console.error('[CallService] onCallEnded error:', errMsg)
+			// 即使出错也确保导航回退
+			setTimeout(doNavigateBack, navigationDelay)
+		}
+	}, null)
 }

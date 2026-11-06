@@ -2,8 +2,7 @@
   <view class="voice-audience-container" :style="{ height: systemInfo?.windowHeight + 'px' }">
     <image class="voice-bg" src="/static/images/index/voice-background.png" mode="aspectFill" :style="{ width: systemInfo?.windowWidth + 'px', height: systemInfo?.windowHeight + 'px' }"></image>
     <view class="voice-bg-mask" :style="{ width: systemInfo?.windowWidth + 'px', height: systemInfo?.windowHeight + 'px' }"></view>
-
-    <view class="live-header">
+    <view class="live-header" :style="{ marginTop: headerTopPx + 'px' }">
       <view class="header-left">
         <view class="stream-info">
           <image class="header-avatar" :src="currentLive?.liveOwner?.avatarURL || defaultAvatarURL" mode="aspectFill" />
@@ -18,50 +17,40 @@
         </view>
       </view>
     </view>
-
     <VoiceSeatGrid
       :seatRows="liveSeatRows"
       :speakingUserIDs="speakingUserIDs"
-      :currentUserID="uni.$userID"
+      :currentUserID="loginUserInfo?.userID || ''"
       :isMicOn="isMicOn"
       role="audience"
       :live="true"
       @seatTap="handleSeatTap"
     />
-
     <view class="action-buttons">
       <image class="action-btn action-btn-bg" v-if="uni.$localGuestStatus === 'IDLE'" @tap="handleCoGuestButtonClick" src="/static/images/live/icon/co-guest.png" mode="aspectFit" />
       <image class="action-btn action-btn-bg" v-if="uni.$localGuestStatus === 'USER_APPLYING'" @tap="ShowCoGuestRequestPanel()" src="/static/images/live/icon/co-guest-request.png" />
       <image class="action-btn action-btn-bg" v-if="uni.$localGuestStatus === 'CONNECTED'" @tap="ShowCoGuestRequestPanel()" src="/static/images/live/icon/co-guest-disconnect.png" />
     </view>
-
-    <OptionSheet v-model="isShowExitSheet" :title="exitSheetTitle" :itemList="exitSheetItems" @select="onExitSheetSelect" />
-    <OptionSheet v-model="isShowCoGuestSheet" :title="coGuestSheetTitle" :itemList="coGuestSheetItems" @select="onCoGuestSheetSelect" />
-    <OptionSheet v-model="isShowSeatActionSheet" :itemList="seatActionItems" @select="onSeatActionSelect" />
-
-    <!-- 轻提示(替代 uni.showToast):直播结束/被踢出/静音/连麦申请等。
-         放模板末尾——nvue 后写在上;纯提示不拦截触摸。 -->
-    <LiveToast
-      v-if="tipVisible"
-      :key="tipSeq"
-      v-model="tipVisible"
-      :title="tipTitle"
-      :duration="2000"
-    />
+    <ActionSheet v-model="isShowExitSheet" :title="exitSheetTitle" :itemList="exitSheetItems" @select="onExitSheetSelect" />
+    <ActionSheet v-model="isShowCoGuestSheet" :title="coGuestSheetTitle" :itemList="coGuestSheetItems" @select="onCoGuestSheetSelect" />
+    <ActionSheet v-model="isShowSeatActionSheet" :itemList="seatActionItems" @select="onSeatActionSelect" />
+    <LiveToast :duration="2000"/>
   </view>
 </template>
 
 <script setup lang="ts">
   import { onLoad, onBackPress } from '@dcloudio/uni-app';
   import { ref, onMounted, computed, onUnmounted, watch, nextTick } from 'vue';
-  import OptionSheet from '@/components/live/OptionSheet/index.nvue';
-  import LiveToast from '@/uni_modules/tuikit-atomic-x/components/LiveToast.nvue';
+  import ActionSheet from '@/pages/scenes/live/common/ActionSheet/index.nvue';
+  import LiveToast from '@/uni_modules/tuikit-atomic-x/components/Common/LiveToast/index.nvue';
+  import { showLiveToast } from '@/uni_modules/tuikit-atomic-x/components/Common/LiveToast/index.ts';
   import VoiceSeatGrid from '../components/VoiceSeatGrid.nvue';
   import { useLiveListState } from "@/uni_modules/tuikit-atomic-x/state/LiveListState";
   import { useLiveSeatState } from "@/uni_modules/tuikit-atomic-x/state/LiveSeatState";
   import { useDeviceState, DeviceStatus } from "@/uni_modules/tuikit-atomic-x/state/DeviceState";
   import { useCoGuestState, NoResponseReason } from '@/uni_modules/tuikit-atomic-x/state/CoGuestState';
   import { t } from '../../locales';
+  import { getTopBarOffsetPx } from '../../utils';
   import { useLoginState } from "@/uni_modules/tuikit-atomic-x/state/LoginState";
 
   uni.$localGuestStatus = 'IDLE';
@@ -78,6 +67,7 @@
   const { applyForSeat, disconnect, cancelApplication, connected, addCoGuestGuestListener, removeCoGuestGuestListener } = useCoGuestState(liveID.value);
 
   const systemInfo = ref<any>({});
+  const headerTopPx = getTopBarOffsetPx();
   const defaultAvatarURL = '/uni_modules/tuikit-atomic-x/static/assets/live/default-avatar.png';
 
   const JOIN_FAIL_REDIRECT_MS = 500;
@@ -133,23 +123,13 @@
 
   watch(connected, (newList) => {
     const list = Array.isArray(newList) ? newList : [];
-    const hasSelfInConnected = list.some(item => item?.userID === uni.$userID);
+    const hasSelfInConnected = list.some(item => item?.userID === (loginUserInfo.value?.userID || ''));
     if (!hasSelfInConnected) {
       uni.$localGuestStatus = 'IDLE';
     }
   }, { deep: true, immediate: true });
 
-  const tipVisible = ref(false);
-  const tipSeq = ref(0);
-  const tipTitle = ref('');
-  const showTip = (title: string) => {
-    tipTitle.value = title;
-    tipVisible.value = false;
-    nextTick(() => {
-      tipSeq.value++;
-      tipVisible.value = true;
-    });
-  };
+  const showTip = (title: string) => showLiveToast(title);
 
   onLoad((options: any) => {
     console.warn('VoiceAudience onLoad = ', options);
@@ -277,7 +257,7 @@
       applyForSeat({
         liveID: liveID.value,
         seatIndex: -1,
-        timeout: 30,
+        timeout: 0,
         success: () => {
           console.log('applyForSeat success.');
         },
@@ -329,7 +309,7 @@
   };
 
   const handleSeatTap = (seat: any) => {
-    if (seat?.userInfo?.userID === uni.$userID) {
+    if (seat?.userInfo?.userID === (loginUserInfo.value?.userID || '')) {
       isShowSeatActionSheet.value = true;
     }
   };

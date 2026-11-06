@@ -2,12 +2,10 @@
   <view class="voice-anchor-container" :style="{ height: systemInfo?.windowHeight + 'px' }">
     <image class="voice-bg" src="/static/images/index/voice-background.png" mode="aspectFill" :style="{ width: systemInfo?.windowWidth + 'px', height: systemInfo?.windowHeight + 'px' }"></image>
     <view class="voice-bg-mask" :style="{ width: systemInfo?.windowWidth + 'px', height: systemInfo?.windowHeight + 'px' }"></view>
-
     <view v-if="!isStartLive" class="pre-live-wrapper">
-      <view class="navigate-back-arrow" @tap="goBack">
+      <view class="navigate-back-arrow" :style="{ top: headerTopPx + 'px' }" @tap="goBack">
         <image class="navigate-back-arrow-image" src="/static/images/left-arrow.png"></image>
       </view>
-
       <view class="live-info-card">
         <view class="cover-section" @tap="onEditCover">
           <image class="cover-image" :src="coverURL" mode="aspectFill" @error="handleCoverError" />
@@ -25,26 +23,23 @@
           <view class="underline"></view>
         </view>
       </view>
-
       <VoiceSeatGrid
         :seatRows="staticSeatRows"
         :speakingUserIDs="speakingUserIDs"
-        :currentUserID="uni.$userID"
+        :currentUserID="loginUserInfo?.userID || ''"
         :isMicOn="isMicOn"
         role="anchor"
         :live="false"
         @seatTap="handleOwnerSeatTap"
       />
-
       <view class="bottom-actions">
         <view class="start-live-button" @tap="handleStartLive">
           <text class="start-live-text">{{ t('voice.startLive') }}</text>
         </view>
       </view>
     </view>
-
     <view v-if="isStartLive" class="living-wrapper">
-      <view class="live-header">
+      <view class="live-header" :style="{ marginTop: headerTopPx + 'px' }">
         <view class="header-left">
           <view class="stream-info">
             <image class="header-avatar" :src="loginUserInfo?.avatarURL || defaultAvatarURL" mode="aspectFill" />
@@ -57,17 +52,15 @@
           <image class="control-icon" @tap="handleEndLive" src="/static/images/live/icon/end-live.png" />
         </view>
       </view>
-
       <VoiceSeatGrid
         :seatRows="liveSeatRows"
         :speakingUserIDs="speakingUserIDs"
-        :currentUserID="uni.$userID"
+        :currentUserID="loginUserInfo?.userID || ''"
         :isMicOn="isMicOn"
         role="anchor"
         :live="true"
         @seatTap="handleOwnerSeatTap"
       />
-
       <view class="live-bottom-panel">
         <view class="live-action-buttons">
           <view class="live-action-item" @tap="showCoGuestPanel">
@@ -81,7 +74,6 @@
           </view>
         </view>
       </view>
-
       <view class="coguest-drawer-container" v-if="isShowCoGuestPanel">
         <view class="coguest-drawer-overlay" @tap="closeCoGuestPanel"></view>
         <view class="coguest-drawer">
@@ -112,7 +104,6 @@
         </view>
       </view>
     </view>
-
     <view class="bottom-drawer-container" v-if="isShowCoverDialog">
       <view class="drawer-overlay" @tap="closeCoverDialog"></view>
       <view class="bottom-drawer">
@@ -131,28 +122,22 @@
         </view>
       </view>
     </view>
-
-    <OptionSheet v-model="isShowEndSheet" :itemList="endSheetItems" @select="onEndSheetSelect" />
-    <OptionSheet v-model="isShowSeatActionSheet" :itemList="seatActionItems" @select="onSeatActionSelect" />
-
-    <LiveToast
-      v-if="tipVisible"
-      :key="tipSeq"
-      v-model="tipVisible"
-      :title="tipTitle"
-      :duration="2000"
-    />
+    <ActionSheet v-model="isShowEndSheet" :itemList="endSheetItems" @select="onEndSheetSelect" />
+    <ActionSheet v-model="isShowSeatActionSheet" :itemList="seatActionItems" @select="onSeatActionSelect" />
+    <LiveToast :duration="2000"/>
   </view>
 </template>
 
 <script setup lang="ts">
   import { ref, onMounted, onUnmounted, computed, watch, nextTick } from 'vue';
   import { onBackPress } from '@dcloudio/uni-app';
-  import OptionSheet from '@/components/live/OptionSheet/index.nvue';
-  import LiveToast from '@/uni_modules/tuikit-atomic-x/components/LiveToast.nvue';
+  import ActionSheet from '@/pages/scenes/live/common/ActionSheet/index.nvue';
+  import LiveToast from '@/uni_modules/tuikit-atomic-x/components/Common/LiveToast/index.nvue';
+  import { showLiveToast } from '@/uni_modules/tuikit-atomic-x/components/Common/LiveToast/index.ts';
   import VoiceSeatGrid from '../components/VoiceSeatGrid.nvue';
   import { LIVE_TOKENS, livePlaceholderStyle } from '../../styles/tokens.js';
   import { t } from '../../locales';
+  import { getTopBarOffsetPx } from '../../utils';
   import { useLoginState } from "@/uni_modules/tuikit-atomic-x/state/LoginState";
   import { useLiveListState, TakeSeatMode } from "@/uni_modules/tuikit-atomic-x/state/LiveListState";
   import { useDeviceState, DeviceStatus } from "@/uni_modules/tuikit-atomic-x/state/DeviceState";
@@ -160,30 +145,24 @@
   import { useCoGuestState } from "@/uni_modules/tuikit-atomic-x/state/CoGuestState";
   import { getLiveErrorMessage } from "@/uni_modules/tuikit-atomic-x/utils/liveErrorHandler";
 
-    const tipVisible = ref(false);
-  const tipSeq = ref(0);
-  const tipTitle = ref('');
-  const showTip = (title: string) => {
-    tipTitle.value = title;
-    tipVisible.value = false;
-    nextTick(() => {
-      tipSeq.value++;
-      tipVisible.value = true;
-    });
-  };
+  const showTip = (title: string) => showLiveToast(title);
 
   onBackPress((option) => {
     if (option.from === 'backbutton') return true;
   });
 
   const { loginUserInfo } = useLoginState();
-  const liveID = ref(`voice_${uni.$userID}`);
+  const liveID = computed(() => {
+    const uid = loginUserInfo.value?.userID || '';
+    return uid ? `voice_${uid}` : '';
+  });
   const { createLive, endLive } = useLiveListState();
   const { openLocalMicrophone, closeLocalMicrophone, microphoneStatus } = useDeviceState();
   const { seatList, speakingUsers, muteMicrophone, unmuteMicrophone } = useLiveSeatState(liveID.value);
   const { applicants, acceptApplication, rejectApplication } = useCoGuestState(liveID.value);
 
   const systemInfo = ref<any>({});
+  const headerTopPx = getTopBarOffsetPx();
   const safeArea = ref({ left: 0, right: 0, top: 0, bottom: 0, width: 375, height: 750 });
   const placeholderStyle = livePlaceholderStyle(LIVE_TOKENS.darkText50);
 
@@ -338,7 +317,7 @@
   const seatActionItems = computed(() => [isMicOn.value ? t('voice.closeMic') : t('voice.openMic')]);
 
   const handleOwnerSeatTap = (seat: any) => {
-    const ownerID = uni.$userID;
+    const ownerID = loginUserInfo.value?.userID || ''
     if (seat?.userInfo?.userID === ownerID) {
       isShowSeatActionSheet.value = true;
     }

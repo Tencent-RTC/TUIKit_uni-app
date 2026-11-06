@@ -1,0 +1,86 @@
+<template>
+  <view class="btn" @tap="handleAccept">
+    <image class="btn-img" :style="{ width: size + 'px', height: size + 'px' }" src="/uni_modules/tuikit-atomic-x/static/icon/accept.png"></image>
+    <text class="btn-text" v-if="isShowText">
+      接听
+    </text>
+  </view>
+</template>
+
+<script setup lang="uts">
+  import { computed } from "vue";
+  import {
+    useCallState,
+    type UseCallStateReturn
+  } from '@/uni_modules/tuikit-atomic-x/state/CallState.uts';
+  import { useDeviceState, type UseDeviceStateReturn, type OpenLocalMicrophoneOptions, type OpenLocalCameraOptions } from '@/uni_modules/tuikit-atomic-x/state/DeviceState.uts';
+  import { checkCallPermissionWithDialog } from "@/uni_modules/tuikit-atomic-x/utils/callPermission.uts";
+  import { stopAndResetAudio } from "@/uni_modules/tuikit-atomic-x/server/callService.uts";
+
+  const cs: UseCallStateReturn = useCallState()
+  const ds: UseDeviceStateReturn = useDeviceState()
+
+  const props = defineProps({
+    size: {
+      type: Number,
+      default: 60,
+    },
+    isShowText: {
+      type: Boolean,
+      default: true,
+    },
+  });
+
+  const handleAccept = (): void => {
+    const callInfo: any | null = cs.activeCall.value
+    let mediaType: number = 0
+    if (callInfo != null) {
+      mediaType = ((callInfo as UTSJSONObject)["mediaType"] as number | null) ?? 0
+    }
+    checkCallPermissionWithDialog(mediaType).then((hasPermission: boolean) => {
+      if (!hasPermission) {
+        cs.reject(null)
+        return
+      }
+      stopAndResetAudio()
+      // 视频通话补开摄像头兜底：onCallReceived 已在响铃阶段提前开摄像头，
+      // 但若用户在响铃时未授权、接听时才补授权，则需在此重新打开，避免接听后本地画面无流渲染
+      if (mediaType == 1) {
+        const camOpts: OpenLocalCameraOptions = { isFront: true }
+        ds.openLocalCamera(camOpts)
+      }
+      const micOpts: OpenLocalMicrophoneOptions = {
+        fail: (errCode: number, _errMsg: string): void => {
+          if (errCode == -1104) {
+            setTimeout(() => {
+              ds.openLocalMicrophone(null)
+            }, 200)
+          }
+        }
+      }
+      ds.openLocalMicrophone(micOpts)
+      cs.accept(null)
+    })
+  };
+</script>
+
+<style scoped>
+  .btn {
+    width: 60px;
+    margin: 10px 20px;
+  }
+
+  .btn-img {
+    width: 60px;
+    height: 60px;
+    border-radius: 140px;
+  }
+
+  .btn-text {
+    font-size: 12px;
+    color: #d5e0f2;
+    font-weight: 400;
+    text-align: center;
+    margin-top: 10px;
+  }
+</style>

@@ -196,7 +196,7 @@ import permission from '../../utils/permission';
 import { requestCallPermissions } from '../../utils/callPermission';
 import { isCallMessage, parseCallMessageData, isVideoCall } from '../../utils/callMessageUtils';
 import { stopGlobalAudioPlayer, RECORDING_PSEUDO_ID } from '../../hooks/useAudioPlayer';
-import { useCallState } from '../../state/CallState';
+import { useCallState, isInCall } from '../../state/CallState';
 
 const vueInstance = getCurrentInstance();
 
@@ -310,8 +310,7 @@ const { selfInfo: callSelfInfo } = useCallState();
  * 与 ToolsPanel.startCall 内的判定一致：selfInfo.status == 1（呼叫中/待接听）或 2（通话中）
  */
 const isInCallNow = (): boolean => {
-  const status = callSelfInfo?.value?.status;
-  return status == 1 || status == 2;
+  return isInCall(callSelfInfo.value);
 };
 
 // ==================== 响应式状态 ====================

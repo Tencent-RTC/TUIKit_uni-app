@@ -374,13 +374,20 @@ function bindEvent(liveID: string): void {
     }, (data: string) => {
       try {
         const result = safeJsonParse<any>(data, {});
-        console.log(`[${liveID}][${dataName}] Data:`, result);
+        if (dataName === 'audienceList') {
+          const parsed = safeJsonParse<any[]>(result?.audienceList, []);
+          console.log(`[${liveID}][audienceList] len:`, Array.isArray(parsed) ? parsed.length : 0);
+        } else {
+          console.log(`[${liveID}][${dataName}] Data:`, result);
+        }
         onLiveAudienceStoreChanged[dataName]?.(result);
       } catch (error) {
         console.error(`[${liveID}][${dataName}] Error:`, error);
       }
     });
   });
+
+  fetchAudienceList({ liveID });
 }
 
 /**
@@ -404,10 +411,14 @@ function unbindEvent(liveID: string): void {
 // 监听 currentLive 变化，当 currentLive 为空时自动解绑
 let stopWatchingCurrentLive: (() => void) | null = null;
 
+// SDK 原始 audienceCount(不被列表补偿污染),用于人数派生。
+let sdkAudienceCount = 0;
+
 // 重置观众相关状态为初值:退房/切换房间时清空,避免上个房间的观众列表残留到新房间。
 function resetAudienceState(): void {
   audienceList.value = [];
   audienceCount.value = 0;
+  sdkAudienceCount = 0;
   messageBannedUserList.value = [];
 }
 
@@ -436,12 +447,26 @@ function ensureWatchCurrentLive() {
   );
 }
 
+// SDK 的 audienceCount 只由引擎 onRoomUserCountChanged 驱动(SDK 两侧实现都是 userCount-1),
+// 该回调在部分 Android 端(尤其主播端)观众进/退房时偶发不推送或滞后,count 会停在旧值;
+// 而 audienceList 由 onRemoteUserEnterRoom/LeaveRoom 实时更新。
+// 故人数 = max(SDK 原始值, 当前列表长度):
+//   - SDK 值滞后/为 0 时,用实时列表补齐(列表增减都能跟随,退房会下调);
+//   - 大房间列表分页时 SDK 值大于列表长度,保留 SDK 值,不受分页影响。
+// 补偿值不写回 sdkAudienceCount,避免只增不减;UI 仍只用 audienceCount 单一数据源(对齐 iOS)。
+const applyAudienceCount = () => {
+  const listLength = (audienceList.value || []).length;
+  audienceCount.value = Math.max(Number(sdkAudienceCount) || 0, listLength);
+};
+
 const onLiveAudienceStoreChanged: Record<string, (result: any) => void> = {
   audienceList: (res) => {
     audienceList.value = safeJsonParse<LiveUserInfoParam[]>(res.audienceList, []);
+    applyAudienceCount();
   },
   audienceCount: (res) => {
-    audienceCount.value = safeJsonParse<number>(res.audienceCount, 0);
+    sdkAudienceCount = safeJsonParse<number>(res.audienceCount, 0);
+    applyAudienceCount();
   },
   messageBannedUserList: (res) => {
     messageBannedUserList.value = safeJsonParse<LiveUserInfoParam[]>(res.messageBannedUserList, []);

@@ -1,8 +1,8 @@
 @import 'styles/tokens.scss';
 
   .live-container {
-    width: 100vw;
-    min-height: 100vh;
+    width: 750rpx;
+    flex: 1;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -23,16 +23,17 @@
     position: absolute;
     left: 0;
     top: 0;
-    width: 100%;
-    height: 100%;
+    width: 686rpx;
+    height: 340rpx;
+    border-radius: 24rpx;
   }
 
   .card-content {
     position: absolute;
     left: 0;
     top: 0;
-    width: 100%;
-    height: 100%;
+    width: 686rpx;
+    height: 340rpx;
     display: flex;
     flex-direction: row;
     justify-content: space-between;
@@ -69,6 +70,7 @@
     border-radius: 30rpx;
     background-color: $live-surface-white;
     display: flex;
+    flex-direction: row;
     justify-content: center;
     align-items: center;
     margin-top: 30rpx;
@@ -82,13 +84,16 @@
   .card-right {
     position: absolute;
     right: 40rpx;
-    bottom: 0;
+    top: 40rpx;
+    height: 300rpx;
     display: flex;
+    flex-direction: row;
     align-items: flex-end;
   }
 
   .card-preview {
     width: 240rpx;
     height: 300rpx;
-    border-radius: 16rpx 16rpx 0 0;
+    border-top-left-radius: 16rpx;
+    border-top-right-radius: 16rpx;
   }

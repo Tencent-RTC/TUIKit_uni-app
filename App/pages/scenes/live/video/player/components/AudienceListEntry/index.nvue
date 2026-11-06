@@ -1,0 +1,54 @@
+<template>
+  <view class="audience-list-entry" @click="handleTap">
+    <view class="participant-avatars">
+      <view
+        class="participant-avatar-wrap"
+        :class="{ 'participant-avatar-overlap': index > 0 }"
+        v-for="(user, index) in avatarListReversed"
+        :key="index"
+      >
+        <image class="participant-avatar" :src="user?.avatarURL || defaultAvatarURL" mode="aspectFill" />
+      </view>
+    </view>
+    <view class="participant-count">
+      <text class="count-text">{{ formatOnlineCount(currentAudienceCount) }}</text>
+    </view>
+  </view>
+</template>
+
+<script setup lang="ts">
+  import { computed, watch } from 'vue';
+  import { t } from '../../../../locales';
+  import { useLiveListState } from '@/uni_modules/tuikit-atomic-x/state/LiveListState';
+  import { useLiveAudienceState } from '@/uni_modules/tuikit-atomic-x/state/LiveAudienceState';
+
+  const emit = defineEmits(['audienceTap']);
+  const { currentLive } = useLiveListState();
+  const liveID = computed(() => String(currentLive.value?.liveID || ''));
+  const { audienceList, audienceCount, fetchAudienceList } = useLiveAudienceState(liveID.value);
+
+  const defaultAvatarURL = '/uni_modules/tuikit-atomic-x/static/assets/live/default-avatar.png';
+
+  // 对齐 iOS AudienceView:人数始终以 audienceCount 为唯一来源,不用列表长度兜底
+  // (列表长度与真实人数本就不等:分页/含主播/缓存)。
+  const currentAudienceCount = computed(() => Number(audienceCount.value) || 0);
+  // 对齐 iOS AudienceView.bind(_:):绑定直播间时主动拉一次,保证进房后 audienceCount 是最新值。
+  watch(liveID, (id) => {
+    if (id) fetchAudienceList({ liveID: id });
+  }, { immediate: true });
+  const avatarListReversed = computed(() => (audienceList.value || []).slice(0, 3).reverse());
+
+  const formatOnlineCount = (n: number): string => {
+    const v = Math.max(0, Math.floor(Number(n) || 0));
+    if (v >= 10000) return `${Math.min(10, Math.floor(v / 10000))}${t('common.wanUnit')}+`;
+    return String(v);
+  };
+
+  const handleTap = () => {
+    emit('audienceTap');
+  };
+</script>
+
+<style lang="scss">
+  @import './AudienceListEntry.scss';
+</style>

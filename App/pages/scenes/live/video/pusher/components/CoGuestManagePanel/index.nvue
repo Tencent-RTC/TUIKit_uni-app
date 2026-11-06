@@ -1,0 +1,147 @@
+<template>
+  <BaseDrawer
+    v-model="innerVisible"
+    :height="300"
+    :overlayOpacity="0.4"
+    :zIndex="3200"
+    :showHandle="true"
+    bgImage="/uni_modules/tuikit-atomic-x/static/assets/live/drawer-bg.png"
+    :bgImageHeight="400"
+    padding="0 40rpx 0 40rpx"
+    :useSafeBottom="true"
+  >
+    <text class="manage-title">{{ manageTitle }}</text>
+    <view class="manage-actions">
+      <view class="manage-action" @tap="toggleMicrophone">
+        <image class="manage-action-icon" :src="microphoneOn ? MIC_ON_ICON : MIC_OFF_ICON" mode="aspectFit" />
+        <text class="manage-action-label">{{ microphoneOn ? t('anchor.muteGuestMic') : t('anchor.unmuteGuestMic') }}</text>
+      </view>
+      <view class="manage-action" @tap="disconnectGuest">
+        <image class="manage-action-icon" :src="DISCONNECT_ICON" mode="aspectFit" />
+        <text class="manage-action-label is-danger">{{ t('anchor.disconnectGuest') }}</text>
+      </view>
+    </view>
+  </BaseDrawer>
+</template>
+
+<script setup>
+  import { computed, ref, watch } from 'vue';
+  import BaseDrawer from '@/uni_modules/tuikit-atomic-x/components/Common/BaseDrawer/index.nvue';
+  import { DeviceStatus } from '@/uni_modules/tuikit-atomic-x/state/DeviceState';
+  import { DeviceControlPolicy, useLiveSeatState } from '@/uni_modules/tuikit-atomic-x/state/LiveSeatState';
+  import { t } from '../../../../locales';
+
+  const MIC_ON_ICON = '/uni_modules/tuikit-atomic-x/static/assets/live/coguest-action-mic.png';
+  const MIC_OFF_ICON = '/uni_modules/tuikit-atomic-x/static/assets/live/coguest-action-mic-off.png';
+  const DISCONNECT_ICON = '/uni_modules/tuikit-atomic-x/static/assets/live/coguest-action-disconnect.png';
+
+  const props = defineProps({
+    modelValue: {
+      type: Boolean,
+      default: false,
+    },
+    liveID: {
+      type: String,
+      default: '',
+    },
+    userInfo: {
+      type: Object,
+      default: () => ({}),
+    },
+  });
+
+  const emit = defineEmits(['update:modelValue', 'tip']);
+
+  const { seatList, openRemoteMicrophone, closeRemoteMicrophone, kickUserOutOfSeat } = useLiveSeatState(props.liveID);
+
+  const innerVisible = computed({
+    get: () => props.modelValue,
+    set: (val) => emit('update:modelValue', val),
+  });
+
+  const targetUserID = computed(() => props.userInfo?.userID || '');
+  const manageTitle = computed(() => {
+    const name = props.userInfo?.userName || props.userInfo?.userID || '';
+    return t('anchor.manageUserTitle', { name });
+  });
+
+  const targetSeat = computed(() => {
+    const list = seatList.value || [];
+    if (!targetUserID.value || !Array.isArray(list)) return null;
+    return list.find((item) => item?.userInfo?.userID === targetUserID.value) || null;
+  });
+  const allowOpenMicrophone = computed(() => targetSeat.value?.userInfo?.allowOpenMicrophone !== false);
+  const microphoneOn = computed(() =>
+    allowOpenMicrophone.value && targetSeat.value?.userInfo?.microphoneStatus === DeviceStatus.ON
+  );
+  const toastName = computed(() => {
+    const raw = String(props.userInfo?.userName || props.userInfo?.userID || '')
+      .split(/\s+/)
+      .filter((item) => item)
+      .join(' ');
+    return raw.length > 8 ? `${raw.slice(0, 8)}…` : raw;
+  });
+  const isBusy = ref(false);
+
+  watch([seatList, innerVisible], () => {
+    if (!innerVisible.value) return;
+    if (!targetUserID.value) return;
+    if (!targetSeat.value) innerVisible.value = false;
+  });
+
+  watch(innerVisible, (val) => {
+    if (val) isBusy.value = false;
+  });
+
+  const toggleMicrophone = () => {
+    const userID = targetUserID.value;
+    if (!userID || isBusy.value) return;
+    isBusy.value = true;
+    const finish = () => { isBusy.value = false; };
+    if (allowOpenMicrophone.value && !microphoneOn.value) {
+      finish();
+      emit('tip', t('anchor.guestMicManualOpen'));
+      return;
+    }
+    const message = allowOpenMicrophone.value
+      ? t('anchor.guestMicClosed', { name: toastName.value })
+      : t('anchor.guestMicUnlocked', { name: toastName.value });
+    const done = () => {
+      innerVisible.value = false;
+      finish();
+      emit('tip', message);
+    };
+    if (allowOpenMicrophone.value) {
+      closeRemoteMicrophone({
+        liveID: props.liveID,
+        userID,
+        success: done,
+        fail: () => { finish(); },
+      });
+    } else {
+      openRemoteMicrophone({
+        liveID: props.liveID,
+        userID,
+        policy: DeviceControlPolicy.UNLOCK_ONLY,
+        success: done,
+        fail: () => { finish(); },
+      });
+    }
+  };
+
+  const disconnectGuest = () => {
+    const userID = targetUserID.value;
+    if (!userID || isBusy.value) return;
+    isBusy.value = true;
+    kickUserOutOfSeat({
+      liveID: props.liveID,
+      userID,
+      success: () => { innerVisible.value = false; isBusy.value = false; },
+      fail: () => { isBusy.value = false; },
+    });
+  };
+</script>
+
+<style lang="scss">
+  @import './CoGuestManagePanel.scss';
+</style>

@@ -1,143 +1,220 @@
 <template>
   <BaseDrawer
     v-model="innerVisible"
-    :height="360"
-    :overlayOpacity="0.5"
+    :height="440"
+    :overlayOpacity="0.4"
     bgImage="/uni_modules/tuikit-atomic-x/static/assets/live/drawer-bg.png"
-    :bgImageHeight="710"
-    padding="0 40rpx 60rpx 40rpx"
-    :useSafeBottom="true"
+    :bgImageHeight="440"
+    padding="0 40rpx 0 40rpx"
+    :showHandle="true"
+    :zIndex="zIndex"
   >
-    <view class="beauty-heading">
-      <text class="beauty-title">{{ t('beauty_title') }}</text>
-    </view>
-
-    <view class="beauty-row" :class="{ 'beauty-row-disabled': !beautyOn }">
-      <text class="beauty-row-label">{{ activeLabel }}</text>
+    <text class="beauty-title">{{ t('beauty_title') }}</text>
+    <view class="beauty-slider-row">
+      <text class="beauty-slider-label">{{ activeLabel }}</text>
       <Slider
         class="beauty-slider"
         :modelValue="activeLevel"
         :min="0"
         :max="9"
-        :trackWidth="460"
+        :trackWidth="526"
         :disabled="!beautyOn"
+        :style="{ opacity: beautyOn ? 1 : 0.4 }"
         @input="onLevelInput"
         @change="onLevelChange"
       />
-      <text class="beauty-row-value">{{ activeLevel }}</text>
+      <text class="beauty-slider-value">{{ activeLevel }}</text>
     </view>
-
-    <view class="beauty-footer">
-      <view class="beauty-switch-wrap">
-        <view class="beauty-switch-row">
-          <SwitchButton :modelValue="beautyOn" @change="toggleBeauty" />
+    <view class="beauty-option-row">
+      <view class="beauty-option">
+        <view class="beauty-option-slot">
+          <SwitchButton class="beauty-option-switch" :modelValue="beautyOn" @change="setEnabled" />
         </view>
-        <text class="beauty-switch-label">{{ t('beauty_switch_label') }}</text>
+        <text class="beauty-option-label">{{ t('beauty_title') }}</text>
       </view>
-      <view v-for="tab in tabs" :key="tab.key" class="beauty-tab" @tap="activeKey = tab.key">
-        <view class="beauty-tab-icon-wrap" :class="{ 'beauty-tab-icon-wrap-on': activeKey === tab.key }">
-          <image class="beauty-tab-icon" :src="tab.icon" mode="aspectFit" />
+      <view
+        v-for="tab in tabs"
+        :key="tab.key"
+        class="beauty-option"
+        @tap="activeKey = tab.key"
+      >
+        <view class="beauty-option-slot">
+          <view class="beauty-option-icon" :class="{ 'is-selected': activeKey === tab.key }">
+            <image class="beauty-option-img" :src="tab.icon" mode="aspectFit" />
+          </view>
         </view>
-        <text class="beauty-tab-text" :class="{ 'beauty-tab-text-active': activeKey === tab.key }">{{ tab.label }}</text>
+        <text class="beauty-option-label" :class="{ 'is-selected': activeKey === tab.key }">{{ tab.label }}</text>
       </view>
     </view>
   </BaseDrawer>
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
-import BaseDrawer from '@/components/live/BaseDrawer/index.nvue'
-import Slider from '@/uni_modules/tuikit-atomic-x/components/Slider.nvue'
-import SwitchButton from '@/components/live/SwitchButton/index.nvue'
-import { t } from '../../locales'
-import { useBaseBeautyState } from '@/uni_modules/tuikit-atomic-x/state/BaseBeautyState'
+  import { ref, computed, watch, onMounted } from 'vue';
+  import Slider from '@/uni_modules/tuikit-atomic-x/components/Common/Slider/index.nvue';
+  import SwitchButton from '@/uni_modules/tuikit-atomic-x/components/Common/SwitchButton/index.nvue';
+  import BaseDrawer from '@/uni_modules/tuikit-atomic-x/components/Common/BaseDrawer/index.nvue';
+  import { t } from '../../locales';
+  import { useBaseBeautyState } from '@/uni_modules/tuikit-atomic-x/state/BaseBeautyState';
+  import { useLoginState } from '@/uni_modules/tuikit-atomic-x/state/LoginState';
 
-type BeautyKey = 'smooth' | 'whiteness' | 'ruddy'
+  type BeautyKey = 'smooth' | 'whiteness' | 'ruddy';
 
-const props = defineProps({
-  modelValue: {
-    type: Boolean,
-    default: false
-  }
-})
+  type BeautyPrefs = {
+    isEnabled: boolean;
+    smoothLevel: number;
+    whitenessLevel: number;
+    ruddyLevel: number;
+  };
 
-const emit = defineEmits(['update:modelValue'])
+  const props = defineProps({
+    modelValue: {
+      type: Boolean,
+      default: false
+    },
+    // 宿主层级更高时（如连麦"调整视频连麦画面"层 z-index 3000）需上调，否则抽屉被压在下面。
+    zIndex: {
+      type: Number,
+      default: 2600
+    }
+  });
 
-const innerVisible = computed({
-  get: () => props.modelValue,
-  set: (v) => emit('update:modelValue', v)
-})
+  const emit = defineEmits(['update:modelValue']);
 
-const {
-  smoothLevel,
-  whitenessLevel,
-  ruddyLevel,
-  setSmoothLevel,
-  setWhitenessLevel,
-  setRuddyLevel,
-  getRealUiValue,
-  setRealUiValue,
-} = useBaseBeautyState()
+  const innerVisible = computed({
+    get: () => props.modelValue,
+    set: (v) => emit('update:modelValue', v)
+  });
 
-const tabs: Array<{ key: BeautyKey; label: string; icon: string }> = [
-  { key: 'smooth', label: t('smoothing'), icon: '/uni_modules/tuikit-atomic-x/static/assets/live/beauty-smooth.png' },
-  { key: 'whiteness', label: t('whitening'), icon: '/uni_modules/tuikit-atomic-x/static/assets/live/beauty-whiten.png' },
-  { key: 'ruddy', label: t('rosy'), icon: '/uni_modules/tuikit-atomic-x/static/assets/live/beauty-rosy.png' },
-]
+  const {
+    smoothLevel,
+    whitenessLevel,
+    ruddyLevel,
+    setSmoothLevel,
+    setWhitenessLevel,
+    setRuddyLevel,
+  } = useBaseBeautyState();
+  const { loginUserInfo } = useLoginState();
 
-const activeKey = ref<BeautyKey>('smooth')
+  const tabs: Array<{ key: BeautyKey; label: string; icon: string }> = [
+    { key: 'smooth', label: t('smoothing'), icon: '/uni_modules/tuikit-atomic-x/static/assets/live/beauty-smooth.png' },
+    { key: 'whiteness', label: t('whitening'), icon: '/uni_modules/tuikit-atomic-x/static/assets/live/beauty-whiten.png' },
+    { key: 'ruddy', label: t('rosy'), icon: '/uni_modules/tuikit-atomic-x/static/assets/live/beauty-rosy.png' },
+  ];
 
-const activeLabel = computed(() => tabs.find(tab => tab.key === activeKey.value)?.label || '')
+  const activeKey = ref<BeautyKey>('smooth');
+  const activeLabel = computed(() => tabs.find(tab => tab.key === activeKey.value)?.label || '');
 
-const activeLevel = computed(() => {
-  if (!beautyOn.value) {
-    return getRealUiValue(activeKey.value as 'smooth' | 'whiteness' | 'ruddy')
-  }
-  if (activeKey.value === 'whiteness') return whitenessLevel.value
-  if (activeKey.value === 'ruddy') return ruddyLevel.value
-  return smoothLevel.value
-})
+  const clampLevel = (v: any): number => {
+    const n = Math.round(Number(v) || 0);
+    if (!Number.isFinite(n)) return 0;
+    return Math.min(9, Math.max(0, n));
+  };
 
-const beautyOn = ref(false)
+  const defaultPrefs = (): BeautyPrefs => ({
+    isEnabled: true,
+    smoothLevel: 0,
+    whitenessLevel: 0,
+    ruddyLevel: 0,
+  });
 
-watch(innerVisible, (v) => {
-  if (v) {
-    beautyOn.value = smoothLevel.value > 0 || whitenessLevel.value > 0 || ruddyLevel.value > 0
-  }
-})
+  const prefs = ref<BeautyPrefs>(defaultPrefs());
+  let prefsKey = '';
 
-const applyLevel = (key: BeautyKey, value: number) => {
-  if (key === 'smooth') {
-    smoothLevel.value = value
-    setSmoothLevel({ smoothLevel: value })
-  } else if (key === 'whiteness') {
-    whitenessLevel.value = value
-    setWhitenessLevel({ whitenessLevel: value })
-  } else {
-    ruddyLevel.value = value
-    setRuddyLevel({ ruddyLevel: value })
-  }
-}
+  const beautyOn = computed(() => prefs.value.isEnabled);
 
-const onLevelInput = (v: number) => applyLevel(activeKey.value, v)
-const onLevelChange = (v: number) => applyLevel(activeKey.value, v)
+  const loadPrefs = () => {
+    const uid = loginUserInfo.value?.userID || '';
+    prefsKey = uid ? `TUILiveKit.beauty.v1.${uid}` : '';
+    let loaded: BeautyPrefs | null = null;
+    try {
+      const raw = prefsKey ? uni.getStorageSync(prefsKey) : '';
+      if (raw) {
+        const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+        if (parsed && typeof parsed === 'object') {
+          loaded = {
+            isEnabled: !!parsed.isEnabled,
+            smoothLevel: clampLevel(parsed.smoothLevel),
+            whitenessLevel: clampLevel(parsed.whitenessLevel),
+            ruddyLevel: clampLevel(parsed.ruddyLevel),
+          };
+        }
+      }
+    } catch (e) {
+      loaded = null;
+    }
+    prefs.value = loaded || defaultPrefs();
+  };
 
-const toggleBeauty = () => {
-  if (beautyOn.value) {
-    setRealUiValue('smooth', smoothLevel.value)
-    setRealUiValue('whiteness', whitenessLevel.value)
-    setRealUiValue('ruddy', ruddyLevel.value)
-    applyLevel('smooth', 0)
-    applyLevel('whiteness', 0)
-    applyLevel('ruddy', 0)
-    beautyOn.value = false
-  } else {
-    applyLevel('smooth', getRealUiValue('smooth'))
-    applyLevel('whiteness', getRealUiValue('whiteness'))
-    applyLevel('ruddy', getRealUiValue('ruddy'))
-    beautyOn.value = true
-  }
-}
+  const savePrefs = () => {
+    if (!prefsKey) return;
+    try {
+      uni.setStorageSync(prefsKey, JSON.stringify(prefs.value));
+    } catch (e) {}
+  };
+
+  const applyPrefs = () => {
+    const p = prefs.value;
+    smoothLevel.value = p.isEnabled ? p.smoothLevel : 0;
+    whitenessLevel.value = p.isEnabled ? p.whitenessLevel : 0;
+    ruddyLevel.value = p.isEnabled ? p.ruddyLevel : 0;
+    setSmoothLevel({ smoothLevel: smoothLevel.value });
+    setWhitenessLevel({ whitenessLevel: whitenessLevel.value });
+    setRuddyLevel({ ruddyLevel: ruddyLevel.value });
+  };
+
+  const activeLevel = computed(() => {
+    const p = prefs.value;
+    if (activeKey.value === 'whiteness') return p.whitenessLevel;
+    if (activeKey.value === 'ruddy') return p.ruddyLevel;
+    return p.smoothLevel;
+  });
+
+  const setEnabled = (enabled: boolean) => {
+    if (prefs.value.isEnabled === enabled) return;
+    prefs.value.isEnabled = enabled;
+    savePrefs();
+    applyPrefs();
+  };
+
+  const setBeautyLevel = (value: number) => {
+    if (!prefs.value.isEnabled) return;
+    const v = clampLevel(value);
+    const key = activeKey.value;
+    if (key === 'whiteness') {
+      prefs.value.whitenessLevel = v;
+      whitenessLevel.value = v;
+      setWhitenessLevel({ whitenessLevel: v });
+    } else if (key === 'ruddy') {
+      prefs.value.ruddyLevel = v;
+      ruddyLevel.value = v;
+      setRuddyLevel({ ruddyLevel: v });
+    } else {
+      prefs.value.smoothLevel = v;
+      smoothLevel.value = v;
+      setSmoothLevel({ smoothLevel: v });
+    }
+    savePrefs();
+  };
+
+  const onLevelInput = (v: number) => {
+    setBeautyLevel(v);
+  };
+  const onLevelChange = (v: number) => {
+    setBeautyLevel(v);
+  };
+
+  onMounted(() => {
+    loadPrefs();
+    applyPrefs();
+  });
+
+  watch(innerVisible, (v) => {
+    if (!v) return;
+    loadPrefs();
+    applyPrefs();
+    activeKey.value = 'smooth';
+  });
 </script>
 
 <style lang="scss">

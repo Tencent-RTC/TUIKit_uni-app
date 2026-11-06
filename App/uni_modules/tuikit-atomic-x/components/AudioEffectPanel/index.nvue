@@ -91,11 +91,11 @@
 </template>
 
 <script setup>
-  import { ref, computed } from 'vue';
+  import { ref, computed, watch } from 'vue';
   import { t } from '../locales';
-  import BaseDrawer from '@/components/live/BaseDrawer/index.nvue';
-  import SwitchButton from '@/components/live/SwitchButton/index.nvue';
-  import Slider from '@/uni_modules/tuikit-atomic-x/components/Slider.nvue';
+  import BaseDrawer from '@/uni_modules/tuikit-atomic-x/components/Common/BaseDrawer/index.nvue';
+  import SwitchButton from '@/uni_modules/tuikit-atomic-x/components/Common/SwitchButton/index.nvue';
+  import Slider from '@/uni_modules/tuikit-atomic-x/components/Common/Slider/index.nvue';
   import {
     AudioChangerType,
     AudioReverbType,
@@ -128,9 +128,19 @@
     setAudioReverbType,
   } = useAudioEffectState();
 
-  const { setCaptureVolume } = useDeviceState();
+  const { setCaptureVolume, captureVolume } = useDeviceState();
 
   const voiceVolume = ref(100);
+
+  watch(innerVisible, (val) => {
+    if (val) {
+      voiceVolume.value = captureVolume.value;
+    }
+  });
+
+  watch(captureVolume, (v) => {
+    voiceVolume.value = v;
+  });
 
   const voiceOptions = [
     { key: AudioChangerType.NONE, label: t('ae.original'), icon: '/uni_modules/tuikit-atomic-x/static/assets/live/sound-voice-original.png' },

@@ -1,6 +1,6 @@
 <template>
   <view>
-    <OptionSheet v-model="isShowEndSheet" :title="endSheetTitle" :itemList="endSheetItems" @select="onEndSheetSelect" />
+    <ActionSheet v-model="isShowEndSheet" :title="endSheetTitle" :itemList="endSheetItems" @select="onEndSheetSelect" />
     <BaseDrawer
       v-model="isShowEndConfirm"
       :height="drawerHeight"
@@ -38,12 +38,10 @@
   import { useLiveAudienceState } from '@/uni_modules/tuikit-atomic-x/state/LiveAudienceState';
   import { useLiveListState } from '@/uni_modules/tuikit-atomic-x/state/LiveListState';
   import { t } from '../../../../locales';
-  import BaseDrawer from '@/components/live/BaseDrawer/index.nvue';
-  import OptionSheet from '@/components/live/OptionSheet/index.nvue';
+  import BaseDrawer from '@/uni_modules/tuikit-atomic-x/components/Common/BaseDrawer/index.nvue';
+  import ActionSheet from '@/pages/scenes/live/common/ActionSheet/index.nvue';
 
   const emit = defineEmits(['ended', 'overlayActiveChange']);
-
-  defineExpose({ requestEnd });
 
   const { endLive, currentLive } = useLiveListState();
   const liveID = computed(() => String(currentLive.value?.liveID || ''));
@@ -81,9 +79,9 @@
     isEndingLive.value = true;
     isShowEndConfirm.value = false;
     endLive({
-      success: () => {
+      success: (statisticsData) => {
         console.warn('[EndConfirmPanel] endLive success, emit ended');
-        emit('ended');
+        emit('ended', statisticsData);
       },
       fail: (errCode, errMsg) => {
         isEndingLive.value = false;
@@ -105,6 +103,8 @@
   watch(() => isShowEndSheet.value || isShowEndConfirm.value, (visible) => {
     emit('overlayActiveChange', !!visible);
   });
+
+  defineExpose({ requestEnd });
 </script>
 
 <style lang="scss">

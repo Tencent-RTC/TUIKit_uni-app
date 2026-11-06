@@ -24,5 +24,7 @@ export const en : Record<string, string> = {
 	'sv.confirmDisconnect': 'Disconnect current co-guest?',
 	'sv.disconnect': 'Disconnect',
 	'sv.joinCoGuest': 'Join',
+	'sv.inviteToSeat': 'Invite a co-guest',
+	'sv.applyCoGuest': 'Apply',
 	'sv.roomId': 'Room ID: ',
 }

@@ -24,5 +24,7 @@ export const zhCN : Record<string, string> = {
 	'sv.confirmDisconnect': '确定要断开当前连麦吗?',
 	'sv.disconnect': '断开',
 	'sv.joinCoGuest': '加入连麦',
+	'sv.inviteToSeat': '邀请连麦',
+	'sv.applyCoGuest': '申请连麦',
 	'sv.roomId': '直播房间ID:',
 }

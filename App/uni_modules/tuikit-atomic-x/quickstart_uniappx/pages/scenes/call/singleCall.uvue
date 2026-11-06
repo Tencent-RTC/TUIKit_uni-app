@@ -1,0 +1,344 @@
+<template>
+  <view class="container">
+    <view class="search">
+      <view class="input-box">
+        <input class="input-search-user" v-model="userIDToSearch" maxlength="50" type="text" confirm-type="search" placeholder="搜索用户ID" @confirm="searchUser" />
+      </view>
+      <view class="btn-search" @tap="searchUser">
+        <text class="btn-text">搜索</text>
+      </view>
+    </view>
+
+    <view class="search-selfInfo">
+      <view class="self-info-bar"></view>
+      <text class="search-selfInfo-label">您的ID</text>
+      <text class="search-selfInfo-phone">{{ selfUserID }}</text>
+    </view>
+
+    <view class="search-result">
+      <view v-if="invitee.userID.length > 0" class="user-to-call">
+        <view class="userInfo-box">
+          <Avatar :src="invitee.avatarURL" :size="64" defaultAvatarType="user" :defaultAvatarUrl="DEFAULT_AVATAR_URL" />
+          <text class="userInfo-name">{{ invitee.nickname.length > 0 ? invitee.nickname : invitee.userID }}</text>
+        </view>
+        <view class="btn-userinfo-call" @tap="call">
+          <text class="btn-text">呼叫</text>
+        </view>
+      </view>
+      <text v-else-if="notFound" class="no-result-text">未查询到此用户</text>
+    </view>
+
+    <view v-if="invitee.userID.length == 0 && !notFound" class="search-default">
+      <image class="search-default-img" src="/static/images/search.png" mode="aspectFit" />
+      <text class="search-default-message">搜索添加已注册用户以已发起通话</text>
+    </view>
+  </view>
+</template>
+
+<script setup lang="uts">
+import { ref, computed } from 'vue'
+import { onLoad, onUnload } from '@dcloudio/uni-app'
+import Avatar from '@/uni_modules/tuikit-atomic-x/components/Avatar/Avatar.uvue'
+import {
+  CALL_PAGE,
+  getCurrentPageFullPath,
+  isNavigating,
+  isCallEnding,
+  setLastPage,
+  setCallSource,
+  getCallSource
+} from '@/uni_modules/tuikit-atomic-x/server/callService.uts'
+import { useLoginState, type UserProfileParam } from '@/uni_modules/tuikit-atomic-x/state/LoginState'
+import { useContactState } from '@/uni_modules/tuikit-atomic-x/state/ContactState'
+import {
+  useCallState,
+  isInCall,
+  CALL_ERROR_PACKAGE_NOT_PURCHASED,
+  MEDIA_TYPE_AUDIO,
+  MEDIA_TYPE_VIDEO,
+  type CallsOptions
+} from '@/uni_modules/tuikit-atomic-x/state/CallState'
+import {
+  useDeviceState,
+  type OpenLocalCameraOptions,
+  type OpenLocalMicrophoneOptions
+} from '@/uni_modules/tuikit-atomic-x/state/DeviceState'
+import { checkCallPermissionWithDialog } from '@/uni_modules/tuikit-atomic-x/utils/callPermission.uts'
+import { DEFAULT_AVATAR_URL } from '@/uni_modules/tuikit-atomic-x/utils/avatarHelper.uts'
+import {
+  type CallUserItem,
+  createEmptyUser,
+  toCallUserItem,
+  getSingleCallLastInvitee,
+  setSingleCallLastInvitee
+} from './callPageStore.uts'
+
+// 使用独立的 Contact 实例，页面卸载时销毁，避免影响通讯录等页面共用的默认实例
+const contactState = useContactState('CallQuickStartSingle')
+const cs = useCallState()
+const ds = useDeviceState()
+const { loginUserInfo } = useLoginState()
+
+const userIDToSearch = ref<string>('')
+const invitee = ref<CallUserItem>(createEmptyUser())
+// 是否已搜索但未查询到用户（仅用于控制“未查询到此用户”文案）
+const notFound = ref<boolean>(false)
+const mediaType = ref<number>(MEDIA_TYPE_AUDIO)
+// 呼叫防抖锁，防止频繁点击呼叫按钮
+const isCalling = ref<boolean>(false)
+
+const selfUserID = computed((): string => {
+  const info: UserProfileParam | null = loginUserInfo.value
+  return info?.userID ?? ''
+})
+
+onLoad((options: OnLoadOptions): void => {
+  const opt: UTSJSONObject = options as UTSJSONObject
+  const t: any | null = opt['type']
+  mediaType.value = (t != null && typeof t == 'string' && (t as string) == '1') ? MEDIA_TYPE_VIDEO : MEDIA_TYPE_AUDIO
+  // 从通话页/悬浮窗返回时恢复上次的被叫
+  const last: CallUserItem | null = getSingleCallLastInvitee()
+  if (last != null) {
+    invitee.value = last
+  }
+})
+
+onUnload((): void => {
+  if (getCallSource() != 'caller') {
+    setSingleCallLastInvitee(null)
+  }
+  contactState.destroyStore()
+})
+
+const toast = (title: string): void => {
+  uni.showToast({ title: title, icon: 'none' })
+}
+
+const searchUser = async (): Promise<void> => {
+  const keyword: string = userIDToSearch.value.trim()
+  userIDToSearch.value = keyword
+  notFound.value = false
+  if (keyword.length == 0) return
+  if (keyword == selfUserID.value) {
+    toast('无法向自己发起呼叫')
+    return
+  }
+  try {
+    const userList: any[] = await contactState.getContactInfo([keyword])
+    if (userList.length == 0) {
+      notFound.value = true
+      toast('未查询到此用户')
+      return
+    }
+    invitee.value = toCallUserItem(userList[0], keyword)
+  } catch (e: any) {
+    notFound.value = true
+    console.warn('[singleCall] getContactInfo failed:', e)
+    toast('未查询到此用户')
+  }
+}
+
+const openCallDevices = (): void => {
+  if (mediaType.value == MEDIA_TYPE_VIDEO) {
+    const camOpts: OpenLocalCameraOptions = { isFront: true }
+    ds.openLocalCamera(camOpts)
+  }
+  const micOpts: OpenLocalMicrophoneOptions = {
+    fail: (errCode: number, _errMsg: string): void => {
+      if (errCode == -1104) {
+        setTimeout((): void => {
+          ds.openLocalMicrophone(null)
+        }, 200)
+      }
+    }
+  }
+  ds.openLocalMicrophone(micOpts)
+}
+
+const call = async (): Promise<void> => {
+  // 防抖：上一次呼叫流程尚未完成时，不允许再次呼叫
+  if (isCalling.value) {
+    console.log('[singleCall] call skipped: isCalling is true')
+    return
+  }
+  // 导航锁：页面正在切换中，不允许发起呼叫
+  if (isNavigating()) {
+    console.log('[singleCall] call skipped: navigation in progress')
+    return
+  }
+  // 通话结束流程尚未完成，不允许发起下一次呼叫
+  if (isCallEnding()) {
+    console.log('[singleCall] call skipped: previous call end still processing')
+    return
+  }
+  if (isInCall(cs.selfInfo.value)) {
+    toast('您正在通话中，无法再次发起通话')
+    return
+  }
+  const targetUserID: string = invitee.value.userID
+  if (targetUserID.length == 0) return
+
+  isCalling.value = true
+  try {
+    const hasPermission: boolean = await checkCallPermissionWithDialog(mediaType.value)
+    if (!hasPermission) {
+      isCalling.value = false
+      return
+    }
+    openCallDevices()
+    setSingleCallLastInvitee(invitee.value)
+
+    // 在调用 calls 之前先记录来源页路径
+    const callerPagePath: string = getCurrentPageFullPath()
+    cs.setCallFramework(14)
+    const opts: CallsOptions = {
+      participantIds: [targetUserID],
+      mediaType: mediaType.value,
+      success: (): void => {
+        setCallSource('caller')
+        setLastPage(callerPagePath)
+        uni.navigateTo({
+          url: `${CALL_PAGE}?layoutTemplate=Float`,
+          complete: (): void => { isCalling.value = false }
+        })
+      },
+      fail: (code: number, message: string): void => {
+        if (code == CALL_ERROR_PACKAGE_NOT_PURCHASED) {
+          toast('您的应用还未开通音视频通话（TUICallKit）能力，您可以去控制台申请免费体验')
+          console.error('控制台申请免费体验,https://console.cloud.tencent.com/trtc')
+        }
+        console.log('[singleCall] calls fail:', code, message)
+        isCalling.value = false
+      }
+    }
+    cs.calls(opts)
+  } catch (e: any) {
+    console.log('[singleCall] calls error:', e)
+    isCalling.value = false
+  }
+}
+</script>
+
+<style>
+.container {
+  flex: 1;
+  background-color: #ffffff;
+}
+
+.search {
+  flex-direction: row;
+  align-items: center;
+  padding: 16px;
+}
+
+.input-box {
+  flex: 1;
+  height: 40px;
+  margin-right: 20px;
+  padding: 0 16px;
+  border-radius: 20px;
+  background-color: #f4f5f9;
+  justify-content: center;
+}
+
+.input-search-user {
+  font-size: 16px;
+  color: #666666;
+}
+
+.btn-search {
+  width: 60px;
+  height: 40px;
+  border-radius: 20px;
+  background-color: #0a6cff;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-text {
+  font-size: 14px;
+  color: #ffffff;
+}
+
+.search-selfInfo {
+  flex-direction: row;
+  align-items: center;
+  padding: 0 16px;
+}
+
+.self-info-bar {
+  width: 4px;
+  height: 12px;
+  border-radius: 2px;
+  background-color: #9a9a9a;
+  margin-right: 8px;
+}
+
+.search-selfInfo-label {
+  font-size: 14px;
+  color: #333333;
+}
+
+.search-selfInfo-phone {
+  font-size: 14px;
+  color: #333333;
+  padding-left: 8px;
+}
+
+.search-result {
+  padding: 0 5%;
+  margin-top: 8px;
+}
+
+.no-result-text {
+  font-size: 14px;
+  color: #333333;
+  line-height: 40px;
+}
+
+.user-to-call {
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 0;
+}
+
+.userInfo-box {
+  flex-direction: row;
+  align-items: center;
+}
+
+.userInfo-name {
+  font-size: 12px;
+  color: #333333;
+  padding-left: 8px;
+}
+
+.btn-userinfo-call {
+  width: 60px;
+  height: 40px;
+  border-radius: 20px;
+  background-color: #0a6cff;
+  align-items: center;
+  justify-content: center;
+}
+
+.search-default {
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+}
+
+.search-default-img {
+  width: 64px;
+  height: 66px;
+}
+
+.search-default-message {
+  width: 160px;
+  padding: 16px;
+  font-size: 14px;
+  color: #8a898e;
+  text-align: center;
+}
+</style>

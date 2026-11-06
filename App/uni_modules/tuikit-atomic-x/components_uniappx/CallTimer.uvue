@@ -1,0 +1,51 @@
+<template>
+  <view v-if="isConnected" class="call-timer">
+    <text class="timer-text">{{ formattedTime }}</text>
+  </view>
+</template>
+
+<script setup lang="uts">
+  import { computed } from 'vue';
+  import { useCallState, type UseCallStateReturn } from '@/uni_modules/tuikit-atomic-x/state/CallState.uts';
+
+  const cs: UseCallStateReturn = useCallState();
+
+  const isConnected = computed((): boolean => {
+    const info: any | null = cs.selfInfo.value
+    if (info == null) return false
+    const status: number | null = (info as UTSJSONObject)["status"] as number | null
+    return status == 2
+  });
+
+  const formattedTime = computed((): string => {
+    const callInfo: any | null = cs.activeCall.value
+    let duration: number = 0
+    if (callInfo != null) {
+      duration = ((callInfo as UTSJSONObject)["duration"] as number | null) ?? 0
+    }
+    const hours: number = Math.floor(duration / 3600)
+    const minutes: number = Math.floor((duration % 3600) / 60)
+    const seconds: number = duration % 60
+    const padH: string = hours < 10 ? ('0' + hours) : ('' + hours)
+    const padM: string = minutes < 10 ? ('0' + minutes) : ('' + minutes)
+    const padS: string = seconds < 10 ? ('0' + seconds) : ('' + seconds)
+    if (hours > 0) {
+      return padH + ':' + padM + ':' + padS
+    }
+    return padM + ':' + padS
+  });
+</script>
+
+<style scoped>
+  .call-timer {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .timer-text {
+    font-size: 28rpx;
+    color: #FFFFFF;
+    font-weight: 400;
+  }
+</style>

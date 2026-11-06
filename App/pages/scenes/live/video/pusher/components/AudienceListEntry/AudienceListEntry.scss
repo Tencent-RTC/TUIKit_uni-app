@@ -1,0 +1,49 @@
+@import '../../../../styles/tokens.scss';
+
+.audience-list-entry {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+}
+
+.participant-avatars {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 4rpx;
+}
+
+.participant-avatar-wrap {
+  position: relative;
+  width: 52rpx;
+  height: 52rpx;
+  border-radius: 26rpx;
+  overflow: hidden;
+}
+
+.participant-avatar {
+  width: 48rpx;
+  height: 48rpx;
+  margin-left: 0rpx;
+  border-radius: 24rpx;
+}
+
+.participant-count {
+  height: 52rpx;
+  min-width: 52rpx;
+  border-radius: 26rpx;
+  background-color: $live-dark-bg-overlay-22;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  padding-left: 16rpx;
+  padding-right: 16rpx;
+  margin-left: 8rpx;
+}
+
+.count-text {
+  color: $live-dark-text-primary;
+  font-size: 24rpx;
+  font-weight: 500;
+}

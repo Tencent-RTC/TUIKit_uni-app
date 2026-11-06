@@ -41,7 +41,7 @@
 </template>
 
 <script setup lang="ts">
-  import Slider from '@/uni_modules/tuikit-atomic-x/components/Slider.nvue';
+  import Slider from '@/uni_modules/tuikit-atomic-x/components/Common/Slider/index.nvue';
   import { t } from '../../locales';
   import { useBaseBeautyState } from '@/uni_modules/tuikit-atomic-x/state/BaseBeautyState';
 

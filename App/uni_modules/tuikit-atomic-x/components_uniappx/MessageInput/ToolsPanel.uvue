@@ -32,10 +32,13 @@ import { AlbumPickerMediaFilter } from '../AlbumPicker/AlbumPicker.uts'
 import { openAlbumPicker } from './AlbumPickerMediaSendManager.uts'
 import {
 	useCallState,
-	CallErrorCode
+	isInCall,
+	CALL_ERROR_PACKAGE_NOT_PURCHASED
 } from '@/uni_modules/tuikit-atomic-x/state/CallState'
 import {
-	useDeviceState
+	useDeviceState,
+	type OpenLocalCameraOptions,
+	type OpenLocalMicrophoneOptions
 } from "@/uni_modules/tuikit-atomic-x/state/DeviceState"
 import { getCurrentPageFullPath, isNavigating, isCallEnding } from "../../server/callService"
 import { checkCallPermissionWithDialog } from "@/uni_modules/tuikit-atomic-x/utils/callPermission"
@@ -82,6 +85,27 @@ const removeUnusedResourcePrefix = (path: string): string => {
 const isCalling = ref<boolean>(false)
 
 /**
+ * 发起通话前打开本地设备
+ * openLocalMicrophone 的 fail 回调签名为 (errCode: number, errMsg: string) => void，参数个数必须一致
+ */
+function openCallDevices(mediaType: number): void {
+	if (mediaType == 1) {
+		const camOpts: OpenLocalCameraOptions = { isFront: true }
+		openLocalCamera(camOpts)
+	}
+	const micOpts: OpenLocalMicrophoneOptions = {
+		fail: (errCode: number, _errMsg: string): void => {
+			if (errCode == -1104) {
+				setTimeout((): void => {
+					openLocalMicrophone(null)
+				}, 200)
+			}
+		}
+	}
+	openLocalMicrophone(micOpts)
+}
+
+/**
  * 发起语音/视频通话
  * 同步处理 C2C（直接调起通话）和群聊（先选成员再调起通话）两种场景。
  *
@@ -107,27 +131,14 @@ async function startCall(mediaType: number): Promise<void> {
 		return isC2CConversation.value ? props.conversationID.replace('c2c_', '') : ''
 	}
 	if (isC2CConversation.value) {
-		if (selfInfo.value.status == 1 || selfInfo.value.status == 2) {
+		if (isInCall(selfInfo.value)) {
 			uni.showToast({ title: '您正在通话中，无法再次发起通话', icon: 'none' })
 			return
 		}
 
 		isCalling.value = true
 
-		if (mediaType == 1) {
-			openLocalCamera({
-				isFront: true
-			})
-		}
-		openLocalMicrophone({
-			fail: (error: any): void => {
-				if (error == -1104) {
-					setTimeout((): void => {
-						openLocalMicrophone(null)
-					}, 200)
-				}
-			}
-		})
+		openCallDevices(mediaType)
 		const hasPermission: boolean = await checkCallPermissionWithDialog(mediaType)
 		if (!hasPermission) {
 			isCalling.value = false
@@ -136,7 +147,7 @@ async function startCall(mediaType: number): Promise<void> {
 		reportScene('CHAT_INVOKE_CALL')
 		calls({
 			participantIds: [getPeerUserID()],
-			mediaType,
+			mediaType: mediaType,
 			success: (): void => {
 				setCallSource('caller')
 				setCallLastPage(getCurrentPageFullPath())
@@ -145,8 +156,8 @@ async function startCall(mediaType: number): Promise<void> {
 					complete: (): void => { isCalling.value = false }
 				})
 			},
-			fail: (error: any): void => {
-				if (error == CallErrorCode.PACKAGE_NOT_PURCHASED) {
+			fail: (code: number, _message: string): void => {
+				if (code == CALL_ERROR_PACKAGE_NOT_PURCHASED) {
 					uni.showToast({
 						icon: 'none',
 						title: '您的应用还未开通音视频通话（TUICallKit）能力，您可以去控制台申请免费体验'
@@ -163,27 +174,14 @@ async function startCall(mediaType: number): Promise<void> {
 			if (isNavigating()) return
 			if (isCallEnding()) return
 
-			if (selfInfo.value.status == 1 || selfInfo.value.status == 2) {
+			if (isInCall(selfInfo.value)) {
 				uni.showToast({ title: '您正在通话中，无法再次发起通话', icon: 'none' })
 				return
 			}
 
 			isCalling.value = true
 
-			if (mediaType == 1) {
-				openLocalCamera({
-					isFront: true
-				})
-			}
-			openLocalMicrophone({
-				fail: (error: any): void => {
-					if (error == -1104) {
-						setTimeout((): void => {
-							openLocalMicrophone(null)
-						}, 200)
-					}
-				}
-			})
+			openCallDevices(mediaType)
 			const hasPermission: boolean = await checkCallPermissionWithDialog(mediaType)
 			if (!hasPermission) {
 				isCalling.value = false
@@ -206,7 +204,7 @@ async function startCall(mediaType: number): Promise<void> {
 			}
 			calls({
 				participantIds: userIDList,
-				mediaType,
+				mediaType: mediaType,
 				params: {
 					chatGroupId: props.conversationID.replace('group_', '')
 				},
@@ -218,8 +216,8 @@ async function startCall(mediaType: number): Promise<void> {
 						complete: (): void => { isCalling.value = false }
 					})
 				},
-				fail: (error: any): void => {
-					if (error == CallErrorCode.PACKAGE_NOT_PURCHASED) {
+				fail: (code: number, _message: string): void => {
+					if (code == CALL_ERROR_PACKAGE_NOT_PURCHASED) {
 						uni.showToast({
 							icon: 'none',
 							title: '您的应用还未开通音视频通话（TUICallKit）能力，您可以去控制台申请免费体验'
@@ -250,7 +248,7 @@ const chooseAndSendFile = (): void => {
 			let resObj: UTSJSONObject = new UTSJSONObject()
 			try {
 				const resStr: string = JSON.stringify(res) ?? ''
-				if (resStr.length > 2 && resStr !== '{}') {  // 长度 > 2 排除 "{}" 和 ""
+				if (resStr.length > 2 && resStr != '{}') {  // 长度 > 2 排除 "{}" 和 ""
 					const parsed: UTSJSONObject | null = JSON.parse<UTSJSONObject>(resStr)
 					if (parsed != null) {
 						resObj = parsed

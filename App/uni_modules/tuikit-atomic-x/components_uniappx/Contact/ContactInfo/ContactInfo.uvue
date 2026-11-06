@@ -29,6 +29,8 @@
       @pinChange="handlePinChange"
       @blacklistChange="handleBlacklistChange"
       @deleteFriend="handleDeleteFriend"
+      @voiceCall="handleVoiceCall"
+      @videoCall="handleVideoCall"
     />
 
     <!-- 空状态 -->
@@ -69,6 +71,8 @@ type Emits = {
   sendMessage: string
   remarkEdit: any
   deleteFriend: string
+  voiceCall: string
+  videoCall: string
   // Common events
   muteChange: boolean
   pinChange: boolean
@@ -117,6 +121,14 @@ const handleRemarkEdit = (friendInfo: any): void => {
 
 const handleDeleteFriend = (userID: string): void => {
   emit('deleteFriend', userID)
+}
+
+const handleVoiceCall = (userID: string): void => {
+  emit('voiceCall', userID)
+}
+
+const handleVideoCall = (userID: string): void => {
+  emit('videoCall', userID)
 }
 
 // Common handlers

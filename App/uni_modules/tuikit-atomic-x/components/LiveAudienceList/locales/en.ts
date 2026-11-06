@@ -5,6 +5,8 @@ export const en : Record<string, string> = {
 	'al.kickOut': 'Remove',
 	'al.confirmKickOut': 'Remove {name} from the room?',
 	'al.kickedOut': '{name} has been removed',
+	'al.mutedToast': '{name} has been muted',
+	'al.unmutedToast': '{name} has been unmuted',
 	'al.follow': 'Follow',
 	'al.followed': 'Following',
 	'al.roomManagement': 'Room management',

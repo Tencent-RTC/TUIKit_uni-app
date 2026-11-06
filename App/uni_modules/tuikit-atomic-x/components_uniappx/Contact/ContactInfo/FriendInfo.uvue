@@ -5,7 +5,7 @@
       <!-- 删除好友确认弹窗 -->
       <ConfirmDialog v-model="showDeleteDialog" title="确定删除该好友" message="删除联系人同时清空聊天记录" cancelText="取消" confirmText="确定删除" @confirm="confirmDeleteFriend" @cancel="onCancelDelete" />
       <view class="friend-info__header">
-        
+
         <component :is="resolvedAvatar" :src="(currentFriendInfo as UTSJSONObject | null)?.['avatarURL'] ?? ''" :name="((currentFriendInfo as UTSJSONObject | null)?.['nickname'] ?? ((currentFriendInfo as UTSJSONObject | null)?.['userID'] ?? ''))" :size="96" shape="square" defaultAvatarType="user" :pureMode="true" />
         <view class="friend-info__header-info">
           <text class="friend-info__name" :numberOfLines="1">{{ (currentFriendInfo as UTSJSONObject | null)?.['nickname'] ?? ((currentFriendInfo as UTSJSONObject | null)?.['userID'] ?? '') }}</text>
@@ -75,6 +75,8 @@ type Emits = {
   pinChange: boolean
   blacklistChange: boolean
   deleteFriend: string
+  voiceCall: string
+  videoCall: string
 }
 
 const props = defineProps<Props>()
@@ -317,8 +319,14 @@ const handleDeleteFriend = (): void => {
   showDeleteDialog.value = true
 }
 
-const startCall = (_mediaType: number): void => {
-  console.warn('[FriendInfo] startCall is disabled pending call state modules migration to .uts')
+const startCall = (mediaType: number): void => {
+  const uid = (currentFriendInfo.value as UTSJSONObject | null)?.['userID'] as string
+  if (uid == null || uid.length == 0) return
+  if (mediaType == 0) {
+    emit('voiceCall', uid)
+  } else {
+    emit('videoCall', uid)
+  }
 }
 
 /**

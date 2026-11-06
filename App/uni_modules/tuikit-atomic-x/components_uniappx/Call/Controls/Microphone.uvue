@@ -1,0 +1,58 @@
+<template>
+  <view class="btn" @tap="handleMic">
+    <image class="btn-img" :src="micIcon"></image>
+    <text class="btn-text">
+      {{ micText }}
+    </text>
+  </view>
+</template>
+
+<script setup lang="uts">
+  import { computed } from "vue";
+  import {
+    useDeviceState,
+    DeviceStatus,
+    type UseDeviceStateReturn
+  } from '@/uni_modules/tuikit-atomic-x/state/DeviceState.uts';
+
+  const ds: UseDeviceStateReturn = useDeviceState()
+
+  const micOnSrc: string = '/uni_modules/tuikit-atomic-x/static/icon/mic-on.png'
+  const micOffSrc: string = '/uni_modules/tuikit-atomic-x/static/icon/mic-off.png'
+
+  const micIcon = computed((): string => {
+    return ds.microphoneStatus.value == DeviceStatus.ON ? micOnSrc : micOffSrc
+  })
+
+  const micText = computed((): string => {
+    return ds.microphoneStatus.value == DeviceStatus.ON ? '麦克风已开' : '麦克风已关'
+  })
+
+  const handleMic = (): void => {
+    if (ds.microphoneStatus.value == DeviceStatus.ON) {
+      ds.closeLocalMicrophone();
+    } else {
+      ds.openLocalMicrophone(null);
+    }
+  };
+</script>
+
+<style scoped>
+  .btn {
+    margin: 10px 20px;
+  }
+
+  .btn-img {
+    width: 60px;
+    height: 60px;
+    border-radius: 140px;
+  }
+
+  .btn-text {
+    font-size: 12px;
+    color: #d5e0f2;
+    font-weight: 400;
+    text-align: center;
+    margin-top: 10px;
+  }
+</style>

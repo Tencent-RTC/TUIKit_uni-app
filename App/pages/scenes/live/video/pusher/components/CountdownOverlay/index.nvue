@@ -23,6 +23,7 @@
   const emit = defineEmits(['update:modelValue', 'finished']);
 
   const animation = (uni as any).requireNativePlugin('animation');
+  const numStartStyle = { transform: 'scale(1.6)', opacity: 0 };
 
   const visible = ref(false);
   const count = ref(3);
@@ -47,8 +48,6 @@
     visible.value = false;
     emit('update:modelValue', false);
   };
-
-  const numStartStyle = { transform: 'scale(1.6)', opacity: 0 };
 
   const showNum = (value: number) => {
     if (fadeOutTimer != null) {

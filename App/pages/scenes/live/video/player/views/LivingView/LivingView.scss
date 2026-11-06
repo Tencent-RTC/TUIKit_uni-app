@@ -1,0 +1,89 @@
+@import '../../../../styles/tokens.scss';
+
+.living-view {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+}
+
+.footer {
+  flex: 1;
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 80rpx;
+  padding-left: 32rpx;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  width: 686rpx;
+  z-index: 10;
+}
+
+.barrage-input-entry {
+  width: 380rpx;
+  height: 72rpx;
+  border-radius: 36rpx;
+  background-color: rgba(20, 20, 22, 0.54);
+  border-width: 2rpx;
+  border-color: rgba(255, 255, 255, 0.055);
+  flex-direction: row;
+  align-items: center;
+  padding-left: 34rpx;
+  padding-right: 34rpx;
+  overflow: hidden;
+}
+
+.barrage-input-entry-ph {
+  font-size: 26rpx;
+  color: rgba(235, 235, 245, 0.45);
+  lines: 1;
+  overflow: hidden;
+}
+
+.action-buttons {
+  position: fixed;
+  right: 40rpx;
+  bottom: 80rpx;
+  flex-direction: row;
+  align-items: center;
+  z-index: 10;
+}
+
+.player-top-bar {
+  position: absolute;
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20rpx 32rpx;
+  width: 750rpx;
+  z-index: 1000;
+}
+
+.player-top-bar-right {
+  position: absolute;
+  right: 32rpx;
+  top: 30rpx;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+}
+
+.player-top-bar-close {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  width: 52rpx;
+  height: 52rpx;
+  border-radius: 26rpx;
+  background-color: $live-dark-bg-overlay-22;
+}
+
+.player-top-bar-close-icon {
+  width: 30rpx;
+  height: 30rpx;
+}

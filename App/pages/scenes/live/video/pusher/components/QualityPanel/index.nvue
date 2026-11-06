@@ -38,7 +38,7 @@
   import { computed } from 'vue';
   import { VideoQuality, useDeviceState } from '@/uni_modules/tuikit-atomic-x/state/DeviceState';
   import { t } from '../../../../locales';
-  import BaseDrawer from '@/components/live/BaseDrawer/index.nvue';
+  import BaseDrawer from '@/uni_modules/tuikit-atomic-x/components/Common/BaseDrawer/index.nvue';
 
   const props = defineProps({
     modelValue: {
@@ -49,12 +49,12 @@
 
   const emit = defineEmits(['update:modelValue']);
 
+  const { localVideoQuality, updateVideoQuality } = useDeviceState();
+
   const innerVisible = computed({
     get: () => props.modelValue,
     set: (val) => emit('update:modelValue', val),
   });
-
-  const { localVideoQuality, updateVideoQuality } = useDeviceState();
 
   const qualityList = [
     { quality: VideoQuality.QUALITY_1080P, label: '1080P' },

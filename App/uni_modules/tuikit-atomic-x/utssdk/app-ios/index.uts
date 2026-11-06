@@ -246,8 +246,8 @@ export function reportScene(scene: string) {
 }
 
 
-export function reportUIPlatform() {
-  DataReport.reportUIPlatform(platform = 52)
+export function reportUIPlatform(platform : number = 52) {
+  DataReport.reportUIPlatform(platform = platform.toInt())
 }
 
 export function reportMetrics(type: string) {
@@ -385,6 +385,37 @@ export function startAudioForegroundService() {
 export function stopAudioForegroundService() {
 }
 
+
+/**
+ * 将 uni 静态资源路径（/static/xxx.png）转换为原生可识别的绝对路径
+ * 原生自定义组件（CallCoreView）无法解析 /static 相对路径，需转为沙箱绝对路径
+ */
+export function getStaticResourcePath(path: string): string {
+  return UTSiOS.getResourcePath(path)
+}
+
+/**
+ * 播放通话铃声（走 TRTC 音效混音器，避免与麦克风 AVAudioSession 冲突）
+ * @param path 铃声资源路径，支持 /static/xxx.mp3
+ * @param loop 是否循环
+ */
+export function playCallRingtone(path: string, loop: boolean) {
+  DispatchQueue.main.async(execute = (): void => {
+    // 将 uni 资源路径（/static/xxx.mp3）转换为 iOS 沙箱绝对路径
+    const realPath: string = UTSiOS.getResourcePath(path)
+    console.log(`[playCallRingtone] path=${path} realPath=${realPath} loop=${loop}`)
+    CallRingtonePlayer.shared.play(realPath, loop = loop)
+  })
+}
+
+/**
+ * 停止通话铃声
+ */
+export function stopCallRingtone() {
+  DispatchQueue.main.async(execute = (): void => {
+    CallRingtonePlayer.shared.stop()
+  })
+}
 
 /**
  * 开始震动

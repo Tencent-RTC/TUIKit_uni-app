@@ -9,7 +9,15 @@
     :preload="false"
   >
     <view class="panel-header">
-      <text class="panel-title">{{ t('manage_tab') }}</text>
+      <text class="panel-title">{{ t('settings_title') }}</text>
+      <view
+        v-if="connectedCount > 0"
+        class="end-all"
+        :class="{ 'is-disabled': endAllDisabled }"
+        @tap="handleEndAll"
+      >
+        <text class="end-all-text" :class="{ 'disabled-text': endAllDisabled }">{{ t('end_all') }}</text>
+      </view>
     </view>
 
     <view class="card">
@@ -31,7 +39,9 @@
     </view>
 
     <view class="card">
-      <text class="section-title">{{ connectedCount > 0 ? t('connected_viewers_count', { count: connectedCount }) : t('connected_viewers') }}</text>
+      <text class="section-title">
+        {{ connectedCount > 0 ? t('connected_viewers_count', { count: connectedCount }) : t('connected_viewers') }}
+      </text>
       <scroll-view
         v-if="connectedCount > 0"
         class="list-scroll"
@@ -45,16 +55,10 @@
           class="audience-row"
           :class="{ 'row-divider': index > 0 }"
         >
-          <view class="audience-identity">
-            <view class="audience-avatar-wrap">
-              <image class="audience-avatar" :src="audience?.avatarURL || defaultAvatarURL" mode="aspectFill" />
-            </view>
-            <text class="audience-name" :numberOfLines="1">{{ audience?.userName || audience?.userID }}</text>
-          </view>
-          <view class="audience-actions">
-            <view class="row-btn danger" @tap="handleEndConnection(audience)">
-              <text class="row-btn-text danger-text">{{ t('end') }}</text>
-            </view>
+          <image class="audience-avatar" :src="audience?.avatarURL || defaultAvatarURL" mode="aspectFill" />
+          <text class="audience-name" :numberOfLines="1">{{ audience?.userName || audience?.userID }}</text>
+          <view class="row-btn danger" :class="{ 'is-disabled': isPending(audience) }" @tap="handleEndConnection(audience)">
+            <text class="row-btn-text danger-text">{{ isPending(audience) ? t('processing') : t('end') }}</text>
           </view>
         </view>
       </scroll-view>
@@ -77,74 +81,59 @@
           class="audience-row"
           :class="{ 'row-divider': index > 0 }"
         >
-          <view class="audience-identity">
-            <view class="audience-avatar-wrap">
-              <image class="audience-avatar" :src="audience?.avatarURL || defaultAvatarURL" mode="aspectFill" />
-            </view>
-            <text class="audience-name" :numberOfLines="1">{{ audience?.userName || audience?.userID }}</text>
-          </view>
-          <view class="audience-actions">
-            <view class="row-btn" @tap="handleRequest(audience, 'accept')">
-              <text class="row-btn-text">{{ t('agree') }}</text>
-            </view>
-            <view class="row-btn danger" @tap="handleRequest(audience, 'reject')">
-              <text class="row-btn-text danger-text">{{ t('reject') }}</text>
-            </view>
+          <image class="audience-avatar" :src="audience?.avatarURL || defaultAvatarURL" mode="aspectFill" />
+          <text class="audience-name" :numberOfLines="1">{{ audience?.userName || audience?.userID }}</text>
+          <view
+            class="row-btn"
+            :class="{ 'is-disabled': isPending(audience) || isLayoutFull }"
+            @tap="handleAccept(audience)"
+          >
+            <text class="row-btn-text">{{ isPending(audience) ? t('processing') : t('accept_label') }}</text>
           </view>
         </view>
       </scroll-view>
     </view>
 
-    <view class="card" v-if="availableCount > 0">
-      <text class="section-title">{{ t('available_count', { count: availableCount }) }}</text>
+    <view class="card" v-if="candidateRows.length > 0">
+      <text class="section-title">{{ t('available_count', { count: candidateRows.length }) }}</text>
       <scroll-view
         class="list-scroll"
-        :style="{ height: listContentH(availableCount) + 'rpx' }"
+        :style="{ height: listContentH(candidateRows.length) + 'rpx' }"
         scroll-y
         :show-scrollbar="false"
       >
         <view
-          v-for="(audience, index) in availableList"
-          :key="audience?.userID"
+          v-for="(item, index) in candidateRows"
+          :key="item.userID"
           class="audience-row"
           :class="{ 'row-divider': index > 0 }"
         >
-          <view class="audience-identity">
-            <view class="audience-avatar-wrap">
-              <image class="audience-avatar" :src="audience?.avatarURL || defaultAvatarURL" mode="aspectFill" />
-            </view>
-            <text class="audience-name" :numberOfLines="1">{{ audience?.userName || audience?.userID }}</text>
-          </view>
-          <view class="audience-actions">
-            <view
-              class="row-btn"
-              :class="{ 'is-disabled': isInvited(audience) }"
-              @tap="handleInvite(audience)"
-            >
-              <text class="row-btn-text" :class="{ 'disabled-text': isInvited(audience) }">{{ isInvited(audience) ? t('invited') : t('invite') }}</text>
-            </view>
+          <image class="audience-avatar" :src="item.avatarURL || defaultAvatarURL" mode="aspectFill" />
+          <text class="audience-name" :numberOfLines="1">{{ item.userName || item.userID }}</text>
+          <view
+            class="row-btn"
+            :class="{ 'danger': item.isInvitee, 'is-disabled': isPending(item) || (!item.isInvitee && isLayoutFull) }"
+            @tap="handleCandidateAction(item)"
+          >
+            <text
+              class="row-btn-text"
+              :class="{ 'danger-text': item.isInvitee }"
+            >{{ isPending(item) ? t('processing') : (item.isInvitee ? t('cancel_invitation') : t('invite')) }}</text>
           </view>
         </view>
       </scroll-view>
     </view>
   </BaseDrawer>
-  <LiveToast
-    v-if="tipVisible"
-    :key="tipSeq"
-    v-model="tipVisible"
-    :title="tipTitle"
-    :duration="2000"
-  />
 </template>
 
 <script setup>
-  import { ref, computed, watch } from 'vue'
-  import BaseDrawer from '@/components/live/BaseDrawer/index.nvue';
+  import { ref, computed, watch, nextTick } from 'vue'
+  import BaseDrawer from '@/uni_modules/tuikit-atomic-x/components/Common/BaseDrawer/index.nvue';
   import { useCoGuestState } from '@/uni_modules/tuikit-atomic-x/state/CoGuestState';
   import { useLiveSeatState } from '@/uni_modules/tuikit-atomic-x/state/LiveSeatState';
   import { useLiveListState } from '@/uni_modules/tuikit-atomic-x/state/LiveListState';
   import { t } from '../locales';
-  import LiveToast from '@/uni_modules/tuikit-atomic-x/components/LiveToast.nvue';
+  import { showLiveToast } from '@/uni_modules/tuikit-atomic-x/components/Common/LiveToast/index.ts';
 
   const props = defineProps({
     modelValue: {
@@ -159,14 +148,7 @@
 
   const emit = defineEmits(['update:modelValue'])
 
-  const tipVisible = ref(false);
-  const tipSeq = ref(0);
-  const tipTitle = ref('');
-  const showTip = (title) => {
-    tipTitle.value = title;
-    tipSeq.value++;
-    tipVisible.value = true;
-  };
+  const showTip = (title) => showLiveToast(title);
 
   const innerVisible = computed({
     get: () => props.modelValue,
@@ -181,33 +163,34 @@
     applicants,
     candidates,
     acceptApplication,
-    rejectApplication,
     inviteToSeat,
+    cancelInvitation,
   } = useCoGuestState(liveID.value);
   const { kickUserOutOfSeat } = useLiveSeatState();
 
   const defaultAvatarURL = '/uni_modules/tuikit-atomic-x/static/assets/live/default-avatar.png';
 
   const HANDLE_H = 76;
-  const HEADER_H = 72;
+  const HEADER_H = 40;
   const BOTTOM_BASE_H = 32;
   const CARD_GAP = 24;
   const SECTION_PAD_H = 64;
   const SECTION_TITLE_H = 54;
   const LAYOUT_GRID_H = 208;
-  const ROW_H = 132;
-  const EMPTY_H = 184;
+  const ROW_H = 104;
+  const EMPTY_H = 304;
   const MAX_ROWS = 3;
 
   const LAYOUTS = [
-    { id: 601, key: 'layout_floating', icon: '/uni_modules/tuikit-atomic-x/static/assets/live/co-mic-layout-floating.png', iconActive: '/uni_modules/tuikit-atomic-x/static/assets/live/co-mic-layout-floating-active.png' },
-    { id: 600, key: 'layout_grid2', icon: '/uni_modules/tuikit-atomic-x/static/assets/live/co-mic-layout-grid2.png', iconActive: '/uni_modules/tuikit-atomic-x/static/assets/live/co-mic-layout-grid2-active.png' },
-    { id: 801, key: 'layout_fixed', icon: '/uni_modules/tuikit-atomic-x/static/assets/live/co-mic-layout-fixed.png', iconActive: '/uni_modules/tuikit-atomic-x/static/assets/live/co-mic-layout-fixed-active.png' },
-    { id: 800, key: 'layout_grid9', icon: '/uni_modules/tuikit-atomic-x/static/assets/live/co-mic-layout-grid9.png', iconActive: '/uni_modules/tuikit-atomic-x/static/assets/live/co-mic-layout-grid9-active.png' },
+    { id: 601, key: 'layout_floating', guestCapacity: 6, icon: '/uni_modules/tuikit-atomic-x/static/assets/live/co-mic-layout-floating.png', iconActive: '/uni_modules/tuikit-atomic-x/static/assets/live/co-mic-layout-floating-active.png' },
+    { id: 600, key: 'layout_grid2', guestCapacity: 8, icon: '/uni_modules/tuikit-atomic-x/static/assets/live/co-mic-layout-grid2.png', iconActive: '/uni_modules/tuikit-atomic-x/static/assets/live/co-mic-layout-grid2-active.png' },
+    { id: 801, key: 'layout_fixed', guestCapacity: 6, icon: '/uni_modules/tuikit-atomic-x/static/assets/live/co-mic-layout-fixed.png', iconActive: '/uni_modules/tuikit-atomic-x/static/assets/live/co-mic-layout-fixed-active.png' },
+    { id: 800, key: 'layout_grid9', guestCapacity: 8, icon: '/uni_modules/tuikit-atomic-x/static/assets/live/co-mic-layout-grid9.png', iconActive: '/uni_modules/tuikit-atomic-x/static/assets/live/co-mic-layout-grid9-active.png' },
   ];
 
   const selectedTemplateID = ref(600);
   const layoutUpdating = ref(false);
+  const pendingUserIDs = ref(new Set());
 
   const layoutRows = computed(() => [LAYOUTS.slice(0, 2), LAYOUTS.slice(2, 4)]);
 
@@ -216,9 +199,29 @@
     (connected.value || []).filter(user => user?.userID !== anchorUserID.value)
   );
   const connectedCount = computed(() => connectedGuests.value.length);
+  const guestCapacity = computed(() => {
+    const layout = LAYOUTS.find(opt => opt.id === selectedTemplateID.value);
+    return layout ? layout.guestCapacity : 8;
+  });
+  const isLayoutFull = computed(() => connectedCount.value >= guestCapacity.value);
   const applicantCount = computed(() => (applicants.value || []).length);
-  const availableList = computed(() => candidates.value || []);
-  const availableCount = computed(() => availableList.value.length);
+
+  const candidateRows = computed(() => {
+    const invitedRows = (invitees.value || []).map(user => ({
+      ...user,
+      isInvitee: true,
+    }));
+    const candidateList = (candidates.value || []).map(user => ({
+      ...user,
+      isInvitee: false,
+    }));
+    return [...invitedRows, ...candidateList];
+  });
+
+  const isPending = (audience) => !!audience?.userID && pendingUserIDs.value.has(audience.userID);
+  const endAllDisabled = computed(() =>
+    connectedCount.value > 0 && connectedGuests.value.every(user => isPending(user))
+  );
 
   const listContentH = (count) => (count > 0 ? Math.min(count, MAX_ROWS) * ROW_H : EMPTY_H);
 
@@ -228,10 +231,10 @@
     const applicantsCardH = applicantCount.value > 0
       ? SECTION_PAD_H + SECTION_TITLE_H + listContentH(applicantCount.value)
       : 0;
-    const availableCardH = availableCount.value > 0
-      ? SECTION_PAD_H + SECTION_TITLE_H + listContentH(availableCount.value)
+    const availableCardH = candidateRows.value.length > 0
+      ? SECTION_PAD_H + SECTION_TITLE_H + listContentH(candidateRows.value.length)
       : 0;
-    const cardCount = 2 + (applicantCount.value > 0 ? 1 : 0) + (availableCount.value > 0 ? 1 : 0);
+    const cardCount = 2 + (applicantCount.value > 0 ? 1 : 0) + (candidateRows.value.length > 0 ? 1 : 0);
     return HANDLE_H + HEADER_H + BOTTOM_BASE_H
       + layoutCardH + connectedCardH + applicantsCardH + availableCardH
       + CARD_GAP * cardCount;
@@ -243,9 +246,19 @@
     }
   });
 
+  // UI 层限频:5s 内只允许切换一次布局,避免高频调用 updateLiveInfo 触发服务端反复重混流。【背景：麦上用户布局切换时拉其他麦上用户容易黑屏，老 engine 问题】
+  const LAYOUT_SWITCH_COOLDOWN_MS = 5000;
+  let lastLayoutSwitchAt = 0;
+
   const selectLayout = (templateID) => {
     if (templateID === selectedTemplateID.value || layoutUpdating.value) return;
+    const now = Date.now();
+    if (now - lastLayoutSwitchAt < LAYOUT_SWITCH_COOLDOWN_MS) {
+      showTip(t('layout_switch_limit'));
+      return;
+    }
     const prev = selectedTemplateID.value;
+    lastLayoutSwitchAt = now;
     layoutUpdating.value = true;
     selectedTemplateID.value = templateID;
     updateLiveInfo({
@@ -261,259 +274,103 @@
       fail: (errCode, errMsg) => {
         layoutUpdating.value = false;
         selectedTemplateID.value = prev;
+        // 切换失败不占用冷却,允许立即重试。
+        lastLayoutSwitchAt = 0;
         console.error(`updateLiveInfo fail errCode: ${errCode}, errMsg: ${errMsg}`);
         showTip(t('layout_change_failed'));
       },
     });
   };
 
-  const isInvited = (audience) => {
-    if (!audience?.userID) return false;
-    return (invitees.value || []).some(user => user?.userID === audience.userID);
+  const handleAccept = (audience) => {
+    const userID = audience?.userID;
+    if (!userID || pendingUserIDs.value.has(userID)) return;
+    if (isLayoutFull.value) {
+      showTip(t('capacity_full', { capacity: guestCapacity.value }));
+      return;
+    }
+    pendingUserIDs.value.add(userID);
+    acceptApplication({
+      liveID: liveID.value,
+      userID,
+      success: () => {
+        pendingUserIDs.value.delete(userID);
+        console.log('acceptApplication success.');
+      },
+      fail: (errCode, errMsg) => {
+        pendingUserIDs.value.delete(userID);
+        console.error(`acceptApplication fail errCode: ${errCode}, errMsg: ${errMsg}`);
+        showTip(t('handle_request_failed'));
+      },
+    });
   };
 
-  const handleRequest = (audience, action) => {
-    if (action === 'accept') {
-      acceptApplication({
+  const handleCandidateAction = (item) => {
+    const userID = item?.userID;
+    if (!userID || pendingUserIDs.value.has(userID)) return;
+    if (item.isInvitee) {
+      pendingUserIDs.value.add(userID);
+      cancelInvitation({
         liveID: liveID.value,
-        userID: audience?.userID,
+        inviteeID: userID,
         success: () => {
-          console.log('acceptApplication success.');
+          pendingUserIDs.value.delete(userID);
+          console.log('cancelInvitation success.');
         },
         fail: (errCode, errMsg) => {
-          console.error(`acceptApplication fail errCode: ${errCode}, errMsg: ${errMsg}`);
+          pendingUserIDs.value.delete(userID);
+          console.error(`cancelInvitation fail errCode: ${errCode}, errMsg: ${errMsg}`);
+          showTip(t('handle_request_failed'));
         },
       });
       return;
     }
-    if (action === 'reject') {
-      rejectApplication({
-        liveID: liveID.value,
-        userID: audience?.userID,
-        success: () => {
-          console.log('rejectApplication success.');
-        },
-        fail: (errCode, errMsg) => {
-          console.error(`rejectCoGuestRequest fail errCode: ${errCode}, errMsg: ${errMsg}`);
-        },
-      });
-      uni.$localGuestStatus = 'IDLE'
+    if (isLayoutFull.value) {
+      showTip(t('capacity_full', { capacity: guestCapacity.value }));
+      return;
     }
-  };
-
-  const handleInvite = (audience) => {
-    if (!audience?.userID || isInvited(audience)) return;
+    pendingUserIDs.value.add(userID);
     inviteToSeat({
       liveID: liveID.value,
-      inviteeID: audience.userID,
+      inviteeID: userID,
       seatIndex: -1,
       timeout: 30,
       success: () => {
+        pendingUserIDs.value.delete(userID);
         console.log('inviteToSeat success.');
       },
       fail: (errCode, errMsg) => {
+        pendingUserIDs.value.delete(userID);
         console.error(`inviteToSeat fail errCode: ${errCode}, errMsg: ${errMsg}`);
+        showTip(t('handle_request_failed'));
       },
     });
   };
 
   const handleEndConnection = (audience) => {
-    if (!audience?.userID) return;
+    const userID = audience?.userID;
+    if (!userID || pendingUserIDs.value.has(userID)) return;
+    pendingUserIDs.value.add(userID);
     kickUserOutOfSeat({
       liveID: liveID.value,
-      userID: audience.userID,
+      userID,
       success: () => {
+        pendingUserIDs.value.delete(userID);
         console.log('kickUserOutOfSeat success.');
       },
       fail: (errCode, errMsg) => {
+        pendingUserIDs.value.delete(userID);
         console.error(`kickUserOutOfSeat fail errCode: ${errCode}, errMsg: ${errMsg}`);
       },
     });
   };
+
+  const handleEndAll = () => {
+    if (endAllDisabled.value) return;
+    connectedGuests.value.forEach(audience => handleEndConnection(audience));
+  };
 </script>
 
 <style>
-  .panel-header {
-    width: 686rpx;
-    height: 40rpx;
-    margin-bottom: 32rpx;
-    justify-content: center;
-    align-items: center;
-    flex-direction: row;
-  }
-
-  .panel-title {
-    color: #ffffff;
-    font-size: 30rpx;
-    font-weight: 600;
-  }
-
-  .card {
-    width: 686rpx;
-    margin-bottom: 24rpx;
-    padding: 32rpx;
-    border-radius: 32rpx;
-    background-color: rgba(0, 0, 0, 0.28);
-    border-width: 1rpx;
-    border-color: rgba(255, 255, 255, 0.05);
-    flex-direction: column;
-  }
-
-  .section-title {
-    color: rgba(255, 255, 255, 0.85);
-    font-size: 24rpx;
-    font-weight: 600;
-    margin-bottom: 24rpx;
-  }
-
-  .layout-grid {
-    width: 622rpx;
-    flex-direction: column;
-  }
-
-  .layout-row {
-    width: 622rpx;
-    height: 96rpx;
-    margin-bottom: 16rpx;
-    flex-direction: row;
-  }
-
-  .layout-option {
-    width: 303rpx;
-    height: 96rpx;
-    margin-right: 16rpx;
-    border-radius: 24rpx;
-    border-width: 1rpx;
-    border-color: rgba(255, 255, 255, 0.14);
-    background-color: rgba(0, 0, 0, 0.22);
-    flex-direction: row;
-    justify-content: center;
-    align-items: center;
-  }
-
-  .layout-option.is-active {
-    border-color: rgba(74, 158, 255, 0.8);
-    background-color: rgba(74, 158, 255, 0.2);
-  }
-
-  .layout-icon {
-    width: 40rpx;
-    height: 40rpx;
-    margin-right: 16rpx;
-  }
-
-  .layout-label {
-    color: rgba(255, 255, 255, 0.72);
-    font-size: 26rpx;
-  }
-
-  .layout-label.is-active-label {
-    color: #8ecfff;
-    font-weight: 600;
-  }
-
-  .list-scroll {
-    width: 622rpx;
-  }
-
-  .audience-row {
-    width: 622rpx;
-    height: 132rpx;
-    flex-direction: row;
-    align-items: center;
-    justify-content: space-between;
-  }
-
-  .row-divider {
-    border-top-width: 1rpx;
-    border-top-color: rgba(255, 255, 255, 0.07);
-  }
-
-  .audience-identity {
-    flex: 1;
-    flex-direction: row;
-    align-items: center;
-  }
-
-  .audience-avatar-wrap {
-    width: 68rpx;
-    height: 68rpx;
-    margin-right: 20rpx;
-    border-radius: 34rpx;
-    background-color: rgba(255, 255, 255, 0.06);
-    border-width: 1rpx;
-    border-color: rgba(74, 158, 255, 0.22);
-    overflow: hidden;
-    justify-content: center;
-    align-items: center;
-  }
-
-  .audience-avatar {
-    width: 68rpx;
-    height: 68rpx;
-    border-radius: 34rpx;
-  }
-
-  .audience-name {
-    flex: 1;
-    font-size: 26rpx;
-    color: rgba(255, 255, 255, 0.88);
-    lines: 1;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .audience-actions {
-    flex-direction: row;
-    align-items: center;
-    margin-left: 16rpx;
-  }
-
-  .row-btn {
-    width: 136rpx;
-    height: 72rpx;
-    margin-left: 16rpx;
-    border-radius: 20rpx;
-    background-color: rgba(74, 158, 255, 0.18);
-    border-width: 1rpx;
-    border-color: rgba(74, 158, 255, 0.42);
-    flex-direction: row;
-    justify-content: center;
-    align-items: center;
-  }
-
-  .row-btn.danger {
-    background-color: rgba(255, 79, 86, 0.1);
-    border-color: rgba(255, 79, 86, 0.22);
-  }
-
-  .row-btn.is-disabled {
-    background-color: rgba(255, 255, 255, 0.06);
-    border-color: rgba(255, 255, 255, 0.06);
-  }
-
-  .row-btn-text {
-    color: #ffffff;
-    font-size: 24rpx;
-  }
-
-  .row-btn-text.danger-text {
-    color: #ff7076;
-  }
-
-  .row-btn-text.disabled-text {
-    color: rgba(255, 255, 255, 0.4);
-  }
-
-  .list-empty {
-    width: 622rpx;
-    min-height: 184rpx;
-    justify-content: center;
-    align-items: center;
-  }
-
-  .list-empty-text {
-    color: rgba(255, 255, 255, 0.52);
-    font-size: 28rpx;
-  }
+  @import './CoGuestPanel.scss';
 </style>

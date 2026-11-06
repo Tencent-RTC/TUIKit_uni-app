@@ -1,0 +1,65 @@
+<template>
+  <view class="live-ended-view">
+    <image class="live-ended-bg" :style="{ height: bgHeightPx + 'px' }" src="/static/images/live/background/live-ended-shade.jpg" mode="scaleToFill" />
+    <view class="live-ended-close" :style="{ top: closeTopPx + 'px' }" @tap="emitClose">
+      <image class="live-ended-close-icon" src="/static/images/live/icon/close.png" mode="aspectFit" />
+    </view>
+    <view class="live-ended-content" :style="{ top: contentTopPx + 'px' }">
+      <text class="live-ended-title">{{ reason || t('audience.liveEnded') }}</text>
+      <view class="live-ended-avatar">
+        <Avatar :src="avatarURL || defaultAvatarURL" :name="hostName" :size="160" shape="circle" pureMode />
+      </view>
+      <text class="live-ended-host">{{ hostName }}</text>
+      <text class="live-ended-copy">{{ t('audience.liveEndedCopy') }}</text>
+    </view>
+  </view>
+</template>
+
+<script setup lang="ts">
+  import { t } from '../../../../locales';
+  import { getTopBarOffsetPx } from '../../../../utils';
+  import Avatar from '@/uni_modules/tuikit-atomic-x/components/Avatar/Avatar.nvue';
+
+  const defaultAvatarURL = '/uni_modules/tuikit-atomic-x/static/assets/live/default-avatar.png';
+
+  const props = defineProps({
+    hostName: {
+      type: String,
+      default: '',
+    },
+    avatarURL: {
+      type: String,
+      default: '',
+    },
+    reason: {
+      type: String,
+      default: '',
+    },
+  });
+
+  const emit = defineEmits(['close']);
+
+  const closeTopPx = getTopBarOffsetPx();
+  const contentTopPx = (() => {
+    try {
+      return Math.round((uni.getSystemInfoSync().windowHeight || 0) * 0.135);
+    } catch (e) {
+      return 200;
+    }
+  })();
+  const bgHeightPx = (() => {
+    try {
+      return uni.getSystemInfoSync().windowHeight || 0;
+    } catch (e) {
+      return 0;
+    }
+  })();
+
+  const emitClose = () => {
+    emit('close');
+  };
+</script>
+
+<style lang="scss">
+  @import './LiveEndedView.scss';
+</style>

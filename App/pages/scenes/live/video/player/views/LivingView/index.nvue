@@ -1,0 +1,456 @@
+<template>
+  <view class="living-view">
+    <view class="player-top-bar" :style="{ top: topOffsetPx + 'px' }">
+      <AnchorInfoCapsule role="audience" />
+      <view class="player-top-bar-right">
+        <AudienceListEntry @audienceTap="showAudienceList" />
+        <view class="player-top-bar-close" @click.stop="emit('back')">
+          <image class="player-top-bar-close-icon" src="/static/images/live/icon/close.png" />
+        </view>
+      </view>
+    </view>
+    <BarrageList mode="audience" :liveID="liveID" :topPx="barrageTopPx" @receiveGift="onBarrageReceiveGift" ref="barrageListRef" />
+    <AudienceEntryBanner ref="audienceEntryBannerRef" :topPx="audienceEntryTopPx" />
+    <view class="footer" :style="{ opacity: isShowCommentInput ? 0 : 1 }">
+      <view
+        class="barrage-input-entry"
+        @tap="openCommentInput"
+      >
+        <text class="barrage-input-entry-ph">{{ commentEntryPlaceholder }}</text>
+      </view>
+      <view
+        class="action-buttons"
+        :style="{ opacity: isShowCommentInput ? 0 : 1 }"
+        :userInteractionEnabled="!isShowCommentInput"
+      >
+        <BottomToolbar
+          :micEnabled="templateLayout !== 200"
+          :micConnected="localGuestStatus === 'CONNECTED'"
+          :micDisabled="shouldDisableCoGuestButton"
+          @coGuestTap="handleCoGuestButtonClick"
+          @micConnectedTap="expandCoGuestControlBar"
+          @giftTap="showGiftPicker"
+        />
+      </view>
+    </view>
+    <CoGuestControlBar
+      v-if="templateLayout !== 200 && localGuestStatus === 'CONNECTED'"
+      v-model="isCoGuestControlBarOpen"
+      :liveID="liveID"
+      :userID="currentLoginUserId"
+      :freezeCamera="isFreezeCamera"
+      @openDetail="onCoGuestControlBarOpenDetail"
+      @end="onCoGuestControlBarEnd"
+      @tip="showTip"
+    />
+
+    <LiveAudienceList v-model="isShowAudienceList" :liveID="liveID" @overlayActiveChange="onAudienceInnerPanelChange"></LiveAudienceList>
+    <CoGuestRequestPanel
+      v-model="isShowCoGuestRequestPanel"
+      :liveID="liveID"
+      :userID="currentLoginUserId"
+      :seatIndex="seatIndex"
+      :initialDetailOpen="requestPanelInitialDetail"
+      @accepted="onCoGuestAccepted"
+      @statusChange="onCoGuestStatusChange"
+      @back="onCoGuestDetailBack"
+    ></CoGuestRequestPanel>
+
+    <GiftPicker
+      v-model="isShowGiftPicker"
+      @giftSent="onSelfGiftSent"
+      @advancedComboStart="onAdvancedComboStart"
+    />
+    <GiftEntryBanner ref="entryBannerRef" :bottomPx="giftEntryBottomPx" :elevated="isShowGiftPicker" :hidden="nonGiftOverlayVisible" />
+    <ActionSheet v-model="isShowCoGuestSheet" :title="coGuestSheetTitle" :itemList="coGuestSheetItems" @select="onCoGuestSheetSelect" />
+    <BarrageInput v-if="liveID" v-model="isShowCommentInput" :liveID="liveID" @tip="showTip" />
+    <FloatingGiftCombo
+      ref="floatingComboRef"
+      @comboSend="onSelfGiftSent"
+    />
+  </view>
+</template>
+
+<script setup lang="ts">
+  import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
+  import { CoGuestRequestPanel, CoGuestControlBar } from '@/uni_modules/tuikit-atomic-x/components/CoGuestPanel';
+  import LiveAudienceList from '@/uni_modules/tuikit-atomic-x/components/LiveAudienceList';
+  import BarrageInput from '@/pages/scenes/live/common/BarrageInput/index.nvue';
+  import BarrageList from '@/uni_modules/tuikit-atomic-x/components/BarrageList';
+  import { GiftPicker, GiftEntryBanner, FloatingGiftCombo } from '@/uni_modules/tuikit-atomic-x/components/Gift';
+  import { useLiveSeatState } from '@/uni_modules/tuikit-atomic-x/state/LiveSeatState';
+  import { useLiveListState } from '@/uni_modules/tuikit-atomic-x/state/LiveListState';
+  import { useLiveAudienceState } from '@/uni_modules/tuikit-atomic-x/state/LiveAudienceState';
+  import { useCoGuestState } from '@/uni_modules/tuikit-atomic-x/state/CoGuestState';
+  import { DeviceStatus } from '@/uni_modules/tuikit-atomic-x/state/DeviceState';
+  import { useLoginState } from '@/uni_modules/tuikit-atomic-x/state/LoginState';
+  import { useCoHostState } from '@/uni_modules/tuikit-atomic-x/state/CoHostState';
+  import { heightPercentToRpx } from '@/uni_modules/tuikit-atomic-x/utils/screen';
+  import { safeJsonParse } from '@/uni_modules/tuikit-atomic-x/utils/utsUtils';
+  import ActionSheet from '@/pages/scenes/live/common/ActionSheet/index.nvue';
+  import { t } from '../../../../locales';
+  import { getTopBarOffsetPx, LIVE_ENDED_BACKGROUND_IMAGE, preloadLiveImages } from '../../../../utils';
+  import AnchorInfoCapsule from '@/pages/scenes/live/common/AnchorInfoCapsule/index.nvue';
+  import AudienceListEntry from '../../components/AudienceListEntry/index.nvue';
+  import BottomToolbar from '../../components/BottomToolbar/index.nvue';
+  import AudienceEntryBanner from '@/pages/scenes/live/common/AudienceEntryBanner/index.nvue';
+
+  const props = defineProps({
+    liveID: {
+      type: String,
+      default: '',
+    },
+    safeArea: {
+      type: Object,
+      default: () => ({ left: 0, right: 0, top: 0, bottom: 0, width: 375, height: 750 }),
+    },
+    templateLayout: {
+      type: Number,
+      default: 600,
+    },
+    currentLoginUserId: {
+      type: String,
+      default: '',
+    },
+    systemInfo: {
+      type: Object,
+      default: () => ({}),
+    },
+  });
+
+  const emit = defineEmits(['tip', 'receiveGift', 'back']);
+
+  const BARRAGE_LIST_H_PX = uni.upx2px(380);
+  const FREEZE_RELEASE_MS = 800;
+  const SYNC_WIN_H = (() => { try { return uni.getSystemInfoSync().windowHeight || 0; } catch (e) { return 0; } })();
+  const BOTTOM_PANEL_H_PX = (() => {
+    try { return uni.getSystemInfoSync().platform === 'ios' ? 60 : 80; } catch (e) { return 80; }
+  })();
+  const topOffsetPx = getTopBarOffsetPx();
+  const isExitingLive = false;
+
+  const parseEventData = (data: any) => {
+    try {
+      return typeof data === 'string' ? JSON.parse(data) : (data || {});
+    } catch (e) {
+      return {};
+    }
+  };
+
+  const parseAudienceEventUser = (eventData: string): { userID: string; userName: string; level: number } => {
+    const parsed = safeJsonParse<any>(eventData, null);
+    let user = parsed?.audience ?? parsed?.userInfo ?? parsed;
+    if (typeof user === 'string') {
+      user = safeJsonParse<any>(user, null);
+    }
+    user = user ?? {};
+    return {
+      userID: user?.userID || user?.userId || '',
+      userName: user?.userName || user?.nameCard || user?.userID || user?.userId || '',
+      level: Number(user?.level) || 0,
+    };
+  };
+
+  const { loginUserInfo } = useLoginState();
+  const { currentLive } = useLiveListState();
+  const { seatList } = useLiveSeatState(props.liveID);
+  const { audienceList, messageBannedUserList, addAudienceListener, removeAudienceListener } = useLiveAudienceState(props.liveID);
+  const { disconnect, connected, cancelApplication } = useCoGuestState(props.liveID);
+  const { connected: hostConnected } = useCoHostState(props.liveID);
+
+  const isShowAudienceList = ref(false);
+  const isShowCoGuestRequestPanel = ref(false);
+  const isCoGuestControlBarOpen = ref(false);
+  const isShowCommentInput = ref(false);
+  const requestPanelInitialDetail = ref(false);
+  const isShowGiftPicker = ref(false);
+  const isShowCoGuestSheet = ref(false);
+  const coGuestSheetItems = ref([t('audience.cancelCoGuestRequest')]);
+  const coGuestSheetTitle = ref('');
+  const audienceInnerPanelVisible = ref(false);
+  const isFreezeCamera = ref(false);
+  const seatIndex = ref(-1);
+  let freezeReleaseTimer: any = null;
+
+  const barrageListRef = ref();
+  const entryBannerRef = ref(null);
+  const floatingComboRef = ref<any>(null);
+  const audienceEntryBannerRef = ref(null);
+
+  uni.$localGuestStatus = 'IDLE';
+  const localGuestStatus = ref(uni.$localGuestStatus);
+
+  const shouldDisableCoGuestButton = computed(() => {
+    return Array.isArray(hostConnected.value) && hostConnected.value.length > 0;
+  });
+  const isDisableSendMessage = computed(() =>
+    (messageBannedUserList.value || []).some((obj: any) => obj?.userID === (loginUserInfo.value?.userID || ''))
+  );
+  const commentEntryPlaceholder = computed(() => t('audience.commentPlaceholder'));
+
+  const videoBottomPx = computed(() => {
+    const sa: any = (props.systemInfo && props.systemInfo.safeArea) || {};
+    return (Number(sa.top) || 0) + (Number(sa.height) || 0) - BOTTOM_PANEL_H_PX;
+  });
+  const barrageTopPx = computed(() => {
+    const winH = (props.systemInfo && props.systemInfo.windowHeight) || SYNC_WIN_H;
+    if (winH <= 0) return -9999;
+    const videoBottom = videoBottomPx.value;
+    const baseBottom = (videoBottom > BARRAGE_LIST_H_PX && videoBottom <= winH)
+      ? (winH - videoBottom)
+      : 84;
+    return Math.max(0, Math.round(winH - baseBottom - BARRAGE_LIST_H_PX));
+  });
+  const audienceEntryTopPx = computed(() => barrageTopPx.value - uni.upx2px(64));
+  const giftEntryBottomPx = computed(() => {
+    if (isShowGiftPicker.value) {
+      return uni.upx2px(heightPercentToRpx(0.5) + 80 + 16);
+    }
+    return props.safeArea.height / 8 + uni.upx2px(380 + 16);
+  });
+
+  const anyOverlayVisible = computed(() =>
+    isShowCoGuestSheet.value ||
+    isShowGiftPicker.value ||
+    isShowAudienceList.value ||
+    audienceInnerPanelVisible.value ||
+    isShowCoGuestRequestPanel.value
+  );
+  const nonGiftOverlayVisible = computed(() =>
+    isShowCoGuestSheet.value ||
+    isShowAudienceList.value ||
+    isShowCoGuestRequestPanel.value
+  );
+
+  const showTip = (title: string, position: string = 'center') => {
+    emit('tip', title, position);
+  };
+
+  const setGuestStatus = (status: string) => {
+    uni.$localGuestStatus = status;
+    localGuestStatus.value = status;
+  };
+
+  const pushAudienceEntry = (user: { userID: string; userName: string; level: number }) => {
+    audienceEntryBannerRef.value?.push?.(user);
+  };
+
+  const openCommentInput = () => {
+    if (isDisableSendMessage.value) {
+      showTip(t('audience.banned'));
+      return;
+    }
+    isShowCommentInput.value = true;
+  };
+
+  const showGiftPicker = () => {
+    isShowGiftPicker.value = true;
+  };
+
+  const onBarrageReceiveGift = (giftData: any) => {
+    if (!giftData) return;
+    const senderId = giftData?.sender?.userID || '';
+    const isSelf = !!senderId && senderId === loginUserInfo.value?.userID;
+    const count = Math.max(1, Math.round(Number(giftData.count) || 1));
+    console.log('======onReceiveGift senderId=', senderId, 'isSelf=', isSelf, 'count=', count, 'giftID=', giftData?.gift?.giftID);
+    if (!isSelf) {
+      const anchor = currentLive.value?.liveOwner || null;
+      entryBannerRef.value?.push?.({
+        gift: giftData.gift,
+        sender: giftData.sender,
+        recipient: anchor ? {
+          userID: anchor.userID || '',
+          userName: anchor.userName || anchor.userID || '',
+        } : null,
+        count: count,
+      });
+    }
+    emit('receiveGift', giftData, count);
+  };
+
+  const onSelfGiftSent = (payload: any) => {
+    const gift = payload?.gift;
+    if (!gift) return;
+    entryBannerRef.value?.push?.({
+      gift: {
+        giftID: gift.giftID,
+        name: gift.name,
+        iconURL: gift.iconURL,
+      },
+      sender: {
+        userID: loginUserInfo.value?.userID || 'self',
+        userName: loginUserInfo.value?.nickname || loginUserInfo.value?.userID || '',
+        avatarURL: loginUserInfo.value?.avatarURL || '',
+      },
+      recipient: null,
+    });
+  };
+
+  const onAdvancedComboStart = (payload: any) => {
+    const gift = payload?.gift;
+    const count = payload?.count || 1;
+    isShowGiftPicker.value = false;
+    floatingComboRef.value?.activate?.(gift, count);
+  };
+
+  const showAudienceList = () => {
+    isShowAudienceList.value = true;
+  };
+
+  const onAudienceInnerPanelChange = (visible) => {
+    audienceInnerPanelVisible.value = !!visible;
+  };
+
+  const onAudienceJoined = (eventData: string) => {
+    pushAudienceEntry(parseAudienceEventUser(eventData));
+  };
+
+  const onAudienceMessageDisabled = (data: any) => {
+    if (isExitingLive) return;
+    const res = parseEventData(data);
+    const audience = parseEventData(res?.audience);
+    const userID = String(audience?.userID || '');
+    if (!userID || userID !== String(props.currentLoginUserId || '')) return;
+    showTip(t(res?.isDisable ? 'audience.banned' : 'audience.unbanned'));
+  };
+
+  const showCoGuestRequestPanel = () => {
+    if (uni.$localGuestStatus === 'CONNECTED') {
+      coGuestSheetItems.value = [t('audience.disconnectCoGuest')]
+      isShowCoGuestSheet.value = true
+    } else {
+      isShowCoGuestRequestPanel.value = true
+    }
+  };
+
+  const handleCoGuestButtonClick = () => {
+    if (shouldDisableCoGuestButton.value) {
+      return;
+    }
+    seatIndex.value = -1;
+    showCoGuestRequestPanel();
+  };
+
+  const onCoGuestSheetSelect = (res: { tapIndex: number }) => {
+    if (uni.$localGuestStatus === 'CONNECTED') {
+      if (res.tapIndex === 0) {
+        disconnect({
+          liveID: props.liveID,
+        })
+        setGuestStatus('IDLE')
+      }
+      return
+    }
+    if (uni.$localGuestStatus === 'USER_APPLYING') {
+      if (res.tapIndex === 0) {
+        cancelApplication({
+          liveID: props.liveID,
+        })
+        setGuestStatus('IDLE')
+      }
+    }
+  }
+
+  const expandCoGuestControlBar = () => {
+    isCoGuestControlBarOpen.value = true;
+  };
+  const onCoGuestAccepted = () => {};
+  const onCoGuestDetailBack = () => {
+    isShowCoGuestRequestPanel.value = false;
+    isCoGuestControlBarOpen.value = true;
+  };
+  const onCoGuestStatusChange = (status: string) => {
+    localGuestStatus.value = status;
+  };
+  const onCoGuestControlBarOpenDetail = () => {
+    requestPanelInitialDetail.value = true;
+    isFreezeCamera.value = true;
+    isShowCoGuestRequestPanel.value = true;
+  };
+  const onCoGuestControlBarEnd = () => {
+    setGuestStatus('IDLE');
+    isCoGuestControlBarOpen.value = false;
+  };
+
+  const openCoGuestRequestFromSeat = (payload: any) => {
+    if (!payload?.userID) {
+      if (shouldDisableCoGuestButton.value) {
+        return;
+      }
+      const idx = Number(payload?.seatIndex);
+      seatIndex.value = Number.isFinite(idx) && idx >= 0 ? idx : -1;
+      showCoGuestRequestPanel();
+    }
+  };
+
+  defineExpose({ openCoGuestRequestFromSeat });
+
+  let seenAudienceIDs = new Set<string>();
+  let audienceListInitialized = false;
+  watch(audienceList, (list) => {
+    const arr = Array.isArray(list) ? list : [];
+    const ids = new Set(arr.map((u: any) => u?.userID).filter(Boolean));
+    if (ids.size === 0) {
+      seenAudienceIDs.clear();
+      audienceListInitialized = false;
+      return;
+    }
+    if (!audienceListInitialized) {
+      seenAudienceIDs = ids;
+      audienceListInitialized = true;
+      return;
+    }
+    ids.forEach(id => {
+      if (!seenAudienceIDs.has(id)) {
+        const user = arr.find((u: any) => u?.userID === id);
+        pushAudienceEntry({ userID: id, userName: user?.userName || id, level: Number(user?.level) || 0 });
+      }
+    });
+    seenAudienceIDs = ids;
+  });
+
+  watch(connected, (newList, oldList) => {
+    const list = Array.isArray(newList) ? newList : [];
+    const hasSelfInConnected = list.some(item => item?.userID === (loginUserInfo.value?.userID || ''));
+    if (!hasSelfInConnected) {
+      setGuestStatus('IDLE')
+      isCoGuestControlBarOpen.value = false
+    }
+  }, { deep: true, immediate: true })
+
+  watch(isShowCoGuestRequestPanel, (val) => {
+    if (!val) {
+      requestPanelInitialDetail.value = false;
+      clearTimeout(freezeReleaseTimer);
+      freezeReleaseTimer = setTimeout(() => { isFreezeCamera.value = false; }, FREEZE_RELEASE_MS);
+    }
+  });
+
+  watch(
+    () => seatList.value?.find((s) => s.userInfo?.userID === props.currentLoginUserId)?.userInfo?.cameraStatus,
+    (status) => {
+      if (!isShowCoGuestRequestPanel.value && status === DeviceStatus.ON) {
+        isFreezeCamera.value = false;
+      }
+    },
+  );
+
+  onMounted(() => {
+    setTimeout(() => {
+      preloadLiveImages([LIVE_ENDED_BACKGROUND_IMAGE], 1);
+    }, 1500);
+    addAudienceListener(props.liveID, 'onAudienceJoined', onAudienceJoined);
+    addAudienceListener(props.liveID, 'onAudienceMessageDisabled', onAudienceMessageDisabled);
+  });
+
+  onUnmounted(() => {
+    removeAudienceListener(props.liveID, 'onAudienceJoined', onAudienceJoined);
+    removeAudienceListener(props.liveID, 'onAudienceMessageDisabled', onAudienceMessageDisabled);
+    clearTimeout(freezeReleaseTimer);
+  });
+</script>
+
+
+<style lang="scss">
+  @import './LivingView.scss';
+</style>
