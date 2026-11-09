@@ -1,0 +1,125 @@
+/**
+ * 头像下载与缓存工具
+ *
+ * uniappx 中网络路径转本地路径方案：
+ * - 网络图片：调用 uni.downloadFile() 下载到临时目录，返回 tempFilePath 即为本地可用路径
+ * - 持久保存：使用 uni.saveFile() 将临时文件存储到本地永久目录
+ * - 应用内静态资源：直接使用相对路径（如 /static/xxx）无需转换，框架自动解析
+ *
+ * 注意：uniappx 中无 plus.io API，不能使用 plus.io.convertLocalFileSystemURL()
+ */
+
+/**
+ * 默认头像 URL
+ *
+ * 无用户信息（participant 有 id 但无 avatarURL）时，上层下发的默认头像需与原生底层
+ * CallCoreView 的内置默认头像保持一致，否则会出现"上层头像与底层头像不同"的问题。
+ * 底层默认头像为 TUIKit 的 avatar_03.png，iOS / Android 均对齐为该地址。
+ */
+export const DEFAULT_AVATAR_URL: string = "https://web.sdk.qcloud.com/component/TUIKit/assets/avatar_03.png"
+
+/** 头像缓存（URL → 本地路径），模块级单例，跨组件共享 */
+const avatarCache: Map<string, string> = new Map<string, string>()
+
+/** 默认头像本地路径 */
+let _defaultAvatarLocalPath: string = ""
+
+/** 默认头像是否已就绪 */
+let _defaultAvatarReady: boolean = false
+
+/**
+ * 获取默认头像本地路径
+ */
+export function getDefaultAvatarPath(): string {
+  return _defaultAvatarLocalPath.length > 0 ? _defaultAvatarLocalPath : ""
+}
+
+/**
+ * 默认头像是否已下载就绪
+ */
+export function isDefaultAvatarReady(): boolean {
+  return _defaultAvatarReady
+}
+
+/**
+ * 下载网络图片并缓存到本地
+ *
+ * 在 uniappx 中，通过 uni.downloadFile 将网络路径转为本地路径，
+ * 返回的 res.tempFilePath 即为本地可用路径，可直接传给原生组件使用。
+ */
+export function downloadAvatar(url: string): Promise<string> {
+  const cached: string | null = avatarCache.get(url)
+  if (cached != null) {
+    return Promise.resolve(cached)
+  }
+  return new Promise<string>((resolve: (value: string) => void) => {
+    uni.downloadFile({
+      url: url,
+      success: (res): void => {
+        if (res.statusCode == 200) {
+          const localPath: string = res.tempFilePath
+          avatarCache.set(url, localPath)
+          resolve(localPath)
+        } else {
+          console.warn('[AvatarHelper] download failed, statusCode:', res.statusCode, url)
+          resolve(getDefaultAvatarPath())
+        }
+      },
+      fail: (err): void => {
+        console.error('[AvatarHelper] download error:', url, err)
+        resolve(getDefaultAvatarPath())
+      }
+    })
+  })
+}
+
+/** 预下载默认头像的 Promise（模块加载时自动开始） */
+export const defaultAvatarPromise: Promise<string> = downloadAvatar(DEFAULT_AVATAR_URL)
+defaultAvatarPromise.then((localPath: string): void => {
+  _defaultAvatarLocalPath = localPath
+  _defaultAvatarReady = true
+  console.log('[AvatarHelper] default avatar cached:', localPath)
+})
+
+/**
+ * 批量下载参与者头像
+ * @param participants 参与者数组，每项包含 id 和 avatarURL 字段
+ * @returns Promise<UTSJSONObject> 格式的 { participantId: localPath } 映射
+ */
+export function downloadParticipantAvatars(participants: any[]): Promise<UTSJSONObject> {
+  return new Promise<UTSJSONObject>((resolve: (value: UTSJSONObject) => void) => {
+    if (participants.length == 0) {
+      resolve({} as UTSJSONObject)
+      return
+    }
+    const doDownload = (): void => {
+      const avatarMap: UTSJSONObject = {} as UTSJSONObject
+      const tasks: Promise<void>[] = [] as Promise<void>[]
+      for (let i: number = 0; i < participants.length; i++) {
+        const participant: UTSJSONObject = participants[i] as UTSJSONObject
+        const pid: string = (participant["id"] as string | null) ?? ''
+        const avatarURL: string = (participant["avatarURL"] as string | null) ?? ''
+        if (pid.length > 0 && avatarURL.length > 0) {
+          tasks.push(
+            downloadAvatar(avatarURL).then((localPath: string): void => {
+              avatarMap[pid] = localPath
+            })
+          )
+        } else if (pid.length > 0) {
+          avatarMap[pid] = getDefaultAvatarPath()
+        }
+      }
+      Promise.all(tasks).then((_res): void => {
+        resolve(avatarMap)
+      })
+    }
+    // 等待默认头像就绪后再下载，确保 fallback 路径可用
+    if (!_defaultAvatarReady) {
+      defaultAvatarPromise.then((_path: string): void => {
+        doDownload()
+      })
+    } else {
+      doDownload()
+    }
+  })
+}

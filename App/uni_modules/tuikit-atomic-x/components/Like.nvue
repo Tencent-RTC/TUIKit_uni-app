@@ -30,7 +30,7 @@
 </template>
 
 <script setup lang="ts">
-  import { ref, computed, onMounted, onUnmounted } from 'vue';
+  import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
   import { useLikeState } from "@/uni_modules/tuikit-atomic-x/state/LikeState";
   import { useLiveListState } from "@/uni_modules/tuikit-atomic-x/state/LiveListState";
 
@@ -40,7 +40,6 @@
       default: 'audience',
       validator: (value: string) => ['anchor', 'audience'].includes(value)
     },
-    // 同屏最大漂浮数量：过多会拖累 nvue 逐帧 style patch 通信
     maxConcurrent: {
       type: Number,
       default: 8,
@@ -49,23 +48,18 @@
       type: Boolean,
       default: true,
     },
+    liveID: {
+      type: String,
+      default: '',
+    },
   });
 
   const { currentLive } = useLiveListState();
-  const liveID = computed(() => String(currentLive.value?.liveID || ''));
-  const { sendLike, addLikeListener, removeLikeListener } = useLikeState(liveID.value);
+  const liveID = computed(() => String(props.liveID || currentLive.value?.liveID || ''));
+  const { sendLike, totalLikeCount } = useLikeState(liveID.value);
 
-  // nvue 原生 animation 模块：直接对按钮元素 ref 执行 transform/opacity 动画（与底部操作按钮统一），
-  // 不依赖 CSS transition（nvue Weex 上 class/style 切 transform 不稳定）。
   const animation = uni.requireNativePlugin('animation');
 
-  // ============ 按钮按压反馈 ============
-  // 按压态仅缩放不改透明度：transform: scale(0.92)。
-  //
-  // 注意：nvue 的 animation.transition 打断进行中的动画时，起点不像浏览器 CSS :active 那样从
-  // 「当前真实插值」平滑接续，导致轻点（touchstart 后立刻 touchend）时收缩还没起来就被回弹覆盖、
-  // 几乎看不到缩放。为此加「最小可见按压时长」：按下即播收缩，抬起若过快则延迟回弹补足到
-  // MIN_PRESS_VISIBLE_MS，保证轻点也能看到「缩到 0.92 再回弹」。长按行为不变（与底部操作按钮统一）。
   let likeBtnRef: any = null;
   const BTN_ANIM_DURATION = 120;
   const BTN_ANIM_TIMING = 'ease';
@@ -104,7 +98,6 @@
     }, delay);
   }
 
-  // ============ 飘心动画 ============
   const REACTION_ICONS = [
     '/uni_modules/tuikit-atomic-x/static/assets/live/reaction-thumb.png',
     '/uni_modules/tuikit-atomic-x/static/assets/live/reaction-heart.png',
@@ -133,17 +126,14 @@
   let floatSeq = 0;
   let rafTimer: any = null;
 
-  // 关键帧节点：0% / 12.5% / 42.25% / 70.25% / 80.75% / 100%
   const STAGE_1 = 0.125;
   const STAGE_2 = 0.4225;
   const STAGE_3 = 0.7025;
   const STAGE_4 = 0.8075;
   const RISE_Y = -100;
-  // layer 宽度需与 CSS 保持一致；按钮位于 layer 右侧
   const LAYER_W = 380;
   const BTN_CENTER_FROM_RIGHT = 156;
 
-  // 点击节流：SPAWN_THROTTLE 内的重复调用直接丢弃，避免同屏飘心堆积拖累帧率
   const SPAWN_THROTTLE = 80;
   let lastSpawnAt = 0;
 
@@ -162,8 +152,6 @@
       return;
     }
     const now = Date.now();
-    // 倒序遍历：finished 时 splice 精准剔除；其余只改 reactive 属性触发精准 patch，
-    // 不做整体数组替换（否则 nvue 会重建 native view，视觉卡顿）
     for (let i = floats.value.length - 1; i >= 0; i--) {
       const f = floats.value[i];
       const p = (now - f.bornAt) / f.duration;
@@ -210,15 +198,12 @@
     if (rafTimer == null) rafTimer = setTimeout(tick, 16);
   }
 
-  // 生成一条飘心：从按钮中心蹿出，四段近乎垂直上升的漂移路径。
-  // X 方向只在 -2~-14rpx 微摆，飘心几乎垂直上升，避免侧向漂出容器被裁切。
   function spawnFloat() {
     const now = Date.now();
     if (now - lastSpawnAt < SPAWN_THROTTLE) return;
     lastSpawnAt = now;
 
     const startX = LAYER_W - BTN_CENTER_FROM_RIGHT + (Math.random() * 20 - 10);
-    // rise2：整体总上升量。配合 RISE_Y=-100，最高 Y 约 -260rpx
     const rise2 = 100 + Math.random() * 60;
     const p1x = -(8 + Math.random() * 4);
     const p1y = RISE_Y - rise2 * 0.34;
@@ -241,7 +226,6 @@
       p1x, p1y, p2x, p2y, p3x, p3y, p4x, p4y,
     };
 
-    // 超上限则丢最旧
     if (floats.value.length >= props.maxConcurrent) {
       floats.value.splice(0, 1);
     }
@@ -249,7 +233,6 @@
     ensureTicking();
   }
 
-  // ============ 后端发送策略：6s 内累积批量发送，动画每次点击立即出 ============
   const pendingCount = ref(0);
   let batchTimer: any = null;
   let lastSendAt = 0;
@@ -281,6 +264,7 @@
     spawnFloat();
 
     pendingCount.value += 1;
+    selfPendingLikes += 1; // 记一笔，计数回声回来时抵消，避免重复播
     const now = Date.now();
     if (lastSendAt === 0 || now - lastSendAt >= BATCH_DELAY) {
       flushBatch();
@@ -292,27 +276,58 @@
     }
   }
 
-  function handleReceiveLikesMessage(event: any) {
-    const res = typeof event === 'string' ? JSON.parse(event) : event;
-    const sender = typeof res?.sender === 'string' ? JSON.parse(res.sender) : res?.sender;
-    if (sender && sender.userID === uni.$userID) return;
-    spawnFloat();
-  }
-
   function triggerLike() {
     spawnFloat();
   }
 
+  let lastTotalLikeCount = 0;
+  let selfPendingLikes = 0;
+
+  function spawnFloats(count: number) {
+    const total = Math.max(1, Math.min(count, 3));
+    for (let i = 0; i < total; i++) {
+      if (i === 0) {
+        spawnFloat();
+      } else {
+        setTimeout(spawnFloat, i * 120);
+      }
+    }
+  }
+
+  watch(totalLikeCount, (next: any) => {
+    const n = Number(next) || 0;
+    if (lastTotalLikeCount === 0) {
+      lastTotalLikeCount = n;
+      return;
+    }
+    const delta = n - lastTotalLikeCount;
+    lastTotalLikeCount = n;
+    if (delta <= 0) return;
+    const owned = Math.min(delta, selfPendingLikes);
+    selfPendingLikes -= owned;
+    const fromOthers = delta - owned;
+    if (fromOthers <= 0) return;
+    spawnFloats(fromOthers);
+  });
+
+  let stopLikeWatch: (() => void) | null = null;
   onMounted(() => {
-    addLikeListener(liveID.value, 'onReceiveLikesMessage', handleReceiveLikesMessage);
+    stopLikeWatch = watch(liveID, (id) => {
+      if (!id) return;
+      lastTotalLikeCount = 0;
+      selfPendingLikes = 0;
+      useLikeState(id);
+    }, { immediate: true });
   });
 
   onUnmounted(() => {
-    removeLikeListener(liveID.value, 'onReceiveLikesMessage', handleReceiveLikesMessage);
+    if (stopLikeWatch) {
+      stopLikeWatch();
+      stopLikeWatch = null;
+    }
     if (rafTimer != null) { clearTimeout(rafTimer); rafTimer = null; }
     if (batchTimer != null) { clearTimeout(batchTimer); batchTimer = null; }
     if (likeBtnReleaseTimer != null) { clearTimeout(likeBtnReleaseTimer); likeBtnReleaseTimer = null; }
-    // 组件卸载前 flush 未发送量，避免吞点赞
     if (pendingCount.value > 0) flushBatch();
   });
 
@@ -320,7 +335,6 @@
 </script>
 
 <style>
-  /* 明确宽高：避免 nvue Weex 里 relative + 无尺寸 view 被 flex 父级压到 0×0 */
   .like-container {
     position: relative;
     width: 88rpx;
@@ -346,8 +360,6 @@
     height: 72rpx;
   }
 
-  /* fixed 定位脱离 flex 相对定位链；right -80rpx 让右边界超出屏幕，
-     为飘心右侧起点抖动留出 padding，避免右侧被裁 */
   .like-float-layer {
     position: fixed;
     right: -80rpx;
@@ -357,7 +369,6 @@
     z-index: 100;
   }
 
-  /* bottom: -40rpx 让元素中心贴 layer 底线（= 按钮中心线） */
   .like-float {
     position: absolute;
     bottom: -40rpx;

@@ -1,161 +1,226 @@
 <template>
-	<view class="page" :style="{ paddingTop: statusBarHeight + 'px' }">
-		<text class="title">TUIKit</text>
+  <view class="page">
+    <view class="navbar" :style="{ paddingTop: statusBarHeight + 'px' }">
+      <view class="navbar-content">
+        <view class="navbar-left">
+          <image class="logo-image" src="/static/images/logo.png" mode="aspectFit"></image>
+        </view>
+        <image class="avatar" :src="avatarURL" mode="aspectFill" @tap="handleAvatarTap"></image>
+      </view>
+    </view>
 
-		<!-- 用户信息 -->
-		<view class="card">
-		  <image class="avatar" :src="avatarURL" />
-		  <view class="info">
-			<text class="name">{{ displayName }}</text>
-			<text class="id">{{ displayID }}</text>
-		  </view>
-		</view>
-
-		<!-- 操作按钮 -->
-		<view class="btn btn-primary" @tap="startChat">
-		  <text class="btn-text">开始聊天</text>
-		</view>
-		<view class="btn btn-outline" @tap="handleLogout">
-		  <text class="btn-text-dark">退出登录</text>
-		</view>
-
-		<view class="footer">
-		  <text class="footer-text">Powered by Tencent Cloud IM</text>
-		</view>
-	  </view>
+    <scroll-view class="main-content" direction="vertical" :show-scrollbar="false">
+      <view v-for="(row, rowIndex) in moduleRows" :key="rowIndex" class="module-row">
+        <view
+          v-for="(module, index) in row"
+          :key="module.id"
+          :class="['module-card', index == row.length - 1 ? 'module-card-last' : '']"
+          @tap="navigateToModule(module)"
+        >
+          <view class="card-header">
+            <view class="card-header-left">
+              <image class="card-icon" :src="module.icon" mode="aspectFit"></image>
+              <text class="card-title">{{ module.title }}</text>
+              <view class="ui-badge">
+                <text class="badge-text">UI组件</text>
+              </view>
+            </view>
+            <text class="arrow-icon">›</text>
+          </view>
+          <view class="card-info">
+            <text class="card-description">{{ module.description }}</text>
+          </view>
+        </view>
+        <!-- 奇数个模块时补位，保持两列等宽 -->
+        <view v-if="row.length == 1" class="module-card-placeholder"></view>
+      </view>
+      <view class="footer-placeholder"></view>
+    </scroll-view>
+  </view>
 </template>
 
 <script setup lang="uts">
-import { useLoginState } from '@/uni_modules/tuikit-atomic-x/state/LoginState'
+import { ref, computed } from 'vue'
+import { onLoad } from '@dcloudio/uni-app'
+import { useLoginState, type UserProfileParam } from '@/uni_modules/tuikit-atomic-x/state/LoginState'
+import { HOME_MODULES, type ModuleItem } from './home-config.uts'
 
-const statusBarHeight = ref(0)
-const { loginUserInfo: userInfo, logout } = useLoginState()
+const DEFAULT_AVATAR: string = 'https://web.sdk.qcloud.com/component/TUIKit/assets/avatar_21.png'
 
-const DEFAULT_AVATAR = 'https://web.sdk.qcloud.com/component/TUIKit/assets/avatar_21.png'
+const statusBarHeight = ref<number>(0)
+const { loginUserInfo, logout } = useLoginState()
+
 const avatarURL = computed((): string => {
-  const info = userInfo.value
-  if (info == null) return DEFAULT_AVATAR
-  return (info.avatarURL != null && info.avatarURL.length > 0) ? info.avatarURL : DEFAULT_AVATAR
+  const info: UserProfileParam | null = loginUserInfo.value
+  const url: string = info?.avatarURL ?? ''
+  return url.length > 0 ? url : DEFAULT_AVATAR
 })
 
-const displayName = computed((): string => {
-  const info = userInfo.value
-  if (info == null) return '未登录'
-  return (info.nickname != null && info.nickname.length > 0) ? info.nickname : '未登录'
+/** 两个一行排列 */
+const moduleRows = computed((): ModuleItem[][] => {
+  const rows: ModuleItem[][] = []
+  for (let i: number = 0; i < HOME_MODULES.length; i += 2) {
+    rows.push(HOME_MODULES.slice(i, i + 2))
+  }
+  return rows
 })
 
-const displayID = computed((): string => {
-  const info = userInfo.value
-  if (info == null || info.userID == null) return '请先登录'
-  return `ID: ${info.userID}`
-})
-
-const startChat = () => {
-  uni.switchTab({
-    url: '/pages/scenes/chat/conversationList/conversationList',
-  })
+/** 跳转逻辑与 demo 一致：无路由提示开发中；tabBar 页用 switchTab，其余 navigateTo */
+const navigateToModule = (module: ModuleItem): void => {
+  if (module.route.length == 0) {
+    uni.showToast({ title: '功能开发中', icon: 'none' })
+    return
+  }
+  if (module.isTabbar) {
+    uni.switchTab({ url: module.route })
+    return
+  }
+  uni.navigateTo({ url: module.route })
 }
 
-const handleLogout = () => {
+/**
+ * 点击头像：demo 中跳转"个人中心"，quickstart 不包含该页面，这里直接提供退出登录
+ */
+const handleAvatarTap = (): void => {
   uni.showModal({
-	title: '提示',
-	content: '确定退出登录？',
-	success: (res) => {
-	  if (res.confirm) {
-		logout({
-		  // 修复 E27-3：箭头函数用 block body + 显式 : void 标注，
-		  // 避免 expression body 把 uni.reLaunch(...) / uni.showToast(...) 的
-		  success: (): void => { uni.reLaunch({ url: '/pages/login/login' }) },
-		  fail: (_: number, msg: string): void => { uni.showToast({ title: msg, icon: 'none' }) }
-		})
-	  }
-	}
+    title: '提示',
+    content: '确定退出登录？',
+    success: (res): void => {
+      if (res.confirm) {
+        logout({
+          success: (): void => { uni.reLaunch({ url: '/pages/login/login' }) },
+          fail: (_: number, msg: string): void => { uni.showToast({ title: msg, icon: 'none' }) }
+        })
+      }
+    }
   })
 }
 
-onLoad(() => {
-  statusBarHeight.value = uni.getSystemInfoSync().statusBarHeight;
+onLoad((_options: OnLoadOptions): void => {
+  statusBarHeight.value = uni.getSystemInfoSync().statusBarHeight
 })
 </script>
 
 <style>
 .page {
-  display: flex;
-  flex-direction: column;
   flex: 1;
-  padding: 0 32rpx;
-  background: #F5F5F5;
-  box-sizing: border-box;
+  background-color: #f5f5f5;
 }
-.title {
-  font-size: 48rpx;
-  font-weight: 600;
-  color: #000;
-  padding: 48rpx 0;
+
+.navbar {
+  background-color: #ffffff;
+  border-bottom-width: 1rpx;
+  border-bottom-color: #e5e5e5;
+  border-bottom-style: solid;
 }
-.card {
-  display: flex;
+
+.navbar-content {
+  height: 129rpx;
+  padding: 20rpx 36rpx;
+  flex-direction: row;
   align-items: center;
-  background: #FFF;
-  padding: 32rpx;
-  border-radius: 16rpx;
-  margin-bottom: 32rpx;
+  justify-content: space-between;
 }
+
+.navbar-left {
+  flex-direction: row;
+  align-items: center;
+}
+
+.logo-image {
+  width: 260rpx;
+  height: 60rpx;
+}
+
 .avatar {
-  width: 96rpx;
-  height: 96rpx;
-  border-radius: 50%;
-  margin-right: 24rpx;
-  background: #E5E5E5;
+  width: 60rpx;
+  height: 60rpx;
+  border-radius: 30rpx;
 }
-.info {
-  display: flex;
+
+.main-content {
+  flex: 1;
+  padding-top: 24rpx;
+}
+
+.footer-placeholder {
+  height: 46rpx;
+}
+
+.module-row {
+  flex-direction: row;
+  padding: 0 36rpx;
+  margin-bottom: 28rpx;
+}
+
+.module-card {
+  flex: 1;
+  background-color: #ffffff;
+  border-radius: 18rpx;
+  margin-right: 28rpx;
   flex-direction: column;
 }
-.name {
-  font-size: 32rpx;
-  font-weight: 500;
-  color: #000;
+
+.module-card-last {
+  margin-right: 0;
 }
-.id {
-  font-size: 26rpx;
-  color: #888;
-  margin-top: 8rpx;
-}
-.btn {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  height: 96rpx;
-  border-radius: 12rpx;
-  margin-bottom: 24rpx;
-}
-.btn-primary {
-  background: #007AFF;
-}
-.btn-outline {
-  background: #FFF;
-  border: 1px solid #E5E5E5;
-}
-.btn-text {
-  font-size: 32rpx;
-  font-weight: 500;
-  color: #FFF;
-}
-.btn-text-dark {
-  font-size: 32rpx;
-  font-weight: 500;
-  color: #000;
-}
-.footer {
+
+.module-card-placeholder {
   flex: 1;
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
-  padding-bottom: 64rpx;
 }
-.footer-text {
+
+.card-header {
+  padding: 28rpx 24rpx 0;
+  border-radius: 18rpx;
+  background-image: linear-gradient(to bottom, #CCDFFF, #ffffff);
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.card-header-left {
+  flex-direction: row;
+  align-items: center;
+}
+
+.card-icon {
+  width: 48rpx;
+  height: 48rpx;
+}
+
+.card-title {
+  font-size: 32rpx;
+  line-height: 36rpx;
+  font-weight: 700;
+  color: #000000;
+  margin: 0 12rpx;
+}
+
+.ui-badge {
+  background-color: #73A1F0;
+  border-radius: 4rpx;
+  padding: 0 8rpx;
+}
+
+.badge-text {
   font-size: 24rpx;
-  color: #AAA;
+  line-height: 36rpx;
+  color: #ffffff;
+}
+
+.card-info {
+  padding: 24rpx;
+  height: 120rpx;
+}
+
+.card-description {
+  font-size: 24rpx;
+  color: #6C7077;
+  line-height: 36rpx;
+}
+
+.arrow-icon {
+  font-size: 46rpx;
+  color: #d8d8d8;
 }
 </style>

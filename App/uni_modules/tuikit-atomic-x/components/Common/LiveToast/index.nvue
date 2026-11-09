@@ -1,0 +1,78 @@
+<template>
+  <view
+    v-if="visible"
+    :key="showSeq"
+    class="lt-toast-layer"
+    :class="position === 'top' ? 'lt-layer-top' : 'lt-layer-center'"
+    :userInteractionEnabled="false"
+  >
+    <view class="lt-chip" ref="chipRef">
+      <text class="lt-chip-text">{{ title }}</text>
+    </view>
+  </view>
+</template>
+
+<script setup lang="ts">
+  import { nextTick, onUnmounted, ref, watch } from 'vue';
+  import { visible, title, position, showSeq, hideLiveToast } from './index.ts';
+
+  const props = defineProps({
+    duration: {
+      type: Number,
+      default: 2400
+    }
+  });
+
+  const animation = uni.requireNativePlugin('animation');
+  const chipRef = ref<any>(null);
+  let timer: any = null;
+  let animSeq = 0;
+
+  const close = () => {
+    const seq = ++animSeq;
+    if (chipRef.value) {
+      try {
+        animation.transition(chipRef.value, {
+          styles: { opacity: 0 },
+          duration: 200,
+          timingFunction: 'ease-in'
+        }, () => {
+          if (seq !== animSeq) return;
+          hideLiveToast();
+        });
+        return;
+      } catch (e) { /* animation 异常时直接卸载兜底 */ }
+    }
+    hideLiveToast();
+  };
+
+  watch(showSeq, () => {
+    if (timer) { clearTimeout(timer); timer = null; }
+    const autoCloseMs = props.duration > 0 ? props.duration : 2400;
+    if (autoCloseMs > 0) {
+      timer = setTimeout(() => {
+        timer = null;
+        close();
+      }, autoCloseMs);
+    }
+    const seq = ++animSeq;
+    nextTick(() => {
+      if (seq !== animSeq || !visible.value || !chipRef.value) return;
+      try {
+        animation.transition(chipRef.value, {
+          styles: { opacity: 1 },
+          duration: 220,
+          timingFunction: 'ease-out'
+        });
+      } catch (e) { /* ignore */ }
+    });
+  });
+
+  onUnmounted(() => {
+    if (timer) { clearTimeout(timer); timer = null; }
+  });
+</script>
+
+<style lang="scss">
+  @import './LiveToast.scss';
+</style>

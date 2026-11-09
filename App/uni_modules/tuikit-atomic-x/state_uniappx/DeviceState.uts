@@ -1,60 +1,345 @@
 
-// ==================== 类型定义 ====================
+import { ref, type Ref } from "vue";
+import type { HybridListenerOptions } from "@/uni_modules/tuikit-atomic-x";
+import { callAPI, addListener, removeListener } from "@/uni_modules/tuikit-atomic-x";
+import type { HybridCallOptions } from "./hybridCallOptions.uts";
+import { safeJsonParse } from "../utils/utsUtils.uts";
 
-/** openLocalCamera 选项（占位，与未来 SDK 桥接的 option 形态一致） */
-export type OpenLocalCameraOptions = {
-	isFront?: boolean
+/**
+ * 桥接响应（参照 atomicx HybridResponse data class）
+ */
+type HybridResponse = {
+	api: string | null;
+	code: number;
+	message: string | null;
+	data: any | null;
+};
+
+/**
+ * 桥接响应默认值（JSON.parse 失败兜底）
+ */
+const DEFAULT_HYBRID_RESPONSE: HybridResponse = {
+	api: null,
+	code: -1,
+	message: null,
+	data: null
+};
+
+// ==================== 枚举 ====================
+
+/** 设备开关状态 */
+export enum DeviceStatus {
+	OFF = 0,
+	ON = 1
 }
 
-/** openLocalMicrophone 选项（占位，与未来 SDK 桥接的 option 形态一致） */
+/** 设备错误码 */
+export enum DeviceError {
+	NO_ERROR = 0,
+	NO_DEVICE_DETECTED = 1,
+	NO_SYSTEM_PERMISSION = 2,
+	NOT_SUPPORT_CAPTURE = 3,
+	OCCUPIED_ERROR = 4,
+	UNKNOWN_ERROR = 5,
+}
+
+/** 音频输出路由 */
+export enum AudioOutput {
+	SPEAKERPHONE = 0,
+	EARPIECE = 1,
+}
+
+/** 镜像类型 */
+export enum MirrorType {
+	AUTO = 0,
+	ENABLE = 1,
+	DISABLE = 2,
+}
+
+/** 网络质量等级 */
+export enum NetworkQuality {
+	Unknown = 0,
+	Excellent = 1,
+	Good = 2,
+	Poor = 3,
+	Bad = 4,
+	VeryBad = 5,
+	Down = 6,
+}
+
+// ==================== 选项类型 ====================
+
+/** openLocalMicrophone 选项 */
 export type OpenLocalMicrophoneOptions = {
-	fail?: (error: any) => void
+	success?: () => void;
+	fail?: (errCode: number, errMsg: string) => void;
 }
 
-// ==================== Hook 返回值类型 ====================
-
-/** useDeviceState Hook 返回值 */
-export type UseDeviceStateReturn = {
-	openLocalCamera: (options: OpenLocalCameraOptions | null) => Promise<void>
-	openLocalMicrophone: (options: OpenLocalMicrophoneOptions | null) => Promise<void>
+/** openLocalCamera 选项 */
+export type OpenLocalCameraOptions = {
+	isFront?: boolean;
+	success?: () => void;
+	fail?: (errCode: number, errMsg: string) => void;
 }
 
-// ==================== 实现函数 ====================
+/** switchCamera 选项 */
+export type SwitchCameraOptions = {
+	isFront: boolean;
+}
+
+/** setAudioRoute 选项 */
+export type SetAudioRouteOptions = {
+	audioRoute: AudioOutput;
+}
+
+/** 音量选项 */
+export type VolumeOptions = {
+	volume: number;
+}
+
+// ==================== 监听 payload ====================
+
+type MicrophoneStatusPayload = {
+	microphoneStatus: number | null;
+}
+type CameraStatusPayload = {
+	cameraStatus: number | null;
+}
+type IsFrontCameraPayload = {
+	isFrontCamera: boolean | null;
+}
+type CurrentAudioRoutePayload = {
+	currentAudioRoute: number | null;
+}
+
+// 解析失败兜底值（Kotlin 泛型 T 为非空类型，defaultValue 不能直接传 null）
+const DEFAULT_MIC_PAYLOAD: MicrophoneStatusPayload = { microphoneStatus: null };
+const DEFAULT_CAMERA_PAYLOAD: CameraStatusPayload = { cameraStatus: null };
+const DEFAULT_FRONT_CAMERA_PAYLOAD: IsFrontCameraPayload = { isFrontCamera: null };
+const DEFAULT_AUDIO_ROUTE_PAYLOAD: CurrentAudioRoutePayload = { currentAudioRoute: null };
+
+// ==================== 全局状态（防热重载丢失） ====================
+
+type DeviceGlobalState = {
+	microphoneStatus: Ref<DeviceStatus>;
+	cameraStatus: Ref<DeviceStatus>;
+	isFrontCamera: Ref<boolean>;
+	currentAudioRoute: Ref<AudioOutput>;
+	bindEventDone: boolean;
+}
+
+const _deviceStateCache: Map<string, DeviceGlobalState> = new Map<string, DeviceGlobalState>();
+
+function getGlobalState(): DeviceGlobalState {
+	const key: string = 'default';
+	const cached: DeviceGlobalState | null = _deviceStateCache.get(key) ?? null;
+	if (cached != null) {
+		return cached;
+	}
+	const state: DeviceGlobalState = {
+		microphoneStatus: ref<DeviceStatus>(DeviceStatus.OFF),
+		cameraStatus: ref<DeviceStatus>(DeviceStatus.OFF),
+		isFrontCamera: ref<boolean>(true),
+		currentAudioRoute: ref<AudioOutput>(AudioOutput.SPEAKERPHONE),
+		bindEventDone: false
+	};
+	_deviceStateCache.set(key, state);
+	return state;
+}
+
+// ==================== 事件监听 ====================
+
+function makeDeviceListenerOptions(name: string): HybridListenerOptions {
+	const opts: HybridListenerOptions = {
+		type: "state",
+		store: "DeviceStore",
+		name: name,
+		listenerID: "DeviceStore",
+		params: {}
+	};
+	return opts;
+}
+
+function bindEvent(): void {
+	const globalState = getGlobalState();
+	if (globalState.bindEventDone) {
+		return;
+	}
+	globalState.bindEventDone = true;
+
+	addListener(makeDeviceListenerOptions("microphoneStatus"), (data: string) => {
+		const result = safeJsonParse<MicrophoneStatusPayload>(data, DEFAULT_MIC_PAYLOAD);
+		if (result.microphoneStatus != null) {
+			globalState.microphoneStatus.value = result.microphoneStatus == 1 ? DeviceStatus.ON : DeviceStatus.OFF;
+		}
+	});
+
+	addListener(makeDeviceListenerOptions("cameraStatus"), (data: string) => {
+		const result = safeJsonParse<CameraStatusPayload>(data, DEFAULT_CAMERA_PAYLOAD);
+		if (result.cameraStatus != null) {
+			globalState.cameraStatus.value = result.cameraStatus == 1 ? DeviceStatus.ON : DeviceStatus.OFF;
+		}
+	});
+
+	addListener(makeDeviceListenerOptions("isFrontCamera"), (data: string) => {
+		const result = safeJsonParse<IsFrontCameraPayload>(data, DEFAULT_FRONT_CAMERA_PAYLOAD);
+		if (result.isFrontCamera != null) {
+			globalState.isFrontCamera.value = result.isFrontCamera!;
+		}
+	});
+
+	addListener(makeDeviceListenerOptions("currentAudioRoute"), (data: string) => {
+		const result = safeJsonParse<CurrentAudioRoutePayload>(data, DEFAULT_AUDIO_ROUTE_PAYLOAD);
+		if (result.currentAudioRoute != null) {
+			globalState.currentAudioRoute.value = result.currentAudioRoute == 1 ? AudioOutput.EARPIECE : AudioOutput.SPEAKERPHONE;
+		}
+	});
+}
+
+function unbindEvent(): void {
+	const names: string[] = ["microphoneStatus", "cameraStatus", "isFrontCamera", "currentAudioRoute"];
+	names.forEach((name: string) => {
+		removeListener(makeDeviceListenerOptions(name));
+	});
+	const globalState = getGlobalState();
+	globalState.bindEventDone = false;
+}
+
+// ==================== 方法 ====================
 
 /**
- * 打开本地摄像头（占位 stub）
- *
- *   引用时类型为 `Function1<OpenLocalCameraOptions?, UTSPromise<Unit>>`
- *   与 hook 字段类型完全匹配
+ * 打开本地麦克风
  */
-export const openLocalCameraImpl = async (options: OpenLocalCameraOptions | null): Promise<void> => {
-	const opts: OpenLocalCameraOptions | null = options ?? null
-	// stub: SDK 接入后此处调用 utssdk/app-android 或 app-ios 的摄像头桥接
-	console.warn('[DeviceState] openLocalCamera is a stub - SDK not yet integrated')
+function openLocalMicrophone(params?: OpenLocalMicrophoneOptions): Promise<void> {
+	return new Promise<void>((resolve, reject) => {
+		const options: HybridCallOptions = {
+			api: "openLocalMicrophone",
+			params: {}
+		};
+		callAPI(JSON.stringify(options), (res: string) => {
+			const data = safeJsonParse<HybridResponse>(res, DEFAULT_HYBRID_RESPONSE);
+			if (data.code == 0) {
+				params?.success?.();
+				resolve();
+			} else {
+				params?.fail?.(data.code, data.message ?? '');
+				reject(new Error(data.message ?? 'openLocalMicrophone failed'));
+			}
+		});
+	});
 }
 
 /**
- * 打开本地麦克风（占位 stub）
- *
+ * 关闭本地麦克风
  */
-export const openLocalMicrophoneImpl = async (options: OpenLocalMicrophoneOptions | null): Promise<void> => {
-	const opts: OpenLocalMicrophoneOptions | null = options ?? null
-	// stub: SDK 接入后此处调用 utssdk/app-android 或 app-ios 的麦克风桥接
-	console.warn('[DeviceState] openLocalMicrophone is a stub - SDK not yet integrated')
+function closeLocalMicrophone(): void {
+	const options: HybridCallOptions = {
+		api: "closeLocalMicrophone",
+		params: {}
+	};
+	callAPI(JSON.stringify(options), (_res: string) => { });
+}
+
+/**
+ * 打开本地摄像头
+ */
+function openLocalCamera(params?: OpenLocalCameraOptions): Promise<void> {
+	return new Promise<void>((resolve, reject) => {
+		const options: HybridCallOptions = {
+			api: "openLocalCamera",
+			params: {
+				isFront: params?.isFront ?? true
+			}
+		};
+		callAPI(JSON.stringify(options), (res: string) => {
+			const data = safeJsonParse<HybridResponse>(res, DEFAULT_HYBRID_RESPONSE);
+			if (data.code == 0) {
+				params?.success?.();
+				resolve();
+			} else {
+				params?.fail?.(data.code, data.message ?? '');
+				reject(new Error(data.message ?? 'openLocalCamera failed'));
+			}
+		});
+	});
+}
+
+/**
+ * 关闭本地摄像头
+ */
+function closeLocalCamera(): void {
+	const options: HybridCallOptions = {
+		api: "closeLocalCamera",
+		params: {}
+	};
+	callAPI(JSON.stringify(options), (_res: string) => { });
+}
+
+/**
+ * 切换前后摄像头
+ */
+function switchCamera(params: SwitchCameraOptions): void {
+	const options: HybridCallOptions = {
+		api: "switchCamera",
+		params: {
+			isFront: params.isFront
+		}
+	};
+	callAPI(JSON.stringify(options), (_res: string) => { });
+}
+
+/**
+ * 设置音频路由（扬声器/听筒）
+ */
+function setAudioRoute(params: SetAudioRouteOptions): void {
+	const routeValue: number = params.audioRoute == AudioOutput.EARPIECE ? 1 : 0
+	const options: HybridCallOptions = {
+		api: "setAudioRoute",
+		params: {
+			audioRoute: routeValue
+		}
+	};
+	callAPI(JSON.stringify(options), (_res: string) => { });
 }
 
 // ==================== Hook ====================
 
 /**
- * 设备状态 Hook
+ * useDeviceState Hook 返回值
  *
- * @returns { openLocalCamera, openLocalMicrophone }
- *   - openLocalCamera: 打开本地摄像头（占位 stub）
- *   - openLocalMicrophone: 打开本地麦克风（占位 stub）
+ * 注意：函数类型字段在 Kotlin 中不支持可选/默认参数，可选入参统一写成 `X | null`，调用方需显式传 null。
  */
-export const useDeviceState = (): UseDeviceStateReturn => {
-	return {
-		openLocalCamera: openLocalCameraImpl,
-		openLocalMicrophone: openLocalMicrophoneImpl
-	}
+export type UseDeviceStateReturn = {
+	microphoneStatus: Ref<DeviceStatus>;
+	cameraStatus: Ref<DeviceStatus>;
+	isFrontCamera: Ref<boolean>;
+	currentAudioRoute: Ref<AudioOutput>;
+	openLocalMicrophone: (params: OpenLocalMicrophoneOptions | null) => Promise<void>;
+	closeLocalMicrophone: () => void;
+	openLocalCamera: (params: OpenLocalCameraOptions | null) => Promise<void>;
+	closeLocalCamera: () => void;
+	switchCamera: (params: SwitchCameraOptions) => void;
+	setAudioRoute: (params: SetAudioRouteOptions) => void;
 }
+
+/**
+ * 设备状态 Hook
+ */
+export function useDeviceState(): UseDeviceStateReturn {
+	const globalState = getGlobalState();
+	bindEvent();
+	return {
+		microphoneStatus: globalState.microphoneStatus,
+		cameraStatus: globalState.cameraStatus,
+		isFrontCamera: globalState.isFrontCamera,
+		currentAudioRoute: globalState.currentAudioRoute,
+		openLocalMicrophone: (params: OpenLocalMicrophoneOptions | null): Promise<void> => { return openLocalMicrophone(params); },
+		closeLocalMicrophone: (): void => { closeLocalMicrophone(); },
+		openLocalCamera: (params: OpenLocalCameraOptions | null): Promise<void> => { return openLocalCamera(params); },
+		closeLocalCamera: (): void => { closeLocalCamera(); },
+		switchCamera: (params: SwitchCameraOptions): void => { switchCamera(params); },
+		setAudioRoute: (params: SetAudioRouteOptions): void => { setAudioRoute(params); }
+	} as UseDeviceStateReturn;
+}
+
+export default useDeviceState;

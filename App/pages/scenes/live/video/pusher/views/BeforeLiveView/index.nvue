@@ -20,8 +20,7 @@
       />
       <text class="room-topic" @tap.stop="onEditTitle">{{ t('anchor.editTopic') }}</text>
     </view>
-    <CoverPickerPanel v-model="isShowCoverPicker" :selectedURL="coverURL" @select="onCoverSelect" />
-    <view class="prepare-actions" :style="concealStyle">
+    <view class="prepare-actions" :style="actionConcealStyle">
       <view class="prepare-action" @tap="handleBeauty">
         <view class="pa-icon">
           <image class="pa-img" src="/static/images/live/icon/prepare-beauty.png" mode="aspectFit" />
@@ -41,7 +40,7 @@
         <text class="pa-label">{{ t('anchor.more') }}</text>
       </view>
     </view>
-    <view class="start-btn" :style="[concealStyle, { bottom: startBtnBottomPx + 'px' }]" @tap="startLive">
+    <view class="start-btn" :style="[actionConcealStyle, { bottom: startBtnBottomPx + 'px' }]" @tap="startLive">
       <image class="start-btn-bg" src="/static/images/live/background/start-btn-bg.png" mode="scaleToFill" />
       <view class="start-btn-ring" />
       <image class="start-dot" src="/static/images/live/icon/start-dot.png" mode="aspectFit" />
@@ -49,22 +48,25 @@
     </view>
     <BeautyPanel v-model="isShowBeautyPanel" />
     <CountdownOverlay v-model="countdownVisible" @finished="doStartLive" />
+    <CoverPickerPanel v-model="isShowCoverPicker" :selectedURL="coverURL" @select="onCoverSelect" />
     <BeforeLiveMorePanel v-model="isShowMorePanel" @tip="showTip" />
   </view>
 </template>
 
 <script setup lang="ts">
-  import { ref, computed, nextTick } from 'vue';
+  import { ref, computed, nextTick, onMounted } from 'vue';
   import { BeautyPanel } from '@/uni_modules/tuikit-atomic-x/components/Beauty';
   import { useBaseBeautyState } from '@/uni_modules/tuikit-atomic-x/state/BaseBeautyState';
-  import { useDeviceState } from '@/uni_modules/tuikit-atomic-x/state/DeviceState';
+  import { VideoQuality, useDeviceState } from '@/uni_modules/tuikit-atomic-x/state/DeviceState';
   import { TakeSeatMode, useLiveListState } from '@/uni_modules/tuikit-atomic-x/state/LiveListState';
   import { LIVE_TOKENS, livePlaceholderStyle } from '../../../../styles/tokens.js';
   import { t } from '../../../../locales';
+  import { LIVE_MUTE_PLACEHOLDER_IMAGE, preloadLiveImages } from '../../../../utils';
   import BeforeLiveMorePanel from '../../components/BeforeLiveMorePanel/index.nvue';
   import CountdownOverlay from '../../components/CountdownOverlay/index.nvue';
   import CoverPickerPanel from '../../components/CoverPickerPanel/index.nvue';
   import { getLiveErrorMessage } from '@/uni_modules/tuikit-atomic-x/utils/liveErrorHandler';
+  import permission from '@/uni_modules/tuikit-atomic-x/utils/permission';
 
   const props = defineProps({
     templateLayout: { type: Number, default: 600 },
@@ -73,8 +75,16 @@
   const emit = defineEmits(['update:templateLayout', 'back', 'tip', 'started']);
 
   const { createLive, fetchLiveList, callExperimentalAPI } = useLiveListState();
-  const { openLocalCamera, openLocalMicrophone, isFrontCamera, switchCamera } = useDeviceState();
+  const { openLocalCamera, openLocalMicrophone, isFrontCamera, switchCamera, updateVideoQuality } = useDeviceState();
   const { smoothLevel, whitenessLevel, ruddyLevel, setSmoothLevel, setWhitenessLevel, setRuddyLevel } = useBaseBeautyState();
+
+  onMounted(() => {
+    updateVideoQuality({ quality: VideoQuality.QUALITY_720P });
+    ensureMediaPermission();
+    setTimeout(() => {
+      preloadLiveImages([LIVE_MUTE_PLACEHOLDER_IMAGE], 1);
+    }, 1500);
+  });
 
   const placeholderStyle = livePlaceholderStyle(LIVE_TOKENS.darkText50);
 
@@ -102,10 +112,6 @@
     startBtnBottomPx = Math.max(0, Math.round((videoBottomGap - btnHeightPx) / 2));
   } catch (e) {}
 
-  const showTip = (title: string) => {
-    emit('tip', title);
-  };
-
   const getByteLength = (str: string): number => {
     let len = 0;
     for (let i = 0; i < str.length; i++) {
@@ -123,8 +129,50 @@
     return len;
   };
 
+  const ensureMediaPermission = async (): Promise<boolean> => {
+    // #ifdef APP-PLUS
+    let cameraDenied = false;
+    let micDenied = false;
+    let allGranted = true;
+    if (plus.os.name === 'iOS') {
+      cameraDenied = permission.isMediaPermissionDenied('camera');
+      micDenied = permission.isMediaPermissionDenied('microphone');
+      allGranted = !cameraDenied && !micDenied;
+    } else {
+      const cameraResult = await permission.ensureAndroidPermission('android.permission.CAMERA');
+      const micResult = await permission.ensureAndroidPermission('android.permission.RECORD_AUDIO');
+      cameraDenied = cameraResult === -1;
+      micDenied = micResult === -1;
+      allGranted = cameraResult === 1 && micResult === 1;
+    }
+    if (cameraDenied && micDenied) {
+      showTip(t('anchor.bothPermissionDenied'));
+      return false;
+    }
+    if (cameraDenied) {
+      showTip(t('anchor.cameraPermissionDenied'));
+      return false;
+    }
+    if (micDenied) {
+      showTip(t('anchor.micPermissionDenied'));
+      return false;
+    }
+    if (!allGranted) {
+      return false;
+    }
+    // #endif
+    return true;
+  };
+
+  const showTip = (title: string) => {
+    emit('tip', title);
+  };
+
   const isPublicVisible = computed(() => liveMode.value === t('anchor.defaultLiveMode'));
   const concealStyle = computed(() => ({ visibility: (countdownVisible.value || isStarting.value) ? 'hidden' : 'visible' }));
+  const actionConcealStyle = computed(() => ({
+    visibility: (countdownVisible.value || isStarting.value) ? 'hidden' : 'visible',
+  }));
 
   const goBack = () => {
     emit('back');
@@ -140,6 +188,7 @@
 
   const onInputTitle = (e: any) => {
     const inputValue = e.detail.value;
+    liveTitle.value = inputValue;
     if (getByteLength(inputValue) <= 100) {
       lastValidTitle.value = inputValue;
       return;
@@ -176,7 +225,9 @@
     isShowMorePanel.value = true;
   };
 
-  const startLive = () => {
+  const startLive = async () => {
+    const permitted = await ensureMediaPermission();
+    if (!permitted) return;
     countdownVisible.value = true;
   };
 
@@ -185,7 +236,7 @@
   };
 
   const setLocalVideoMuteImage = () => {
-    const tempFilePath = '/static/images/live/icon/mute-local-video.png';
+    const tempFilePath = '/static/images/live/background/mute-local-video.jpg';
     let imageFilePath = '';
     uni.saveFile({
       tempFilePath: tempFilePath,
@@ -204,18 +255,23 @@
     });
   }
 
-  const doStartLive = () => {
+  const doStartLive = async () => {
     isStarting.value = true;
+    const permitted = await ensureMediaPermission();
+    if (!permitted) {
+      isStarting.value = false;
+      return;
+    }
     const beautySnapshot = {
       smoothLevel: smoothLevel.value,
       whitenessLevel: whitenessLevel.value,
       ruddyLevel: ruddyLevel.value,
     };
+    const trimmedTitle = liveTitle.value.trim();
     createLive({
       liveInfo: {
         liveID: props.liveID,
-        liveName: liveTitle.value,
-        totalViewerCount: 4,
+        liveName: trimmedTitle || t('anchor.defaultTitle'),
         coverURL: coverURL.value,
         isSeatEnabled: true,
         seatMode: TakeSeatMode.APPLY,

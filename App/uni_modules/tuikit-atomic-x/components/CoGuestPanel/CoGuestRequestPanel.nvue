@@ -2,20 +2,15 @@
   <view>
   <!-- 连麦接通后从控制条"画面调整"进入（initialDetailOpen=true）：跳过选择面板层，只渲染 detail drawer，直达调整视频连麦画面。 -->
   <BaseDrawer
-    v-if="!initialDetailOpen"
     ref="baseDrawerRef"
-    v-model="innerVisible"
+    :model-value="requestPanelVisible"
+    @update:model-value="onRequestPanelVisibleChange"
     :height="430"
     :overlayOpacity="0.4"
     bgImage="/uni_modules/tuikit-atomic-x/static/assets/live/drawer-bg.png"
     :bgImageHeight="710"
     padding="0 40rpx 60rpx 40rpx"
   >
-    <!-- 右上角"画面调整"设置按钮（位于右侧）。点击进入调整视频连麦画面面板。 -->
-    <view class="sheet-control is-right" @tap="openCoMicDetail">
-      <image class="sheet-control-icon" src="/uni_modules/tuikit-atomic-x/static/assets/live/co-mic-adjust.png" mode="aspectFit" />
-    </view>
-
     <!-- 主播资料（.audience-co-mic-profile） -->
     <view class="anchor-profile">
       <!-- 外层 ring（浅色扩散圈）包裹内层头像 image（含 brand 边框）。
@@ -38,140 +33,134 @@
                  nvue 不支持内联 SVG，按钮透明叠在图上）；
          USER_APPLYING -> 合并为单个全宽"取消申请"按钮（灰色样式）。 -->
     <!-- IDLE：语音/视频双块 -->
-    <view class="co-mic-actions" v-if="!isApplying">
+    <view class="co-mic-actions" v-if="!isApplying && !isConnected">
       <image class="co-mic-split-bg" src="/uni_modules/tuikit-atomic-x/static/assets/live/co-mic-split-bg.png" mode="scaleToFill" />
       <!-- 左半：语音连麦 -->
       <view class="co-mic-apply is-voice" @tap="handleSendCoGuest('mic')">
         <text class="co-mic-apply-text">{{ t('voice_co_guest') }}</text>
       </view>
-      <!-- 右半：视频连麦 -->
+      <!-- 右半：视频连麦（对齐 iOS：先进入"调整视频连麦画面"，点申请按钮才发起申请） -->
       <view class="co-mic-apply is-video" @tap="handleSendCoGuest('video')">
         <text class="co-mic-apply-text">{{ t('video_co_guest') }}</text>
       </view>
     </view>
     <!-- USER_APPLYING：单个"取消申请"按钮 -->
-    <view class="co-mic-actions is-single" v-else>
+    <view class="co-mic-actions is-single" v-else-if="isApplying">
       <view class="co-mic-apply is-cancel" @tap="handleCancelApplication">
         <text class="co-mic-apply-text is-cancel-text">{{ t('cancel_apply') }}</text>
       </view>
     </view>
   </BaseDrawer>
 
-  <!-- 调整视频连麦画面面板（.audience-co-mic-detail-layer）：从右侧横向滑入，
-       顶部本地摄像头预览 + 底部调整面板（返回/标题/镜像/翻转/美化）。 -->
-  <view class="detail-layer" v-if="detailMounted">
-    <view class="detail-overlay" ref="detailOverlayRef" @touchmove.stop.prevent></view>
-    <!-- detail-content 铺满全屏且层级在 overlay 之上，会拦截 overlay 的点击，导致点
-         mask 空白区无法关闭。故把关闭点击直接挂在 content 上：点击 content 的空白区
-         (非预览、非面板) => 关闭回主页；预览区/面板用 @tap.stop 阻断冒泡，点它们不关闭。 -->
-    <view class="detail-content" ref="detailContentRef" @tap="handleOverlayTap" @touchmove.stop>
-      <!-- 顶部本地摄像头预览区：真实本地摄像头预览（startCameraTest）。
-           camera-test-view 承载原生预览画面，viewID 与 startCameraTest 的 cameraView 一致。 -->
-      <view class="local-preview" @tap.stop>
-        <camera-test-view
-          v-if="cameraTestViewReady"
-          class="local-preview-camera"
-          :viewID="cameraTestViewID"
-          :cornerRadius="20"
-        />
-      </view>
-
-      <!-- detail 面板顶部外发光（对齐其他 drawer）：带高斯模糊、无边界的 PNG 光晕图。
-           图片"中间"（最亮处）对齐面板顶部：向下移半张高度。放在 detail-panel 之前渲染，
-           使光晕层级在面板下方——面板盖住光晕下半，只露出顶边往上的柔光，更自然。 -->
-      <image
-        class="detail-glow"
-        src="/uni_modules/tuikit-atomic-x/static/assets/live/drawer-glow.png"
-        mode="scaleToFill"
+  <!-- 调整视频连麦画面：底部抽屉，内部布局对齐 iOS SettingsPanel
+       （返回/标题+副标题/本地摄像头预览/三能力项/申请按钮）。
+       连麦接通后从控制条进入(initialDetailOpen)为 connected 模式：无预览、无申请按钮，仅三能力项。 -->
+  <BaseDrawer
+    v-model="detailVisible"
+    :height="detailDrawerHeight"
+    :zIndex="3200"
+    :showHandle="true"
+    bgImage="/uni_modules/tuikit-atomic-x/static/assets/live/drawer-bg.png"
+    :bgImageHeight="detailDrawerHeight + 80"
+    padding="0 40rpx 48rpx 40rpx"
+    @overlayTap="handleOverlayTap"
+  >
+    <view class="detail-back" @tap="handleDetailBack">
+      <image class="detail-back-icon" src="/uni_modules/tuikit-atomic-x/static/assets/live/co-mic-back.png" mode="aspectFit" />
+    </view>
+    <view class="detail-heading">
+      <text class="detail-title">{{ t('adjust_title') }}</text>
+      <text class="detail-subtitle">{{ t('adjust_subtitle') }}</text>
+    </view>
+    <view class="local-preview" v-if="detailPreviewShown">
+      <camera-test-view
+        v-if="cameraTestViewReady"
+        class="local-preview-camera"
+        :viewID="cameraTestViewID"
+        :cornerRadius="20"
       />
-
-      <!-- 底部调整面板。背景复用与其他 drawer 一致的 drawer-bg.png。 -->
-      <view class="detail-panel" @tap.stop>
-        <!-- 背景图：顶部对齐，与 BaseDrawer 一致的深色蓝调渐变+光斑 -->
-        <image class="detail-panel-bg" src="/uni_modules/tuikit-atomic-x/static/assets/live/drawer-bg.png" mode="scaleToFill" />
-        <view class="drawer-handle"></view>
-        <!-- 返回按钮（.audience-co-mic-detail-back，chevronLeft）：分层返回——
-             美颜模式下先退出美颜（回到三能力项），非美颜模式下才关闭 detail 面板。 -->
-        <view class="detail-back" @tap="handleDetailBack">
-          <image class="detail-back-icon" src="/uni_modules/tuikit-atomic-x/static/assets/live/co-mic-back.png" mode="aspectFit" />
+    </view>
+    <view class="detail-actions">
+      <view class="detail-action" @tap="handleBeauty">
+        <view class="cap-icon">
+          <image class="cap-icon-img" src="/uni_modules/tuikit-atomic-x/static/assets/live/co-mic-beauty.png" mode="aspectFit" />
         </view>
-        <!-- 标题 + 副标题 -->
-        <view class="detail-heading">
-          <text class="detail-title">{{ beautyMode ? t('beauty_adjust') : t('adjust_title') }}</text>
-          <text class="detail-subtitle">{{ t('adjust_subtitle') }}</text>
+        <text class="cap-label">{{ t('beautify') }}</text>
+      </view>
+      <view class="detail-action" @tap="handleToggleMirror">
+        <view class="cap-icon">
+          <image
+            class="cap-icon-img"
+            :style="{ transform: mirrorEnabled ? 'scaleX(1)' : 'scaleX(-1)' }"
+            :src="mirrorOnIcon"
+            mode="aspectFit"
+          />
         </view>
-        <!-- 能力项 <-> 美颜调节 原地内联切换（横向滑动）。
-             美颜模式时容器整体上移(switch-lift)：三滑块远离屏幕底部系统手势区
-             (iOS Home 条 / Android 手势条)，避免拖动被拦截；能力项模式保持原位。 -->
-        <view class="detail-switch" :class="{ 'switch-lift': beautyMode }">
-        <view class="detail-actions" :class="{ 'panel-hidden-left': beautyMode }">
-          <view class="detail-action" @tap="handleBeauty">
-            <view class="cap-icon">
-              <image class="cap-icon-img" src="/uni_modules/tuikit-atomic-x/static/assets/live/co-mic-beauty.png" mode="aspectFit" />
-            </view>
-            <text class="cap-label">{{ t('beautify') }}</text>
-          </view>
-          <view class="detail-action" @tap="handleToggleMirror">
-            <view class="cap-icon">
-              <image class="cap-icon-img" src="/uni_modules/tuikit-atomic-x/static/assets/live/co-mic-mirror.png" mode="aspectFit" />
-            </view>
-            <text class="cap-label">{{ t('mirror') }}</text>
-          </view>
-          <view class="detail-action" @tap="handleFlipCamera">
-            <view class="cap-icon">
-              <image class="cap-icon-img" src="/uni_modules/tuikit-atomic-x/static/assets/live/co-mic-flip.png" mode="aspectFit" />
-            </view>
-            <text class="cap-label">{{ t('flip_camera') }}</text>
-          </view>
+        <text class="cap-label">{{ t('mirror') }}</text>
+      </view>
+      <view class="detail-action" @tap="handleFlipCamera">
+        <view class="cap-icon">
+          <image class="cap-icon-img" src="/uni_modules/tuikit-atomic-x/static/assets/live/co-mic-flip.png" mode="aspectFit" />
         </view>
-          <view class="beauty-adjust" :class="{ 'panel-shown': beautyMode }" @tap.stop>
-            <BeautySliders />
-          </view>
-        </view>
+        <text class="cap-label">{{ t('flip_camera') }}</text>
       </view>
     </view>
+    <view class="detail-apply" v-if="detailPreviewShown" @tap="handleApply">
+      <text class="detail-apply-text">{{ t('apply_co_guest') }}</text>
+    </view>
+    <BeautyPanel
+      :modelValue="isShowBeautyPanel"
+      :zIndex="3200"
+      @update:modelValue="onBeautyVisibleChange"
+    />
+  </BaseDrawer>
   </view>
-  </view>
-
-  <LiveToast
-    v-if="tipVisible"
-    :key="tipSeq"
-    v-model="tipVisible"
-    :title="tipTitle"
-    :duration="2000"
-  />
 </template>
 
 <script setup lang="ts">
   import { onMounted, ref, onUnmounted, computed, watch, nextTick } from 'vue';
-  import BaseDrawer from '@/components/live/BaseDrawer/index.nvue';
-  import { BeautySliders } from '@/uni_modules/tuikit-atomic-x/components/Beauty';
-  import LiveToast from '@/uni_modules/tuikit-atomic-x/components/LiveToast.nvue';
+  import BaseDrawer from '@/uni_modules/tuikit-atomic-x/components/Common/BaseDrawer/index.nvue';
+  import { BeautyPanel } from '@/uni_modules/tuikit-atomic-x/components/Beauty';
+  import { showLiveToast } from '@/uni_modules/tuikit-atomic-x/components/Common/LiveToast/index.ts';
 
   import { useDeviceState } from "@/uni_modules/tuikit-atomic-x/state/DeviceState";
   import { MirrorType } from "@/uni_modules/tuikit-atomic-x/state/DeviceState";
   import { useCoGuestState, NoResponseReason } from "@/uni_modules/tuikit-atomic-x/state/CoGuestState";
+  import { useLiveSeatState } from "@/uni_modules/tuikit-atomic-x/state/LiveSeatState";
   import { t } from '../locales';
   import { useLoginState } from "@/uni_modules/tuikit-atomic-x/state/LoginState";
   import { useLiveListState } from "@/uni_modules/tuikit-atomic-x/state/LiveListState";
+  import permission from "@/uni_modules/tuikit-atomic-x/utils/permission";
   const { loginUserInfo } = useLoginState()
   const { currentLive } = useLiveListState()
   const liveID = computed(() => String(currentLive.value?.liveID || ''))
   const currentCoGuestType = ref('')
 
-  const tipVisible = ref(false);
-  const tipSeq = ref(0);
-  const tipTitle = ref('');
-  const showTip = (title) => {
-    tipTitle.value = title;
-    tipSeq.value++;
-    tipVisible.value = true;
+  const ensureCameraPermission = async (): Promise<boolean> => {
+    const result = await permission.ensureMediaPermission('camera');
+    if (result === 1) return true;
+    if (result === -1) showTip(t('camera_permission_denied'));
+    return false;
+  };
+
+  const showTip = (title) => showLiveToast(title);
+
+  // iOS SDK 的 requestPermissions(openCamera: true) 会同时申请麦克风权限,麦克风被拒时
+  // startCameraTest / openLocalCamera / openLocalMicrophone 都会返回 -1105,视频也开不了。
+  // 这三条失败可能在同一轮上麦里接连发生,3s 内只提示一次,指向真正需要开启的权限。
+  let lastPermissionTipAt = 0;
+  const showPermissionTipOnce = (errCode: any, errMsg: any) => {
+    if (Number(errCode) !== -1105 && !String(errMsg || '').includes('Microphone')) return;
+    const now = Date.now();
+    if (now - lastPermissionTipAt < 3000) return;
+    lastPermissionTipAt = now;
+    showTip(t('micPermissionDenied'));
   };
 
   const {
-    microphoneStatus, microphoneStatusReason, microphoneLastError, hasPublishAudioPermission, captureVolume,
+    microphoneStatus, microphoneStatusReason, microphoneLastError, captureVolume,
     cameraStatus, cameraStatusReason, cameraLastError,
-    currentAudioRoute, isScreenSharing, isFrontCamera, screenStatus, screenStatusReason,
+    currentAudioRoute, isScreenSharing, isFrontCamera, localMirrorType, screenStatus, screenStatusReason,
     openLocalMicrophone, closeLocalMicrophone, muteLocalAudio, unmuteLocalAudio, setAudioRoute,
     openLocalCamera, closeLocalCamera, switchCamera, switchMirror, updateVideoQuality,
     startCameraTest, stopCameraTest,
@@ -183,12 +172,10 @@
     addCoGuestHostListener, removeCoGuestHostListener,
     addCoGuestGuestListener, removeCoGuestGuestListener
   } = useCoGuestState(liveID.value);
+  const { seatList, muteMicrophone } = useLiveSeatState(liveID.value);
 
 
   const defaultAvatarURL = '/uni_modules/tuikit-atomic-x/static/assets/live/default-avatar.png';
-  // nvue 原生 animation / dom 模块
-  const animation = uni.requireNativePlugin('animation');
-  const dom = uni.requireNativePlugin('dom');
   const props = defineProps({
     modelValue: {
       type: Boolean,
@@ -205,115 +192,102 @@
       type: Number,
       default: -1,
     },
-    // 打开时是否直接进入 detail 层（跳过\"申请连麦方式\"层）。
-    // 连麦接通后从控制条打开时使用；申请前从主入口打开时保持默认值 false。
     initialDetailOpen: {
       type: Boolean,
       default: false,
     },
   });
-  const emit = defineEmits(['update:modelValue', 'accepted', 'statusChange']);
+  const emit = defineEmits(['update:modelValue', 'accepted', 'statusChange', 'back']);
 
-  // 通过 computed 转发 v-model：props 只读，不能直接 v-model 到 prop。
+  const requestPanelVisible = computed(() => innerVisible.value && !props.initialDetailOpen);
+
+  const onRequestPanelVisibleChange = (val) => {
+    if (val) return;
+    innerVisible.value = false;
+  };
+
   const innerVisible = computed({
     get: () => props.modelValue,
     set: (val) => emit('update:modelValue', val)
   });
 
-  // 本地连麦状态镜像（uni.$localGuestStatus 是普通变量，模板不响应式，用 ref 镜像驱动 UI）。
-  // 'IDLE' 显示语音/视频双块；'USER_APPLYING' 合并为单个"取消申请"按钮。
   const guestStatus = ref(uni.$localGuestStatus || 'IDLE');
-  // 面板打开时同步一次当前状态；若 initialDetailOpen=true（连麦接通后从控制条进入），
-  // 直接展开 detail 层（跳过\"申请连麦方式\"层）。
+
   watch(innerVisible, (val) => {
     if (val) {
       guestStatus.value = uni.$localGuestStatus || 'IDLE';
       if (props.initialDetailOpen) {
-        // 等 BaseDrawer 挂载完当前帧再触发 detail 打开动画，保证连锁横滑过渡自然。
-        setTimeout(() => { openCoMicDetail(); }, 0);
+        setTimeout(() => { detailVisible.value = true; }, 0);
       }
     }
   });
-  // 是否处于"已申请"态
   const isApplying = computed(() => guestStatus.value === 'USER_APPLYING');
+  const isConnected = computed(() => guestStatus.value === 'CONNECTED');
 
-  // ===== 调整视频连麦画面 detail 层 =====
-  // detailMounted 控制 DOM 挂载（关闭动画后卸载）；detailOpen 控制横向滑入。
-  const detailMounted = ref(false);
-  const detailOpen = ref(false);
-  const detailContentRef = ref(null);
-  const detailOverlayRef = ref(null);
+  const detailVisible = ref(false);
   const baseDrawerRef = ref(null);
-  let detailCloseTimer: any = null;
-  // 布局变化后重建预览 view 并重启采集的延迟 timer(见 seatLayoutTemplateID watch)。
   let cameraRelayoutTimer: any = null;
+  let cameraStartTimer: any = null;
+  let detailMode = 'preview';
+  const detailPreviewShown = ref(true);
+  let cameraTeardownTimer: any = null;
 
-  const DETAIL_ANIM_DURATION = 340;
-  const DETAIL_ANIM_TIMING = 'cubic-bezier(0.32, 0.72, 0, 1)';
-  // 摄像头测试预览视图标识：与 startCameraTest 的 cameraView 一致，
-  // camera-test-view 组件以此标识把原生预览视图注册给底层，供 startCameraTest 渲染。
   const cameraTestViewID = 'co-guest-camera-test';
-  // 本地镜像开关（默认镜像，点击切换 ENABLE/DISABLE）。
-  const mirrorEnabled = ref(true);
-  // camera-test-view 的挂载开关:布局变化时强制卸载重挂——原生侧视图注册随布局重建
-  // 失效,而 JS 节点无变化不会重新触发 onAttachedToWindow 注册,必须重建节点恢复。
+  const mirrorEnabled = computed(() =>
+    localMirrorType.value === MirrorType.AUTO || localMirrorType.value === MirrorType.ENABLE
+  );
+  const mirrorOnIcon = '/uni_modules/tuikit-atomic-x/static/assets/live/co-mic-mirror.png';
   const cameraTestViewReady = ref(true);
-  // 美颜内联调节（方案 A：detail 面板内原地切换，边看预览边调）。
-  // beautyMode=true 时下方从"三能力项"横滑切换为"磨皮/美白/红润"三个滑块
-  // (内容由共享组件 BeautySliders 承载,与 BeautyPanel 共用同一实现)。
-  const beautyMode = ref(false);
+  const isShowBeautyPanel = ref(false);
+  const BEAUTY_CLOSE_GUARD_MS = 400;
+  let beautyClosedAt = 0;
+  const onBeautyVisibleChange = (val: boolean) => {
+    const next = !!val;
+    if (!next) beautyClosedAt = Date.now();
+    isShowBeautyPanel.value = next;
+  };
 
-  const exitBeautyMode = () => { beautyMode.value = false; };
-  // 分层返回：美颜调节 → 三能力项 → 关闭 detail 面板。
-  // 若本次是通过 initialDetailOpen 直达 detail（从控制条进入），关 detail 时同时关闭整个 drawer
-  // 直接回到主页面（跳过"申请连麦方式"层，因为用户已经在连麦中，不需要再看申请面板）。
+  const showDetailPreview = computed(() => !props.initialDetailOpen);
+  const detailDrawerHeight = computed(() => (detailPreviewShown.value ? 1054 : 380));
+
   const handleDetailBack = () => {
-    if (beautyMode.value) {
-      exitBeautyMode();
-      return;
-    }
-    closeCoMicDetail();
+    detailVisible.value = false;
     if (props.initialDetailOpen) {
-      emit('update:modelValue', false);
+      emit('back');
     }
   };
 
-  // 点击 detail 遮罩(mask)：要求【直接回到无任何 drawer 的拉流主页】。
-  // 与返回按钮的“分层返回”不同——无论当前是否美颜模式、无论 detail 是哪条路径进入
-  // (控制条画面调整 initialDetailOpen=true / 连麦方式面板右上角设置 initialDetailOpen=false，
-  //  后者下层还有 BaseDrawer 连麦方式选择)，都要一路关到底：先关 detail，再【无条件】关闭
-  // 整个 Panel(emit false)，确保不残留下层的连麦方式 BaseDrawer。
   const handleOverlayTap = () => {
-    closeCoMicDetail();
+    if (isShowBeautyPanel.value) return;
+    if (Date.now() - beautyClosedAt < BEAUTY_CLOSE_GUARD_MS) return;
+    detailVisible.value = false;
+    if (props.initialDetailOpen) {
+      emit('back');
+      return;
+    }
     emit('update:modelValue', false);
   };
 
-  // 打开 detail：挂载 -> 下一帧触发横向滑入（连麦面板同时左移）+ 开始摄像头预览。
-  // 摄像头预览用自适应重试启动：camera-test-view 是 nvue 原生 view，其 onAttachedToWindow
-  // 回调完成前 native CameraTestViewManager 里没有对应视图，此时 startCameraTest 会返回
-  // -1 cameraView not found。因此失败后延时 100ms 重试，最多 10 次（等到原生 view 注册好）。
   let cameraTestRetryTimer: any = null;
   let cameraTestRetryCount = 0;
   const CAMERA_TEST_MAX_RETRY = 10;
-  // 跟随实际前后置：SDK startCameraTest 固定以前置打开测试预览，不跟随当前设置。
-  // 故启动前快照 isFrontCamera，成功后若实际为后置则 switchCamera 切回，保持预览与实际一致。
   let cameraFollowTimer: any = null;
-  let cameraFollowPending = false; // 跟随切换已排队未执行（面板提前关闭时据此按后置恢复）
-  const tryStartCameraTest = () => {
+  let cameraFollowPending = false;
+  const tryStartCameraTest = async () => {
     const wantFront = isFrontCamera.value;
+    const cameraPermitted = await ensureCameraPermission();
+    if (!cameraPermitted) return;
     startCameraTest({
       cameraView: cameraTestViewID,
       success: () => {
         cameraTestRetryCount = 0;
         console.log('startCameraTest success.');
         if (!wantFront) {
-          // 稍延时待摄像头设备就绪后再切换，并同步 JS 状态
-          // （确保关闭面板时 openLocalCamera 用正确的前后置恢复、翻转按钮基于正确状态切换）。
           cameraFollowPending = true;
           clearTimeout(cameraFollowTimer);
           cameraFollowTimer = setTimeout(() => {
             cameraFollowPending = false;
-            if (detailMounted.value) {
+            if (detailVisible.value) {
               switchCamera({ isFront: false });
               isFrontCamera.value = false;
             }
@@ -321,69 +295,35 @@
         }
       },
       fail: (errCode, errMsg) => {
-        // -1 cameraView not found：原生 view 尚未注册，延时重试。
-        if (errCode === -1 && cameraTestRetryCount < CAMERA_TEST_MAX_RETRY && detailMounted.value) {
+        if (errCode === -1 && cameraTestRetryCount < CAMERA_TEST_MAX_RETRY && detailVisible.value) {
           cameraTestRetryCount += 1;
           clearTimeout(cameraTestRetryTimer);
           cameraTestRetryTimer = setTimeout(() => { tryStartCameraTest(); }, 100);
         } else {
           console.error(`startCameraTest fail errCode: ${errCode}, errMsg: ${errMsg}`);
+          showPermissionTipOnce(errCode, errMsg);
         }
       },
     });
   };
   const openCoMicDetail = () => {
-    clearTimeout(detailCloseTimer);
     clearTimeout(cameraTestRetryTimer);
     clearTimeout(cameraFollowTimer);
+    clearTimeout(cameraStartTimer);
+    clearTimeout(cameraTeardownTimer);
     cameraTestRetryCount = 0;
-    detailMounted.value = true;
-    // 用 dom.getComponentRect 确认布局完成后执行滑入动画（不依赖延时）
-    nextTick(() => {
-      tryDetailOpenAnimation();
-      tryStartCameraTest();
-    });
+    detailMode = showDetailPreview.value ? 'preview' : 'connected';
+    detailPreviewShown.value = showDetailPreview.value;
+    if (detailMode === 'connected') return;
+    switchCamera({ isFront: true });
+    switchMirror({ mirrorType: MirrorType.ENABLE });
+    cameraStartTimer = setTimeout(() => {
+      cameraStartTimer = null;
+      if (detailVisible.value) tryStartCameraTest();
+    }, 350);
   };
 
-  // 确认 detail-content 已布局完成后执行横向滑入动画
-  function tryDetailOpenAnimation(retries = 0) {
-    const content = detailContentRef.value;
-    if (!content) {
-      if (retries < 10) setTimeout(() => tryDetailOpenAnimation(retries + 1), 16);
-      return;
-    }
-    dom.getComponentRect(content, (res) => {
-      const ready = (res?.size?.height || res?.height || 0) > 0;
-      if (!ready) {
-        if (retries < 10) setTimeout(() => tryDetailOpenAnimation(retries + 1), 16);
-        return;
-      }
-      // 先强制设到隐藏位置，再执行滑入
-      animation.transition(content, {
-        styles: { transform: 'translateX(100%)' },
-        duration: 0,
-        timingFunction: 'linear'
-      }, () => {
-        // detail 滑入与连麦 drawer 左推同步执行
-        animation.transition(content, {
-          styles: { transform: 'translateX(0)' },
-          duration: DETAIL_ANIM_DURATION,
-          timingFunction: DETAIL_ANIM_TIMING
-        });
-        baseDrawerRef.value?.animateShift?.(true);
-      });
-      const overlay = detailOverlayRef.value;
-      if (overlay) {
-        animation.transition(overlay, {
-          styles: { backgroundColor: 'rgba(0, 0, 0, 0.3)' },
-          duration: DETAIL_ANIM_DURATION,
-          timingFunction: 'ease'
-        });
-      }
-    });
-  }
-
-  // 关闭 detail：停止摄像头预览 -> 横向滑出，动画结束后卸载；同步退出美颜模式。
+  // 关闭 detail（iOS: sheetWillDismiss -> stopPreview）。
   // 两种场景处理差异：
   //   - 未连麦（initialDetailOpen=false）：正常 stopCameraTest 关闭测试预览即可
   //   - 连麦中（initialDetailOpen=true）：先 stopCameraTest 关摄像头（会中断连麦画面），
@@ -405,44 +345,24 @@
       isFrontCamera.value = false;
     }
     cameraTestRetryCount = 0;
+    isShowBeautyPanel.value = false;
+    // connected 模式从未启动预览采集（iOS 也不 startPreview），无需收尾、不会关掉连麦摄像头。
+    // 用打开时快照的 detailMode：此时 props.initialDetailOpen 可能已被父层复位成 false。
+    if (detailMode === 'connected') return;
     stopCameraTest();
-    if (props.initialDetailOpen) {
-      // 触发 LiveCoreView 的 seatList cameraStatus 变化以重新绑定 view 回到连麦画面。
-      openLocalCamera({
-        isFront: isFrontCamera.value,
-        success: () => { console.log('reopenLocalCamera after detail close success.'); },
-        fail: (errCode, errMsg) => { console.error(`reopenLocalCamera fail errCode: ${errCode}, errMsg: ${errMsg}`); },
-      });
-    }
-    beautyMode.value = false;
-    // 用 animation 模块执行横向滑出动画
-    const content = detailContentRef.value;
-    const overlay = detailOverlayRef.value;
-    if (content) {
-      // detail 滑出与连麦 drawer 滑回同步执行
-      animation.transition(content, {
-        styles: { transform: 'translateX(100%)' },
-        duration: DETAIL_ANIM_DURATION,
-        timingFunction: DETAIL_ANIM_TIMING
-      });
-      baseDrawerRef.value?.animateShift?.(false);
-    }
-    if (overlay) {
-      animation.transition(overlay, {
-        styles: { backgroundColor: 'rgba(0, 0, 0, 0)' },
-        duration: DETAIL_ANIM_DURATION,
-        timingFunction: 'ease'
-      });
-    }
-    clearTimeout(detailCloseTimer);
-    detailCloseTimer = setTimeout(() => {
-      detailMounted.value = false;
-    }, DETAIL_ANIM_DURATION);
   };
+
+  watch(detailVisible, (val) => {
+    if (val) {
+      openCoMicDetail();
+    } else {
+      closeCoMicDetail();
+    }
+  });
 
   watch(() => currentLive.value?.seatLayoutTemplateID, (newVal, oldVal) => {
     if (oldVal === undefined || newVal === oldVal) return;
-    if (!detailMounted.value) return;
+    if (!detailVisible.value) return;
     if (uni.$localGuestStatus !== 'CONNECTED') return;
     console.log(`[CoGuest] layout changed: ${oldVal} -> ${newVal}, recover camera then restart test.`);
     showTip(t('layout_adjusted'));
@@ -463,7 +383,7 @@
     clearTimeout(cameraRelayoutTimer);
     cameraRelayoutTimer = setTimeout(() => {
       cameraRelayoutTimer = null;
-      if (!detailMounted.value) return;
+      if (!detailVisible.value) return;
       console.log('[CoGuest] relayout settle, remount camera test view & restart capture.');
       cameraTestViewReady.value = true;
       nextTick(() => { tryStartCameraTest(); });
@@ -471,8 +391,7 @@
   });
 
   const handleToggleMirror = () => {
-    mirrorEnabled.value = !mirrorEnabled.value;
-    switchMirror({ mirrorType: mirrorEnabled.value ? MirrorType.ENABLE : MirrorType.DISABLE });
+    switchMirror({ mirrorType: mirrorEnabled.value ? MirrorType.DISABLE : MirrorType.ENABLE });
   };
 
   const handleFlipCamera = () => {
@@ -480,18 +399,37 @@
   };
 
   const handleBeauty = () => {
-    beautyMode.value = true;
+    isShowBeautyPanel.value = true;
   };
 
-  const anchorAvatarURL = computed(() => currentLive.value?.liveOwner?.avatarURL || defaultAvatarURL);
-  const anchorName = computed(() => currentLive.value?.liveOwner?.userName || currentLive.value?.liveOwner?.userID || '');
+  // 「申请连麦」按钮（iOS SettingsPanel.applyButton -> onApply）：关闭调整画面并发起视频连麦申请。
+  const handleApply = () => {
+    doApplyCoGuest('video');
+  };
 
+  // SDK 偶发返回字符串 "null"/"undefined",需过滤,否则会被当成有效 URL 加载失败后卡在兜底图。
+  const anchorAvatarURL = computed(() => {
+    const raw = String(currentLive.value?.liveOwner?.avatarURL ?? '').trim();
+    if (!raw || raw === 'null' || raw === 'undefined') return '';
+    return raw;
+  });
+  // 对齐 iOS RequestingPanel.bind：超 15 字符截断并加省略号
+  const anchorName = computed(() => {
+    const raw = currentLive.value?.liveOwner?.userName || currentLive.value?.liveOwner?.userID || '';
+    return raw.length > 15 ? `${raw.slice(0, 15)}…` : raw;
+  });
+
+  // 对齐 iOS RequestingPanel.bind:kf.setImage(with:owner.avatarURL, placeholder:默认头像)。
+  // 默认图只作初始占位,真实 URL 直接赋给 image;不做"清空 src + setTimeout" —— iOS nvue
+  // 对空 src 会派发 @error,迟到的旧 error 会把刚赋值的真实头像覆盖成兜底图且无法自愈。
   const LOCAL_FALLBACK_AVATAR = defaultAvatarURL;
-  const anchorAvatarDisplay = ref('');
+  const anchorAvatarDisplay = ref(LOCAL_FALLBACK_AVATAR);
+  let appliedAvatarURL = '';
   const applyAnchorAvatar = () => {
     const url = anchorAvatarURL.value;
-    anchorAvatarDisplay.value = '';
-    setTimeout(() => { anchorAvatarDisplay.value = url; }, 0);
+    if (!url || url === appliedAvatarURL) return;
+    appliedAvatarURL = url;
+    anchorAvatarDisplay.value = url;
   };
   const onAnchorAvatarError = () => {
     if (anchorAvatarDisplay.value !== LOCAL_FALLBACK_AVATAR) {
@@ -501,58 +439,92 @@
   const onAnchorAvatarLoad = () => {
     // 加载成功回调（保留 hook，方便后续扩展，比如埋点/淡入动画）。
   };
-  watch(anchorAvatarURL, () => { applyAnchorAvatar(); });
-  watch(innerVisible, (val) => { if (val) applyAnchorAvatar(); }, { immediate: true });
+  // 数据到达即绑定(对齐 iOS bind(liveInfo)),不等面板打开。
+  watch(anchorAvatarURL, () => { applyAnchorAvatar(); }, { immediate: true });
+  // 每次打开面板重新绑定一次:若上次加载失败停在兜底图,重新打开可重试。
+  watch(innerVisible, (val) => {
+    if (val) {
+      appliedAvatarURL = '';
+      applyAnchorAvatar();
+    }
+  });
 
   const close = () => {
     emit('update:modelValue', false);
   };
 
   onMounted(() => {
-    addCoGuestGuestListener(liveID.value, 'onGuestApplicationResponded', handleGuestApplicationResponded)
-    addCoGuestGuestListener(liveID.value, 'onGuestApplicationNoResponse', handleGuestApplicationNoResponse)
+    bindGuestEventListeners(liveID.value)
   })
 
   onUnmounted(() => {
     currentCoGuestType.value = ''
-    clearTimeout(detailCloseTimer)
+    uni.$localCoGuestType = ''
     clearTimeout(cameraTestRetryTimer)
     clearTimeout(cameraFollowTimer)
     clearTimeout(cameraRelayoutTimer)
-    if (detailMounted.value) {
+    clearTimeout(cameraStartTimer)
+    clearTimeout(cameraTeardownTimer)
+    if (detailVisible.value) {
       stopCameraTest()
     }
-    removeCoGuestGuestListener(liveID.value, 'onGuestApplicationResponded', handleGuestApplicationResponded)
-    removeCoGuestGuestListener(liveID.value, 'onGuestApplicationNoResponse', handleGuestApplicationNoResponse)
+    if (boundGuestEventLiveID) {
+      removeCoGuestGuestListener(boundGuestEventLiveID, 'onGuestApplicationResponded', handleGuestApplicationResponded)
+      removeCoGuestGuestListener(boundGuestEventLiveID, 'onGuestApplicationNoResponse', handleGuestApplicationNoResponse)
+      boundGuestEventLiveID = ''
+    }
   })
 
 
   const finalizeAccepted = () => {
     if (uni.$localGuestStatus === 'CONNECTED') return;
+    pendingSeatIndex = -1;
     uni.$localGuestStatus = 'CONNECTED'
     guestStatus.value = 'CONNECTED'
     emit('statusChange', 'CONNECTED')
-    if (currentCoGuestType.value === 'video') {
+    // 相机 / 麦克风各自向系统确认自己的权限(Android 主动 requestPermissions 取权威结果,
+    // iOS 读原生授权状态),互不牵连;被拒时【不发起】设备打开请求,避免留下挂起请求 ——
+    // 否则用户后续在系统设置里开启权限后设备会自动开始采集(别人能听到,但 UI 仍显示关闭)。
+    const coGuestType = currentCoGuestType.value;
+    permission.ensureMediaPermission('camera').then((result: number) => {
+      if (result !== 1 || coGuestType !== 'video') return;
       openLocalCamera({
         isFront: isFrontCamera.value !== false,
         success: () => {
+          // 对齐 iOS CoGuestIcon:开启期间已进后台则立刻关掉摄像头。
+          // 例外:系统权限弹框造成的"假后台"不能关,否则上麦后刚开的摄像头会被误关。
+          if (uni.$appIsActive === false && !permission.isPermissionPrompting()) {
+            closeLocalCamera();
+            return;
+          }
           console.log('openLocalCamera success.');
         },
         fail: (errCode, errMsg) => {
           console.error(`openLocalCamera fail errCode: ${errCode}, errMsg: ${errMsg}`);
+          showPermissionTipOnce(errCode, errMsg);
+          closeLocalCamera();
         },
       });
-    }
-    openLocalMicrophone({
-      success: () => {
-        console.log('openLocalMicrophone success.');
-      },
-      fail: (errCode, errMsg) => {
-        console.error(`openLocalMicrophone fail errCode: ${errCode}, errMsg: ${errMsg}`);
-      },
     });
-    if (detailMounted.value) {
-      closeCoMicDetail();
+    permission.ensureMediaPermission('microphone').then((result: number) => {
+      if (result !== 1) {
+        muteMicrophone({ liveID: liveID.value });
+        return;
+      }
+      openLocalMicrophone({
+        success: () => {
+          console.log('openLocalMicrophone success.');
+        },
+        fail: (errCode, errMsg) => {
+          console.error(`openLocalMicrophone fail errCode: ${errCode}, errMsg: ${errMsg}`);
+          showPermissionTipOnce(errCode, errMsg);
+          closeLocalMicrophone();
+          muteMicrophone({ liveID: liveID.value });
+        },
+      });
+    });
+    if (detailVisible.value) {
+      detailVisible.value = false;
     }
     emit('update:modelValue', false);
     emit('accepted');
@@ -578,7 +550,6 @@
     }
   }, { deep: true });
   const handleGuestApplicationNoResponse = (event) => {
-    console.log('miles-test-handleGuestApplicationNoResponse', event)
     const res = JSON.parse(event)
     if (res.reason === NoResponseReason.TIMEOUT) {
       uni.$localGuestStatus = 'IDLE'
@@ -588,22 +559,82 @@
     }
   }
 
-  const handleSendCoGuest = (type: string) => {
+  let boundGuestEventLiveID = '';
+  const bindGuestEventListeners = (roomID: string) => {
+    if (!roomID || roomID === boundGuestEventLiveID) return;
+    if (boundGuestEventLiveID) {
+      removeCoGuestGuestListener(boundGuestEventLiveID, 'onGuestApplicationResponded', handleGuestApplicationResponded)
+      removeCoGuestGuestListener(boundGuestEventLiveID, 'onGuestApplicationNoResponse', handleGuestApplicationNoResponse)
+    }
+    boundGuestEventLiveID = roomID;
+    addCoGuestGuestListener(roomID, 'onGuestApplicationResponded', handleGuestApplicationResponded)
+    addCoGuestGuestListener(roomID, 'onGuestApplicationNoResponse', handleGuestApplicationNoResponse)
+  };
+  watch(liveID, (val) => { bindGuestEventListeners(val); });
+
+  let pendingSeatIndex = -1;
+  watch(seatList, (newList) => {
+    if (uni.$localGuestStatus !== 'USER_APPLYING' || pendingSeatIndex < 0) return;
+    const list: any[] = Array.isArray(newList) ? newList : [];
+    const seat = list.find((s: any) => Number(s?.index) === pendingSeatIndex);
+    const occupiedUserID = seat?.userInfo?.userID;
+    if (occupiedUserID && occupiedUserID !== props.userID) {
+      cancelApplication({ liveID: liveID.value });
+      pendingSeatIndex = -1;
+      uni.$localGuestStatus = 'IDLE'
+      guestStatus.value = 'IDLE'
+      emit('statusChange', 'IDLE')
+      showTip(t('seat_occupied'));
+    }
+  }, { deep: true });
+
+  let lastSelfAllowOpenMic: boolean | null = null;
+  watch(seatList, (newList) => {
+    const list: any[] = Array.isArray(newList) ? newList : [];
+    const selfSeat = list.find((s: any) => s?.userInfo?.userID === props.userID);
+    if (!selfSeat) {
+      lastSelfAllowOpenMic = null;
+      return;
+    }
+    const allowOpenMic = selfSeat?.userInfo?.allowOpenMicrophone !== false;
+    if (lastSelfAllowOpenMic !== null && lastSelfAllowOpenMic !== allowOpenMic) {
+      showTip(t(allowOpenMic ? 'micUnlocked' : 'micLocked'));
+    }
+    lastSelfAllowOpenMic = allowOpenMic;
+  }, { deep: true });
+
+  const APPLY_ERROR_KEYS: Record<number, string> = {
+    100004: 'room_not_exist',
+    100005: 'not_room_member',
+    100006: 'cannot_do_now',
+    100200: 'seat_locked',
+    100202: 'already_requesting',
+    100203: 'already_on_seat',
+    100205: 'seat_full',
+    100210: 'seat_occupied',
+    100211: 'not_supported',
+  };
+
+  const doApplyCoGuest = (type: string) => {
     console.log(`goGuest localStatus: ${uni.$localGuestStatus}`);
     if (uni.$localGuestStatus !== 'IDLE') {
       return
     }
     currentCoGuestType.value = type
+    uni.$localCoGuestType = type
+    // 从调整画面发起：先关闭预览采集，再申请（预览摄像头与连麦推流互斥）。
+    if (detailVisible.value) {
+      detailVisible.value = false;
+    }
+    pendingSeatIndex = props.seatIndex >= 0 ? props.seatIndex : -1
     applyForSeat({
       liveID: props.liveID,
       seatIndex: props.seatIndex,
-      timeout: 30,
+      timeout: 0,
       success: () => {
       },
       fail: (errorCode) => {
-        if (errorCode === 100006) {
-          showTip(t('cannot_do_now'))
-        }
+        showTip(t(APPLY_ERROR_KEYS[errorCode] || 'apply_failed'))
         uni.$localGuestStatus = 'IDLE'
         guestStatus.value = 'IDLE'
         emit('statusChange', 'IDLE')
@@ -615,10 +646,21 @@
     emit('statusChange', 'USER_APPLYING')
   }
 
+  // 语音连麦：直接发起申请；视频连麦：先进入"调整视频连麦画面"，由其中的申请按钮发起。
+  const handleSendCoGuest = (type: string) => {
+    if (type === 'video') {
+      currentCoGuestType.value = 'video';
+      detailVisible.value = true;
+      return;
+    }
+    doApplyCoGuest(type);
+  }
+
   const handleCancelApplication = () => {
     cancelApplication({
       liveID: props.liveID,
     })
+    pendingSeatIndex = -1;
     uni.$localGuestStatus = 'IDLE'
     guestStatus.value = 'IDLE'
     emit('statusChange', 'IDLE')
@@ -626,27 +668,6 @@
 </script>
 
 <style>
-  .sheet-control {
-    position: absolute;
-    top: 36rpx;
-    width: 72rpx;
-    height: 72rpx;
-    border-radius: 50%;
-    background-color: rgba(255, 255, 255, 0.055);
-    align-items: center;
-    justify-content: center;
-    z-index: 4;
-  }
-
-  .sheet-control.is-right {
-    right: 40rpx;
-  }
-
-  .sheet-control-icon {
-    width: 40rpx;
-    height: 40rpx;
-  }
-
   /* 主播资料 .audience-co-mic-profile：竖向居中 */
   .anchor-profile {
     flex-direction: column;
@@ -747,233 +768,93 @@
     color: rgba(255, 255, 255, 0.72);
   }
 
-  /* ===== 调整视频连麦画面 detail 层（.audience-co-mic-detail-layer） ===== */
+  /* ===== 调整视频连麦画面（从右往左滑入的面板；内部度量对齐 iOS SettingsPanel） ===== */
   /* 全屏层容器 */
-  .detail-layer {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    z-index: 3000;
-  }
 
-  /* 遮罩（rgba(0,0,0,0.3)） */
-  /* 遮罩层：背景色由 animation 模块驱动 */
-  .detail-overlay {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background-color: rgba(0, 0, 0, 0);
-  }
+  /* 遮罩：背景色由 animation 模块驱动（滑入渐显 / 滑出渐隐） */
 
-  /* 内容层：整屏，transform 由 animation 模块驱动，CSS 只保留初始隐藏状态。
-     背景给一个极低非零不透明度：nvue Android 上完全透明(无背景)的 view 不接收
-     touch 事件，会导致挂在此层的 @tap 点不动。0.01 视觉上不可见，但能接收点击。 */
-  .detail-content {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background-color: rgba(0, 0, 0, 0.01);
-    transform: translateX(100%);
-  }
+  /* 内容层：整屏，transform 由 animation 模块驱动。
+     背景给极低非零不透明度：nvue Android 上完全透明的 view 不接收 touch，会导致关闭点击失效。
+     注意：不能用 align-items/justify-content 把面板压到底部——weex 默认 column，
+     align-items 管的是水平方向；面板改为自身绝对定位贴底（见 .detail-panel）。 */
 
-  /* 本地摄像头预览区（.audience-co-mic-local-preview，top:116px 左右 40px 方形）。
-     116px→232rpx，left/right 40px→80rpx。承载真实本地摄像头预览画面。 */
-  .local-preview {
-    position: absolute;
-    top: 232rpx;
-    left: 80rpx;
-    right: 80rpx;
-    width: 590rpx;
-    height: 590rpx;
-    border-radius: 40rpx;
-    overflow: hidden;
-    border-width: 2rpx;
-    border-style: solid;
-    border-color: rgba(255, 255, 255, 0.16);
-    background-color: rgba(12, 13, 18, 0.9);
-    align-items: center;
-    justify-content: center;
-  }
+  /* 面板：全宽、贴底，高度 = 各区实际高度之和 1022rpx（handle 48 + 标题区 64 + 预览 534
+     + 能力项 192 + 申请按钮 136 + 底部内边距 48），从右滑入。 */
 
-  /* 摄像头预览画面：铺满预览区 */
-  .local-preview-camera {
-    width: 590rpx;
-    height: 590rpx;
-  }
 
-  /* 底部调整面板（.audience-co-mic-detail-panel）：贴底，圆角 26px→52rpx，
-     padding 10px 20px 30px→20rpx 40rpx 60rpx，深色玻璃底。 */
-  .detail-panel {
-    position: absolute;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    width: 750rpx;
-    height: 430rpx;
-    padding: 20rpx 40rpx 60rpx 40rpx;
-    border-top-left-radius: 52rpx;
-    border-top-right-radius: 52rpx;
-    /* 兜底实色，避免背景图加载延迟时透出 */
-    background-color: #0a090e;
-    overflow: hidden;
-    flex-direction: column;
-    align-items: center;
-  }
+  /* 顶部 thumb 短横线：margin-top 20rpx + 自身 8rpx + 下间距 20rpx（收紧，避免标题离横条太远） */
 
-  /* detail 面板顶部外发光图：无边界柔和雾状蓝光,图片"中间"(最亮线)对齐面板顶部边缘。
-     面板高 430rpx、图片高 160rpx,故 bottom = 430 - 160/2 = 350rpx,
-     下半叠在面板顶部、上半露在上方,向上柔和淡出,与其他 drawer 一致。 */
-  .detail-glow {
-    position: absolute;
-    left: 0;
-    bottom: 350rpx;
-    width: 750rpx;
-    height: 160rpx;
-  }
-
-  /* 背景图：与其他 drawer 一致（drawer-bg.png），顶部对齐铺满面板，
-     圆角随面板顶部两角（nvue 中 overflow 不裁绝对定位 image，圆角需加在 image 自身）。 */
-  .detail-panel-bg {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 750rpx;
-    height: 710rpx;
-    border-top-left-radius: 52rpx;
-    border-top-right-radius: 52rpx;
-  }
-
-  /* 面板内 handle（对齐 BaseDrawer 的 base-drawer-handle） */
-  .detail-panel .drawer-handle {
-    width: 72rpx;
-    height: 8rpx;
-    border-radius: 4rpx;
-    background-color: rgba(255, 255, 255, 0.2);
-    margin-top: 20rpx;
-    margin-bottom: 32rpx;
-  }
-
-  /* 返回按钮：76rpx 圆形 + 半透明底 + 白色 chevron 图标。
-     不加描边:低透明度描边在深色底上肉眼几乎不可见，而 nvue 渲染的描边偏明显。 */
+  /* 返回按钮：36pt→72rpx 圆形，圆角 36rpx，白 9% 底，left 16pt→32rpx，top 20pt→40rpx */
   .detail-back {
     position: absolute;
-    top: 32rpx;
-    left: 40rpx;
-    width: 76rpx;
-    height: 76rpx;
-    border-radius: 50%;
-    background-color: rgba(255, 255, 255, 0.055);
+    left: 32rpx;
+    top: 40rpx;
+    width: 72rpx;
+    height: 72rpx;
+    border-radius: 36rpx;
+    background-color: rgba(255, 255, 255, 0.09);
     align-items: center;
     justify-content: center;
     z-index: 3;
   }
 
   .detail-back-icon {
-    width: 42rpx;
-    height: 42rpx;
+    width: 36rpx;
+    height: 36rpx;
   }
 
-  /* 标题区（.audience-co-mic-detail-heading） */
+  /* 标题区：紧贴上方横条（不再额外拉开间距）；title 16pt→32rpx 600 居中，
+     subtitle 12pt→24rpx 白 60%，上间距 4pt→8rpx */
   .detail-heading {
     flex-direction: column;
     align-items: center;
-    margin-top: 8rpx;
   }
 
-  /* 标题（.audience-co-mic-detail-title）：rgba(255,255,255,0.94) 15px→30rpx 600 letter-spacing:0.3px→0.6rpx */
   .detail-title {
-    color: rgba(255, 255, 255, 0.94);
-    font-size: 30rpx;
+    color: #ffffff;
+    font-size: 32rpx;
     font-weight: 600;
-    letter-spacing: 0.6rpx;
   }
 
-  /* 副标题（.audience-co-mic-detail-subtitle）：rgba(255,255,255,0.44) 11px→22rpx margin-top:4px→8rpx */
   .detail-subtitle {
     margin-top: 8rpx;
-    color: rgba(255, 255, 255, 0.44);
-    font-size: 22rpx;
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 24rpx;
   }
 
-  /* 能力项 <-> 美颜调节 切换容器：以其为定位父级，两个子区共占同一空间，横向滑动切换。
-     宽 520rpx 与 detail-actions 保持一致；高度取美颜调节区的自然高度（更高的那个）。
-     声明 translateY(0) 默认态：nvue 的 transition 需显式基准，否则移除 class 时
-     transform 不回归。 */
-  .detail-switch {
-    position: relative;
-    width: 520rpx;
+  /* 本地摄像头预览：左右各内缩 64pt→128rpx（宽 494rpx），正方形，圆角 20pt→40rpx，
+     底色 RGB(0.055,0.098,0.196)→#0E1932，与标题区间距 20pt→40rpx */
+  .local-preview {
+    width: 494rpx;
+    height: 494rpx;
     margin-top: 40rpx;
-    height: 360rpx;
+    border-radius: 40rpx;
     overflow: hidden;
-    transform: translateY(0);
-    transition-property: transform;
-    transition-duration: 260ms;
-    transition-timing-function: ease;
+    background-color: #0e1932;
+    align-items: center;
+    justify-content: center;
   }
 
-  /* 美颜模式：容器上移，三滑块远离屏幕底部系统手势区(iOS Home 条 / Android 手势条)，
-     避免最底部滑块拖动被系统返回拦截。用 transform 而非 margin-top：margin 无过渡会
-     瞬移跳变，transform 与子区横滑同步(260ms)平滑过渡，上移融入切换动画不突兀。
-     注意数值：nvue 的 transform translateY 对 rpx 可能按 pt(逻辑像素)解析，
-     18 即视觉约 36rpx 上移量；若实测仍有偏差按视觉微调此值。
-     能力项(美化/镜像/翻转)此时处于横移+透明隐藏态，一并上移无视觉影响。 */
-  .detail-switch.switch-lift {
-    transform: translateY(-18rpx);
+  .local-preview-camera {
+    width: 494rpx;
+    height: 494rpx;
   }
 
-  /* 三个能力项（.audience-co-mic-detail-actions，260px→3列均分） */
+  /* 三个能力项：左右内缩 56pt→112rpx（宽 526rpx），等间距，高 76pt→152rpx */
   .detail-actions {
-    position: absolute;
-    left: 0;
-    top: 0;
     flex-direction: row;
-    justify-content: space-around;
-    width: 520rpx;
-    /* nvue 里 transition 需要显式声明默认状态，否则移除 class 时 transform 不会回归。 */
-    transform: translateX(0);
-    opacity: 1;
-    transition-property: transform, opacity;
-    transition-duration: 260ms;
-    transition-timing-function: ease;
+    justify-content: space-between;
+    align-items: center;
+    width: 526rpx;
+    height: 152rpx;
+    margin-top: 40rpx;
   }
-
-  /* 美颜模式：三能力项左移淡出（退出可视区） */
-  .detail-actions.panel-hidden-left {
-    transform: translateX(-560rpx);
-    opacity: 0;
-  }
-
-  /* 美颜调节区：默认在右侧可视区外，进入美颜模式时滑入原位 */
-  .beauty-adjust {
-    position: absolute;
-    left: 0;
-    top: 0;
-    width: 520rpx;
-    transform: translateX(560rpx);
-    opacity: 0;
-    transition-property: transform, opacity;
-    transition-duration: 260ms;
-    transition-timing-function: ease;
-  }
-  .beauty-adjust.panel-shown {
-    transform: translateX(0);
-    opacity: 1;
-  }
-
-  /* 美颜调节三行(label+Slider+数值)由共享组件 BeautySliders 承载,样式随组件走。 */
 
   .detail-action {
     flex-direction: column;
     align-items: center;
   }
 
-  /* .cap-icon：48px→96rpx 圆形，rgba(255,255,255,0.08) */
   .cap-icon {
     width: 96rpx;
     height: 96rpx;
@@ -989,10 +870,26 @@
     height: 48rpx;
   }
 
-  /* 能力项文案（.cap-label）：rgba(255,255,255,0.75) 11px→22rpx，nowrap 防换行 */
   .cap-label {
     color: rgba(255, 255, 255, 0.75);
     font-size: 22rpx;
     white-space: nowrap;
+  }
+
+  /* 申请按钮：左右内缩 20pt→40rpx（宽 670rpx），高 44pt→88rpx，圆角 22pt→44rpx，#3B7BFF */
+  .detail-apply {
+    width: 670rpx;
+    height: 88rpx;
+    margin-top: 48rpx;
+    border-radius: 44rpx;
+    background-color: #3b7bff;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .detail-apply-text {
+    color: #ffffff;
+    font-size: 30rpx;
+    font-weight: 600;
   }
 </style>

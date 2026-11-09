@@ -1,70 +1,724 @@
 
-import { ref } from 'vue'
-import type { Ref } from 'vue'
+import { ref, type Ref } from "vue";
+import type { HybridListenerOptions } from "@/uni_modules/tuikit-atomic-x";
+import type { HybridCallOptions } from "./hybridCallOptions.uts";
+import {
+  callAPI, addListener, removeListener,
+  setVirtualBackground,
+  startFloatView, stopFloatView, addFloatViewListener, removeFloatViewListener,
+  startVibrating, stopVibrating, enableMultiDeviceAbility,
+  startForegroundService, stopForegroundService, setCallFramework
+} from "@/uni_modules/tuikit-atomic-x";
+import { NetworkQuality } from "./DeviceState.uts";
+import { safeJsonParse } from "../utils/utsUtils.uts";
 
-// ==================== 类型定义 ====================
+export { NetworkQuality };
 
-/** 通话状态: 0=空闲, 1=呼叫中/待接听, 2=通话中 */
-export type CallStatus = 0 | 1 | 2
+/**
+ * 桥接响应（参照 atomicx HybridResponse data class）
+ */
+type HybridResponse = {
+  api: string | null;
+  code: number;
+  message: string | null;
+  data: any | null;
+};
 
-/** 通话组件框架类型（与 utssdk/app-android/app-ios 的 setCallFramework 一致） */
-export type CallFrameworkType = number
+/**
+ * 桥接响应默认值（JSON.parse 失败兜底）
+ */
+const DEFAULT_HYBRID_RESPONSE: HybridResponse = {
+  api: null,
+  code: -1,
+  message: null,
+  data: null
+};
 
-/** 自身通话信息 */
-export type CallSelfInfo = {
-	status: CallStatus
-	// 其他字段由 SDK 桥接，本 stub 仅暴露 status 满足消费方判空需求
+// ==================== 枚举 ====================
+
+/** 通话媒体类型 */
+export enum CallMediaType {
+  Audio = 0,
+  Video = 1
 }
 
-/** 发起通话选项（与未来 SDK 桥接的 CallsOptions 形态一致） */
-export type CallsOptions = {
-	participantIds: string[]
-	mediaType: number
-	params?: UTSJSONObject
-	success: () => void
-	fail: (error: any) => void
+/** 通话结束原因 */
+export enum CallEndReason {
+  Unknown = 0,
+  Hangup = 1,
+  Reject = 2,
+  Timeout = 3,
+  Cancel = 4,
+  Busy = 5,
+  LineBusy = 6,
+  Error = 7
 }
 
-/** Hook 返回值 */
-export type CallStateReturn = {
-	selfInfo: Ref<CallSelfInfo>
-	calls: (options: CallsOptions) => Promise<void>
-	setCallFramework: (component: CallFrameworkType) => void
-}
-
-// ==================== 错误码 ====================
-
+/**
+ * 通话错误码
+ * 注意：UTS 的 enum 在 Kotlin 中是独立类型，不能与 number 直接比较（会报 "Comparison of incompatible enums"）。
+ * 与原生回调的 code（number）比较时，请使用下方的 number 常量 CALL_ERROR_PACKAGE_NOT_PURCHASED。
+ */
 export enum CallErrorCode {
-	PACKAGE_NOT_PURCHASED = 0,
-	CALL_TIMEOUT = 1,
-	CALL_REJECTED = 2,
-	CALL_BUSY = 3,
-	CALL_LINE_BUSY = 4,
+  PACKAGE_NOT_PURCHASED = 101011
 }
 
-// ==================== 状态存储 ====================
+/** 未开通音视频通话套餐的错误码（number 形式，可直接与 fail 回调的 code 比较） */
+export const CALL_ERROR_PACKAGE_NOT_PURCHASED: number = 101011;
 
-const selfInfoRef: Ref<CallSelfInfo> = ref<CallSelfInfo>({ status: 0 } as CallSelfInfo)
+/** 媒体类型数值常量（与 CallMediaType 对应，number 形式便于跨端传参） */
+export const MEDIA_TYPE_AUDIO: number = 0;
+export const MEDIA_TYPE_VIDEO: number = 1;
+
+/** 通话中状态值：1 呼叫中/待接听，2 已接通 */
+const CALL_STATUS_WAITING: number = 1;
+const CALL_STATUS_CONNECTED: number = 2;
+
+/**
+ * 从 selfInfo（any）中安全读取通话状态
+ * selfInfo 类型为 any，UTS 中不能直接 `.status` 访问，需要转为 UTSJSONObject 后按 key 取值
+ */
+export function getCallStatus(selfInfo: any | null): number {
+  if (selfInfo == null) return 0;
+  return ((selfInfo as UTSJSONObject)["status"] as number | null) ?? 0;
+}
+
+/**
+ * 当前是否处于通话中（呼叫中/待接听/已接通）
+ */
+export function isInCall(selfInfo: any | null): boolean {
+  const status: number = getCallStatus(selfInfo);
+  return status == CALL_STATUS_WAITING || status == CALL_STATUS_CONNECTED;
+}
+
+// ==================== 选项类型 ====================
+
+/** 发起通话参数 */
+export type CallsOptions = {
+  participantIds: string[];
+  /** 媒体类型：0 音频，1 视频（使用 number，避免 enum 与 number 之间的类型不匹配及序列化差异） */
+  mediaType: number;
+  params?: any;
+  success?: () => void;
+  fail?: (code: number, message: string) => void;
+}
+
+/** 接听通话参数 */
+export type AcceptOptions = {
+  success?: () => void;
+  fail?: (code: number, message: string) => void;
+}
+
+/** 拒绝通话参数 */
+export type RejectOptions = {
+  success?: () => void;
+  fail?: (code: number, message: string) => void;
+}
+
+/** 挂断通话参数 */
+export type HangupOptions = {
+  success?: () => void;
+  fail?: (code: number, message: string) => void;
+}
+
+/** 加入通话参数 */
+export type JoinOptions = {
+  callId: string;
+  success?: () => void;
+  fail?: (code: number, message: string) => void;
+}
+
+/** 邀请加入通话参数 */
+export type InviteOptions = {
+  participantIds: string[];
+  params?: any;
+  success?: () => void;
+  fail?: (code: number, message: string) => void;
+}
+
+/** 查询通话记录参数 */
+export type QueryRecentCallsOptions = {
+  cursor?: string;
+  count?: number;
+  success?: () => void;
+  fail?: (code: number, message: string) => void;
+}
+
+/** 删除通话记录参数 */
+export type DeleteRecentCallsOptions = {
+  callIdList: string[];
+  success?: () => void;
+  fail?: (code: number, message: string) => void;
+}
+
+/** 悬浮窗配置项 */
+export type StartFloatWindowOptions = {
+  avatars?: any;
+  waitingAnimation?: string;
+  volumeLevelIcons?: any;
+  networkQualityIcons?: any;
+}
+
+/** 通话事件监听器函数类型 */
+export type ICallListener = (event: string) => void;
+
+/** 悬浮窗启动结果回调（使用具名类型，避免内联函数类型在 Kotlin 中被推断为 Unit? 返回值） */
+export type FloatWindowCallback = (code: number, message: string) => void;
+
+// ==================== 全局状态（防热重载丢失） ====================
+
+type CallGlobalState = {
+  activeCall: Ref<any | null>;
+  recentCalls: Ref<any[]>;
+  cursor: Ref<string>;
+  selfInfo: Ref<any | null>;
+  allParticipants: Ref<any[]>;
+  speakerVolumes: Ref<any[]>;
+  networkQualities: Ref<any | null>;
+  bindEventDone: boolean;
+}
+
+const _callStateCache: Map<string, CallGlobalState> = new Map<string, CallGlobalState>();
+
+function getGlobalState(): CallGlobalState {
+  const key: string = 'default';
+  const cached: CallGlobalState | null = _callStateCache.get(key) ?? null;
+  if (cached != null) {
+    return cached;
+  }
+  const state: CallGlobalState = {
+    activeCall: ref<any | null>(null),
+    recentCalls: ref<any[]>([] as any[]),
+    cursor: ref<string>(''),
+    selfInfo: ref<any | null>(null),
+    allParticipants: ref<any[]>([] as any[]),
+    speakerVolumes: ref<any[]>([] as any[]),
+    networkQualities: ref<any | null>(null),
+    bindEventDone: false
+  };
+  _callStateCache.set(key, state);
+  return state;
+}
+
+const createStoreParams: string = JSON.stringify({
+  storeName: "call",
+  id: ''
+});
+
+// ==================== API 回调统一处理 ====================
+
+/**
+ * 统一处理 callAPI 回调响应，消除重复 try-catch
+ */
+function handleApiCallback(
+  res: string,
+  success?: () => void,
+  fail?: (code: number, message: string) => void
+): void {
+  const data = safeJsonParse<HybridResponse>(res, DEFAULT_HYBRID_RESPONSE);
+  if (data.code == 0) {
+    success?.();
+  } else {
+    fail?.(data.code, data.message ?? '');
+  }
+}
+
+// ==================== 通话控制方法 ====================
+
+/**
+ * 发起通话
+ */
+function calls(params: CallsOptions): void {
+  callAPI(JSON.stringify({
+    api: "calls",
+    params: {
+      createStoreParams: createStoreParams,
+      participantIds: params.participantIds,
+      mediaType: params.mediaType,
+      params: params.params
+    }
+  }), (res: string) => {
+    handleApiCallback(res, params.success, params.fail);
+  });
+}
+
+/**
+ * 接听通话
+ */
+function accept(params?: AcceptOptions): void {
+  callAPI(JSON.stringify({
+    api: "accept",
+    params: {
+      createStoreParams: createStoreParams
+    }
+  }), (res: string) => {
+    handleApiCallback(res, params?.success, params?.fail);
+  });
+}
+
+/**
+ * 拒绝通话
+ */
+function reject(params?: RejectOptions): void {
+  callAPI(JSON.stringify({
+    api: "reject",
+    params: {
+      createStoreParams: createStoreParams
+    }
+  }), (res: string) => {
+    handleApiCallback(res, params?.success, params?.fail);
+  });
+}
+
+/**
+ * 挂断通话
+ */
+function hangup(params?: HangupOptions): void {
+  callAPI(JSON.stringify({
+    api: "hangup",
+    params: {
+      createStoreParams: createStoreParams
+    }
+  }), (res: string) => {
+    handleApiCallback(res, params?.success, params?.fail);
+  });
+}
+
+/**
+ * 加入通话
+ */
+function join(params: JoinOptions): void {
+  callAPI(JSON.stringify({
+    api: "join",
+    params: {
+      createStoreParams: createStoreParams,
+      callId: params.callId
+    }
+  }), (res: string) => {
+    handleApiCallback(res, params.success, params.fail);
+  });
+}
+
+/**
+ * 邀请用户加入通话
+ */
+function invite(params: InviteOptions): void {
+  callAPI(JSON.stringify({
+    api: "invite",
+    params: {
+      createStoreParams: createStoreParams,
+      participantIds: params.participantIds,
+      params: params.params
+    }
+  }), (res: string) => {
+    handleApiCallback(res, params.success, params.fail);
+  });
+}
+
+/**
+ * 设置虚拟背景（背景模糊）
+ */
+function enableVirtualBackground(enable: boolean): void {
+  setVirtualBackground(enable);
+}
+
+/**
+ * 查询通话记录
+ */
+function queryRecentCalls(params?: QueryRecentCallsOptions): void {
+  const c: string = params?.cursor ?? '';
+  const cnt: number = params?.count ?? 20;
+  callAPI(JSON.stringify({
+    api: "queryRecentCalls",
+    params: {
+      createStoreParams: createStoreParams,
+      cursor: c,
+      count: cnt
+    }
+  }), (res: string) => {
+    handleApiCallback(res, params?.success, params?.fail);
+  });
+}
+
+/**
+ * 删除通话记录
+ */
+function deleteRecentCalls(params: DeleteRecentCallsOptions): void {
+  callAPI(JSON.stringify({
+    api: "deleteRecentCalls",
+    params: {
+      createStoreParams: createStoreParams,
+      callIdList: params.callIdList
+    }
+  }), (res: string) => {
+    handleApiCallback(res, params.success, params.fail);
+  });
+}
+
+// ==================== 事件监听 ====================
+
+function makeCallListenerOptions(name: string, listenerID: string): HybridListenerOptions {
+  const opts: HybridListenerOptions = {
+    type: "state",
+    store: "CallStore",
+    name: name,
+    listenerID: listenerID,
+    params: {
+      createStoreParams: createStoreParams
+    }
+  };
+  return opts;
+}
+
+/**
+ * 添加通话事件监听
+ * @param eventName 'onCallStarted' | 'onCallReceived' | 'onCallEnded'
+ */
+function addCallListener(eventName: string, listener: ICallListener, listenerID?: string): void {
+  const options: HybridListenerOptions = {
+    type: "state",
+    store: "CallStore",
+    name: eventName,
+    params: {
+      createStoreParams: createStoreParams
+    }
+  };
+  if (listenerID != null) {
+    options.listenerID = listenerID;
+  }
+  addListener(options, (data: string) => {
+    listener(data);
+  });
+}
+
+/**
+ * 移除通话事件监听
+ */
+function removeCallListener(eventName: string, listenerID?: string): void {
+  const options: HybridListenerOptions = {
+    type: "state",
+    store: "CallStore",
+    name: eventName,
+    params: {
+      createStoreParams: createStoreParams
+    }
+  };
+  if (listenerID != null) {
+    options.listenerID = listenerID;
+  }
+  removeListener(options);
+}
+
+/**
+ * 从监听 payload 中取出某字段并解析成对象/数组（字段可能是 JSON 字符串或已是对象）
+ */
+function parseField(result: UTSJSONObject, key: string): any | null {
+  const raw = result[key];
+  if (raw == null) {
+    return null;
+  }
+  if (typeof raw == 'string') {
+    // 不能用 safeJsonParse<any>(..., null)：Kotlin 中 any → Any（非空），默认值不能为 null
+    try {
+      return JSON.parse(raw as string);
+    } catch (e: any) {
+      return null;
+    }
+  }
+  return raw;
+}
+
+/**
+ * 安全地把字段解析为数组
+ * 注意：Kotlin 中 `v as any[]` 是真实强转，类型不符会抛 ClassCastException（TS 中只是编译期标注，不会报错），
+ * 因此必须先用 Array.isArray 判断。
+ */
+function parseArrayField(result: UTSJSONObject, key: string): any[] {
+  const v = parseField(result, key);
+  if (v != null && Array.isArray(v)) {
+    return v as any[];
+  }
+  if (v != null) {
+    console.warn(`[CallState] ${key} is not an array, ignored`);
+  }
+  return [] as any[];
+}
+
+/**
+ * 解析 speakerVolumes
+ * 原生层推送的是对象 `{ userId: volume }`，而对外暴露的类型约定为 `[{ userId, volume }]`，这里统一转换；
+ * 若原生层推送的已经是数组，则直接使用。
+ */
+function parseSpeakerVolumes(result: UTSJSONObject): any[] {
+  const v = parseField(result, "speakerVolumes");
+  if (v == null) {
+    return [] as any[];
+  }
+  if (Array.isArray(v)) {
+    return v as any[];
+  }
+  if (v instanceof UTSJSONObject) {
+    const list: any[] = [] as any[];
+    (v as UTSJSONObject).toMap().forEach((value: any | null, userId: string) => {
+      const volume: number = (value != null && typeof value == 'number') ? (value as number) : 0;
+      const item: UTSJSONObject = {
+        userId: userId,
+        volume: volume
+      } as UTSJSONObject;
+      list.push(item);
+    });
+    return list;
+  }
+  return [] as any[];
+}
+
+function bindEvent(): void {
+  const globalState = getGlobalState();
+  if (globalState.bindEventDone) {
+    return;
+  }
+  globalState.bindEventDone = true;
+
+  addListener(makeCallListenerOptions("activeCall", "call"), (data: string) => {
+    try {
+      const result = JSON.parse<UTSJSONObject>(data);
+      if (result != null) {
+        globalState.activeCall.value = parseField(result, "activeCall");
+      }
+    } catch (error: any) {
+      const errMsg = error instanceof Error ? (error as Error).message : `${error}`;
+      console.error(`[activeCall listener] Error: ${errMsg}`);
+    }
+  });
+
+  addListener(makeCallListenerOptions("recentCalls", "call"), (data: string) => {
+    try {
+      const result = JSON.parse<UTSJSONObject>(data);
+      if (result != null) {
+        globalState.recentCalls.value = parseArrayField(result, "recentCalls");
+      }
+    } catch (error: any) {
+      const errMsg = error instanceof Error ? (error as Error).message : `${error}`;
+      console.error(`[recentCalls listener] Error: ${errMsg}`);
+    }
+  });
+
+  addListener(makeCallListenerOptions("cursor", "call"), (data: string) => {
+    try {
+      const result = JSON.parse<UTSJSONObject>(data);
+      if (result != null) {
+        const v = result["cursor"];
+        globalState.cursor.value = typeof v == 'string' ? (v as string) : '';
+      }
+    } catch (error: any) {
+      const errMsg = error instanceof Error ? (error as Error).message : `${error}`;
+      console.error(`[cursor listener] Error: ${errMsg}`);
+    }
+  });
+
+  addListener(makeCallListenerOptions("selfInfo", "call"), (data: string) => {
+    try {
+      const result = JSON.parse<UTSJSONObject>(data);
+      if (result != null) {
+        globalState.selfInfo.value = parseField(result, "selfInfo");
+      }
+    } catch (error: any) {
+      const errMsg = error instanceof Error ? (error as Error).message : `${error}`;
+      console.error(`[selfInfo listener] Error: ${errMsg}`);
+    }
+  });
+
+  addListener(makeCallListenerOptions("allParticipants", "call"), (data: string) => {
+    try {
+      const result = JSON.parse<UTSJSONObject>(data);
+      if (result != null) {
+        globalState.allParticipants.value = parseArrayField(result, "allParticipants");
+      }
+    } catch (error: any) {
+      const errMsg = error instanceof Error ? (error as Error).message : `${error}`;
+      console.error(`[allParticipants listener] Error: ${errMsg}`);
+    }
+  });
+
+  addListener(makeCallListenerOptions("speakerVolumes", "call"), (data: string) => {
+    try {
+      const result = JSON.parse<UTSJSONObject>(data);
+      if (result != null) {
+        globalState.speakerVolumes.value = parseSpeakerVolumes(result);
+      }
+    } catch (error: any) {
+      const errMsg = error instanceof Error ? (error as Error).message : `${error}`;
+      console.error(`[speakerVolumes listener] Error: ${errMsg}`);
+    }
+  });
+
+  addListener(makeCallListenerOptions("networkQualities", "call"), (data: string) => {
+    try {
+      const result = JSON.parse<UTSJSONObject>(data);
+      if (result != null) {
+        globalState.networkQualities.value = parseField(result, "networkQualities");
+      }
+    } catch (error: any) {
+      const errMsg = error instanceof Error ? (error as Error).message : `${error}`;
+      console.error(`[networkQualities listener] Error: ${errMsg}`);
+    }
+  });
+}
+
+function unbindEvent(): void {
+  const names: string[] = [
+    "activeCall", "recentCalls", "cursor", "selfInfo",
+    "allParticipants", "speakerVolumes", "networkQualities"
+  ];
+  names.forEach((name: string) => {
+    removeListener(makeCallListenerOptions(name, "call"));
+  });
+  const globalState = getGlobalState();
+  globalState.bindEventDone = false;
+}
+
+// ==================== 悬浮窗 / 震动 / 多端 ====================
+
+/**
+ * 开启悬浮窗
+ */
+function startFloatWindow(options: StartFloatWindowOptions | null, callback: FloatWindowCallback | null): void {
+  const optStr: string = options != null ? (JSON.stringify(options) ?? "{}") : "{}";
+  startFloatView(optStr, (code: number, message: string): void => {
+    if (callback != null) {
+      callback(code, message);
+    }
+  });
+}
+
+/**
+ * 关闭悬浮窗
+ */
+function stopFloatWindow(): void {
+  stopFloatView();
+}
+
+/**
+ * 开启振动
+ */
+function startVibrate(): void {
+  startVibrating();
+}
+
+/**
+ * 关闭振动
+ */
+function stopVibrate(): void {
+  stopVibrating();
+}
+
+/**
+ * 添加悬浮窗点击事件监听
+ */
+function addFloatWindowListener(click: () => void): void {
+  addFloatViewListener(click);
+}
+
+/**
+ * 移除悬浮窗点击事件监听
+ */
+function removeFloatWindowListener(): void {
+  removeFloatViewListener();
+}
+
+/**
+ * 开启/关闭多设备登录能力
+ */
+function enableCallMultiDeviceAbility(enable: boolean): void {
+  enableMultiDeviceAbility(enable);
+}
 
 // ==================== Hook ====================
 
 /**
- * 通话状态 Hook
+ * useCallState Hook 返回值
  *
- * @returns { selfInfo, calls, setCallFramework }
- *   - selfInfo: 当前自身通话状态 ref（status: 0=空闲, 1=呼叫中, 2=通话中）
- *   - calls: 发起通话函数（占位 stub）；调用后内部不真发起，仅 console.warn
- *   - setCallFramework: 初始化通话组件框架（占位 stub）
+ * 注意：这里的字段都是"函数类型"，编译到 Kotlin 后为 FunctionN，不支持可选/默认参数。
+ * 因此不能写 `(params?: X) => void`，必须写成 `(params: X | null) => void`，调用方需显式传 null。
  */
-export const useCallState = (): CallStateReturn => {
-	return {
-		selfInfo: selfInfoRef,
-		calls: async (_options: CallsOptions): Promise<void> => {
-			// stub: SDK 接入后此处调用 utssdk/app-android 或 app-ios 的通话桥接
-			console.warn('[CallState] calls is a stub - SDK not yet integrated')
-		},
-		setCallFramework: (_component: CallFrameworkType): void => {
-			// stub: SDK 接入后此处调用 utssdk/app-android 或 app-ios 的 setCallFramework
-		}
-	}
+export type UseCallStateReturn = {
+  activeCall: Ref<any | null>;
+  recentCalls: Ref<any[]>;
+  cursor: Ref<string>;
+  selfInfo: Ref<any | null>;
+  allParticipants: Ref<any[]>;
+  speakerVolumes: Ref<any[]>;
+  networkQualities: Ref<any | null>;
+
+  calls: (params: CallsOptions) => void;
+  accept: (params: AcceptOptions | null) => void;
+  reject: (params: RejectOptions | null) => void;
+  hangup: (params: HangupOptions | null) => void;
+  join: (params: JoinOptions) => void;
+  invite: (params: InviteOptions) => void;
+  enableVirtualBackground: (enable: boolean) => void;
+
+  queryRecentCalls: (params: QueryRecentCallsOptions | null) => void;
+  deleteRecentCalls: (params: DeleteRecentCallsOptions) => void;
+
+  addCallListener: (eventName: string, listener: ICallListener, listenerID: string | null) => void;
+  removeCallListener: (eventName: string, listenerID: string | null) => void;
+
+  startFloatWindow: (options: StartFloatWindowOptions | null, callback: FloatWindowCallback | null) => void;
+  stopFloatWindow: () => void;
+  startVibrate: () => void;
+  stopVibrate: () => void;
+  addFloatWindowListener: (click: () => void) => void;
+  removeFloatWindowListener: () => void;
+  enableCallMultiDeviceAbility: (enable: boolean) => void;
+
+  startForegroundService: () => void;
+  stopForegroundService: () => void;
+  setCallFramework: (component: number) => void;
 }
+
+/**
+ * 通话状态管理 Hook
+ */
+export function useCallState(): UseCallStateReturn {
+  const globalState = getGlobalState();
+  bindEvent();
+  setCallFramework(17);
+  return {
+    activeCall: globalState.activeCall,
+    recentCalls: globalState.recentCalls,
+    cursor: globalState.cursor,
+    selfInfo: globalState.selfInfo,
+    allParticipants: globalState.allParticipants,
+    speakerVolumes: globalState.speakerVolumes,
+    networkQualities: globalState.networkQualities,
+
+    calls: (params: CallsOptions): void => { calls(params); },
+    accept: (params: AcceptOptions | null): void => { accept(params); },
+    reject: (params: RejectOptions | null): void => { reject(params); },
+    hangup: (params: HangupOptions | null): void => { hangup(params); },
+    join: (params: JoinOptions): void => { join(params); },
+    invite: (params: InviteOptions): void => { invite(params); },
+    enableVirtualBackground: (enable: boolean): void => { enableVirtualBackground(enable); },
+
+    queryRecentCalls: (params: QueryRecentCallsOptions | null): void => { queryRecentCalls(params); },
+    deleteRecentCalls: (params: DeleteRecentCallsOptions): void => { deleteRecentCalls(params); },
+
+    addCallListener: (eventName: string, listener: ICallListener, listenerID: string | null): void => { addCallListener(eventName, listener, listenerID); },
+    removeCallListener: (eventName: string, listenerID: string | null): void => { removeCallListener(eventName, listenerID); },
+
+    startFloatWindow: (options: StartFloatWindowOptions | null, callback: FloatWindowCallback | null): void => { startFloatWindow(options, callback); },
+    stopFloatWindow: (): void => { stopFloatWindow(); },
+    startVibrate: (): void => { startVibrate(); },
+    stopVibrate: (): void => { stopVibrate(); },
+    addFloatWindowListener: (click: () => void): void => { addFloatWindowListener(click); },
+    removeFloatWindowListener: (): void => { removeFloatWindowListener(); },
+    enableCallMultiDeviceAbility: (enable: boolean): void => { enableCallMultiDeviceAbility(enable); },
+
+    startForegroundService: (): void => { startForegroundService(); },
+    stopForegroundService: (): void => { stopForegroundService(); },
+    setCallFramework: (component: number): void => { setCallFramework(component); }
+  } as UseCallStateReturn;
+}
+
+export default useCallState;

@@ -1,0 +1,77 @@
+<template>
+  <view v-if="innerVisible" class="ld-mask" @tap="onMaskTap">
+    <view class="ld-box" @tap.stop="">
+      <view class="ld-bg"></view>
+      <view class="ld-inner">
+        <text v-if="title" class="ld-title">{{ title }}</text>
+        <text v-if="message" class="ld-message">{{ message }}</text>
+        <view class="ld-btns">
+          <view v-if="cancelText" class="ld-btn is-cancel" @tap="onCancel">
+            <text class="ld-btn-text is-cancel-text">{{ cancelText }}</text>
+          </view>
+          <view v-if="confirmText" class="ld-btn is-confirm" :class="`is-confirm--${confirmType}`" @tap="onConfirm">
+            <text class="ld-btn-text is-confirm-text">{{ confirmText }}</text>
+          </view>
+        </view>
+      </view>
+    </view>
+  </view>
+</template>
+
+<script setup lang="ts">
+  import { computed } from 'vue';
+
+  const props = defineProps({
+    modelValue: {
+      type: Boolean,
+      default: false
+    },
+    title: {
+      type: String,
+      default: ''
+    },
+    message: {
+      type: String,
+      default: ''
+    },
+    confirmText: {
+      type: String,
+      default: '确定'
+    },
+    cancelText: {
+      type: String,
+      default: '取消'
+    },
+    confirmType: {
+      type: String as () => 'danger' | 'primary',
+      default: 'danger'
+    }
+  });
+
+  const emit = defineEmits(['update:modelValue', 'confirm', 'cancel']);
+
+  const innerVisible = computed({
+    get: () => props.modelValue,
+    set: (val: boolean) => emit('update:modelValue', val)
+  });
+
+  const close = () => {
+    innerVisible.value = false;
+  };
+  const onConfirm = () => {
+    emit('confirm');
+    close();
+  };
+  const onCancel = () => {
+    emit('cancel');
+    close();
+  };
+  const onMaskTap = () => {
+    emit('cancel');
+    close();
+  };
+</script>
+
+<style lang="scss">
+  @import './LiveDialog.scss';
+</style>

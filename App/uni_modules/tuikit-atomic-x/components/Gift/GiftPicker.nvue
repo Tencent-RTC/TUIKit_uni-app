@@ -12,11 +12,6 @@
          此前 showHandle=false 时自绘 gift-handle 仅作视觉;开启后二者叠加出现双横线,
          故删除内部自绘的这条。 -->
 
-    <view class="gift-balance">
-      <view class="gift-coin"></view>
-      <text class="gift-balance-value">{{ balance }}</text>
-    </view>
-
     <text class="gift-title">{{ t('gift.pickerTitle') }}</text>
 
     <view class="category-tabs">
@@ -141,7 +136,7 @@
     onMounted,
     onUnmounted
   } from 'vue';
-  import BaseDrawer from '@/components/live/BaseDrawer/index.nvue';
+  import BaseDrawer from '@/uni_modules/tuikit-atomic-x/components/Common/BaseDrawer/index.nvue';
   import { t } from '../locales';
   import {
     preloadGiftAnimations
@@ -200,8 +195,6 @@
   const currentCategoryIndex = ref(0);
   // drawer 高度 = 屏幕高度的 50%（rpx），通过 screen.ts 工具动态计算适配不同屏幕尺寸。
   const drawerHeight = ref(heightPercentToRpx(0.5));
-  // 本地演示余额（当前 state 无余额接口，纯前端展示，不阻断真实 sendGift）
-  const balance = ref(999999);
 
   // 礼物分类列表（后端已返回分类结构）
   const giftLists = computed(() => usableGifts.value || []);
@@ -311,23 +304,20 @@
     doSend(index);
   }
 
-  // 执行一次赠送：扣余额、UI 立即累加连击、把 count 打包进"待发送队列"（不立即发）。
+  // 执行一次赠送：UI 立即累加连击、把 count 打包进"待发送队列"（不立即发）。
   // 真实 sendGift 由 scheduleFlushSend 节流合并成一次带 count=N 的调用，避免高频点击
   // 触发底层 IM 频率限制导致主播端漏收（比如客户端点 30 次主播只收到 20 次）。
   function doSend(index) {
     const gift = currentCategoryGifts.value[index];
     if (!gift) return false;
-    const price = Math.max(0, Math.floor(Number(gift.coins) || 0));
-    if (price > balance.value) return false;
 
     const isSameCombo = comboGiftID.value === gift.giftID && comboIndex.value === index;
 
     // 首次送出「高级礼物」（有 SVGA 动画资源 resourceURL）时，
     // 关闭抽屉并把连击按钮迁移到画面右下角的浮动连击组件（由 video 侧承接），
-    // 抽屉内不启动网格连击。后续连击由浮动组件处理（含扣费、发送、计数、SVGA）。
+    // 抽屉内不启动网格连击。后续连击由浮动组件处理（发送、计数、SVGA）。
     const isAdvanced = !!(gift.resourceURL && String(gift.resourceURL).length > 0);
     if (isAdvanced && !isSameCombo) {
-      balance.value -= price;
       // 先 flush 掉可能残留的普通连击量，并清掉网格连击态
       flushPendingSend();
       stopCombo();
@@ -336,8 +326,6 @@
       emit('advancedComboStart', { gift, count: 1 });
       return true;
     }
-
-    balance.value -= price;
 
     if (isSameCombo) {
       comboCount.value += 1;
@@ -628,30 +616,6 @@
      ============================================================ */
 
   /* 顶部 handle:已删除(改用 BaseDrawer 的 showHandle=true,见模板注释)。 */
-
-  .gift-balance {
-    position: absolute;
-    top: 40rpx;
-    right: 32rpx;
-    flex-direction: row;
-    align-items: center;
-  }
-
-  .gift-coin {
-    width: 20rpx;
-    height: 20rpx;
-    border-radius: 10rpx;
-    background-color: #ffc32e;
-    border-width: 2rpx;
-    border-color: rgba(255, 218, 86, 0.9);
-    margin-right: 10rpx;
-  }
-
-  .gift-balance-value {
-    color: rgba(255, 255, 255, 0.82);
-    font-size: 24rpx;
-    font-weight: 600;
-  }
 
   .gift-title {
     color: rgba(255, 255, 255, 0.94);

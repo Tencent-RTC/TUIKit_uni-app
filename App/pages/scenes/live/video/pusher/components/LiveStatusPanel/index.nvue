@@ -115,7 +115,7 @@
               <text class="live-status-health-title">{{ videoStateText }}</text>
               <text class="live-status-health-sub">{{ videoStateCopy }}</text>
             </view>
-            <text class="live-status-health-value">720P</text>
+            <text class="live-status-health-value">{{ videoQualityLabel }}</text>
           </view>
 
           <view class="live-status-health-item live-status-audio-item">
@@ -172,11 +172,11 @@
             <text class="live-status-media-title">{{ t('liveStatus.videoInfo') }}</text>
             <view class="live-status-media-row">
               <text class="live-status-media-key">{{ t('liveStatus.resolution') }}</text>
-              <text class="live-status-media-value">720×1280</text>
+              <text class="live-status-media-value">{{ videoResolutionText }}</text>
             </view>
             <view class="live-status-media-row">
               <text class="live-status-media-key">{{ t('liveStatus.bitrate') }}</text>
-              <text class="live-status-media-value">1800 kbps</text>
+              <text class="live-status-media-value">{{ videoBitrateText }}</text>
             </view>
             <view class="live-status-media-row">
               <text class="live-status-media-key">{{ t('liveStatus.frameRate') }}</text>
@@ -203,13 +203,14 @@
 <script setup lang="ts">
   import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
   import { useLiveAudienceState } from '@/uni_modules/tuikit-atomic-x/state/LiveAudienceState';
-  import { useDeviceState, DeviceStatus, DeviceError, NetworkQuality } from '@/uni_modules/tuikit-atomic-x/state/DeviceState';
+  import { useDeviceState, DeviceStatus, DeviceError, NetworkQuality, VideoQuality } from '@/uni_modules/tuikit-atomic-x/state/DeviceState';
   import { useLiveListState } from '@/uni_modules/tuikit-atomic-x/state/LiveListState';
   import { useLiveSummaryState } from '@/uni_modules/tuikit-atomic-x/state/LiveSummaryState';
   import { t } from '@/pages/scenes/live/locales';
+  import { getTopBarOffsetPx } from '@/pages/scenes/live/utils';
   import { LIVE_TOKENS } from '@/pages/scenes/live/styles/tokens.js';
-  import BaseDrawer from '@/components/live/BaseDrawer/index.nvue';
-  import Slider from '@/uni_modules/tuikit-atomic-x/components/Slider.nvue';
+  import BaseDrawer from '@/uni_modules/tuikit-atomic-x/components/Common/BaseDrawer/index.nvue';
+  import Slider from '@/uni_modules/tuikit-atomic-x/components/Common/Slider/index.nvue';
 
   const props = defineProps({
     liveID: { type: String, default: '' },
@@ -217,8 +218,30 @@
 
   const { audienceList, audienceCount } = useLiveAudienceState(props.liveID);
   const { currentLive } = useLiveListState(props.liveID);
-  const { cameraStatus, cameraLastError, microphoneStatus, microphoneLastError, captureVolume, setCaptureVolume, networkInfo } = useDeviceState();
+  const { cameraStatus, cameraLastError, microphoneStatus, microphoneLastError, captureVolume, setCaptureVolume, networkInfo, localVideoQuality } = useDeviceState();
   const { summaryData } = useLiveSummaryState(props.liveID);
+
+  const RESOLUTION_BY_QUALITY: Record<number, string> = {
+    [VideoQuality.QUALITY_360P]: '360×640',
+    [VideoQuality.QUALITY_540P]: '540×960',
+    [VideoQuality.QUALITY_720P]: '720×1280',
+    [VideoQuality.QUALITY_1080P]: '1080×1920',
+  };
+  const BITRATE_BY_QUALITY: Record<number, string> = {
+    [VideoQuality.QUALITY_360P]: '800 kbps',
+    [VideoQuality.QUALITY_540P]: '1200 kbps',
+    [VideoQuality.QUALITY_720P]: '1800 kbps',
+    [VideoQuality.QUALITY_1080P]: '2400 kbps',
+  };
+  const QUALITY_LABEL_BY_QUALITY: Record<number, string> = {
+    [VideoQuality.QUALITY_360P]: '360P',
+    [VideoQuality.QUALITY_540P]: '540P',
+    [VideoQuality.QUALITY_720P]: '720P',
+    [VideoQuality.QUALITY_1080P]: '1080P',
+  };
+  const videoQualityLabel = computed(() => QUALITY_LABEL_BY_QUALITY[Number(localVideoQuality.value)] || '--');
+  const videoResolutionText = computed(() => RESOLUTION_BY_QUALITY[Number(localVideoQuality.value)] || '--');
+  const videoBitrateText = computed(() => BITRATE_BY_QUALITY[Number(localVideoQuality.value)] || '--');
 
   const ICON_DIR = '/static/images/live/icon';
   const ICON_VIDEO = `${ICON_DIR}/status-video.png`;
@@ -240,17 +263,10 @@
   const liveDuration = ref(0);
   const volume = ref(0);
   const systemNetworkConnected = ref(true);
-  const triggerTopPx = (() => {
-    try {
-      const statusBarTop = (uni.getSystemInfoSync().safeArea as any)?.top || 0;
-      return uni.upx2px(220) - statusBarTop + 16;
-    } catch (e) {
-      return uni.upx2px(220);
-    }
-  })();
-
   let liveStartAt = 0;
+  let pauseStartAt = 0;
   let durationTimer: ReturnType<typeof setInterval> | null = null;
+  const triggerTopPx = getTopBarOffsetPx() + uni.upx2px(124);
 
   const localElapsedSeconds = () => Math.max(0, (Date.now() - liveStartAt) / 1000);
 
@@ -292,16 +308,6 @@
     return `${Math.round(n)}${suffix}`;
   };
 
-  const networkStatus = computed<'good' | 'poor' | 'bad' | 'disconnected' | 'checking'>(() => {
-    if (!systemNetworkConnected.value) return 'disconnected';
-    const quality = Number(networkInfo.value?.quality);
-    if (quality === NetworkQuality.Down) return 'disconnected';
-    if (quality === NetworkQuality.Bad || quality === NetworkQuality.VeryBad) return 'bad';
-    if (quality === NetworkQuality.Poor) return 'poor';
-    if (quality === NetworkQuality.Excellent || quality === NetworkQuality.Good) return 'good';
-    return 'checking';
-  });
-
   const durationText = computed(() => {
     const h = String(Math.floor(liveDuration.value / 3600)).padStart(2, '0');
     const m = String(Math.floor((liveDuration.value % 3600) / 60)).padStart(2, '0');
@@ -312,7 +318,6 @@
   const onlineCount = computed(() =>
     audienceList.value.length > 100 ? Number(audienceCount?.value) || 0 : audienceList.value.length
   );
-
   const giftCoins = computed(() => Math.max(0, Math.floor(Number(summaryData.value?.totalGiftCoins) || 0)));
   const gifterCount = computed(() => Math.max(0, Math.floor(Number(summaryData.value?.totalGiftUniqueSenders) || 0)));
   const likeCount = computed(() => Math.max(0, Math.floor(Number(summaryData.value?.totalLikesReceived) || 0)));
@@ -325,31 +330,36 @@
   const giftCountText = computed(() => formatCount(giftCount.value));
   const messageCountText = computed(() => formatCount(messageCount.value));
 
+  const networkStatus = computed<'good' | 'poor' | 'bad' | 'disconnected' | 'checking'>(() => {
+    if (!systemNetworkConnected.value) return 'disconnected';
+    const quality = Number(networkInfo.value?.quality);
+    if (quality === NetworkQuality.Down) return 'disconnected';
+    if (quality === NetworkQuality.Bad || quality === NetworkQuality.VeryBad) return 'bad';
+    if (quality === NetworkQuality.Poor) return 'poor';
+    if (quality === NetworkQuality.Excellent || quality === NetworkQuality.Good) return 'good';
+    return 'checking';
+  });
   const networkIcon = computed(() => {
     if (networkStatus.value === 'poor') return ICON_TRIGGER_POOR;
     if (networkStatus.value === 'bad') return ICON_TRIGGER_BAD;
     if (networkStatus.value === 'disconnected') return ICON_TRIGGER_DISCONNECTED;
     return '';
   });
-
   const networkIconWidth = computed(() =>
     networkStatus.value === 'poor' ? 26 : 34
   );
-
   const triggerLabel = computed(() => {
     if (networkStatus.value === 'poor') return t('liveStatus.networkPoorLabel');
     if (networkStatus.value === 'bad') return t('liveStatus.networkVeryBadLabel');
     if (networkStatus.value === 'disconnected') return t('liveStatus.networkDisconnectedLabel');
     return t('liveStatus.title');
   });
-
   const networkHealthIcon = computed(() => {
     if (networkStatus.value === 'poor') return ICON_NETWORK_POOR;
     if (networkStatus.value === 'bad') return ICON_NETWORK_BAD;
     if (networkStatus.value === 'disconnected') return ICON_NETWORK_DISCONNECTED;
     return ICON_NETWORK;
   });
-
   const networkStateText = computed(() => {
     if (networkStatus.value === 'poor') return t('liveStatus.networkPoorLabel');
     if (networkStatus.value === 'bad') return t('liveStatus.networkBadLabel');
@@ -357,7 +367,6 @@
     if (networkStatus.value === 'checking') return t('liveStatus.networkCheckingLabel');
     return t('liveStatus.networkExcellent');
   });
-
   const networkStateCopy = computed(() => {
     if (networkStatus.value === 'poor') return t('liveStatus.networkFluctuatingCopy');
     if (networkStatus.value === 'bad') return t('liveStatus.networkSwitchCopy');
@@ -365,7 +374,6 @@
     if (networkStatus.value === 'checking') return t('liveStatus.networkCheckingCopy');
     return t('liveStatus.networkCopy');
   });
-
   const rttText = computed(() => formatNetworkMetric(networkInfo.value?.delay, 'ms'));
   const downLossText = computed(() => formatNetworkMetric(networkInfo.value?.downLoss, '%'));
   const upLossText = computed(() => formatNetworkMetric(networkInfo.value?.upLoss, '%'));
@@ -391,6 +399,7 @@
     if (isVideoStreamError.value) return t('liveStatus.videoStreamErrorCopy');
     return isVideoOff.value ? t('liveStatus.videoOffCopy') : t('liveStatus.videoNormalCopy');
   });
+
   const isAudioDeviceError = computed(() => microphoneLastError.value !== DeviceError.NO_ERROR);
   const isAudioOff = computed(() =>
     !isAudioDeviceError.value && (microphoneStatus.value !== DeviceStatus.ON || volume.value <= 0)
@@ -429,17 +438,6 @@
     applyNetworkType(res?.networkType, res?.isConnected);
   };
 
-  watch(captureVolume, (val) => {
-    volume.value = Math.max(0, Math.round(Number(val) || 0));
-  }, { immediate: true });
-
-  watch(() => currentLive.value?.createTime, (createTime) => {
-    if (liveStartAt > 0) return;
-    liveStartAt = toMsTimestamp(createTime);
-  }, { immediate: true });
-
-  let pauseStartAt = 0;
-
   const onPauseChanged = (paused: boolean) => {
     if (paused) {
       pauseStartAt = Date.now();
@@ -459,6 +457,15 @@
       }
     }
   };
+
+  watch(captureVolume, (val) => {
+    volume.value = Math.max(0, Math.round(Number(val) || 0));
+  }, { immediate: true });
+
+  watch(() => currentLive.value?.createTime, (createTime) => {
+    if (liveStartAt > 0) return;
+    liveStartAt = toMsTimestamp(createTime);
+  }, { immediate: true });
 
   onMounted(() => {
     durationTimer = setInterval(() => {

@@ -1,5 +1,12 @@
-
-import { MessageType } from "../components/ConversationList/types";
+/**
+ * 通话消息处理公共工具（uni-app x 版）
+ * 逻辑对齐 vue3 版 utils/callMessageUtils.ts：
+ *   messagePayload.customData(JSON 字符串) -> businessID === 1 才是通话消息；
+ *   customData.data 本身还是一段 JSON（可能是字符串，也可能已是对象），解析后才是 callInfo。
+ *
+ * 注意：message 可能是响应式代理对象，直接 `as UTSJSONObject` 会抛 ClassCastException，
+ * 统一经 convertToJSONObject（JSON 往返）转换后再按下标读取。
+ */
 
 export type CallSignalData = {
   cmd?: string | null;
@@ -7,88 +14,191 @@ export type CallSignalData = {
   message?: string | null;
   room_id?: number | null;
   str_room_id?: string | null;
-  /** 通话结束时长（秒）— 旧版协议字段，部分老消息可能有 */
+  /** 通话结束时长（秒）— 旧版协议字段，部分老消息可能放在这一层 */
   call_end?: number | null;
 };
 
-/** 通话信令数据（最小子集，含新版所需的 actionType/groupID/inviter 等） */
-export type CallMessageData = {
-  call_type: number; // 1=语音, 2=视频
-  businessID: string | number | null;
-  // 新版扩展字段
-  actionType?: number | null;
-  inviter?: string | null;
-  inviteeList?: string[] | null;
-  groupID?: string | null;
-  timeout?: number | null;
-  inviteID?: string | null;
+/** customData.data 解析后的通话信息（对应 vue3 版 callInfo） */
+export type CallInfo = {
+  businessID?: number | null;
+  call_end?: number | null;
+  /** 1=语音, 2=视频 */
+  call_type?: number | null;
   line_busy?: string | null;
+  platform?: string | null;
+  room_id?: number | null;
+  version?: number | null;
   data?: CallSignalData | null;
 };
 
-function safeMessageAsJSONObject(message: any): UTSJSONObject {
-  if (message == null) return new UTSJSONObject()
-  return new UTSJSONObject()
+/** 通话消息解析结果（结构对齐 vue3 版 CallMessageData） */
+export type CallMessageData = {
+  businessID: number;
+  timeout?: number | null;
+  inviteID?: string | null;
+  actionType: number;
+  inviter?: string | null;
+  groupID?: string | null;
+  callInfo: CallInfo;
+};
+
+// ==================== 基础读取工具 ====================
+
+function convertToJSONObject(value: any | null): UTSJSONObject {
+  return JSON.parse<UTSJSONObject>(JSON.stringify(value ?? new UTSJSONObject())) ?? new UTSJSONObject()
 }
 
-function getCustomData(message: any): string | null {
-  if (message == null) return null
-  const msgObj: UTSJSONObject = safeMessageAsJSONObject(message)
-  const payloadRaw: any | null = msgObj['messagePayload']
-  if (payloadRaw == null) return null
-  const payload: UTSJSONObject = payloadRaw as UTSJSONObject
-  // 新版 MessageBody：自定义消息数据在 customMessage.customData
-  const customRaw: any | null = payload['customMessage']
-  if (customRaw != null) {
-    const custom: UTSJSONObject = customRaw as UTSJSONObject
-    const direct: any | null = custom['customData']
-    if (typeof direct == 'string' && (direct as string).length > 0) {
-      return direct as string
-    }
-  }
-  // 兜底：MessagePayload 顶层 data 字段（流式/旧版承载）
-  const topDataRaw: any | null = payload['data']
-  if (typeof topDataRaw == 'string' && (topDataRaw as string).length > 0) {
-    return topDataRaw as string
+function readStringField(obj: UTSJSONObject, key: string): string | null {
+  const raw: any | null = obj[key]
+  if (typeof raw == 'string') {
+    return raw as string
   }
   return null
 }
 
-/**
- * 判断消息是否为通话消息
- * @param message 消息对象
- */
-export function isCallMessage(message: any): boolean {
+function readNumberField(obj: UTSJSONObject, key: string): number | null {
+  const raw: any | null = obj[key]
+  if (typeof raw == 'number') {
+    return raw as number
+  }
+  return null
+}
+
+/** 读取对象字段；字段值是 JSON 字符串时先解析（对应 vue3 版 safeJsonParse 对 data 的处理） */
+function readObjectField(obj: UTSJSONObject, key: string): UTSJSONObject | null {
+  const raw: any | null = obj[key]
+  if (raw == null) return null
+  try {
+    if (typeof raw == 'string') {
+      const text: string = raw as string
+      if (text.length == 0) return null
+      return JSON.parse<UTSJSONObject>(text)
+    }
+    return convertToJSONObject(raw)
+  } catch (error: any) {
+    return null
+  }
+}
+
+/** 取自定义消息的 customData 原始字符串；兼容旧结构 customMessage.customData 与顶层 data */
+function readCustomDataText(message: any | null): string | null {
+  if (message == null) return null
+  const payload = readObjectField(convertToJSONObject(message), 'messagePayload')
+  if (payload == null) return null
+
+  const direct = readStringField(payload, 'customData')
+  if (direct != null && direct.length > 0) return direct
+
+  const legacy = readObjectField(payload, 'customMessage')
+  if (legacy != null) {
+    const legacyData = readStringField(legacy, 'customData')
+    if (legacyData != null && legacyData.length > 0) return legacyData
+  }
+
+  const topData = readStringField(payload, 'data')
+  if (topData != null && topData.length > 0) return topData
+  return null
+}
+
+// ==================== 对外：自定义消息通用读取 ====================
+
+/** 解析自定义消息的 customData 为对象，失败返回 null */
+export function parseCustomDataObject(message: any | null): UTSJSONObject | null {
+  const text = readCustomDataText(message)
+  if (text == null || text.length == 0) return null
+  try {
+    return JSON.parse<UTSJSONObject>(text)
+  } catch (error: any) {
+    return null
+  }
+}
+
+/** 读取自定义消息 payload.description，没有则返回空串 */
+export function getCustomMessageDescription(message: any | null): string {
+  if (message == null) return ''
+  const payload = readObjectField(convertToJSONObject(message), 'messagePayload')
+  if (payload == null) return ''
+  return readStringField(payload, 'description') ?? ''
+}
+
+/** 是否本人发送（兼容内部版 isSelf / SDK 版 isSentBySelf） */
+export function isMessageSentBySelf(message: any | null): boolean {
   if (message == null) return false
-  const msgObj: UTSJSONObject = safeMessageAsJSONObject(message)
-  const mt: any | null = msgObj['messageType']
-  if (mt !== MessageType.CUSTOM) {
-    return false;
-  }
-  const data = parseCallMessageData(message);
-  if (data == null) {
-    return false;
-  }
-  return data.call_type == 1 || data.call_type == 2;
+  const msgObj: UTSJSONObject = convertToJSONObject(message)
+  const sentBySelf: any | null = msgObj['isSentBySelf']
+  const isSelf: any | null = msgObj['isSelf']
+  return sentBySelf == true || isSelf == true
+}
+
+// ==================== 对外：通话消息 ====================
+
+/**
+ * 判断消息是否为通话消息（customData.businessID === 1）
+ */
+export function isCallMessage(message: any | null): boolean {
+  const dataContent = parseCustomDataObject(message)
+  if (dataContent == null) return false
+  return (readNumberField(dataContent, 'businessID') ?? -1) == 1
 }
 
 /**
  * 解析通话信令数据，失败返回 null
- * @param message 消息对象
  */
-export function parseCallMessageData(message: any): CallMessageData | null {
-  const raw = getCustomData(message);
-  if (raw == null || raw.length == 0) {
-    return null;
+export function parseCallMessageData(message: any | null): CallMessageData | null {
+  const dataContent = parseCustomDataObject(message)
+  if (dataContent == null) return null
+  const businessID: number = readNumberField(dataContent, 'businessID') ?? -1
+  if (businessID != 1) return null
+
+  // customData.data 才是 callInfo（可能是 JSON 字符串，也可能已是对象）
+  const callInfoObj = readObjectField(dataContent, 'data')
+  if (callInfoObj == null) return null
+
+  let signal: CallSignalData | null = null
+  const signalObj = readObjectField(callInfoObj, 'data')
+  if (signalObj != null) {
+    const parsedSignal: CallSignalData = {
+      cmd: readStringField(signalObj, 'cmd'),
+      inviter: readStringField(signalObj, 'inviter'),
+      message: readStringField(signalObj, 'message'),
+      room_id: readNumberField(signalObj, 'room_id'),
+      str_room_id: readStringField(signalObj, 'str_room_id'),
+      call_end: readNumberField(signalObj, 'call_end')
+    }
+    signal = parsedSignal
   }
-  try {
-    const result = JSON.parse<CallMessageData>(raw);
-    return result;
-  } catch (error: any) {
-    const errMsg = error instanceof Error ? (error as Error).message : `${error}`;
-    console.warn(`[callMessageUtils] parse error: ${errMsg}`);
-    return null;
+
+  const callInfo: CallInfo = {
+    businessID: readNumberField(callInfoObj, 'businessID'),
+    // call_type / call_end 兼容放在外层 customData 或信令 data 里的老消息
+    call_end: readNumberField(callInfoObj, 'call_end') ?? (signal != null ? signal.call_end : null),
+    call_type: readNumberField(callInfoObj, 'call_type') ?? readNumberField(dataContent, 'call_type'),
+    line_busy: readStringField(callInfoObj, 'line_busy'),
+    platform: readStringField(callInfoObj, 'platform'),
+    room_id: readNumberField(callInfoObj, 'room_id'),
+    version: readNumberField(callInfoObj, 'version'),
+    data: signal
   }
+
+  const result: CallMessageData = {
+    businessID: businessID,
+    timeout: readNumberField(dataContent, 'timeout'),
+    inviteID: readStringField(dataContent, 'inviteID'),
+    actionType: readNumberField(dataContent, 'actionType') ?? 0,
+    inviter: readStringField(dataContent, 'inviter'),
+    groupID: readStringField(dataContent, 'groupID'),
+    callInfo: callInfo
+  }
+  return result
+}
+
+/**
+ * 读取信令里的 cmd（audioCall / videoCall / hangup / switchToAudio / switchToVideo ...）
+ */
+function readCallCmd(callData: CallMessageData): string | null {
+  const signal: CallSignalData | null = callData.callInfo.data ?? null
+  if (signal == null) return null
+  return signal.cmd ?? null
 }
 
 /**
@@ -100,11 +210,11 @@ export function isVideoCall(callData: CallMessageData | null): boolean {
     return false;
   }
   // 通过 call_type 判断
-  if (callData.call_type == 2) {
+  if (callData.callInfo.call_type == 2) {
     return true;
   }
   // 通过 cmd 判断
-  const cmd = callData.data?.cmd;
+  const cmd = readCallCmd(callData);
   if (cmd == 'videoCall' || cmd == 'switchToVideo') {
     return true;
   }
@@ -115,13 +225,11 @@ export function isVideoCall(callData: CallMessageData | null): boolean {
  * 判断是否是群组内的通话消息
  * 群组内的通话消息需要居中显示，不带头像和气泡
  */
-export function isGroupCallMessage(message: any, conversationID: string): boolean {
+export function isGroupCallMessage(message: any | null, conversationID: string): boolean {
   if (!isCallMessage(message)) {
     return false;
   }
-  // 检查是否是群聊会话
-  const cid: string = typeof conversationID == 'string' ? conversationID : '';
-  return cid.startsWith('group_');
+  return conversationID.startsWith('group_');
 }
 
 /**
@@ -147,31 +255,6 @@ export function formatCallDuration(seconds: number): string {
 }
 
 /**
- * 获取消息发送者显示名称（截断到 maxLength 字符）
- */
-export function getMessageSenderName(message: any, maxLength: number = 12): string {
-  if (message == null) return ''
-  const msgObj: UTSJSONObject = safeMessageAsJSONObject(message)
-  const senderRaw: any | null = msgObj['from']
-  if (senderRaw == null) return ''
-  const sender: UTSJSONObject = senderRaw as UTSJSONObject
-  const friendRemark: any | null = sender['friendRemark']
-  if (typeof friendRemark == 'string' && (friendRemark as string).length > 0) {
-    return substringByLength(friendRemark as string, maxLength);
-  }
-  const nameCard: any | null = sender['nameCard']
-  if (typeof nameCard == 'string' && (nameCard as string).length > 0) {
-    return substringByLength(nameCard as string, maxLength);
-  }
-  const nickname: any | null = sender['nickname']
-  if (typeof nickname == 'string' && (nickname as string).length > 0) {
-    return substringByLength(nickname as string, maxLength);
-  }
-  const userID: any | null = sender['userID']
-  return substringByLength(userID != null ? `${userID}` : '', maxLength);
-}
-
-/**
  * 截取字符串前 maxLength 字符，超出加省略号
  */
 function substringByLength(str: string, maxLength: number = 12): string {
@@ -182,45 +265,63 @@ function substringByLength(str: string, maxLength: number = 12): string {
 }
 
 /**
+ * 获取消息发送者显示名称（截断到 maxLength 字符）
+ */
+export function getMessageSenderName(message: any | null, maxLength: number = 12): string {
+  if (message == null) return ''
+  const sender = readObjectField(convertToJSONObject(message), 'from')
+  if (sender == null) return ''
+
+  const friendRemark = readStringField(sender, 'friendRemark')
+  if (friendRemark != null && friendRemark.length > 0) {
+    return substringByLength(friendRemark, maxLength);
+  }
+  const nameCard = readStringField(sender, 'nameCard')
+  if (nameCard != null && nameCard.length > 0) {
+    return substringByLength(nameCard, maxLength);
+  }
+  const nickname = readStringField(sender, 'nickname')
+  if (nickname != null && nickname.length > 0) {
+    return substringByLength(nickname, maxLength);
+  }
+  return substringByLength(readStringField(sender, 'userID') ?? '', maxLength);
+}
+
+/**
  * 生成通话消息上屏文本
  *
  * @param message 消息信息
  * @param showSenderName 是否显示发送者名称（用于群聊场景，默认为 true）
  * @returns 上屏显示的文本
  */
-export function getCallMessageText(message: any, showSenderName: boolean = true): string {
+export function getCallMessageText(message: any | null, showSenderName: boolean = true): string {
   const data = parseCallMessageData(message);
   if (data == null) {
     return '通话消息';
   }
 
-  const actionType: number = typeof data.actionType == 'number' ? data.actionType : 0;
-  const objectData: CallMessageData = data;
-  let isSelfInviter: boolean = false
-  if (message != null) {
-    const msgObj: UTSJSONObject = safeMessageAsJSONObject(message)
-    // 兼容内部版 isSelf / SDK 版 isSentBySelf
-    const selfVal: any | null = msgObj['isSelf']
-    const sentBySelfVal: any | null = msgObj['isSentBySelf']
-    isSelfInviter = selfVal == true || sentBySelfVal == true
-  }
+  const actionType: number = data.actionType;
+  const callInfo: CallInfo = data.callInfo;
+  const cmd: string | null = readCallCmd(data);
+  const signalMessage: string | null = callInfo.data != null ? (callInfo.data.message ?? null) : null;
+  const isSelfInviter: boolean = isMessageSentBySelf(message);
   const senderName: string = showSenderName ? getMessageSenderName(message) : '';
-  const groupID: string | null = data.groupID ?? null;
+  const groupID: string = data.groupID ?? '';
+  const isGroup: boolean = groupID.length > 0;
 
   if (actionType == 1) {
     // 发起/挂断
-    const cmd = objectData.data?.cmd ?? null;
     if (cmd == 'audioCall' || cmd == 'videoCall') {
-      if (groupID != null && groupID.length > 0 && senderName.length > 0) {
+      if (isGroup && senderName.length > 0) {
         return `${senderName} 发起通话`;
       }
       return '发起通话';
     }
     if (cmd == 'hangup') {
-      if (groupID != null && groupID.length > 0) {
+      if (isGroup) {
         return '通话结束';
       }
-      const callEnd: number = typeof objectData.data?.call_end == 'number' ? (objectData.data?.call_end as number) : 0;
+      const callEnd: number = callInfo.call_end ?? 0;
       return `${formatCallDuration(callEnd)} 通话时长`;
     }
     if (cmd == 'switchToAudio') {
@@ -229,12 +330,13 @@ export function getCallMessageText(message: any, showSenderName: boolean = true)
     if (cmd == 'switchToVideo') {
       return '切换为视频通话';
     }
+    // CMD 异常时默认返回发起通话
     return '发起通话';
   }
 
   if (actionType == 2) {
     // 取消
-    if (groupID != null && groupID.length > 0 && senderName.length > 0) {
+    if (isGroup && senderName.length > 0) {
       return `${senderName} 已取消`;
     }
     if (isSelfInviter) {
@@ -245,14 +347,13 @@ export function getCallMessageText(message: any, showSenderName: boolean = true)
 
   if (actionType == 3) {
     // 接听
-    const cmd = objectData.data?.cmd ?? null;
     if (cmd == 'switchToAudio') {
       return '切换为语音通话';
     }
     if (cmd == 'switchToVideo') {
       return '切换为视频通话';
     }
-    if (groupID != null && groupID.length > 0 && senderName.length > 0) {
+    if (isGroup && senderName.length > 0) {
       return `${senderName} 已接听`;
     }
     return '已接听';
@@ -260,11 +361,11 @@ export function getCallMessageText(message: any, showSenderName: boolean = true)
 
   if (actionType == 4) {
     // 拒绝
-    if (groupID != null && groupID.length > 0 && senderName.length > 0) {
+    if (isGroup && senderName.length > 0) {
       return `${senderName} 已拒绝`;
     }
     // 检查忙线状态
-    if (objectData.line_busy == 'line_busy' || objectData.data?.message == 'lineBusy') {
+    if (callInfo.line_busy == 'line_busy' || signalMessage == 'lineBusy') {
       if (isSelfInviter) {
         return '对方忙线';
       }
@@ -278,14 +379,13 @@ export function getCallMessageText(message: any, showSenderName: boolean = true)
 
   if (actionType == 5) {
     // 超时无应答
-    const cmd = objectData.data?.cmd ?? null;
     if (cmd == 'switchToAudio') {
       return '切换为语音通话';
     }
     if (cmd == 'switchToVideo') {
       return '切换为视频通话';
     }
-    if (groupID != null && groupID.length > 0 && senderName.length > 0) {
+    if (isGroup && senderName.length > 0) {
       return `${senderName} 无应答`;
     }
     if (isSelfInviter) {

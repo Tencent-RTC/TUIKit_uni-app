@@ -83,8 +83,9 @@
   import { BeautyPanel } from '@/uni_modules/tuikit-atomic-x/components/Beauty';
   import { DeviceStatus, MirrorType, useDeviceState } from '@/uni_modules/tuikit-atomic-x/state/DeviceState';
   import { useLiveListState } from '@/uni_modules/tuikit-atomic-x/state/LiveListState';
+  import { useLiveSeatState } from '@/uni_modules/tuikit-atomic-x/state/LiveSeatState';
   import { t } from '../../../../locales';
-  import BaseDrawer from '@/components/live/BaseDrawer/index.nvue';
+  import BaseDrawer from '@/uni_modules/tuikit-atomic-x/components/Common/BaseDrawer/index.nvue';
   import AudioEffectPanel from '@/uni_modules/tuikit-atomic-x/components/AudioEffectPanel';
 
   const props = defineProps({
@@ -96,8 +97,10 @@
 
   const emit = defineEmits(['update:modelValue', 'tip', 'pause', 'comment']);
 
-  const { isFrontCamera, switchCamera, switchMirror, localMirrorType, microphoneStatus, openLocalMicrophone, closeLocalMicrophone } = useDeviceState();
+  const { isFrontCamera, switchCamera, switchMirror, localMirrorType, microphoneStatus } = useDeviceState();
   const { currentLive } = useLiveListState();
+  const liveID = computed(() => String(currentLive.value?.liveID || ''));
+  const { seatList, muteMicrophone, unmuteMicrophone } = useLiveSeatState(liveID.value);
 
   const drawerHeight = 750;
   const isShowBeautyPanel = ref(false);
@@ -112,7 +115,18 @@
     localMirrorType.value === MirrorType.AUTO || localMirrorType.value === MirrorType.ENABLE
   );
 
-  const micEnabled = computed(() => microphoneStatus.value === DeviceStatus.ON);
+  const anchorUserID = computed(() => String(currentLive.value?.liveOwner?.userID || ''));
+  const selfSeat = computed(() => {
+    const list = Array.isArray(seatList.value) ? seatList.value : [];
+    return list.find((s) => s?.userInfo?.userID === anchorUserID.value) || null;
+  });
+  const micEnabled = computed(() => {
+    const seatMicStatus = selfSeat.value?.userInfo?.microphoneStatus;
+    if (seatMicStatus !== undefined && seatMicStatus !== null) {
+      return seatMicStatus !== DeviceStatus.OFF;
+    }
+    return microphoneStatus.value === DeviceStatus.ON;
+  });
 
   const handlePause = () => {
     visible.value = false;
@@ -120,10 +134,14 @@
   };
 
   const handleMic = () => {
-    if (micEnabled.value) {
-      closeLocalMicrophone();
+    // 对齐 iOS presentationState.settings.isMuted:记录主播自己的静音意图,
+    // 切后台/恢复采集后据此保持静音(不被恢复流程解除)。
+    const willMute = !!micEnabled.value;
+    uni.$pusherSelfMuted = willMute;
+    if (willMute) {
+      muteMicrophone({ liveID: liveID.value });
     } else {
-      openLocalMicrophone();
+      unmuteMicrophone({ liveID: liveID.value });
     }
   };
 
@@ -144,11 +162,6 @@
   };
 
   const handleSwitchMirror = () => {
-    if (!isFrontCamera.value) {
-      emit('tip', t('morePanel.frontOnly'))
-      return
-    }
-
     switchMirror({
       mirrorType: mirrorEnabled.value ? MirrorType.DISABLE : MirrorType.ENABLE
     })
@@ -160,14 +173,13 @@
   };
 
   const handleShare = () => {
-    const liveID = String(currentLive.value?.liveID || '');
-    if (!liveID) return;
+    if (!liveID.value) return;
     uni.setClipboardData({
-      data: liveID,
+      data: liveID.value,
       showToast: false,
       success: () => {
         visible.value = false;
-        emit('tip', t('morePanel.shareCopied', { id: liveID }));
+        emit('tip', t('morePanel.shareCopied', { id: liveID.value }));
       },
     });
   };

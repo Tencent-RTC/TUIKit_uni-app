@@ -32,7 +32,7 @@ export const addListener: (options: any, callback: (data: string) => void) => vo
 export const removeListener: (options: any) => void =
   _pluginReady && _removeListener ? _removeListener : noop;
 
-export const reportUIPlatform: () => void =
+export const reportUIPlatform: (options: any) => void =
   _pluginReady && _reportUIPlatform ? _reportUIPlatform : noop;
 
 // ========== CallState 需要的原生能力 ==========

@@ -209,8 +209,8 @@ const SceneMap = {
 }
 
 
-export function reportUIPlatform() {
-  DataReport.reportUIPlatform(52)
+export function reportUIPlatform(platform : number = 52) {
+  DataReport.reportUIPlatform(platform.toInt())
 }
 
 
@@ -275,6 +275,26 @@ export function addFloatViewListener(click: () => void) {
 export function removeFloatViewListener() {
   FloatViewManager.removeFloatViewListener()
 }
+/**
+ * 将 uni 静态资源路径（/static/xxx.png）转换为原生可识别的绝对路径
+ * 原生自定义组件（CallCoreView）无法解析 /static 相对路径，需转为 app 资源绝对路径
+ */
+export function getStaticResourcePath(path: string): string {
+  return UTSAndroid.getResourcePath(path)
+}
+
+/**
+ * 播放通话铃声（Android 无需原生实现，由 JS 层 InnerAudioContext 播放）
+ */
+export function playCallRingtone(path: string, loop: boolean) {
+}
+
+/**
+ * 停止通话铃声（Android 空实现）
+ */
+export function stopCallRingtone() {
+}
+
 /**
  * 开始震动
  */

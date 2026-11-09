@@ -172,7 +172,11 @@ const createStoreParams = JSON.stringify({
  * });
  */
 function login(params: LoginOptions): void {
-  reportUIPlatform()
+  try {
+    reportUIPlatform(54);
+  } catch (error) {
+    console.error("reportUIPlatform error", error);
+  };
   callAPI(JSON.stringify({
     api: "login",
     params: {

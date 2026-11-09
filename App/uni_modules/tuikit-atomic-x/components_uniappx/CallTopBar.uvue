@@ -1,0 +1,106 @@
+<template>
+  <view class="top-bar" :style="{ paddingTop: safeAreaTopPx + 'px' }">
+    <view class="top-bar-left">
+      <FloatWindow />
+    </view>
+    <view class="top-bar-center">
+      <CallTimer v-if="isConnected" />
+      <text v-else-if="isGroupCalling" class="waiting-text">等待对方接收邀请</text>
+    </view>
+    <view class="top-bar-right" />
+  </view>
+</template>
+
+<script setup lang="uts">
+  import { ref, computed, onMounted } from 'vue';
+  import FloatWindow from './Call/Controls/floatWindow.uvue';
+  import CallTimer from './CallTimer.uvue';
+  import { useCallState, type UseCallStateReturn } from '@/uni_modules/tuikit-atomic-x/state/CallState.uts';
+  import { useLoginState, type UserProfileParam } from '@/uni_modules/tuikit-atomic-x/state/LoginState.uts';
+
+  const cs: UseCallStateReturn = useCallState();
+  const ls = useLoginState();
+
+  const safeAreaTopPx = ref<number>(0)
+
+  // 通话已接通（status == 2）
+  const isConnected = computed((): boolean => {
+    const info: any | null = cs.selfInfo.value
+    if (info == null) return false
+    const status: number | null = (info as UTSJSONObject)["status"] as number | null
+    return status == 2
+  });
+
+  // 主叫方呼叫中（多人/群聊）
+  const isGroupCalling = computed((): boolean => {
+    const info: any | null = cs.selfInfo.value
+    if (info == null) return false
+    const status: number | null = (info as UTSJSONObject)["status"] as number | null
+    if (status != 1) return false
+
+    const call: any | null = cs.activeCall.value
+    if (call == null) return false
+    const callObj: UTSJSONObject = call as UTSJSONObject
+    const inviterId: string = (callObj["inviterId"] as string | null) ?? ''
+
+    // 获取当前用户 ID（loginUserInfo 是强类型 UserProfileParam，直接取字段，不能强转为 UTSJSONObject）
+    const userInfo: UserProfileParam | null = ls.loginUserInfo.value
+    const currentUserId: string = userInfo?.userID ?? ''
+    if (inviterId != currentUserId) return false
+
+    const inviteeIds: any[] | null = callObj["inviteeIds"] as any[] | null
+    const chatGroupId: string = (callObj["chatGroupId"] as string | null) ?? ''
+    return (inviteeIds != null && inviteeIds.length > 1) || chatGroupId.length > 0
+  });
+
+  onMounted(() => {
+    const sysInfo = uni.getSystemInfoSync()
+    const safeTop: number = sysInfo.safeArea.top
+    safeAreaTopPx.value = safeTop > 0 ? safeTop : 0
+  });
+</script>
+
+<style scoped>
+  .top-bar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    padding-left: 48rpx;
+    padding-right: 24rpx;
+    padding-bottom: 16rpx;
+    min-height: 48px;
+  }
+
+  .top-bar-left {
+    width: 96rpx;
+    height: 48px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .top-bar-center {
+    flex: 1;
+    height: 48px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .top-bar-right {
+    width: 96rpx;
+    height: 48px;
+  }
+
+  .waiting-text {
+    font-size: 28rpx;
+    color: #FFFFFF;
+    font-weight: 400;
+  }
+</style>

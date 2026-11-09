@@ -1,0 +1,58 @@
+@import '../../../../styles/tokens.scss';
+
+  .operate-buttons {
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .btn-bg {
+    width: 72rpx;
+    height: 72rpx;
+    background-color: $live-dark-bg-float;
+    border-radius: 50%;
+    border: 2rpx solid $live-dark-surface-055;
+    margin-left: 16rpx;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .btn-icon {
+    width: 72rpx;
+    height: 72rpx;
+  }
+
+  .co-mic-icon {
+    width: 76rpx;
+    height: 64rpx;
+    margin: -10rpx;
+  }
+
+  .more-icon {
+    width: 56rpx;
+    height: 56rpx;
+  }
+
+  .co-mic-wave {
+    position: relative;
+    width: 72rpx;
+    height: 72rpx;
+  }
+
+  .co-mic-wave-slot {
+    position: absolute;
+    top: 0;
+    width: 6.4rpx;
+    height: 72rpx;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .co-mic-wave-bar {
+    width: 6.4rpx;
+    background-color: #f5f7fa;
+    border-radius: 3.2rpx;
+    transform-origin: 50% 50%;
+  }

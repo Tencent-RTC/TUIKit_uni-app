@@ -1,0 +1,40 @@
+.lt-toast-layer {
+  position: fixed;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  align-items: center;
+  z-index: 9999;
+}
+
+.lt-layer-center {
+  justify-content: center;
+}
+
+.lt-layer-top {
+  justify-content: flex-start;
+  padding-top: 300rpx;
+}
+
+.lt-chip {
+  flex-direction: row;
+  align-items: center;
+  padding: 18rpx 32rpx;
+  border-top-left-radius: 999rpx;
+  border-top-right-radius: 999rpx;
+  border-bottom-left-radius: 999rpx;
+  border-bottom-right-radius: 999rpx;
+  background-image: linear-gradient(to right, rgba(5, 50, 127, 0.92), rgba(56, 99, 112, 0.88));
+  border-width: 2rpx;
+  border-color: rgba(255, 255, 255, 0.10);
+  box-shadow: 0 8rpx 24rpx rgba(0, 82, 217, 0.35);
+  opacity: 0;
+}
+
+.lt-chip-text {
+  color: #ffffff;
+  font-size: 24rpx;
+  font-weight: 600;
+  max-width: 654rpx;
+}

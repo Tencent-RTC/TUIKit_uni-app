@@ -1,0 +1,61 @@
+<template>
+  <view class="btn" @tap="handleSwitchAudioPlay">
+    <image class="btn-img" :src="handsfreeIcon"></image>
+    <text class="btn-text">
+      {{ handsfreeText }}
+    </text>
+  </view>
+</template>
+
+<script setup lang="uts">
+  import { computed } from "vue";
+  import {
+    AudioOutput,
+    useDeviceState,
+    type UseDeviceStateReturn,
+    type SetAudioRouteOptions
+  } from '@/uni_modules/tuikit-atomic-x/state/DeviceState.uts';
+
+  const ds: UseDeviceStateReturn = useDeviceState()
+
+  const handsfreeOnSrc: string = '/uni_modules/tuikit-atomic-x/static/icon/handsfree-on.png'
+  const handsfreeOffSrc: string = '/uni_modules/tuikit-atomic-x/static/icon/handsfree-off.png'
+
+  const handsfreeIcon = computed((): string => {
+    return ds.currentAudioRoute.value == AudioOutput.SPEAKERPHONE ? handsfreeOnSrc : handsfreeOffSrc
+  })
+
+  const handsfreeText = computed((): string => {
+    return ds.currentAudioRoute.value == AudioOutput.SPEAKERPHONE ? '扬声器已开' : '扬声器已关'
+  })
+
+  const handleSwitchAudioPlay = (): void => {
+    if (ds.currentAudioRoute.value == AudioOutput.SPEAKERPHONE) {
+      const opts: SetAudioRouteOptions = { audioRoute: AudioOutput.EARPIECE }
+      ds.setAudioRoute(opts)
+    } else {
+      const opts: SetAudioRouteOptions = { audioRoute: AudioOutput.SPEAKERPHONE }
+      ds.setAudioRoute(opts)
+    }
+  }
+</script>
+
+<style>
+  .btn {
+    margin: 10px 20px;
+  }
+
+  .btn-img {
+    width: 60px;
+    height: 60px;
+    border-radius: 140px;
+  }
+
+  .btn-text {
+    font-size: 12px;
+    color: #d5e0f2;
+    font-weight: 400;
+    text-align: center;
+    margin-top: 10px;
+  }
+</style>

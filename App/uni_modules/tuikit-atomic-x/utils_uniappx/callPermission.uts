@@ -64,12 +64,12 @@ export async function checkCallPermissions(mediaType: number): Promise<string[]>
   if (isIos) {
   } else {
     const micResult: number = await permission.requestAndroidPermission('android.permission.RECORD_AUDIO');
-    if (micResult !== 0) {
+    if (micResult != 0) {
       missingPermissions.push('麦克风');
     }
     if (mediaType == 1) {
       const cameraResult: number = await permission.requestAndroidPermission('android.permission.CAMERA');
-      if (cameraResult !== 0) {
+      if (cameraResult != 0) {
         missingPermissions.push('摄像头');
       }
     }
@@ -140,12 +140,12 @@ export async function requestCallPermissions(mediaType: number): Promise<boolean
   if (isIos) {
   } else {
     const micResult: number = await permission.requestAndroidPermission('android.permission.RECORD_AUDIO');
-    if (micResult !== 0) {
+    if (micResult != 0) {
       allGranted = false;
     }
     if (mediaType == 1) {
       const cameraResult: number = await permission.requestAndroidPermission('android.permission.CAMERA');
-      if (cameraResult !== 0) {
+      if (cameraResult != 0) {
         allGranted = false;
       }
     }

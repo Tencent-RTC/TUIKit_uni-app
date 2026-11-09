@@ -903,20 +903,45 @@ function ensureWatchCurrentLive() {
         bindEvent(newLiveID);
       }
     },
-    // immediate:建立 watch 时 currentLive 可能已就绪(如冷启动 native 先推、
-    // 页面/组件后建 watch)——不回放当前值则永不 bind,数据链断。
-    // 首次建立时 currentLive 为 null 走 '' 分支,reset 对空状态无副作用。
     { flush: 'sync', immediate: true }
   );
 }
 
+// canvas 与 seatList 是两条独立订阅。切换布局时若两者不同步到达,会出现
+// "新 seatList + 旧 canvas"(或反之)的组合:用旧 canvas 算缩放、用新 region 定位,
+// 挂件就会与画面错位(偶现)。故把同一批推送(同一事件循环)合并后一起提交,
+// 保证 UI 每次看到的 canvas + seatList 属于同一布局。用微任务,不用定时器。
+// 说明:iOS 由 SDK 逐个下发 UnitInfo、本就原子;这里是等价还原,不是状态去抖。
+let pendingCanvas: LiveCanvasParams | null = null;
+let pendingSeatCommit: SeatInfo[] | null = null;
+let seatBatchScheduled = false;
+
+const flushSeatBatch = () => {
+  seatBatchScheduled = false;
+  if (pendingCanvas !== null) {
+    canvas.value = pendingCanvas;
+    pendingCanvas = null;
+  }
+  if (pendingSeatCommit !== null) {
+    seatList.value = pendingSeatCommit;
+    pendingSeatCommit = null;
+  }
+};
+
+const scheduleSeatBatch = () => {
+  if (seatBatchScheduled) return;
+  seatBatchScheduled = true;
+  Promise.resolve().then(flushSeatBatch);
+};
+
 const onLiveSeatStoreChanged: Record<string, (result: any) => void> = {
   seatList: (res) => {
-    console.log(`[LiveSeatState] seatList:`, res);
-    seatList.value = safeJsonParse<SeatInfo[]>(res.seatList, []);
+    pendingSeatCommit = safeJsonParse<SeatInfo[]>(res.seatList, []);
+    scheduleSeatBatch();
   },
   canvas: (res) => {
-    canvas.value = safeJsonParse<LiveCanvasParams | null>(res.canvas, null);
+    pendingCanvas = safeJsonParse<LiveCanvasParams | null>(res.canvas, null);
+    scheduleSeatBatch();
   },
   speakingUsers: (res) => {
     speakingUsers.value = safeJsonParse<Map<string, number> | null>(res.speakingUsers, null);

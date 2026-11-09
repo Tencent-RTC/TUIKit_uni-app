@@ -38,18 +38,20 @@
       <!-- 单人模式（观众视角特有） -->
       <!-- effCanvas 门控:同网格,canvas 未就绪前不渲染,避免以默认 scale 错误定位后跳变。 -->
       <view v-if="!isAnchor && effCanvas && seatList?.length === 1" @touchend.stop="" class="grid-content-cell"
-        v-for="(participant, colIndex) in seatList" :key="`${colIndex}`" @tap="streamViewClick(participant)" :style="{
+        v-for="(participant, colIndex) in renderSeatList" :key="`${colIndex}`" @tap="streamViewClick(participant)" :style="{
                   left: calculateLeftValue(participant) + 'px',
                   top: calculateTopValue(participant) + 'px',
-                  'background-color': participant?.userInfo?.cameraStatus === DeviceStatus.OFF ? '#000' : 'transparent',
                 }">
+        <view v-for="(bgRect, bgIndex) in noVideoBgRects(participant)" :key="`bg-${bgIndex}`" class="seat-no-video-patch"
+          :style="{ left: bgRect.left + 'px', top: bgRect.top + 'px', width: bgRect.width + 'px', height: bgRect.height + 'px' }"></view>
         <view style="display: flex; flex-direction: row; width: 120rpx; justify-content: center; align-items: center;"
           :style="{
                     width: calcWidthValue(participant) + 'px',
                     height: calcHeightValue(participant) + 'px',
                   }">
-          <view v-if="participant?.userInfo?.cameraStatus === DeviceStatus.OFF" class="video-container">
+          <view v-if="showsNoVideo(participant)" class="video-container">
             <image class="participant-video" :src="participant?.userInfo?.avatarURL || defaultAvatarURL"
+              :style="{ width: seatAvatarPx(participant) + 'px', height: seatAvatarPx(participant) + 'px', 'border-radius': seatAvatarPx(participant) / 2 + 'px' }"
               mode="aspectFill" />
           </view>
         </view>
@@ -59,23 +61,28 @@
       <!-- cell 自带 absolute+left/top/width/height,挂件作为 cell 直接子元素相对 cell 定位
            (避免 nvue 下跨层 absolute 定位祖先不可靠导致挂件跑到屏幕左侧)。 -->
       <view v-if="effCanvas && seatList?.length > 1 && (templateLayout !== 801 && templateLayout !== 800)" @touchend.stop=""
-        class="grid-content-cell" v-for="(participant, colIndex) in seatList" :key="`${colIndex}`"
+        class="grid-content-cell" v-for="(participant, colIndex) in renderSeatList" :key="`${participant.index !== undefined ? participant.index : colIndex}`"
         @tap="streamViewClick(participant)" style="border-radius: 0rpx;" :style="{
                   left: calculateLeftValue(participant) + 'px',
                   top: calculateTopValue(participant) + 'px',
                   width: calcWidthValue(participant) + 'px',
                   height: calcHeightValue(participant) + 'px',
-                  'background-color': !isAnchor && participant?.userInfo?.cameraStatus === DeviceStatus.OFF ? '#1f2024' : 'transparent',
                 }">
-        <view v-if="participant?.userInfo?.cameraStatus === DeviceStatus.OFF" class="video-container"
+        <view v-for="(bgRect, bgIndex) in noVideoBgRects(participant)" :key="`bg-${bgIndex}`" class="seat-no-video-patch"
+          :style="{ left: bgRect.left + 'px', top: bgRect.top + 'px', width: bgRect.width + 'px', height: bgRect.height + 'px' }"></view>
+        <view v-if="showsNoVideo(participant)" class="video-container"
           style="position: absolute; left: 0; top: 0; right: 0; bottom: 0; display: flex; flex-direction: row; justify-content: center; align-items: center;">
           <image class="participant-video" :src="participant?.userInfo?.avatarURL || defaultAvatarURL"
+            :style="{ width: seatAvatarPx(participant) + 'px', height: seatAvatarPx(participant) + 'px', 'border-radius': seatAvatarPx(participant) / 2 + 'px' }"
             mode="aspectFill" />
         </view>
 
-        <view v-if="!isMainHostSeat(participant)" class="participant-info-container">
-          <image v-if="participant?.userInfo?.microphoneStatus === DeviceStatus.OFF" class="mic-icon"
-            src="/static/images/unmute-mic.png" mode="aspectFit" />
+        <view v-if="showsSeatOverlay(participant)" class="seat-mic-badge">
+          <image class="seat-mic-icon"
+            :src="participant?.userInfo?.microphoneStatus === DeviceStatus.OFF ? MIC_MUTED_ICON : MIC_ON_ICON"
+            mode="aspectFit" />
+        </view>
+        <view v-if="showsSeatOverlay(participant)" class="seat-name-layer">
           <text class="participant-name" :style="{ 'max-width': participant?.region.w * scale.scaleX * 0.85 + 'px' }">
             {{ participant?.userInfo?.userName || participant?.userInfo?.userID }}
           </text>
@@ -87,30 +94,34 @@
            cell 会以错误位置出现、canvas 到达后再跳到正确位置(进房"跳边")。加 effCanvas
            门控后,cell 只在最终 scale 就绪后渲染,揭开遮罩瞬间与画面一起就位,无跳变。 -->
       <view v-if="effCanvas && seatList?.length > 1 && (templateLayout === 801 || templateLayout === 800)" @touchend.stop=""
-        class="grid-content-cell" v-for="(participant, colIndex) in seatList"
-        :key="`${isAnchor ? colIndex : participant.index}`" @tap="streamViewClick(participant)"
+        class="grid-content-cell" v-for="(participant, colIndex) in renderSeatList"
+        :key="`${participant.index !== undefined ? participant.index : colIndex}`" @tap="streamViewClick(participant)"
         style="border-radius: 0rpx;" :style="{
                   left: calculateLeftValue(participant) + 'px',
                   top: calculateTopValue(participant) + 'px',
                   width: calcWidthValue(participant) + 'px',
                   height: calcHeightValue(participant) + 'px',
-                  'background-color': !isAnchor && participant?.userInfo?.cameraStatus === DeviceStatus.OFF ? '#1f2024' : 'transparent',
-                  'border-bottom': !isAnchor && participant?.userInfo?.cameraStatus === DeviceStatus.OFF ? '1rpx solid #000' : '',
-                  'border-left': isAnchor && templateLayout === 800 && participant?.userInfo?.cameraStatus === DeviceStatus.OFF ? '1rpx solid #000' : '',
-                  'border-right': !isAnchor && templateLayout === 800 && participant?.userInfo?.cameraStatus === DeviceStatus.OFF ? '1rpx solid #000' : '',
+                  'border-bottom': !isAnchor && showsNoVideo(participant) ? '1rpx solid #000' : '',
+                  'border-left': isAnchor && templateLayout === 800 && showsNoVideo(participant) ? '1rpx solid #000' : '',
+                  'border-right': !isAnchor && templateLayout === 800 && showsNoVideo(participant) ? '1rpx solid #000' : '',
                 }">
+        <view v-for="(bgRect, bgIndex) in noVideoBgRects(participant)" :key="`bg-${bgIndex}`" class="seat-no-video-patch"
+          :style="{ left: bgRect.left + 'px', top: bgRect.top + 'px', width: bgRect.width + 'px', height: bgRect.height + 'px' }"></view>
         <view v-if="participant?.userInfo.userID"
           class="video-container"
           style="position: absolute; left: 0; top: 0; right: 0; bottom: 0; display: flex; flex-direction: row; justify-content: center; align-items: center;">
-          <image v-if="participant?.userInfo?.cameraStatus === DeviceStatus.OFF"
+          <image v-if="showsNoVideo(participant)"
             class="participant-video" :src="participant?.userInfo?.avatarURL || defaultAvatarURL"
+            :style="{ width: seatAvatarPx(participant) + 'px', height: seatAvatarPx(participant) + 'px', 'border-radius': seatAvatarPx(participant) / 2 + 'px' }"
             mode="aspectFill" />
         </view>
 
-        <view v-if="participant?.userInfo.userID" class="participant-info-container"
-          :class="{ 'audience-mode': !isAnchor }">
-          <image v-if="participant?.userInfo?.microphoneStatus === DeviceStatus.OFF" class="mic-icon"
-            src="/static/images/unmute-mic.png" mode="aspectFit" />
+        <view v-if="showsSeatOverlay(participant)" class="seat-mic-badge">
+          <image class="seat-mic-icon"
+            :src="participant?.userInfo?.microphoneStatus === DeviceStatus.OFF ? MIC_MUTED_ICON : MIC_ON_ICON"
+            mode="aspectFit" />
+        </view>
+        <view v-if="showsSeatOverlay(participant)" class="seat-name-layer">
           <text class="participant-name" :style="{ 'max-width': participant?.region.w * scale.scaleX * 0.85 + 'px' }">
             {{ participant?.userInfo?.userName || participant?.userInfo?.userID }}
           </text>
@@ -124,8 +135,25 @@
                     'border-left': isAnchor && templateLayout === 800 ? '1rpx solid #000' : '',
                     'border-right': !isAnchor && templateLayout === 800 ? '1rpx solid #000' : '',
                   }">
-          <text class="participant-join-content">{{ isAnchor ? colIndex : participant?.index }}</text>
-          <text class="participant-join-content">{{ t('sv.joinCoGuest') }}</text>
+          <view class="participant-wait-content">
+            <view
+              class="participant-join-plus"
+              :style="{ height: seatPlusHeightPx(participant) + 'px' }"
+            >
+              <view
+                class="participant-join-plus-bar"
+                :style="{ width: seatPlusBarPx(participant) + 'px', height: seatPlusThicknessPx(participant) + 'px' }"
+              ></view>
+              <view
+                class="participant-join-plus-bar is-vertical"
+                :style="{ width: seatPlusThicknessPx(participant) + 'px', height: seatPlusBarPx(participant) + 'px' }"
+              ></view>
+            </view>
+            <text
+              v-if="showsJoinInvite(participant)"
+              class="participant-join-content"
+            >{{ isAnchor ? t('sv.inviteToSeat') : t('sv.applyCoGuest') }}</text>
+          </view>
         </view>
       </view>
       <LiveStreamActionPanel v-if="enableClickPanel" v-model="isShowClickPanel" :liveID="liveID || ''"
@@ -240,6 +268,47 @@
   } = props?.liveID && useLiveSeatState(props?.liveID);
   const platform = ref('android');
   const defaultAvatarURL = '/uni_modules/tuikit-atomic-x/static/assets/live/default-avatar.png';
+  // 对齐 iOS LiveSeat.updateVisibility:
+  // showsNoVideo = cameraStatus != .on || userSuspendStatus == .inBackground
+  const SUSPEND_IN_BACKGROUND = 1;
+
+  // 完全对齐 iOS,不做任何补偿(无延时 / 无防抖 / 无双采样 / 不合并多数据源):
+  //   观众端 UnitView(UnitView.swift:39-46): showsNoVideo = cameraStatus != .on || userSuspendStatus == .inBackground
+  //   主播端 PusherCoGuestSeatViewProvider(:152-157): cameraStatus = isHost ? localCameraStatus : unitInfo.cameraStatus
+  //        "seat snapshot can lag behind an already active local preview"
+  // iOS 能直接采信,是因为 SDK 逐个下发强类型 UnitInfo、不推瞬时中间态;
+  // 若这里仍观察到跳变,根因在插件层 seatList 的整包解析(LiveSeatState)会暴露中间态,
+  // 应在插件 / SDK 侧修复,而不是在 UI 层做平滑。
+  const noVideoLogCache = new Map<string, string>();
+
+  const showsNoVideo = (participant) => {
+    const info = participant?.userInfo;
+    const userID = String(info?.userID || '');
+    if (!userID) return false;
+    const suspend = Number(info?.userSuspendStatus);
+    const snapshot = info?.cameraStatus;
+    const selfID = String(loginUserInfo.value?.userID || props.currentLoginUserId || '');
+    const isSelf = !!selfID && userID === selfID;
+    const useLocal = props.isAnchor && isSelf;
+    let result = false;
+    let src = 'snapshot';
+    if (suspend === SUSPEND_IN_BACKGROUND) { result = true; src = 'suspend'; }
+    else if (useLocal) { result = cameraStatus.value === DeviceStatus.OFF; src = 'local'; }
+    else { result = snapshot === DeviceStatus.OFF; src = 'snapshot'; }
+    const sig = `${result}|${src}|${snapshot}|${suspend}|${cameraStatus.value}`;
+    if (noVideoLogCache.get(userID) !== sig) {
+      noVideoLogCache.set(userID, sig);
+      console.warn(`[noVideo] ${userID} self=${isSelf} isAnchor=${props.isAnchor} src=${src} snapshot=${snapshot} suspend=${suspend} local=${cameraStatus.value} => ${result}`);
+    }
+    return result;
+  };
+
+  watch(cameraStatus, (v) => console.warn(`[localCam] cameraStatus=${v}`));
+
+
+
+  const MIC_ON_ICON = '/uni_modules/tuikit-atomic-x/static/assets/live/coguest-seat-mic.png';
+  const MIC_MUTED_ICON = '/uni_modules/tuikit-atomic-x/static/assets/live/coguest-seat-mic-muted.png';
 
   const scale = ref({
     scaleX: 1,
@@ -423,13 +492,8 @@
         } else {
           streamViewHeight.value = systemInfo.value.windowHeight;
         }
-        // 容器高度(初始 1px→满屏)变化会触发 SDK re-measure 重布局,进房期同样
-        // 重置揭开计时,避免遮罩揭开后容器才落位导致画面二次挪动。
         resetMaskTimerIfLoading();
-
-        // systemInfo 就绪后重算 scale,修正首帧回退基准。
         recomputeScale();
-
         console.warn(`LiveStreamView: isAnchor=${props.isAnchor}, safeArea: ${JSON.stringify(res.safeArea)},
                     deviceWidthRatio: ${deviceWidthRatio.value}, deviceHeightRatio: ${deviceHeightRatio.value}, 
                     windowWidth: ${res.windowWidth}, windowHeight: ${res.windowHeight},
@@ -438,10 +502,8 @@
     });
   });
 
-  // 统一 scale:挂件/座位与视频共用 renderScale(Fit 等比 / Fill cover 放大),
-  // scaleX===scaleY 保证不变形,x/y 用同一系数换算,再叠加 videoLeft/TopOffset。
   const recomputeScale = () => {
-    const c = canvas.value;
+    const c = effCanvas.value;
     if (!c?.w || !c?.h) return;
     const s = renderScale.value;
     scale.value = { scaleX: s, scaleY: s };
@@ -466,43 +528,47 @@
     recomputeScale();
   });
 
+  // 对齐 iOS onCoGuestStageTap(stagePoint):宿主页面的顶层视图(LivingView)会盖住本组件,
+  // 点击到不了座位 cell,由宿主把点击坐标转进来,这里按麦位几何做命中测试。
+  const handleStageTap = (point: { x: number; y: number }) => {
+    const x = Number(point?.x);
+    const y = Number(point?.y);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+    const renderList = Array.isArray(renderSeatList.value) ? renderSeatList.value : [];
+    const list = [...renderList].reverse();
+    for (let i = 0; i < list.length; i++) {
+      const seat = list[i];
+      if (!seat?.region) continue;
+      const left = calculateLeftValue(seat);
+      const top = calculateTopValue(seat);
+      const width = calcWidthValue(seat);
+      const height = calcHeightValue(seat);
+      if (x >= left && x <= left + width && y >= top && y <= top + height) {
+        streamViewClick(seat);
+        return;
+      }
+    }
+  };
+
   const streamViewClick = (options) => {
     console.log(`LiveStreamView: click options: ${JSON.stringify(options)}, isAnchor: ${props.isAnchor}`);
     if (!props.isLiving) return
-    // 非主播模式且没有参与者信息（背景点击），直接忽略
-    if (!props.isAnchor && !options?.userInfo) {
+    if (!props.isAnchor && !options?.userInfo && !options?.region) {
       return;
     }
 
     if (props.isAnchor) {
-      // 主播模式：区分点击背景（loginUserInfo）和点击参与者（带 userInfo）
       if (options?.userInfo) {
-        if (audienceConnected.value.length > 1 && connected?.value.length === 0) {
-          const userInfo = { ...options.userInfo, seatIndex: options.index };
-          if (!userInfo?.userID) return;
-          if (props.enableClickPanel) {
-            clickUserInfo.value = userInfo;
-            isShowClickPanel.value = true;
-          }
-        }
-        if (connected?.value.length > 0) {
-          if (options?.userInfo.userID === uni.$userID) {
-            const userInfo = { ...options.userInfo, seatIndex: options.index };
-            if (!userInfo?.userID) return;
-            if (props.enableClickPanel) {
-              clickUserInfo.value = userInfo;
-              isShowClickPanel.value = true;
-            }
-          }
-        }
+        const userInfo = { ...options.userInfo, seatIndex: options.index };
+        if (!userInfo?.userID) return;
+        const selfID = loginUserInfo.value?.userID || props.currentLoginUserId || uni.$userID || '';
+        if (userInfo.userID === selfID) return;
+        props.onStreamViewClick?.(userInfo);
+        emit('streamViewClick', userInfo);
       } else {
         // 背景点击：直接把当前登录用户信息抛给上层，保持原有行为
         // props.onStreamViewClick?.(options);
         // emit('streamViewClick', options);
-        if (props.enableClickPanel) {
-          clickUserInfo.value = { ...(loginUserInfo.value || {}), userID: loginUserInfo.value?.userID, userName: loginUserInfo.value?.nickname } as any;
-          isShowClickPanel.value = true;
-        }
       }
     } else {
       // 面板限制规则仅影响面板，不影响事件下发给页面
@@ -510,6 +576,8 @@
       const isTemplateGrid = props.templateLayout === 800 || props.templateLayout === 801;
       const isCoGuesting = uni.$localGuestStatus !== 'DISCONNECTED';
       const payload = { ...options.userInfo, seatIndex: options.index };
+
+      if (!options?.userInfo?.userID) return;
 
       // 点击自己的画面(上麦后自己的视频区域)不弹用户信息面板——该交互已不需要。
       // 直接 return:既不弹内部 LiveStreamActionPanel,也不向父页面下发点击事件。
@@ -602,6 +670,30 @@
   //   既不漏缝也不重叠,1rpx 分隔边框不会被邻格背景盖住 → 所有格间分隔线均匀显示。
   // - 非网格(浮窗 601 等):用"自身右边界 round − 左边界 round"(边界对齐);浮窗右对齐小窗直接 round(w*s)。
   // 注意:region.x/y/w/h 是【字符串】,必须先 Number() 转数字——否则 x+w 会变成字符串拼接(→NaN)导致塌成 0。
+  // 无视频头像尺寸:对齐 iOS LiveSeatNoVideoView——按座位短边分档
+  //   ≤110→42、≤140→30、>250→67、其余 63(iOS 为 pt,此处 px 同为逻辑像素)。
+  const isCompactSeat = (participant) =>
+    Math.min(calcWidthValue(participant), calcHeightValue(participant)) <= 110;
+
+  const seatPlusFontPx = (participant) => (isCompactSeat(participant) ? 29 : 26);
+
+  const seatPlusHeightPx = (participant) => (isCompactSeat(participant) ? 32 : 30);
+
+  const seatPlusBarPx = (participant) => (isCompactSeat(participant) ? 18 : 16);
+
+  const seatPlusThicknessPx = (participant) => (isCompactSeat(participant) ? 1.4 : 1.2);
+
+  const showsJoinInvite = (participant) =>
+    calcHeightValue(participant) >= seatPlusHeightPx(participant) + 3 + 14;
+
+  const seatAvatarPx = (participant) => {
+    const shortSide = Math.min(calcWidthValue(participant), calcHeightValue(participant));
+    if (shortSide <= 110) return 42;
+    if (shortSide <= 140) return 30;
+    if (shortSide > 250) return 67;
+    return 63;
+  };
+
   const calcWidthValue = (participant) => {
     if (!participant?.region) return 0;
     const r = participant.region;
@@ -640,13 +732,125 @@
     return Math.round((ry + rh) * s + off) - top;
   };
 
-  // 浮窗布局(601 等非网格模板)下,region 占满整个 canvas 的座位即主播大画面,
-  // 其左下角不显示用户名胶囊。
+  const seatOwnerID = computed(
+    () => String(currentLive.value?.liveOwner?.userID || '')
+  );
+
+  const hasGuests = computed(() => (audienceConnected.value || []).length > 0);
+
+  const isHostSeat = (participant, userID: string) => {
+    const ownerID = seatOwnerID.value;
+    if (ownerID) return userID === ownerID;
+    return isMainHostSeat(participant);
+  };
+
+  // 矩形相减:从 base 中依次扣除 holes,返回剩余区域(支持多个洞,逐个迭代切分)。
+  const subtractRects = (base: any[], holes: any[]) => {
+    let rects = base;
+    holes.forEach((h: any) => {
+      const next: any[] = [];
+      rects.forEach((r: any) => {
+        // 无交集:整块保留
+        if (h.right <= r.left || h.left >= r.right || h.bottom <= r.top || h.top >= r.bottom) {
+          next.push(r);
+          return;
+        }
+        const top = Math.max(r.top, h.top);
+        const bottom = Math.min(r.bottom, h.bottom);
+        if (h.top > r.top) {
+          next.push({ left: r.left, top: r.top, right: r.right, bottom: h.top });
+        }
+        if (h.bottom < r.bottom) {
+          next.push({ left: r.left, top: h.bottom, right: r.right, bottom: r.bottom });
+        }
+        if (h.left > r.left) {
+          next.push({ left: r.left, top, right: h.left, bottom });
+        }
+        if (h.right < r.right) {
+          next.push({ left: h.right, top, right: r.right, bottom });
+        }
+      });
+      rects = next.filter((r: any) => r.right - r.left > 0 && r.bottom - r.top > 0);
+    });
+    return rects;
+  };
+
+  // 无视频背景层的绘制区域(相对席位 cell 的局部坐标,px)。
+  // 常规布局:整块铺满 cell。
+  // 浮窗模板(601/605):主画面铺满全屏、连麦者小窗浮于其上,而小窗画面由 SDK 原生视频层渲染
+  // (位于所有 nvue 视图之下),整块铺满会盖住小窗画面。故按小窗边界把主画面切成最多 4 块,
+  // 只画小窗之外的区域 —— 既保持与其它布局一致的背景覆盖观感,又不遮挡连麦者画面。
+  const seatRectPx = (p: any) => ({
+    left: calculateLeftValue(p),
+    top: calculateTopValue(p),
+    width: calcWidthValue(p),
+    height: calcHeightValue(p),
+  });
+
+  // 避让对象:完全落在当前席位矩形内部、且有视频的其他席位(即浮在主画面上的小窗)。
+  // 小窗画面由 SDK 原生层渲染(位于所有 nvue 视图之下),大画面整块铺背景会盖住它,故需扣除;
+  // 反过来小窗自身铺背景时不扣除任何区域(小窗层级在大画面之上,盖住大画面是其固有行为)。
+  const noVideoBgRects = (participant: any) => {
+    if (!showsNoVideo(participant)) {
+      return [];
+    }
+    const full = seatRectPx(participant);
+    const base = [{ left: 0, top: 0, right: full.width, bottom: full.height }];
+    const holes = (seatList.value || [])
+      .filter((p: any) => p !== participant && !!String(p?.userInfo?.userID || '') && !showsNoVideo(p))
+      .map(seatRectPx)
+      .map((r: any) => ({
+        left: r.left - full.left,
+        top: r.top - full.top,
+        right: r.left - full.left + r.width,
+        bottom: r.top - full.top + r.height,
+      }))
+      .filter((h: any) =>
+        h.left >= 0 && h.top >= 0 && h.right <= full.width && h.bottom <= full.height &&
+        h.right - h.left > 0 && h.bottom - h.top > 0
+      );
+    return subtractRects(base, holes)
+      .map((r: any) => ({ left: r.left, top: r.top, width: r.right - r.left, height: r.bottom - r.top }));
+  };
+
+  const showsSeatOverlay = (participant) => {
+    const userID = String(participant?.userInfo?.userID || '');
+    if (!userID) return false;
+    if (!props.isAnchor) {
+      return !isHostSeat(participant, userID);
+    }
+    if (isHostSeat(participant, userID)) {
+      const tpl = Number(props.templateLayout);
+      return tpl === 800 || (tpl === 600 && hasGuests.value);
+    }
+    return hasGuests.value;
+  };
+
   const isMainHostSeat = (participant) => {
     const c = effCanvas.value;
     if (!c) return false;
     return Number(participant?.region?.w) === c.w && Number(participant?.region?.h) === c.h;
   };
+
+  // 浮窗模板(601/605):主画面铺满全屏、连麦者小窗浮于其上。
+  // nvue 层级由渲染顺序决定(z-index 不可靠),若主画面席位排在小窗之后渲染,主画面的
+  // 无视频占位层(铺满 cell)会盖住小窗里连麦者的画面 —— 故主画面先渲染、小窗后渲染。
+  const renderSeatList = computed(() => {
+    const list = Array.isArray(seatList.value) ? seatList.value : [];
+    if (!isFullscreenFloatTemplate.value || list.length <= 1) {
+      return list;
+    }
+    const main: any[] = [];
+    const rest: any[] = [];
+    list.forEach((p: any) => {
+      if (isMainHostSeat(p)) {
+        main.push(p);
+      } else {
+        rest.push(p);
+      }
+    });
+    return [...main, ...rest];
+  });
 
   watch(seatList, (newValue) => {
     if ((newValue || []).length > 1 && canvas.value?.w && canvas.value?.h) {
@@ -694,6 +898,7 @@
   }
 
   defineExpose({
+    handleStageTap,
     streamViewClick,
     calculateTopValue,
     calculateLeftValue,
@@ -718,6 +923,7 @@
     position: relative;
   }
 
+
   .live-stream-view-content.audience-mode {
     background-color: #000;
   }
@@ -728,6 +934,7 @@
     top: 0;
     z-index: -1;
   }
+
 
   .live-loading-mask {
     position: absolute;
@@ -748,6 +955,52 @@
     width: 80rpx;
     height: 80rpx;
     border-radius: 80rpx;
+  }
+
+  .seat-mic-badge {
+    position: absolute;
+    left: 12rpx;
+    top: 12rpx;
+    width: 40rpx;
+    height: 28rpx;
+    border-radius: 14rpx;
+    background-color: rgba(0, 0, 0, 0.32);
+    justify-content: center;
+    align-items: center;
+  }
+
+  .seat-mic-icon {
+    width: 24rpx;
+    height: 24rpx;
+  }
+
+  .seat-name-layer {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 28rpx;
+    background-image: linear-gradient(to bottom, rgba(0, 0, 0, 0), rgba(0, 0, 0, 0.4));
+    justify-content: center;
+    align-items: flex-start;
+  }
+
+  /* 无视频占位层:铺满 cell 的独立子视图,隐藏时随 v-if 移除(iOS noVideoView 同理),
+     避免用 cell 的 background-image 切换导致渐变残留遮挡画面。 */
+  .seat-no-video-layer {
+    position: absolute;
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    background-image: linear-gradient(to bottom right, #1a2e45, #080f1f);
+  }
+
+  /* 浮窗模板下的分块背景:尺寸/位置由内联样式给出,不设 right/bottom 以免与 width/height 冲突。
+     用纯色而非渐变:weex 渐变按块独立渲染、无法跨块共享相位,分块渐变会在块边界割裂。 */
+  .seat-no-video-patch {
+    position: absolute;
+    background-color: #111f32;
   }
 
   .grid-content-cell {
@@ -778,10 +1031,10 @@
   }
 
   .participant-name {
-    font-size: 24rpx;
-    font-weight: 500;
-    color: #ffffff;
-    margin-left: 4rpx;
+    font-size: 20rpx;
+    font-weight: 400;
+    color: rgba(255, 255, 255, 0.8);
+    margin-left: 8rpx;
     lines: 1;
     text-overflow: ellipsis;
     overflow: hidden;
@@ -795,12 +1048,30 @@
     justify-content: center;
   }
 
+  .participant-wait-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .participant-join-plus {
+    width: 100%;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .participant-join-plus-bar {
+    position: absolute;
+    background-color: rgba(255, 255, 255, 0.46);
+  }
+
   .participant-join-content {
-    font-size: 28rpx;
-    font-weight: 500;
+    font-size: 20rpx;
+    font-weight: 400;
     text-align: center;
-    color: #ffffff;
-    margin-top: 12rpx;
+    color: rgba(255, 255, 255, 0.48);
+    margin-top: 6rpx;
   }
 
   .default-avatar {

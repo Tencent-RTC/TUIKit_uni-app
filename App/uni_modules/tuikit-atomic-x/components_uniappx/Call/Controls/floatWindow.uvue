@@ -1,0 +1,108 @@
+<template>
+	<view class="btn" @tap="toggleFloatWindow">
+		<image class="btn-img" :style="iosFixStyle" src="/uni_modules/tuikit-atomic-x/static/icon/float-window.png"></image>
+	</view>
+</template>
+
+<script setup lang="uts">
+	import { ref, watch } from "vue";
+	import {
+		useCallState,
+		type UseCallStateReturn,
+		type StartFloatWindowOptions,
+		type FloatWindowCallback
+	} from '@/uni_modules/tuikit-atomic-x/state/CallState.uts';
+	import { getLastPage } from "@/uni_modules/tuikit-atomic-x/server/callService.uts";
+	import { downloadParticipantAvatars } from '@/uni_modules/tuikit-atomic-x/utils/avatarHelper.uts';
+	import { getStaticResourcePath } from '@/uni_modules/tuikit-atomic-x';
+
+	const cs: UseCallStateReturn = useCallState()
+	const isFloatWindowOpen = ref<boolean>(false)
+
+	// iOS 端图片渲染存在镜像问题，通过旋转 90 度修正
+	const sysInfo = uni.getSystemInfoSync()
+	const isIOS: boolean = sysInfo.platform == 'ios'
+	const iosFixStyle: UTSJSONObject = isIOS
+		? { transform: 'rotate(90deg)' } as UTSJSONObject
+		: {} as UTSJSONObject
+
+	const waitingAnimation: string = getStaticResourcePath("/static/images/callview-loading.gif")
+
+	const volumeLevelIcons: UTSJSONObject = {
+		"Mute": getStaticResourcePath("/static/images/callview-self-mute.png"),
+		"Low": getStaticResourcePath("/static/images/callview-network.png"),
+		"Medium": getStaticResourcePath("/static/images/callview-network.png"),
+		"High": getStaticResourcePath("/static/images/callview-network.png"),
+		"Peak": getStaticResourcePath("/static/images/callview-network.png")
+	} as UTSJSONObject
+
+	const networkQualityIcons: UTSJSONObject = {
+		"BAD": getStaticResourcePath("/static/images/callview-network-bad.png"),
+		"VERY_BAD": getStaticResourcePath("/static/images/callview-network-bad.png")
+	} as UTSJSONObject
+
+	const participantAvatars = ref<UTSJSONObject>({} as UTSJSONObject)
+
+	function updateParticipantAvatars(participants: any[]): void {
+		downloadParticipantAvatars(participants).then((avatarMap: UTSJSONObject): void => {
+			console.log('[FloatWindow] participantAvatars updated')
+			participantAvatars.value = avatarMap
+		})
+	}
+
+	watch((): any[] => { return cs.allParticipants.value as any[] }, (newVal: any[]) => {
+		updateParticipantAvatars(newVal)
+	}, { immediate: true, deep: true })
+
+	// 切换悬浮窗状态（500ms 节流）
+	let isToggling: boolean = false
+	const toggleFloatWindow = (): void => {
+		if (isToggling) {
+			console.warn('[FloatWindow] toggleFloatWindow throttled, ignoring')
+			return
+		}
+		isToggling = true
+		setTimeout(() => { isToggling = false }, 500)
+
+		if (isFloatWindowOpen.value) {
+			cs.stopFloatWindow()
+			isFloatWindowOpen.value = false
+		} else {
+			const opts: StartFloatWindowOptions = {
+				avatars: participantAvatars.value,
+				waitingAnimation: waitingAnimation,
+				volumeLevelIcons: volumeLevelIcons,
+				networkQualityIcons: networkQualityIcons,
+			}
+			const onStarted: FloatWindowCallback = (code: number, message: string): void => {
+				if (code != -1) {
+					isFloatWindowOpen.value = true
+					uni.navigateBack({
+						delta: 1,
+						fail: (_err) => {
+							const lastPage: string = getLastPage()
+							uni.redirectTo({ url: lastPage })
+						}
+					})
+				}
+				console.log('[FloatWindow] show FloatWindow, code:', code, 'message:', message)
+			}
+			cs.startFloatWindow(opts, onStarted)
+		}
+	}
+</script>
+
+<style scoped>
+	.btn {
+		width: 48px;
+		height: 48px;
+		display: flex;
+		justify-content: center;
+		align-items: center;
+	}
+
+	.btn-img {
+		width: 24px;
+		height: 24px;
+	}
+</style>

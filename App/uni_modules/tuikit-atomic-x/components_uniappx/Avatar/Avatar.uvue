@@ -46,6 +46,8 @@ const props = withDefaults(defineProps<{
   shape: string
   // 默认头像类型：none | user | work | public | meeting | avchatroom
   defaultAvatarType: string
+  // 自定义默认头像地址：传入时优先于 defaultAvatarType 内置映射（src 为空时生效）
+  defaultAvatarUrl: string
   // 纯净模式，没有外层的 padding
   pureMode: string | boolean
   // 懒加载：mount 时不立即赋值 src，让出主线程后再加载远程图
@@ -59,6 +61,7 @@ const props = withDefaults(defineProps<{
   showBadgeDot: false,
   shape: 'square',
   defaultAvatarType: 'none',
+  defaultAvatarUrl: '',
   pureMode: false,
   lazy: false,
 })
@@ -130,6 +133,8 @@ const badgeClass = computed<string>((): string => {
 const effectiveAvatarSrc = computed<string>((): string => {
   const src: string = avatarSrc.value
   if (src && src.length > 0) return src
+  // 自定义默认头像优先于内置 defaultAvatarType 映射
+  if (props.defaultAvatarUrl.length > 0) return props.defaultAvatarUrl
   const def: string = props.defaultAvatarType
   const defaultMap: UTSJSONObject = new UTSJSONObject()
   defaultMap['user'] = 'https://web.sdk.qcloud.com/im/assets/all-in-one/user.png'

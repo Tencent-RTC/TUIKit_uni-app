@@ -22,7 +22,6 @@ export function giftService(params : {
   const showGift = async (giftData : GiftData, options ?: { onlyDisplay ?: boolean; isFromSelf ?: boolean; count ?: number }) => {
     if (!giftData) return
     const isFromSelf = !!options?.isFromSelf
-    const count = Math.max(1, Math.floor(Number(options?.count) || 1))
 
     if (giftData.gift.resourceURL !== "") {
       isGiftPlaying.value = true
@@ -30,7 +29,7 @@ export function giftService(params : {
       // 兼容两种持有方式：pusher 端直接传 ref 对象（取 .value）；
       // 观众端经 GiftLayer 透传时传普通容器对象（取 .current，避免 iOS nvue 把 ref 对象当 prop 透传时解包丢失）。
       const playerInst = params.giftPlayerRef && (params.giftPlayerRef.value || params.giftPlayerRef.current);
-      playerInst?.playGift?.(giftData.gift, isFromSelf, count);
+      playerInst?.playGift?.(giftData.gift, isFromSelf);
     }
   }
 

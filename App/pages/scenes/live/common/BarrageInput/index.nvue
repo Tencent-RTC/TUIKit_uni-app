@@ -1,0 +1,179 @@
+<template>
+  <view v-if="active">
+    <view class="comment-dismiss" @tap="close"></view>
+    <view ref="barRef" class="comment-bar" :style="{ opacity: ready ? 1 : 0 }">
+      <view class="comment-cancel" @tap="close">
+        <text class="comment-cancel-text">×</text>
+      </view>
+      <input
+        ref="inputRef"
+        class="comment-input"
+        v-model="draft"
+        :maxlength="120"
+        :placeholder="t('morePanel.commentPlaceholder')"
+        placeholder-class="comment-input-placeholder"
+        :adjust-position="false"
+        :fixed="true"
+        :focus="focusTrigger"
+        :cursor-spacing="0"
+        confirm-type="send"
+        @focus="onFocus"
+        @blur="onBlur"
+        @confirm="submit"
+      />
+      <view class="comment-send" @tap="submit">
+        <text class="comment-send-text">{{ t('morePanel.send') }}</text>
+      </view>
+    </view>
+  </view>
+</template>
+
+<script setup lang="ts">
+  import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue';
+  import { t } from '../../locales';
+  import { useBarrageState } from '@/uni_modules/tuikit-atomic-x/state/BarrageState';
+  import { getLiveErrorMessage } from '@/uni_modules/tuikit-atomic-x/utils/liveErrorHandler';
+
+  const props = defineProps({
+    modelValue: {
+      type: Boolean,
+      default: false,
+    },
+    liveID: {
+      type: String,
+      default: '',
+    },
+  });
+
+  const emit = defineEmits(['update:modelValue', 'tip']);
+
+  const animation = (uni as any).requireNativePlugin('animation');
+  const KEYBOARD_GAP_PX = 12;
+
+  const active = computed({
+    get: () => props.modelValue,
+    set: (v) => emit('update:modelValue', v),
+  });
+
+  const { sendTextMessage } = useBarrageState(props.liveID);
+
+  const barRef = ref<any>(null);
+  const inputRef = ref<any>(null);
+  const focusTrigger = ref(false);
+  const ready = ref(false);
+  const draft = ref('');
+
+  const keyboardShown = ref(false);
+  const inputFocused = ref(false);
+  let blurCloseTimer: any = null;
+
+  const liftBar = (height: number) => {
+    const el = barRef.value;
+    if (!el) return;
+    animation.transition(el, {
+      styles: { transform: `translateY(${-(height + KEYBOARD_GAP_PX)}px)` },
+      duration: 160,
+      timingFunction: 'ease-out',
+    });
+  };
+
+  const focusInput = () => {
+    keyboardShown.value = false;
+    focusTrigger.value = false;
+    nextTick(() => {
+      setTimeout(() => {
+        focusTrigger.value = true;
+        inputRef.value?.focus?.();
+        setTimeout(() => inputRef.value?.focus?.(), 120);
+        setTimeout(() => inputRef.value?.focus?.(), 300);
+      }, 0);
+    });
+  };
+
+  const onFocus = () => {
+    inputFocused.value = true;
+    ready.value = true;
+    if (blurCloseTimer != null) {
+      clearTimeout(blurCloseTimer);
+      blurCloseTimer = null;
+    }
+  };
+
+  const onBlur = () => {
+    inputFocused.value = false;
+    if (blurCloseTimer != null) clearTimeout(blurCloseTimer);
+    blurCloseTimer = setTimeout(() => {
+      blurCloseTimer = null;
+      if (active.value && !inputFocused.value) close();
+    }, 200);
+  };
+
+  const onKeyboardHeightChange = (res: any) => {
+    const height = (res && res.height) || 0;
+    if (height > 0) {
+      keyboardShown.value = true;
+      ready.value = true;
+      liftBar(height);
+    } else if (keyboardShown.value && active.value) {
+      close();
+    }
+  };
+
+  const close = () => {
+    if (blurCloseTimer != null) {
+      clearTimeout(blurCloseTimer);
+      blurCloseTimer = null;
+    }
+    keyboardShown.value = false;
+    inputFocused.value = false;
+    try { inputRef.value?.blur?.(); } catch (e) { /* ignore */ }
+    try { uni.hideKeyboard(); } catch (e) { /* ignore */ }
+    focusTrigger.value = false;
+    ready.value = false;
+    active.value = false;
+  };
+
+  const submit = () => {
+    const content = draft.value.trim();
+    if (!content) return;
+    sendTextMessage({
+      liveID: props.liveID,
+      text: content,
+      success: () => {
+        draft.value = '';
+        close();
+      },
+      fail: (code: any, msg: any) => {
+        console.error(`sendTextMessage fail code: ${code}, msg: ${msg}`);
+        emit('tip', `${t('morePanel.commentSendFailed')}: ${getLiveErrorMessage(code)}`);
+      },
+    });
+  };
+
+  watch(() => props.modelValue, (v) => {
+    if (v) {
+      ready.value = false;
+      nextTick(() => focusInput());
+    } else {
+      focusTrigger.value = false;
+      ready.value = false;
+    }
+  });
+
+  onMounted(() => {
+    uni.onKeyboardHeightChange(onKeyboardHeightChange);
+  });
+
+  onUnmounted(() => {
+    uni.offKeyboardHeightChange(onKeyboardHeightChange);
+    if (blurCloseTimer != null) {
+      clearTimeout(blurCloseTimer);
+      blurCloseTimer = null;
+    }
+    try { uni.hideKeyboard(); } catch (e) { /* ignore */ }
+  });
+</script>
+
+<style lang="scss">
+  @import './BarrageInput.scss';
+</style>

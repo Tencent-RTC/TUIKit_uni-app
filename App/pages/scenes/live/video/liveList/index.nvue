@@ -13,22 +13,14 @@
       </view>
     </view>
   </view>
-
-  <LiveToast
-    v-if="tipVisible"
-    :key="tipSeq"
-    v-model="tipVisible"
-    :title="tipTitle"
-    :duration="2000"
-  />
+  <LiveToast :duration="2000"/>
 </template>
 
 <script setup>
   import {
     ref,
     onMounted,
-    watch,
-    nextTick
+    watch
   } from 'vue';
   import {
     onLoad,
@@ -36,7 +28,8 @@
   } from '@dcloudio/uni-app';
 
   import LiveList from '@/uni_modules/tuikit-atomic-x/components/LiveList';
-  import LiveToast from '@/uni_modules/tuikit-atomic-x/components/LiveToast.nvue';
+  import LiveToast from '@/uni_modules/tuikit-atomic-x/components/Common/LiveToast/index.nvue';
+  import { showLiveToast } from '@/uni_modules/tuikit-atomic-x/components/Common/LiveToast/index.ts';
   import { t } from '../../locales';
   import {
     useLiveListState
@@ -46,17 +39,7 @@
     liveListCursor
   } = useLiveListState();
 
-  const tipVisible = ref(false);
-  const tipSeq = ref(0);
-  const tipTitle = ref('');
-  const showTip = (title) => {
-    tipTitle.value = title;
-    tipVisible.value = false;
-    nextTick(() => {
-      tipSeq.value++;
-      tipVisible.value = true;
-    });
-  };
+  const showTip = (title) => showLiveToast(title);
 
   const safeArea = ref({
     left: 0,

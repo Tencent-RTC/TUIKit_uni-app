@@ -95,11 +95,11 @@ const calculateMenuPosition = () => {
 
 /**
  * 处理返回按钮点击
+ * 会话列表是 tabBar 页（由首页 switchTab 进入），页面栈中没有上一页，navigateBack 无效，
+ * 与 demo / 通讯录页一致，直接回到首页
  */
-const handleBack = () => {
-	uni.navigateBack({
-		delta: 1
-	})
+const handleBack = (): void => {
+	uni.reLaunch({ url: '/pages/index/index' })
 }
 
 /**

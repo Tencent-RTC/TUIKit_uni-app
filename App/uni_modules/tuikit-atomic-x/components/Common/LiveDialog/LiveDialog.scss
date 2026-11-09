@@ -1,0 +1,115 @@
+.ld-mask {
+  position: fixed;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.4);
+  justify-content: center;
+  align-items: center;
+  z-index: 6000;
+}
+
+.ld-box {
+  position: relative;
+  width: 500rpx;
+  height: 256rpx;
+  border-top-left-radius: 28rpx;
+  border-top-right-radius: 28rpx;
+  border-bottom-left-radius: 28rpx;
+  border-bottom-right-radius: 28rpx;
+  box-shadow: 0 20rpx 60rpx rgba(0, 0, 0, 0.55);
+}
+
+.ld-bg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 500rpx;
+  height: 256rpx;
+  border-top-left-radius: 28rpx;
+  border-top-right-radius: 28rpx;
+  border-bottom-left-radius: 28rpx;
+  border-bottom-right-radius: 28rpx;
+  background-color: rgba(14, 18, 28, 0.94);
+  border-width: 2rpx;
+  border-color: rgba(255, 255, 255, 0.10);
+}
+
+.ld-inner {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 500rpx;
+  height: 256rpx;
+  flex-direction: column;
+  align-items: center;
+  padding: 36rpx 40rpx 28rpx 40rpx;
+}
+
+.ld-title {
+  color: #ffffff;
+  font-size: 32rpx;
+  font-weight: 700;
+  margin-bottom: 12rpx;
+  text-align: center;
+}
+
+.ld-message {
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 24rpx;
+  margin-bottom: 32rpx;
+  text-align: center;
+  lines: 2;
+}
+
+.ld-btns {
+  flex-direction: row;
+  width: 420rpx;
+}
+
+.ld-btn {
+  flex: 1;
+  height: 72rpx;
+  border-radius: 36rpx;
+  justify-content: center;
+  align-items: center;
+}
+
+.ld-btn.is-cancel {
+  background-color: rgba(255, 255, 255, 0.10);
+  margin-right: 20rpx;
+}
+
+.ld-btn.is-confirm.is-confirm--danger {
+  background-color: #FF5158;
+}
+
+.ld-btn.is-confirm.is-confirm--primary {
+  background-image: linear-gradient(to right, #2A6BFF, #4A9EFF);
+}
+
+.ld-btn.is-cancel:active {
+  background-color: rgba(255, 255, 255, 0.18);
+}
+
+.ld-btn.is-confirm.is-confirm--danger:active {
+  background-color: #E04549;
+}
+
+.ld-btn.is-confirm.is-confirm--primary:active {
+  opacity: 0.88;
+}
+
+.ld-btn-text {
+  font-size: 28rpx;
+  font-weight: 600;
+}
+
+.ld-btn-text.is-cancel-text {
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.ld-btn-text.is-confirm-text {
+  color: #ffffff;
+}

@@ -104,10 +104,14 @@
   import { isMessageMultiSelectable } from '../../../utils/multiSelect'
   import {
     useCallState,
-    CallErrorCode
+    CALL_ERROR_PACKAGE_NOT_PURCHASED,
+    MEDIA_TYPE_AUDIO,
+    MEDIA_TYPE_VIDEO
   } from '@/uni_modules/tuikit-atomic-x/state/CallState';
   import {
-    useDeviceState
+    useDeviceState,
+    type OpenLocalCameraOptions,
+    type OpenLocalMicrophoneOptions
   } from "@/uni_modules/tuikit-atomic-x/state/DeviceState";
   import { getCurrentPageFullPath, isNavigating, isCallEnding } from "../../../server/callService"
   import { checkCallPermissionWithDialog } from "@/uni_modules/tuikit-atomic-x/utils/callPermission"
@@ -307,7 +311,7 @@ const props = withDefaults(defineProps<Props>(), {
     if (message == null) return false
     let v: any | null = message['isSentBySelf']
     if (v == null) v = message['isSelf']  // 旧版字段名 fallback
-    if (v === true || v === 'true' || v === 1) return true
+    if (v == true || v == 'true' || v == 1) return true
     // 字段缺失时用 from.userID 对比当前用户
     if (v == null) {
       const fromRaw: any | null = message['from']
@@ -363,7 +367,7 @@ const props = withDefaults(defineProps<Props>(), {
   }
 
   // iOS 暂时禁用点击打开聊天记录详情；恢复时把该值改为 false 即可
-  const isMergedDetailDisabled: boolean = uni.getSystemInfoSync().platform === 'ios'
+  const isMergedDetailDisabled: boolean = uni.getSystemInfoSync().platform == 'ios'
 
   const handleMergedTap = (): void => {
     if (isMergedDetailDisabled) return
@@ -538,7 +542,7 @@ const triggerFlash = (): void => {
   // 调用业务方传入的 customMessageRender 解析 CUSTOM 消息对应的渲染组件
   // 仅在 messageType == CUSTOM 时生效；render 抛错或返回空值时降级走默认渲染
   const customComponent = computed((): any | null => {
-    if (messageType.value !== 8) return null
+    if (messageType.value != 8) return null
     if (props.customMessageRender == null) return null
     try {
       const renderFn = props.customMessageRender as ((m: any, cid: string) => any) | null
@@ -665,7 +669,7 @@ watch(
           duration: 800,
           timingFunction: 'linear'
         }, () => {
-          if (loadingAnimationTimer.value !== null) {
+          if (loadingAnimationTimer.value != null) {
             rotate()
           }
         })
@@ -811,7 +815,7 @@ watch(
     (): number => (props.inputPanelHeight ?? 0) + (props.inputToolbarHeight ?? 0),
     (newTotal: number, oldTotal: number): void => {
       if (!showActions.value) return
-      if (newTotal === oldTotal) return
+      if (newTotal == oldTotal) return
       recomputeLongPressPosition()
     }
   )
@@ -859,26 +863,27 @@ watch(
     }
 
     const callData = parseCallMessageData(props.message)
-    const mediaType: number = isVideoCall(callData) ? 1 : 2
+    // 0 音频，1 视频（与原版 CallType.AUDIO=0 / VIDEO=1 保持一致）
+    const mediaType: number = isVideoCall(callData) ? MEDIA_TYPE_VIDEO : MEDIA_TYPE_AUDIO
     const peerUserID: string = props.conversationID.replace('c2c_', '')
 
     if (peerUserID.length > 0) {
       isCalling.value = true;
 
-      if (mediaType == 1) {
-        openLocalCamera({
-          isFront: true
-        })
+      if (mediaType == MEDIA_TYPE_VIDEO) {
+        const camOpts: OpenLocalCameraOptions = { isFront: true }
+        openLocalCamera(camOpts)
       }
-      openLocalMicrophone({
-        fail: (error) => {
-          if (error == -1104) {
-            setTimeout(() => {
+      const micOpts: OpenLocalMicrophoneOptions = {
+        fail: (errCode: number, _errMsg: string): void => {
+          if (errCode == -1104) {
+            setTimeout((): void => {
               openLocalMicrophone(null);
             }, 200);
           }
         }
-      })
+      }
+      openLocalMicrophone(micOpts)
       const hasPermission = await checkCallPermissionWithDialog(mediaType);
       if (!hasPermission) {
         isCalling.value = false;
@@ -887,17 +892,17 @@ watch(
       setCallFramework(15)
       calls({
         participantIds: [peerUserID],
-        mediaType,
-        success: () => {
+        mediaType: mediaType,
+        success: (): void => {
           setCallSource('caller')
           setCallLastPage(getCurrentPageFullPath())
           uni.navigateTo({
             url: '/uni_modules/tuikit-atomic-x/pages/call?layoutTemplate=Float',
-            complete: () => { isCalling.value = false; }
+            complete: (): void => { isCalling.value = false; }
           })
         },
-        fail: (error) => {
-          if (error == CallErrorCode.PACKAGE_NOT_PURCHASED) {
+        fail: (code: number, _message: string): void => {
+          if (code == CALL_ERROR_PACKAGE_NOT_PURCHASED) {
             uni.showToast({
               icon: 'none',
               title: '您的应用还未开通音视频通话（TUICallKit）能力，您可以去控制台申请免费体验'

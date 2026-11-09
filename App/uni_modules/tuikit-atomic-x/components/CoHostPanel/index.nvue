@@ -61,14 +61,6 @@
       </list>
     </view>
   </view>
-
-  <LiveToast
-    v-if="tipVisible"
-    :key="tipSeq"
-    v-model="tipVisible"
-    :title="tipTitle"
-    :duration="2000"
-  />
 </template>
 
 <script setup lang="ts">
@@ -81,7 +73,7 @@
     watch,
     nextTick
   } from 'vue'
-  import LiveToast from '@/uni_modules/tuikit-atomic-x/components/LiveToast.nvue';
+  import { showLiveToast } from '@/uni_modules/tuikit-atomic-x/components/Common/LiveToast/index.ts';
   import {
     CoHostLayoutTemplateType,
     useCoHostState
@@ -105,14 +97,7 @@
   })
   const emit = defineEmits(['update:modelValue'])
 
-  const tipVisible = ref(false);
-  const tipSeq = ref(0);
-  const tipTitle = ref('');
-  const showTip = (title) => {
-    tipTitle.value = title;
-    tipSeq.value++;
-    tipVisible.value = true;
-  };
+  const showTip = (title) => showLiveToast(title);
   const refreshing = ref('hide')
   const isLoading = ref(false)
   const scrollTop = ref(0)

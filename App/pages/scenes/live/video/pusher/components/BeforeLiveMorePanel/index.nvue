@@ -1,5 +1,5 @@
 <template>
-  <view>
+  <view class="before-live-more-layer" :userInteractionEnabled="innerVisible || isShowAudioEffect">
     <BaseDrawer
       v-model="innerVisible"
       :height="300"
@@ -12,12 +12,6 @@
       <text class="title">{{ t('anchor.moreSettings') }}</text>
 
       <view class="setting-list">
-        <view class="cap" @tap="openQualityPanel">
-          <view class="cap-icon">
-            <image class="cap-icon-img" src="/static/images/live/icon/prepare-quality.png" mode="aspectFit" />
-          </view>
-          <text class="cap-label">{{ qualityLabel }}</text>
-        </view>
         <view class="cap" @tap="handleMirror">
           <view class="cap-icon">
             <image
@@ -37,17 +31,15 @@
         </view>
       </view>
     </BaseDrawer>
-    <QualityPanel v-model="qualityVisible" />
     <AudioEffectPanel v-model="isShowAudioEffect" />
   </view>
 </template>
 
 <script setup lang="ts">
-  import { ref, computed, watch } from 'vue';
-  import { MirrorType, VideoQuality, useDeviceState } from '@/uni_modules/tuikit-atomic-x/state/DeviceState';
+  import { ref, computed } from 'vue';
+  import { MirrorType, useDeviceState } from '@/uni_modules/tuikit-atomic-x/state/DeviceState';
   import { t } from '../../../../locales';
-  import BaseDrawer from '@/components/live/BaseDrawer/index.nvue';
-  import QualityPanel from '../QualityPanel/index.nvue';
+  import BaseDrawer from '@/uni_modules/tuikit-atomic-x/components/Common/BaseDrawer/index.nvue';
   import AudioEffectPanel from '@/uni_modules/tuikit-atomic-x/components/AudioEffectPanel';
 
   const props = defineProps({
@@ -59,9 +51,8 @@
 
   const emit = defineEmits(['update:modelValue', 'tip']);
 
-  const { localMirrorType, isFrontCamera, switchMirror, localVideoQuality } = useDeviceState();
+  const { localMirrorType, switchMirror } = useDeviceState();
 
-  const qualityVisible = ref(false);
   const isShowAudioEffect = ref(false);
 
   const innerVisible = computed({
@@ -74,36 +65,16 @@
       || localMirrorType.value === MirrorType.ENABLE;
   });
 
-  const qualityLabel = computed(() => {
-    const q = Number(localVideoQuality.value);
-    if (q === VideoQuality.QUALITY_1080P) return t('morePanel.qualityUltra');
-    return t('morePanel.qualityHD');
-  });
-
   const handleMirror = () => {
-    if (!isFrontCamera.value) {
-      emit('tip', t('morePanel.frontOnly'));
-      return;
-    }
     switchMirror({
       mirrorType: mirrorEnabled.value ? MirrorType.DISABLE : MirrorType.ENABLE,
     });
-  };
-
-  const openQualityPanel = () => {
-    qualityVisible.value = true;
   };
 
   const handleAudioEffect = () => {
     innerVisible.value = false;
     isShowAudioEffect.value = true;
   };
-
-  watch(qualityVisible, (val, oldVal) => {
-    if (oldVal && !val) {
-      innerVisible.value = false;
-    }
-  });
 </script>
 
 <style lang="scss">

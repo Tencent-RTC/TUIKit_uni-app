@@ -161,7 +161,7 @@ export type LeaveLiveOptions = {
  * @interface EndLiveOptions
  */
 export type EndLiveOptions = {
-  success?: (data: string) => void;
+  success?: (statisticsData: any) => void;
   fail?: (errCode: number, errMsg: string) => void;
 }
 
@@ -341,7 +341,6 @@ function leaveLive(params?: LeaveLiveOptions): void {
  * endLive();
  */
 function endLive(params?: EndLiveOptions): void {
-  // 同步清 currentLive,原因见 leaveLive 注释。
   currentLive.value = null;
   callAPI(JSON.stringify({
     api: "endLive",
@@ -350,7 +349,9 @@ function endLive(params?: EndLiveOptions): void {
     try {
       const data = safeJsonParse(res, {}) as any;
       if (data?.code === 0) {
-        params?.success?.();
+        const raw = data?.data;
+        const statisticsData = typeof raw === 'string' ? safeJsonParse<any>(raw, {}) : (raw || {});
+        params?.success?.(statisticsData);
       } else {
         params?.fail?.(data.code, data.message);
       }

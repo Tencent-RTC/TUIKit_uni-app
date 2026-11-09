@@ -24,7 +24,7 @@
 </template>
 
 <script setup lang="ts">
-  import { ref, watch, computed, reactive, onUnmounted } from 'vue';
+  import { ref, watch, computed, reactive, onMounted, onUnmounted } from 'vue';
   import { downloadAndSaveToPath } from './giftService';
 
   interface SafeAreaLike {
@@ -55,9 +55,6 @@
   const playerRef = ref<any>(null);
   const internalUrl = ref<string>('');
   const computedUrl = computed(() => internalUrl.value || props.url || '');
-  const MAX_CACHE_SIZE = props.maxQueueSize !== undefined ? props.maxQueueSize : 50;
-  const ABSOLUTE_MAX_SIZE = 1000;
-  const effectiveMaxSize = MAX_CACHE_SIZE === 0 ? ABSOLUTE_MAX_SIZE : Math.min(MAX_CACHE_SIZE, ABSOLUTE_MAX_SIZE);
   const giftPrepareList = reactive<GiftModel[]>([]);
   const isPlaying = ref<boolean>(false);
   const currentPlayingGift = ref<GiftModel | null>(null);
@@ -102,6 +99,23 @@
     safePlayerCall('stopPlay');
   }
 
+  function localFileExists(path : string) : Promise<boolean> {
+    return new Promise((resolve) => {
+      let settled = false;
+      const done = (exists : boolean) => {
+        if (settled) return;
+        settled = true;
+        resolve(exists);
+      };
+      try {
+        plus.io.resolveLocalFileSystemURL(path, () => done(true), () => done(false));
+      } catch (e) {
+        done(false);
+      }
+      setTimeout(() => done(false), 1200);
+    });
+  }
+
   async function resolveSvgaLocalPath(resourceURL : string, cacheKey : string) : Promise<string> {
     let cachedPath = plus.storage.getItem(cacheKey);
     if (!cachedPath) {
@@ -129,6 +143,20 @@
         } catch (_) {
           return resourceURL;
         }
+      }
+      const exists = await localFileExists(cachedPath);
+      if (!exists) {
+        plus.storage.removeItem(cacheKey);
+        try {
+          const filePath = await downloadAndSaveToPath(resourceURL);
+          if (filePath && !filePath.startsWith('http')) {
+            plus.storage.setItem(cacheKey, filePath as string);
+            return filePath as string;
+          }
+        } catch (_) {
+          return resourceURL;
+        }
+        return resourceURL;
       }
       return cachedPath;
     }
@@ -185,19 +213,6 @@
     } else {
       giftPrepareList.push(giftModel);
     }
-    while (giftPrepareList.length > effectiveMaxSize) {
-      let removed = false;
-      for (let i = 0; i < giftPrepareList.length; i++) {
-        if (!giftPrepareList[i].isFromSelf) {
-          giftPrepareList.splice(i, 1);
-          removed = true;
-          break;
-        }
-      }
-      if (!removed && giftPrepareList.length > effectiveMaxSize) {
-        giftPrepareList.shift();
-      }
-    }
     if (giftPrepareList.length === 1 && !isPlaying.value) {
       preparePlay();
     }
@@ -216,6 +231,8 @@
       return;
     }
     isPlaying.value = true;
+    playSeq++;
+    schedulePlayTimeout(PLAY_TIMEOUT_MS);
     const queueGift = giftPrepareList[0];
     const gift : GiftModel = {
       resourceURL: String(queueGift.resourceURL || ''),
@@ -274,6 +291,7 @@
   }
 
   function onPlayFinished() {
+    clearPlayTimeout();
     isHandlingFinished = false;
     safePlayerCall('stopPlay');
     isPlaying.value = false;
@@ -295,14 +313,63 @@
     }
   }
 
+  const PLAY_TIMEOUT_MS = 30000;
+  let playSeq = 0;
+  let playTimeoutTimer : any = null;
+
+  const schedulePlayTimeout = (ms : number) => {
+    if (playTimeoutTimer != null) {
+      clearTimeout(playTimeoutTimer);
+      pendingTimers.delete(playTimeoutTimer);
+      playTimeoutTimer = null;
+    }
+    const seq = playSeq;
+    playTimeoutTimer = later(() => {
+      playTimeoutTimer = null;
+      if (seq !== playSeq || !isPlaying.value) return;
+      onPlayFinished();
+    }, ms);
+  };
+
+  const clearPlayTimeout = () => {
+    if (playTimeoutTimer != null) {
+      clearTimeout(playTimeoutTimer);
+      pendingTimers.delete(playTimeoutTimer);
+      playTimeoutTimer = null;
+    }
+  };
+
+  const prefetchNextGift = () => {
+    const next = giftPrepareList[1];
+    if (!next || !next.resourceURL || !next.cacheKey) return;
+    try {
+      const cached = plus.storage.getItem(next.cacheKey);
+      if (cached && !cached.startsWith('http://') && !cached.startsWith('https://')) return;
+    } catch (e) {}
+    resolveSvgaLocalPath(String(next.resourceURL), String(next.cacheKey)).catch(() => {});
+  };
+
+  const resetForInterruption = () => {
+    clearPendingTimers();
+    clearPlayTimeout();
+    playSeq++;
+    isHandlingFinished = false;
+    if (finishedTimer) { clearTimeout(finishedTimer); finishedTimer = null; }
+    safePlayerCall('stopPlay');
+    giftPrepareList.splice(0, giftPrepareList.length);
+    isPlaying.value = false;
+    currentPlayingGift.value = null;
+    internalUrl.value = '';
+    emit('finished');
+    emit('update:modelValue', false);
+  };
+
   const tryStart = () => {
     if (isDestroyed) return;
     if (props.modelValue && computedUrl.value && playerRef.value) {
-      const urlToPlay = computedUrl.value;
-      if (urlToPlay.startsWith('http://') || urlToPlay.startsWith('https://')) {
-        return;
-      }
-      safePlayerCall('startPlay', urlToPlay);
+      safePlayerCall('startPlay', computedUrl.value);
+      schedulePlayTimeout(PLAY_TIMEOUT_MS);
+      prefetchNextGift();
     }
   }
 
@@ -329,7 +396,18 @@
     }, 50);
   }
 
+  onMounted(() => {
+    if (typeof plus !== 'undefined' && plus.globalEvent) {
+      plus.globalEvent.addEventListener('pause', resetForInterruption);
+    }
+  });
+
   onUnmounted(() => {
+    if (typeof plus !== 'undefined' && plus.globalEvent) {
+      try {
+        plus.globalEvent.removeEventListener('pause', resetForInterruption);
+      } catch (e) {}
+    }
     if (finishedTimer) { clearTimeout(finishedTimer); finishedTimer = null; }
     clearPendingTimers();
     // 先停原生播放器(此时实例还活着),再置销毁标记:之后不再向该实例派发任何任务。
@@ -342,15 +420,9 @@
 
   async function playGift(
     giftData : { resourceURL ?: string; name ?: string; giftID ?: string | number },
-    isFromSelf = false,
-    count = 1
+    isFromSelf = false
   ) {
-    // 按 count 循环入队:连击/一次送多个时,服务端回推为单条 count=N 事件,
-    // 需播放 N 次(上限保护,避免异常大值导致队列爆炸)。
-    const times = Math.max(1, Math.min(Math.floor(Number(count) || 1), 50));
-    for (let i = 0; i < times; i++) {
-      addGiftToQueue(giftData, isFromSelf);
-    }
+    addGiftToQueue(giftData, isFromSelf);
   }
 
   defineExpose({

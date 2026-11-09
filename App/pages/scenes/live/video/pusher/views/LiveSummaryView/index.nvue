@@ -1,6 +1,6 @@
 <template>
   <view class="summary-page">
-    <image class="summary-page-bg" :style="{ height: screenHeight + 'px' }" src="/static/images/live/background/summary-bg.png" mode="scaleToFill" />
+    <image class="summary-page-bg" :style="{ height: screenHeight + 'px' }" src="/static/images/live/background/summary-bg.jpg" mode="scaleToFill" />
     <view class="summary-header" :style="{ paddingTop: statusBarHeight + 'px' }">
       <view class="summary-header-row">
         <view class="summary-back" @tap="emit('close')">
@@ -38,7 +38,7 @@
           <view class="summary-stat-mark" />
           <text class="summary-stat-label">{{ t(item.labelKey) }}</text>
           <view class="summary-stat-value-row">
-            <text class="summary-stat-value">{{ formatCount(item.value) }}</text>
+            <text class="summary-stat-value">{{ item.value === null ? '--' : formatCount(item.value) }}</text>
             <text class="summary-stat-unit">{{ t(item.unitKey) }}</text>
           </view>
         </view>
@@ -120,10 +120,12 @@
   ];
 
   const statRows = computed(() => {
-    const items = STATS.map(item => ({
-      ...item,
-      value: Number(props.summary?.[item.valueKey] || 0),
-    }));
+    const hasSummary = !!props.summary;
+    const items = STATS.map(item => {
+      const raw = Number(props.summary?.[item.valueKey]) || 0;
+      const value = item.key === 'viewers' ? Math.max(0, raw - 1) : raw;
+      return { ...item, value: hasSummary ? Math.max(0, value) : null };
+    });
     return [items.slice(0, 2), items.slice(2, 4), items.slice(4, 6)];
   });
 

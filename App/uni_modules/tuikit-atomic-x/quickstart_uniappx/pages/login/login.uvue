@@ -22,19 +22,23 @@
 </template>
 
 <script setup lang="uts">
+import { ref, computed } from 'vue'
+import { onLoad } from '@dcloudio/uni-app'
 import { useLoginState } from '@/uni_modules/tuikit-atomic-x/state/LoginState'
+import { initCallService } from '@/uni_modules/tuikit-atomic-x/server/callService.uts'
 
-const statusBarHeight = ref(0)
-const sdkAppId = 0; // SDKAppID
-const userId = ref(''); // userID
-const secretKey = ''; // SecretKey
-const isLoading = ref(false)
+const statusBarHeight = ref<number>(0)
+const sdkAppId: number = 0 // SDKAppID
+const userId = ref<string>('') // userID
+const isLoading = ref<boolean>(false)
 
 const { login } = useLoginState()
 
-const canLogin = computed<boolean>(() => sdkAppId !== 0 && userId.value.trim().length > 0 && !isLoading.value)
+const canLogin = computed((): boolean => {
+  return sdkAppId != 0 && userId.value.trim().length > 0 && !isLoading.value
+})
 
-const handleLogin = () => {
+const handleLogin = (): void => {
   if (!canLogin.value) return
   isLoading.value = true
 
@@ -42,21 +46,23 @@ const handleLogin = () => {
     sdkAppID: sdkAppId,
     userID: userId.value,
     userSig: '',
-    success: () => {
-      uni.switchTab({
-        url: '/pages/scenes/chat/conversationList/conversationList',
+    success: (): void => {
+      initCallService()
+      // 与 demo 一致：登录成功后进入首页，再由首页进入通话/聊天
+      uni.reLaunch({
+        url: '/pages/index/index',
       })
     },
-    fail: (_: number, msg: string) => {
+    fail: (_: number, msg: string): void => {
       isLoading.value = false
       uni.showToast({ title: msg, icon: 'none' })
     }
   })
 }
 
-onLoad(() => {
+onLoad((_options: OnLoadOptions): void => {
   statusBarHeight.value = uni.getSystemInfoSync().statusBarHeight
-})		
+})
 </script>
 
 <style>

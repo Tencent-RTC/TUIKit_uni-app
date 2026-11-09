@@ -1,0 +1,109 @@
+<template>
+  <view class="audience-list-entry" @tap="handleTap">
+    <view class="participant-avatars">
+      <view
+        class="participant-avatar-wrap"
+        v-for="(item, index) in rankedAudienceList"
+        :key="item?.user?.userID || index"
+      >
+        <image
+          class="participant-avatar"
+          :src="avatarOf(item?.user)"
+          mode="aspectFill"
+          @error="onParticipantAvatarError(item?.user)"
+        />
+      </view>
+    </view>
+    <view class="participant-count">
+      <text class="count-text">{{ viewerCountText }}</text>
+    </view>
+  </view>
+</template>
+
+<script setup lang="ts">
+  import { ref, computed, watch, onMounted } from 'vue';
+  import { useGiftState } from '@/uni_modules/tuikit-atomic-x/state/GiftState';
+  import { useLiveAudienceState } from '@/uni_modules/tuikit-atomic-x/state/LiveAudienceState';
+  import { useLiveListState } from '@/uni_modules/tuikit-atomic-x/state/LiveListState';
+  import { t } from '../../../../locales';
+
+  const props = defineProps<{
+    liveID?: string,
+  }>();
+  const emit = defineEmits(['audienceTap']);
+
+  const { currentLive } = useLiveListState();
+  const liveID = computed(() => props.liveID || String(currentLive.value?.liveID || ''));
+  const { audienceList, audienceCount, fetchAudienceList } = useLiveAudienceState(liveID.value);
+  const { addGiftListener, removeGiftListener } = useGiftState(liveID.value);
+
+  const defaultAvatarURL = '/uni_modules/tuikit-atomic-x/static/assets/live/default-avatar.png';
+  const RANKED_AVATAR_COUNT = 3;
+  const failedAvatarIDs = ref<Record<string, boolean>>({});
+  const giftTotals = ref<Record<string, number>>({});
+
+  const normalizeAvatar = (url: string) => {
+    const s = (url == null ? '' : String(url)).trim();
+    if (!s || s === 'null' || s === 'undefined') return defaultAvatarURL;
+    return s;
+  };
+  const avatarOf = (user: any): string => {
+    if (user?.userID && failedAvatarIDs.value[user.userID]) return defaultAvatarURL;
+    return normalizeAvatar(user?.avatarURL);
+  };
+  const formatCountValue = (value: number): string => {
+    const v = Math.max(0, Math.floor(Number(value) || 0));
+    if (v >= 100000) return `10${t('common.wanUnit')}+`;
+    if (v >= 10000) return `${Math.floor(v / 10000)}${t('common.wanUnit')}+`;
+    return String(v);
+  };
+  const onParticipantAvatarError = (user: any) => {
+    const id = user?.userID;
+    if (!id || failedAvatarIDs.value[id]) return;
+    failedAvatarIDs.value = { ...failedAvatarIDs.value, [id]: true };
+  };
+  const onReceiveGift = (event: any) => {
+    try {
+      const res = typeof event === 'string' ? JSON.parse(event) : (event || {});
+      const gift = typeof res.gift === 'string' ? JSON.parse(res.gift) : (res.gift || {});
+      const sender = typeof res.sender === 'string' ? JSON.parse(res.sender) : (res.sender || {});
+      const senderID = sender?.userID;
+      if (!senderID) return;
+      const coins = Number(gift?.coins) || 0;
+      const count = Number(res.count) || 1;
+      const next = { ...giftTotals.value };
+      next[senderID] = (next[senderID] || 0) + coins * count;
+      giftTotals.value = next;
+    } catch (e) { /* ignore */ }
+  };
+
+  const currentAudienceCount = computed(() => Number(audienceCount.value) || 0);
+  const rankedAudienceList = computed(() => {
+    const scored = (audienceList.value || []).map((user: any, order: number) => ({
+      user,
+      value: Number(giftTotals.value[user?.userID] || 0),
+      order,
+    }));
+    scored.sort((a, b) => (b.value - a.value) || (a.order - b.order));
+    return scored.slice(0, RANKED_AVATAR_COUNT);
+  });
+  const viewerCountText = computed(() => formatCountValue(currentAudienceCount.value));
+
+  const handleTap = () => {
+    emit('audienceTap');
+  };
+
+  onMounted(() => {
+    watch(liveID, (id, _, onCleanup) => {
+      if (!id) return;
+      // 对齐 iOS AudienceView.bind(_:):绑定直播间时主动拉一次,保证 audienceCount 是最新值。
+      fetchAudienceList({ liveID: id });
+      addGiftListener(id, 'onReceiveGift', onReceiveGift);
+      onCleanup(() => removeGiftListener(id, 'onReceiveGift', onReceiveGift));
+    }, { immediate: true });
+  });
+</script>
+
+<style lang="scss">
+  @import './AudienceListEntry.scss';
+</style>

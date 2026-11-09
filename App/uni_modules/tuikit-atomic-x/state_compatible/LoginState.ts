@@ -103,7 +103,7 @@ const createStoreParams = JSON.stringify({
  * 登录方法
  */
 function login(params: LoginOptions): void {
-  reportUIPlatform();
+  reportUIPlatform(55);
   callAPI(JSON.stringify({
     api: "login",
     params: {

@@ -58,7 +58,7 @@ import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { MediaQuality } from '../../../../types/message'
 import { useMessageActionState } from '../../../../state/MessageActionState'
 import { useAudioPlayer, stopGlobalAudioPlayer } from '../../../../hooks/useAudioPlayer'
-import { useCallState } from '../../../../state/CallState'
+import { useCallState, isInCall } from '../../../../state/CallState'
 import {
   getAudioConvertVisibleMap,
   setAudioConvertVisibleMapEntry,
@@ -94,8 +94,7 @@ let hasTriedRemoteFallback = false
 // status == 1（呼叫中/待接听）或 2（通话中）时阻止播放，避免抢占音频焦点
 const { selfInfo: callSelfInfo } = useCallState()
 const isInCallNow = (): boolean => {
-  const status = callSelfInfo?.value?.status
-  return status == 1 || status == 2
+  return isInCall(callSelfInfo.value)
 }
 
 // 长按判定阈值，与 Message.nvue 中保持一致
@@ -204,8 +203,8 @@ const persistShowConvertedText = (visible: boolean): void => {
       writeVisibleStore(newStore)
     }
   } else {
-    // store.get(msgId) !== false → store[msgId] !== false
-    if (store[msgId] !== false) {
+    // store.get(msgId) != false → store[msgId] != false
+    if (store[msgId] != false) {
       store[msgId] = false
       writeVisibleStore(store)
     }
@@ -358,14 +357,14 @@ const waveClipClass0 = computed<string>((): string => {
   if (!isPlaying.value) {
     return 'audio-wave-clip--xs audio-wave-clip--hidden'
   }
-  return waveStep.value === 0 ? 'audio-wave-clip--xs audio-wave-clip--visible' : 'audio-wave-clip--xs audio-wave-clip--hidden'
+  return waveStep.value == 0 ? 'audio-wave-clip--xs audio-wave-clip--visible' : 'audio-wave-clip--xs audio-wave-clip--hidden'
 })
 
 const waveClipClass1 = computed<string>((): string => {
   if (!isPlaying.value) {
     return 'audio-wave-clip--sm audio-wave-clip--hidden'
   }
-  return waveStep.value === 1 ? 'audio-wave-clip--sm audio-wave-clip--visible' : 'audio-wave-clip--sm audio-wave-clip--hidden'
+  return waveStep.value == 1 ? 'audio-wave-clip--sm audio-wave-clip--visible' : 'audio-wave-clip--sm audio-wave-clip--hidden'
 })
 
 const waveClipClass2 = computed<string>((): string => {
@@ -373,7 +372,7 @@ const waveClipClass2 = computed<string>((): string => {
   if (!isPlaying.value) {
     return 'audio-wave-clip--lg audio-wave-clip--visible'
   }
-  return waveStep.value === 2 ? 'audio-wave-clip--lg audio-wave-clip--visible' : 'audio-wave-clip--lg audio-wave-clip--hidden'
+  return waveStep.value == 2 ? 'audio-wave-clip--lg audio-wave-clip--visible' : 'audio-wave-clip--lg audio-wave-clip--hidden'
 })
 
 // 三层声波的透明度

@@ -1,0 +1,66 @@
+/**
+ * 通话演示页公共逻辑
+ * - 搜索结果缓存：对应 demo 中的 uni.$singleCallLastInvitee / uni.$groupCallLastSearchList，
+ *   从通话页（或悬浮窗）返回时恢复上次的搜索结果
+ * - 联系人信息解析
+ */
+
+/** 通话目标用户 */
+export type CallUserItem = {
+  userID: string;
+  nickname: string;
+  avatarURL: string;
+  checked: boolean;
+}
+
+let _singleLastInvitee: CallUserItem | null = null
+let _groupLastSearchList: CallUserItem[] = []
+
+function cloneUser(item: CallUserItem): CallUserItem {
+  return {
+    userID: item.userID,
+    nickname: item.nickname,
+    avatarURL: item.avatarURL,
+    checked: item.checked
+  } as CallUserItem
+}
+
+export function createEmptyUser(): CallUserItem {
+  return { userID: '', nickname: '', avatarURL: '', checked: false } as CallUserItem
+}
+
+export function getSingleCallLastInvitee(): CallUserItem | null {
+  const v: CallUserItem | null = _singleLastInvitee
+  return v != null ? cloneUser(v) : null
+}
+
+export function setSingleCallLastInvitee(item: CallUserItem | null): void {
+  _singleLastInvitee = item != null ? cloneUser(item) : null
+}
+
+export function getGroupCallLastSearchList(): CallUserItem[] {
+  return _groupLastSearchList.map((item: CallUserItem): CallUserItem => cloneUser(item))
+}
+
+export function setGroupCallLastSearchList(list: CallUserItem[]): void {
+  _groupLastSearchList = list.map((item: CallUserItem): CallUserItem => cloneUser(item))
+}
+
+/**
+ * 把 getContactInfo 返回的联系人数据转换为 CallUserItem
+ * 原生数据是 UTSJSONObject，字段需按 key 取值并判断类型（Kotlin 下 as 是真实强转）
+ */
+export function toCallUserItem(raw: any | null, fallbackUserID: string): CallUserItem {
+  const item: CallUserItem = createEmptyUser()
+  item.userID = fallbackUserID
+  if (raw != null && raw instanceof UTSJSONObject) {
+    const obj: UTSJSONObject = raw as UTSJSONObject
+    const uid: any | null = obj['userID']
+    const nick: any | null = obj['nickname']
+    const avatar: any | null = obj['avatarURL']
+    if (uid != null && typeof uid == 'string' && (uid as string).length > 0) item.userID = uid as string
+    if (nick != null && typeof nick == 'string') item.nickname = nick as string
+    if (avatar != null && typeof avatar == 'string') item.avatarURL = avatar as string
+  }
+  return item
+}

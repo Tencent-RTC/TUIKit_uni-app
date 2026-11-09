@@ -1,0 +1,408 @@
+<template>
+  <view class="container">
+    <view class="search">
+      <view class="input-box">
+        <input class="input-search-user" v-model="userIDToSearch" maxlength="50" type="text" confirm-type="search" placeholder="搜索用户ID" @confirm="searchUser" />
+      </view>
+      <view class="btn-search" @tap="searchUser">
+        <text class="btn-text">搜索</text>
+      </view>
+    </view>
+
+    <view class="search-selfInfo">
+      <view class="search-selfInfo-left">
+        <view class="self-info-bar"></view>
+        <text class="search-selfInfo-label">您的ID</text>
+        <text class="search-selfInfo-phone">{{ selfUserID }}</text>
+      </view>
+      <text v-if="searchList.length != 0" class="allcheck" @tap="toggleAll">{{ ischeck ? '全选' : '取消' }}</text>
+    </view>
+
+    <scroll-view v-if="callBtn" class="user-list" direction="vertical">
+      <view v-for="(item, index) in searchList" :key="item.userID" class="user-row" @tap="toggleUser(index)">
+        <view v-if="!item.checked" class="user-switch"></view>
+        <image v-else class="user-checkimg" src="/static/images/check.png" mode="aspectFit"></image>
+        <Avatar :src="item.avatarURL" :size="64" defaultAvatarType="user" :defaultAvatarUrl="DEFAULT_AVATAR_URL" />
+        <text class="user-name">{{ item.nickname.length > 0 ? item.nickname : item.userID }}</text>
+      </view>
+    </scroll-view>
+
+    <view v-if="callBtn && searchList.length > 0" class="callbtn" @tap="groupCall">
+      <text class="callbtn-text">开始通话</text>
+    </view>
+
+    <view v-if="!callBtn" class="search-default">
+      <image class="search-default-img" src="/static/images/search.png" mode="aspectFit" />
+      <text class="search-default-message">搜索添加已注册用户以已发起通话</text>
+    </view>
+  </view>
+</template>
+
+<script setup lang="uts">
+import { ref, computed } from 'vue'
+import { onLoad, onUnload } from '@dcloudio/uni-app'
+import Avatar from '@/uni_modules/tuikit-atomic-x/components/Avatar/Avatar.uvue'
+import {
+  CALL_PAGE,
+  getCurrentPageFullPath,
+  isNavigating,
+  isCallEnding,
+  setLastPage,
+  setCallSource,
+  getCallSource
+} from '@/uni_modules/tuikit-atomic-x/server/callService.uts'
+import { useLoginState, type UserProfileParam } from '@/uni_modules/tuikit-atomic-x/state/LoginState'
+import { useContactState } from '@/uni_modules/tuikit-atomic-x/state/ContactState'
+import {
+  useCallState,
+  isInCall,
+  CALL_ERROR_PACKAGE_NOT_PURCHASED,
+  MEDIA_TYPE_AUDIO,
+  MEDIA_TYPE_VIDEO,
+  type CallsOptions
+} from '@/uni_modules/tuikit-atomic-x/state/CallState'
+import {
+  useDeviceState,
+  type OpenLocalCameraOptions,
+  type OpenLocalMicrophoneOptions
+} from '@/uni_modules/tuikit-atomic-x/state/DeviceState'
+import { checkCallPermissionWithDialog } from '@/uni_modules/tuikit-atomic-x/utils/callPermission.uts'
+import { DEFAULT_AVATAR_URL } from '@/uni_modules/tuikit-atomic-x/utils/avatarHelper.uts'
+import {
+  type CallUserItem,
+  toCallUserItem,
+  getGroupCallLastSearchList,
+  setGroupCallLastSearchList
+} from './callPageStore.uts'
+
+/** 搜索列表最多 8 人（加上自己共 9 人） */
+const MAX_SEARCH_COUNT: number = 8
+
+// 使用独立的 Contact 实例，页面卸载时销毁，避免影响通讯录等页面共用的默认实例
+const contactState = useContactState('CallQuickStartGroup')
+const cs = useCallState()
+const ds = useDeviceState()
+const { loginUserInfo } = useLoginState()
+
+const userIDToSearch = ref<string>('')
+const searchList = ref<CallUserItem[]>([] as CallUserItem[])
+const callBtn = ref<boolean>(false)
+const ischeck = ref<boolean>(true)
+const mediaType = ref<number>(MEDIA_TYPE_AUDIO)
+// 呼叫防抖锁，防止频繁点击呼叫按钮
+const isCalling = ref<boolean>(false)
+
+const selfUserID = computed((): string => {
+  const info: UserProfileParam | null = loginUserInfo.value
+  return info?.userID ?? ''
+})
+
+onLoad((options: OnLoadOptions): void => {
+  const opt: UTSJSONObject = options as UTSJSONObject
+  const t: any | null = opt['type']
+  mediaType.value = (t != null && typeof t == 'string' && (t as string) == '1') ? MEDIA_TYPE_VIDEO : MEDIA_TYPE_AUDIO
+  // 从通话页/悬浮窗返回时恢复上次的搜索列表
+  const last: CallUserItem[] = getGroupCallLastSearchList()
+  if (last.length > 0) {
+    searchList.value = last
+    callBtn.value = true
+  }
+})
+
+onUnload((): void => {
+  if (getCallSource() != 'caller') {
+    setGroupCallLastSearchList([] as CallUserItem[])
+  }
+  contactState.destroyStore()
+})
+
+const toast = (title: string): void => {
+  uni.showToast({ title: title, icon: 'none' })
+}
+
+const searchUser = async (): Promise<void> => {
+  const keyword: string = userIDToSearch.value.trim()
+  userIDToSearch.value = keyword
+  if (keyword.length == 0) return
+
+  if (keyword == selfUserID.value) {
+    toast('无法向自己发起呼叫')
+    return
+  }
+  if (searchList.value.length >= MAX_SEARCH_COUNT) {
+    toast('当前通话最多支持 9 人同时在线')
+    return
+  }
+  for (let i: number = 0; i < searchList.value.length; i++) {
+    if (searchList.value[i].userID == keyword) {
+      toast('userId已存在,请勿重复添加。')
+      return
+    }
+  }
+
+  try {
+    const userList: any[] = await contactState.getContactInfo([keyword])
+    if (userList.length == 0) {
+      toast('未查询到此用户')
+      return
+    }
+    const item: CallUserItem = toCallUserItem(userList[0], keyword)
+    item.checked = false
+    searchList.value.push(item)
+    callBtn.value = true
+    userIDToSearch.value = ''
+  } catch (e: any) {
+    console.warn('[groupCall] getContactInfo failed:', e)
+    toast('未查询到此用户')
+  }
+}
+
+const toggleUser = (index: number): void => {
+  const item: CallUserItem = searchList.value[index]
+  item.checked = !item.checked
+}
+
+const toggleAll = (): void => {
+  const target: boolean = ischeck.value
+  for (let i: number = 0; i < searchList.value.length; i++) {
+    searchList.value[i].checked = target
+  }
+  ischeck.value = !target
+}
+
+const openCallDevices = (): void => {
+  if (mediaType.value == MEDIA_TYPE_VIDEO) {
+    const camOpts: OpenLocalCameraOptions = { isFront: true }
+    ds.openLocalCamera(camOpts)
+  }
+  const micOpts: OpenLocalMicrophoneOptions = {
+    fail: (errCode: number, _errMsg: string): void => {
+      if (errCode == -1104) {
+        setTimeout((): void => {
+          ds.openLocalMicrophone(null)
+        }, 200)
+      }
+    }
+  }
+  ds.openLocalMicrophone(micOpts)
+}
+
+const groupCall = async (): Promise<void> => {
+  // 防抖：上一次呼叫流程尚未完成时，不允许再次呼叫
+  if (isCalling.value) {
+    console.log('[groupCall] call skipped: isCalling is true')
+    return
+  }
+  if (isNavigating()) {
+    console.log('[groupCall] call skipped: navigation in progress')
+    return
+  }
+  if (isCallEnding()) {
+    console.log('[groupCall] call skipped: previous call end still processing')
+    return
+  }
+
+  const userIDList: string[] = searchList.value
+    .filter((item: CallUserItem): boolean => item.checked)
+    .map((item: CallUserItem): string => item.userID)
+
+  if (userIDList.length == 0) {
+    toast('未选择呼叫用户')
+    return
+  }
+  if (isInCall(cs.selfInfo.value)) {
+    toast('您正在通话中，无法再次发起通话')
+    return
+  }
+
+  isCalling.value = true
+  openCallDevices()
+  // 权限检查
+  const hasPermission: boolean = await checkCallPermissionWithDialog(mediaType.value)
+  if (!hasPermission) {
+    isCalling.value = false
+    return
+  }
+
+  setGroupCallLastSearchList(searchList.value)
+  if (userIDList.length > MAX_SEARCH_COUNT) {
+    toast('当前通话最多支持 9 人同时在线')
+    isCalling.value = false
+    return
+  }
+
+  cs.setCallFramework(14)
+  const opts: CallsOptions = {
+    participantIds: userIDList,
+    mediaType: mediaType.value,
+    success: (): void => {
+      setCallSource('caller')
+      setLastPage(getCurrentPageFullPath())
+      // 多人用宫格布局，只选 1 人时用悬浮布局（与 demo 一致）
+      const layout: string = userIDList.length > 1 ? 'Grid' : 'Float'
+      uni.navigateTo({
+        url: `${CALL_PAGE}?layoutTemplate=${layout}`,
+        complete: (): void => { isCalling.value = false }
+      })
+    },
+    fail: (code: number, message: string): void => {
+      if (code == CALL_ERROR_PACKAGE_NOT_PURCHASED) {
+        toast('您的应用还未开通音视频通话（TUICallKit）能力，您可以去控制台申请免费体验')
+        console.error('控制台申请免费体验,https://console.cloud.tencent.com/trtc')
+      }
+      console.log('[groupCall] calls fail:', code, message)
+      isCalling.value = false
+    }
+  }
+  cs.calls(opts)
+  ischeck.value = true
+}
+</script>
+
+<style>
+.container {
+  flex: 1;
+  background-color: #ffffff;
+}
+
+.search {
+  flex-direction: row;
+  align-items: center;
+  padding: 16px;
+}
+
+.input-box {
+  flex: 1;
+  height: 40px;
+  margin-right: 20px;
+  padding: 0 16px;
+  border-radius: 20px;
+  background-color: #f4f5f9;
+  justify-content: center;
+}
+
+.input-search-user {
+  font-size: 16px;
+  color: #666666;
+}
+
+.btn-search {
+  width: 60px;
+  height: 40px;
+  border-radius: 20px;
+  background-color: #0a6cff;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-text {
+  font-size: 14px;
+  color: #ffffff;
+}
+
+.search-selfInfo {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 28px 0 16px;
+}
+
+.search-selfInfo-left {
+  flex-direction: row;
+  align-items: center;
+}
+
+.self-info-bar {
+  width: 4px;
+  height: 12px;
+  border-radius: 2px;
+  background-color: #9a9a9a;
+  margin-right: 8px;
+}
+
+.search-selfInfo-label {
+  font-size: 14px;
+  color: #333333;
+}
+
+.search-selfInfo-phone {
+  font-size: 14px;
+  color: #333333;
+  padding-left: 8px;
+}
+
+.allcheck {
+  font-size: 14px;
+  color: #666666;
+  line-height: 18px;
+}
+
+.user-list {
+  flex: 1;
+  margin-bottom: 120px;
+}
+
+.user-row {
+  flex-direction: row;
+  align-items: center;
+  margin-top: 10px;
+}
+
+.user-switch {
+  width: 24px;
+  height: 24px;
+  border-width: 2px;
+  border-style: solid;
+  border-color: #c7ced7;
+  border-radius: 12px;
+  margin: 0 20px;
+}
+
+.user-checkimg {
+  width: 24px;
+  height: 24px;
+  margin: 0 20px;
+}
+
+.user-name {
+  font-size: 14px;
+  color: #666666;
+  padding-left: 5px;
+}
+
+.callbtn {
+  position: absolute;
+  bottom: 60px;
+  left: 30%;
+  right: 30%;
+  height: 50px;
+  border-radius: 25px;
+  background-color: #006eff;
+  align-items: center;
+  justify-content: center;
+}
+
+.callbtn-text {
+  font-size: 18px;
+  color: #ffffff;
+}
+
+.search-default {
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+}
+
+.search-default-img {
+  width: 64px;
+  height: 66px;
+}
+
+.search-default-message {
+  width: 160px;
+  padding: 16px;
+  font-size: 14px;
+  color: #8a898e;
+  text-align: center;
+}
+</style>

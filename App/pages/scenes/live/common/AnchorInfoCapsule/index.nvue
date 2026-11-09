@@ -1,0 +1,114 @@
+<template>
+  <view>
+    <view v-if="role === 'anchor'" class="anchor-info">
+      <image class="anchor-avatar" :src="anchorAvatar" mode="aspectFill" @error="onAvatarError" />
+      <view class="anchor-copy">
+        <text class="anchor-name" :numberOfLines="1">{{ anchorRoomName }}</text>
+        <text class="anchor-meta" :numberOfLines="1">{{ anchorMetaText }}</text>
+      </view>
+      <view class="fan-club-button" @tap.stop="handleFanClubTap">
+        <image class="fan-club-icon" src="/static/images/live/icon/fan-club.png" mode="scaleToFill" />
+      </view>
+    </view>
+
+    <view v-else class="stream-info">
+      <image class="stream-avatar" :src="hostAvatarSrc" mode="aspectFill" @error="onHostAvatarError" />
+      <view class="stream-details">
+        <text class="stream-title" :numberOfLines="1">{{ t('audience.hostLive', { name: hostName }) }}</text>
+        <text class="stream-meta" :numberOfLines="1">{{ t('audience.likeCount', { count: hostLikeCount }) }}</text>
+      </view>
+      <view
+        class="follow-button"
+        :class="{ 'follow-button-following': isFollowingHost }"
+        @click="toggleFollowHost"
+      >
+        <text class="follow-text" :class="{ 'follow-text-following': isFollowingHost }">{{ isFollowingHost ? t('audience.followed') : t('audience.follow') }}</text>
+      </view>
+    </view>
+  </view>
+</template>
+
+<script setup lang="ts">
+  import { ref, computed, watch } from 'vue';
+  import { t } from '../../locales';
+  import { isUserFollowed, toggleUserFollowed } from '@/uni_modules/tuikit-atomic-x/utils/followStore';
+  import { useLiveListState } from '@/uni_modules/tuikit-atomic-x/state/LiveListState';
+  import { useLoginState } from '@/uni_modules/tuikit-atomic-x/state/LoginState';
+  import { useLikeState } from '@/uni_modules/tuikit-atomic-x/state/LikeState';
+
+  const props = defineProps<{
+    role?: string,
+    liveID?: string,
+  }>();
+  const emit = defineEmits(['fanClubTap']);
+
+  const { loginUserInfo } = useLoginState();
+  const { currentLive } = useLiveListState();
+  const liveID = computed(() => props.liveID || String(currentLive.value?.liveID || ''));
+  const { totalLikeCount } = useLikeState(liveID.value);
+
+  const defaultAvatarURL = '/uni_modules/tuikit-atomic-x/static/assets/live/default-avatar.png';
+
+  const normalizeAvatar = (url: string) => {
+    const s = (url == null ? '' : String(url)).trim();
+    if (!s || s === 'null' || s === 'undefined') return defaultAvatarURL;
+    return s;
+  };
+  const formatViewCount = (n: number): string => {
+    const v = Math.max(0, Math.floor(Number(n) || 0));
+    if (v >= 100000) return `${Math.floor(v / 10000)}${t('common.wanUnit')}+`;
+    if (v >= 10000) {
+      const w = v / 10000;
+      return `${w >= 10 ? Math.floor(w) : Math.round(w * 10) / 10}${t('common.wanUnit')}`;
+    }
+    return String(v);
+  };
+
+  const anchorAvatarSrc = ref('');
+  const onAvatarError = () => {
+    if (anchorAvatarSrc.value !== defaultAvatarURL) anchorAvatarSrc.value = defaultAvatarURL;
+  };
+  const anchorAvatar = computed(() => normalizeAvatar(anchorAvatarSrc.value || loginUserInfo.value?.avatarURL));
+  const anchorRoomName = computed(() => t('anchor.hostLive', {
+    name: loginUserInfo.value?.nickname || loginUserInfo.value?.userID || '',
+  }));
+  const anchorMetaText = computed(() => t('anchor.likeCount', {
+    count: formatViewCount(totalLikeCount.value),
+  }));
+  const handleFanClubTap = () => {
+    emit('fanClubTap');
+  };
+
+  const hostAvatarSrc = ref(defaultAvatarURL);
+  const hostName = ref('');
+  const isFollowingHost = ref(false);
+  const hostLikeCount = computed(() => formatViewCount(totalLikeCount.value));
+  const onHostAvatarError = () => {
+    if (hostAvatarSrc.value !== defaultAvatarURL) {
+      hostAvatarSrc.value = defaultAvatarURL;
+    }
+  };
+  const toggleFollowHost = () => {
+    const ownerID = currentLive.value?.liveOwner?.userID;
+    if (!ownerID) return;
+    isFollowingHost.value = toggleUserFollowed(ownerID);
+  };
+
+  watch(
+    () => currentLive.value?.liveOwner?.avatarURL,
+    (url) => { if (url) hostAvatarSrc.value = normalizeAvatar(url); },
+    { immediate: true }
+  );
+  watch(
+    () => currentLive.value?.liveOwner?.userName || currentLive.value?.liveOwner?.userID || '',
+    (name) => { if (name) hostName.value = name; },
+    { immediate: true }
+  );
+  watch(() => currentLive.value?.liveOwner?.userID, (ownerID) => {
+    if (ownerID) isFollowingHost.value = isUserFollowed(ownerID);
+  }, { immediate: true });
+</script>
+
+<style lang="scss">
+  @import './AnchorInfoCapsule.scss';
+</style>

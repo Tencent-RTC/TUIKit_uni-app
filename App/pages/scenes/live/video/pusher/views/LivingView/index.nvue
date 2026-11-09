@@ -1,16 +1,9 @@
 <template>
-  <view class="living-view">
-    <TopOperateBar :liveID="liveID" @audienceTap="showAudienceList" @endTap="onEndTap" @fanClubTap="showFanClubTip" />
+  <view class="living-view" @touchend="onStageTouchEnd">
     <LiveStatusPanel v-if="liveID" :liveID="liveID" />
     <view class="live-content">
-      <view class="go-guest-request-container" v-if="(applicants || []).length > 0 && isShowCoGuestPanelAvatar" @tap="showCoGuestPanel('requests')">
-        <view class="avatar-overlay-container" :style="getAvatarContainerStyle()">
-          <image v-for="(applicant, index) in applicants.slice(0, 2)" :key="index" class="go-guest-request-img" :style="getAvatarStyle(index, Math.min(applicants.length, 3))" :src="applicantAvatar(applicant)" @error="onApplicantAvatarError(applicant)" />
-          <image v-if="applicants.length >= 3" class="go-guest-request-img" :style="getAvatarStyle(2, 3)" src="/static/images/live/icon/co-guest-more.png" />
-        </view>
-        <text class="go-guest-request-text">{{ t('anchor.applyCoGuest', { count: (applicants || []).length }) }}</text>
-      </view>
-      <BarrageList mode="anchor" :liveID="liveID" :topPx="barrageTopPx" @itemTap="audienceOperator" @receiveGift="onBarrageReceiveGift" ref="barrageListRef" />
+      <BarrageList mode="anchor" :liveID="liveID" :topPx="barrageTopPx" @receiveGift="onBarrageReceiveGift" ref="barrageListRef" />
+      <AudienceEntryBanner ref="audienceEntryBannerRef" :topPx="audienceEntryTopPx" />
       <GiftEntryBanner ref="giftEntryBannerRef" :bottomPx="giftEntryBottomPx" :hidden="anyOverlayVisible" />
       <view class="live-bottom-Panel">
         <view class="action-button-item" @tap="showCoGuestPanel('requests')">
@@ -23,11 +16,20 @@
           <text class="action-button-text">{{ t('anchor.more') }}</text>
         </view>
       </view>
+      <view class="living-top-bar" :style="{ top: topOffsetPx + 'px' }">
+        <AnchorInfoCapsule role="anchor" :liveID="liveID" @fanClubTap="showFanClubTip" />
+        <view class="living-top-bar-right">
+          <AudienceListEntry :liveID="liveID" @audienceTap="showAudienceList" />
+          <view class="living-top-bar-close" @tap="onEndTap">
+            <image class="living-top-bar-close-icon" src="/static/images/live/icon/close.png" mode="aspectFill" />
+          </view>
+        </view>
+      </view>
       <LiveAudienceList v-model="isShowAudienceList" :liveID="liveID" @overlayActiveChange="onAudienceInnerPanelChange"></LiveAudienceList>
-      <AudienceActionPanel v-if="liveID" v-model="isShowAudienceActionPanel" :userInfo="selectedAudience" :liveID="liveID"></AudienceActionPanel>
       <CoGuestPanel v-if="liveID" v-model="isShowCoGuestPanel" :activeTab="activeTab"></CoGuestPanel>
       <MoreOperatePanel v-if="liveID" v-model="isShowMoreOperatePanel" @tip="showTip" @pause="pauseLive" @comment="openCommentInput" />
-      <BarrageInputBar v-if="liveID" v-model="isShowCommentInput" :liveID="liveID" @tip="showTip" />
+      <BarrageInput v-if="liveID" v-model="isShowCommentInput" :liveID="liveID" @tip="showTip" />
+      <Like v-if="liveID" role="anchor" :liveID="liveID" />
       <PauseOverlay :visible="isPaused" :seconds="pausedSeconds" @resume="resumeLive" />
       <UserInfoPanel v-if="liveID" v-model="isShowUserInfoPanel" :userInfo="clickUserInfo" :isShowAnchor="isShowAnchorInfo"></UserInfoPanel>
       <EndConfirmPanel
@@ -51,6 +53,13 @@
           </view>
         </view>
       </view>
+      <CoGuestManagePanel
+        v-if="liveID"
+        v-model="innerShowManage"
+        :liveID="liveID"
+        :userInfo="props.manageUser"
+        @tip="showTip"
+      />
     </view>
   </view>
 </template>
@@ -58,26 +67,35 @@
 <script setup lang="ts">
   import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
   import { CoGuestPanel } from '@/uni_modules/tuikit-atomic-x/components/CoGuestPanel';
-  import { LiveAudienceList, AudienceActionPanel } from '@/uni_modules/tuikit-atomic-x/components/LiveAudienceList';
+  import { LiveAudienceList } from '@/uni_modules/tuikit-atomic-x/components/LiveAudienceList';
   import { UserInfoPanel } from '@/uni_modules/tuikit-atomic-x/components/LiveStreamView';
   import { CoHostStatusType, useCoHostState } from '@/uni_modules/tuikit-atomic-x/state/CoHostState';
   import { useCoGuestState } from '@/uni_modules/tuikit-atomic-x/state/CoGuestState';
-  import { useDeviceState } from '@/uni_modules/tuikit-atomic-x/state/DeviceState';
+  import { useDeviceState, DeviceStatus } from '@/uni_modules/tuikit-atomic-x/state/DeviceState';
   import { useLiveAudienceState } from '@/uni_modules/tuikit-atomic-x/state/LiveAudienceState';
   import { useLiveListState } from '@/uni_modules/tuikit-atomic-x/state/LiveListState';
+  import { useLiveSeatState } from '@/uni_modules/tuikit-atomic-x/state/LiveSeatState';
   import { useLoginState } from '@/uni_modules/tuikit-atomic-x/state/LoginState';
   import { t } from '../../../../locales';
+  import { getTopBarOffsetPx, LIVE_SUMMARY_BACKGROUND_IMAGE, preloadLiveImages } from '../../../../utils';
   import BarrageList from '@/uni_modules/tuikit-atomic-x/components/BarrageList';
+  import Like from '@/uni_modules/tuikit-atomic-x/components/Like.nvue';
   import { GiftEntryBanner } from '@/uni_modules/tuikit-atomic-x/components/Gift';
   import EndConfirmPanel from '../../components/EndConfirmPanel/index.nvue';
   import LiveStatusPanel from '../../components/LiveStatusPanel/index.nvue';
   import MoreOperatePanel from '../../components/MoreOperatePanel/index.nvue';
+  import CoGuestManagePanel from '../../components/CoGuestManagePanel/index.nvue';
   import PauseOverlay from '../../components/PauseOverlay/index.nvue';
-  import TopOperateBar from '../../components/TopOperateBar/index.nvue';
-  import BarrageInputBar from '../../components/BarrageInputBar/index.nvue';
+  import AnchorInfoCapsule from '@/pages/scenes/live/common/AnchorInfoCapsule/index.nvue';
+  import AudienceListEntry from '../../components/AudienceListEntry/index.nvue';
+  import BarrageInput from '@/pages/scenes/live/common/BarrageInput/index.nvue';
+  import AudienceEntryBanner from '@/pages/scenes/live/common/AudienceEntryBanner/index.nvue';
+  import { safeJsonParse } from '@/uni_modules/tuikit-atomic-x/utils/utsUtils';
 
   const props = defineProps({
     liveID: { type: String, default: '' },
+    manageUser: { type: Object, default: () => ({}) },
+    showManage: { type: Boolean, default: false },
     safeArea: {
       type: Object,
       default: () => ({
@@ -90,56 +108,46 @@
       }),
     },
   });
-  const emit = defineEmits(['tip', 'ended', 'receiveGift']);
+  const emit = defineEmits(['tip', 'ended', 'receiveGift', 'update:showManage', 'stageTap']);
+
+  const innerShowManage = computed({
+    get: () => props.showManage,
+    set: (val) => emit('update:showManage', val),
+  });
 
   const { loginUserInfo } = useLoginState();
   const { currentLive, addLiveListListener, removeLiveListListener } = useLiveListState();
   const liveID = computed(() => props.liveID || String(currentLive.value?.liveID || ''));
   const { addCoHostListener, removeCoHostListener, acceptHostConnection, rejectHostConnection, coHostStatus, invitees } = useCoHostState(liveID.value)
   const { applicants, rejectApplication, connected } = useCoGuestState(liveID.value);
-  const { audienceList, messageBannedUserList } = useLiveAudienceState(liveID.value);
-  const { closeLocalCamera, openLocalCamera, isFrontCamera } = useDeviceState();
+  const { audienceList, addAudienceListener, removeAudienceListener } = useLiveAudienceState(liveID.value);
+  const { closeLocalCamera, openLocalCamera, isFrontCamera, microphoneStatus } = useDeviceState();
+  const { muteMicrophone, unmuteMicrophone } = useLiveSeatState(liveID.value);
 
-  const defaultAvatarURL = '/uni_modules/tuikit-atomic-x/static/assets/live/default-avatar.png';
   const BARRAGE_LIST_H_PX = uni.upx2px(380);
 
-  const applicantAvatarFailed = ref<Record<string, boolean>>({});
-  const normalizeAvatarUrl = (url: unknown): string => {
-    const s = (url == null ? '' : String(url)).trim();
-    if (!s || s === 'null' || s === 'undefined') return '';
-    return s;
-  };
-  const applicantAvatar = (applicant: any): string => {
-    if (applicant?.userID && applicantAvatarFailed.value[applicant.userID]) return defaultAvatarURL;
-    return normalizeAvatarUrl(applicant?.avatarURL || applicant?.avatarUrl) || defaultAvatarURL;
-  };
-  const onApplicantAvatarError = (applicant: any) => {
-    if (applicant?.userID) applicantAvatarFailed.value[applicant.userID] = true;
-  };
   const SYNC_WIN_H = (() => {
     try { return uni.getSystemInfoSync().windowHeight || 0; } catch (e) { return 0; }
   })();
 
-  const avatarOverlayConfig = {
-    size: 80,
-    overlapRatio: 0.6,
-    enableScale: false,
-    enableOpacity: false,
-  };
+  const BOTTOM_PANEL_H_PX = (() => {
+    try { return uni.getSystemInfoSync().platform === 'ios' ? 60 : 80; } catch (e) { return 80; }
+  })();
+
+  const topOffsetPx = getTopBarOffsetPx();
 
   const isShowUserInfoPanel = ref(false);
   const isShowAudienceList = ref(false);
   const isShowCoGuestPanel = ref(false);
-  const isShowAudienceActionPanel = ref(false);
   const isShowMoreOperatePanel = ref(false);
   const isShowCommentInput = ref(false);
   const endConfirmPanelRef = ref<any>(null);
   const isShowAnchorInfo = ref(false);
   const isShowCoGuestPanelAvatar = ref(true);
   const activeTab = ref('requests');
-  const selectedAudience = ref({});
   const clickUserInfo = ref({});
   const barrageListRef = ref();
+  const audienceEntryBannerRef = ref();
   const giftEntryBannerRef = ref();
 
   const showCustomModal = ref(false);
@@ -154,6 +162,37 @@
   let pauseTimer: ReturnType<typeof setInterval> | null = null;
   let pauseStartAt = 0;
   let accumulatedPauseMs = 0;
+  let micWasOnBeforePause = false;
+
+  const currentUserID = computed(() => loginUserInfo.value?.userID);
+  const hasCoGuestApplication = computed(() => (applicants.value || []).length > 0 && !isShowCoGuestPanel.value);
+  const videoBottomPx = computed(() => {
+    const sa: any = props.safeArea || {};
+    return (Number(sa.top) || 0) + (Number(sa.height) || 0) - BOTTOM_PANEL_H_PX;
+  });
+  const barrageTopPx = computed(() => {
+    const winH = SYNC_WIN_H;
+    if (winH <= 0) return -9999;
+    const videoBottom = videoBottomPx.value;
+    if (videoBottom > BARRAGE_LIST_H_PX && videoBottom <= winH) {
+      return Math.max(0, Math.round(videoBottom - BARRAGE_LIST_H_PX));
+    }
+    return Math.max(0, Math.round(winH - 84 - BARRAGE_LIST_H_PX));
+  });
+  const giftEntryBottomPx = computed(() => {
+    const bottomGap = (Number(props.safeArea && props.safeArea.height) || 0) * 1 / 8;
+    return bottomGap + uni.upx2px(380 + 16);
+  });
+  const audienceEntryTopPx = computed(() => barrageTopPx.value - uni.upx2px(64));
+  const anyOverlayVisible = computed(() =>
+    isShowAudienceList.value ||
+    isShowCoGuestPanel.value ||
+    isShowMoreOperatePanel.value ||
+    isShowUserInfoPanel.value ||
+    endLiveOverlayVisible.value ||
+    showCustomModal.value ||
+    audienceInnerPanelVisible.value
+  );
 
   const openCommentInput = () => {
     isShowCommentInput.value = true;
@@ -165,7 +204,11 @@
     pauseStartAt = Date.now();
     pausedSeconds.value = 0;
     isShowMoreOperatePanel.value = false;
+    micWasOnBeforePause = microphoneStatus.value === DeviceStatus.ON;
     closeLocalCamera();
+    if (micWasOnBeforePause) {
+      muteMicrophone({ liveID: liveID.value });
+    }
     pauseTimer = setInterval(() => {
       pausedSeconds.value = Math.floor((Date.now() - pauseStartAt) / 1000);
     }, 1000);
@@ -183,84 +226,30 @@
     pausedSeconds.value = 0;
     isPaused.value = false;
     openLocalCamera({ isFront: isFrontCamera.value });
+    if (micWasOnBeforePause) {
+      micWasOnBeforePause = false;
+      if (uni.$pusherSelfMuted === true) {
+        muteMicrophone({ liveID: liveID.value });
+      } else {
+        unmuteMicrophone({ liveID: liveID.value });
+      }
+    }
     uni.$emit('pusher:pauseChanged', false);
+  };
+
+  const onStageTouchEnd = (event: any) => {
+    const list = event?.changedTouches || event?.touches || [];
+    const t = list[0] || {};
+    const detail = event?.detail || {};
+    const x = Number(t.pageX ?? t.clientX ?? t.x ?? t.screenX ?? detail.x ?? NaN);
+    const y = Number(t.pageY ?? t.clientY ?? t.y ?? t.screenY ?? detail.y ?? NaN);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+    emit('stageTap', { x, y });
   };
 
   const showTip = (title: string) => {
     emit('tip', title);
   };
-
-  const currentUserID = computed(() => loginUserInfo.value?.userID);
-  const hasCoGuestApplication = computed(() => (applicants.value || []).length > 0 && !isShowCoGuestPanel.value);
-  const barrageTopPx = computed(() => {
-    const winH = SYNC_WIN_H;
-    if (winH <= 0) return -9999;
-    const bottomGap = 84;
-    return Math.max(0, Math.round(winH - bottomGap - BARRAGE_LIST_H_PX));
-  });
-  const giftEntryBottomPx = computed(() => {
-    const bottomGap = (Number(props.safeArea && props.safeArea.height) || 0) * 1 / 8;
-    return bottomGap + uni.upx2px(380 + 16);
-  });
-  const anyOverlayVisible = computed(() =>
-    isShowAudienceList.value ||
-    isShowAudienceActionPanel.value ||
-    isShowCoGuestPanel.value ||
-    isShowMoreOperatePanel.value ||
-    isShowUserInfoPanel.value ||
-    endLiveOverlayVisible.value ||
-    showCustomModal.value ||
-    audienceInnerPanelVisible.value
-  );
-
-  watch(messageBannedUserList, (newValue, oldValue) => {
-    const isBanned = (newValue || []).some((obj: any) => obj?.userID === uni.$userID);
-    const wasBanned = (oldValue || []).some((obj: any) => obj?.userID === uni.$userID);
-    if (isBanned && !wasBanned) showTip(t('anchor.banned'));
-    if (!isBanned && wasBanned) showTip(t('anchor.unbanned'));
-  });
-
-  watch(applicants, (newVal, oldVal) => {
-    if (!isShowCoGuestPanelAvatar.value) {
-      applicants.value.forEach(applicant => {
-        rejectApplication({
-          liveID: liveID.value,
-          userID: applicant.userID,
-        });
-      });
-    }
-  }, {
-    deep: true,
-    immediate: true,
-  })
-
-  watch(coHostStatus, (newVal) => {
-    if (newVal === CoHostStatusType.DISCONNECTED) {
-      isShowCoGuestPanelAvatar.value = true
-    }
-  }, {
-    deep: true,
-    immediate: true,
-  })
-
-  watch(invitees, (newVal) => {
-    if (!newVal && !isShowCoGuestPanelAvatar.value) {
-      isShowCoGuestPanelAvatar.value = true
-    } else {
-      applicants.value.forEach(applicant => {
-        rejectApplication({
-          liveID: liveID.value,
-          userID: applicant.userID,
-        });
-      });
-    }
-  })
-
-  watch(currentLive, (newVal, oldVal) => {
-    if (newVal) {
-      console.log(`currentLive change: ${JSON.stringify(newVal)}`);
-    }
-  });
 
   const showUserInfoPanel = () => {
     isShowUserInfoPanel.value = true;
@@ -275,46 +264,6 @@
   const closeCustomModal = () => {
     showCustomModal.value = false;
     currentModalUserInfo.value = null;
-  };
-
-  const getAvatarContainerStyle = () => {
-    const count = applicants.value?.length || 0;
-    if (count === 0) return {};
-
-    const overlapOffset = avatarOverlayConfig.size * (1 - avatarOverlayConfig.overlapRatio);
-    const containerWidth = avatarOverlayConfig.size + (count - 1) * overlapOffset;
-
-    return {
-      position: 'relative',
-      width: `${containerWidth}rpx`,
-      height: `${avatarOverlayConfig.size}rpx`,
-      margin: '0 auto'
-    };
-  };
-
-  const getAvatarStyle = (index: number, totalCount: number) => {
-    const overlapOffset = avatarOverlayConfig.size * (1 - avatarOverlayConfig.overlapRatio);
-
-    const left = index * overlapOffset;
-
-    const baseStyle = {
-      position: 'absolute',
-      left: `${left}rpx`,
-      top: '0',
-      width: `${avatarOverlayConfig.size}rpx`,
-      height: `${avatarOverlayConfig.size}rpx`,
-      borderRadius: `${avatarOverlayConfig.size / 2}rpx`,
-    };
-
-    if (avatarOverlayConfig.enableScale) {
-      baseStyle.transform = `scale(${1 - index * 0.05})`;
-    }
-
-    if (avatarOverlayConfig.enableOpacity) {
-      baseStyle.opacity = 1 - index * 0.1;
-    }
-
-    return baseStyle;
   };
 
   const showAudienceList = () => {
@@ -335,27 +284,6 @@
     isShowCoGuestPanel.value = true;
   };
 
-  const audienceOperator = (message: any) => {
-    console.warn(`click message: ${JSON.stringify(message)}`);
-    if (message?.sender?.userID === currentLive?.value.liveOwner.userID) return;
-
-    if (message?.sender?.userID === currentUserID.value) {
-      showTip(t('anchor.cannotFollowSelf'));
-      return;
-    }
-    const targetAudience = audienceList.value.find(audience =>
-      audience.userID === message?.sender?.userID
-    );
-    if (!targetAudience) {
-      isShowAnchorInfo.value = false;
-      clickUserInfo.value = message?.sender;
-      showUserInfoPanel()
-    } else {
-      selectedAudience.value = targetAudience;
-      isShowAudienceActionPanel.value = true;
-    }
-  };
-
   const onBarrageReceiveGift = (giftData: any) => {
     if (!giftData) return;
     const count = Math.max(1, Math.round(Number(giftData.count) || 1));
@@ -372,6 +300,29 @@
     emit('receiveGift', giftData);
   };
 
+  const pushAudienceEntry = (user: { userID: string; userName: string; level: number }) => {
+    if (isPaused.value) return;
+    audienceEntryBannerRef.value?.push?.(user);
+  };
+
+  const parseAudienceEventUser = (eventData: string): { userID: string; userName: string; level: number } => {
+    const parsed = safeJsonParse<any>(eventData, null);
+    let user = parsed?.audience ?? parsed?.userInfo ?? parsed;
+    if (typeof user === 'string') {
+      user = safeJsonParse<any>(user, null);
+    }
+    user = user ?? {};
+    return {
+      userID: user?.userID || user?.userId || '',
+      userName: user?.userName || user?.nameCard || user?.userID || user?.userId || '',
+      level: Number(user?.level) || 0,
+    };
+  };
+
+  const onAudienceJoined = (eventData: string) => {
+    pushAudienceEntry(parseAudienceEventUser(eventData));
+  };
+
   const handleSettings = () => {
     isShowMoreOperatePanel.value = true;
   };
@@ -380,7 +331,7 @@
     audienceInnerPanelVisible.value = !!visible;
   };
 
-  const onLiveEnded = () => {
+  const onLiveEnded = (statisticsData = null) => {
     if (isPaused.value) {
       accumulatedPauseMs += Date.now() - pauseStartAt;
       if (pauseTimer != null) {
@@ -391,8 +342,10 @@
       pausedSeconds.value = 0;
       isPaused.value = false;
     }
-    emit('ended', Math.floor(accumulatedPauseMs / 1000));
+    emit('ended', Math.floor(accumulatedPauseMs / 1000), statisticsData);
   };
+
+  const handleSdkLiveEnded = () => onLiveEnded();
 
   const onEndLiveOverlayChange = (visible: boolean) => {
     endLiveOverlayVisible.value = !!visible;
@@ -455,8 +408,77 @@
     isShowAnchorInfo.value = false
   }
 
+  let seenAudienceIDs = new Set<string>();
+  let audienceListInitialized = false;
+  watch(audienceList, (list) => {
+    const arr = Array.isArray(list) ? list : [];
+    const ids = new Set(arr.map((u: any) => u?.userID).filter(Boolean));
+    if (ids.size === 0) {
+      seenAudienceIDs.clear();
+      audienceListInitialized = false;
+      return;
+    }
+    if (!audienceListInitialized) {
+      seenAudienceIDs = ids;
+      audienceListInitialized = true;
+      return;
+    }
+    ids.forEach(id => {
+      if (!seenAudienceIDs.has(id)) {
+        const user = arr.find((u: any) => u?.userID === id);
+        pushAudienceEntry({ userID: id, userName: user?.userName || id, level: Number(user?.level) || 0 });
+      }
+    });
+    seenAudienceIDs = ids;
+  });
+
+  watch(applicants, (newVal, oldVal) => {
+    if (!isShowCoGuestPanelAvatar.value) {
+      applicants.value.forEach(applicant => {
+        rejectApplication({
+          liveID: liveID.value,
+          userID: applicant.userID,
+        });
+      });
+    }
+  }, {
+    deep: true,
+    immediate: true,
+  })
+
+  watch(coHostStatus, (newVal) => {
+    if (newVal === CoHostStatusType.DISCONNECTED) {
+      isShowCoGuestPanelAvatar.value = true
+    }
+  }, {
+    deep: true,
+    immediate: true,
+  })
+
+  watch(invitees, (newVal) => {
+    if (!newVal && !isShowCoGuestPanelAvatar.value) {
+      isShowCoGuestPanelAvatar.value = true
+    } else {
+      applicants.value.forEach(applicant => {
+        rejectApplication({
+          liveID: liveID.value,
+          userID: applicant.userID,
+        });
+      });
+    }
+  })
+
+  watch(currentLive, (newVal, oldVal) => {
+    if (newVal) {
+      console.log(`currentLive change: ${JSON.stringify(newVal)}`);
+    }
+  });
+
   onMounted(() => {
-    addLiveListListener('onLiveEnded', onLiveEnded);
+    setTimeout(() => {
+      preloadLiveImages([LIVE_SUMMARY_BACKGROUND_IMAGE], 1);
+    }, 1500);
+    addLiveListListener('onLiveEnded', handleSdkLiveEnded);
     addCoHostListener(liveID.value,
       'onCoHostRequestAccepted',
       handleCoHostRequestAccepted
@@ -474,6 +496,7 @@
       handleCoHostRequestReceived
     )
     uni.$on('anchorStreamViewClick', ShowAnchorViewClickPanel);
+    addAudienceListener(liveID.value, 'onAudienceJoined', onAudienceJoined);
   });
 
   onUnmounted(() => {
@@ -481,7 +504,7 @@
       clearInterval(pauseTimer);
       pauseTimer = null;
     }
-    removeLiveListListener('onLiveEnded', onLiveEnded);
+    removeLiveListListener('onLiveEnded', handleSdkLiveEnded);
     removeCoHostListener(liveID.value,
       'onCoHostRequestAccepted',
       handleCoHostRequestAccepted
@@ -499,6 +522,7 @@
       handleCoHostRequestReceived
     )
     uni.$off('anchorStreamViewClick', ShowAnchorViewClickPanel);
+    removeAudienceListener(liveID.value, 'onAudienceJoined', onAudienceJoined);
   });
 </script>
 

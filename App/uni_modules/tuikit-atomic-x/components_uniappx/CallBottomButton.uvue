@@ -1,0 +1,339 @@
+<template>
+	<view class="call-bottom-button">
+		<!-- 单人音频通话 - 主叫方呼叫中 -->
+		<view v-if="scenario == 'single-audio-caller-calling'" class="button-group">
+			<view class="button-group-bottom">
+				<text class="waiting-text">等待对方接收邀请</text>
+			</view>
+			<view class="button-group-row">
+				<Microphone />
+				<HangupCall />
+				<HandsFree />
+			</view>
+		</view>
+
+		<!-- 单人音频通话 - 已接通 -->
+		<view v-else-if="scenario == 'single-audio-connected'" class="button-group-row">
+			<Microphone />
+			<HangupCall />
+			<HandsFree />
+		</view>
+
+		<!-- 单人音频通话 - 被叫方呼叫中 -->
+		<view v-else-if="scenario == 'single-audio-callee-calling'" class="button-group-row">
+			<RejectCall />
+			<AcceptCall />
+		</view>
+
+		<!-- 单人视频通话 - 主叫方呼叫中 -->
+		<view v-else-if="scenario == 'single-video-caller-calling'" class="button-group">
+			<view class="button-group-bottom">
+				<text class="waiting-text">等待对方接收邀请</text>
+			</view>
+			<view class="button-group-row">
+				<SwitchCamera />
+				<Blur />
+				<Camera />
+			</view>
+			<view class="button-group-bottom">
+				<HangupCall />
+			</view>
+		</view>
+
+		<!-- 单人视频通话 - 已接通 -->
+		<view v-else-if="scenario == 'single-video-connected'" class="button-group">
+			<view class="button-group-row">
+				<Microphone />
+				<HandsFree />
+				<Camera />
+			</view>
+			<view class="button-group-row">
+				<Blur :size="35" :is-show-text="false" />
+				<HangupCall :is-show-text="false" />
+				<SwitchCamera :size="35" :is-show-text="false" />
+			</view>
+		</view>
+
+		<!-- 单人视频通话 - 被叫方呼叫中 -->
+		<view v-else-if="scenario == 'single-video-callee-calling'" class="button-group">
+			<view class="button-group-row">
+				<SwitchCamera />
+				<Blur />
+				<Camera />
+			</view>
+			<view class="button-group-row">
+				<RejectCall :is-show-text="false" />
+				<AcceptCall :is-show-text="false" />
+			</view>
+		</view>
+
+		<!-- 群组音频通话 - 主叫方呼叫中 -->
+		<view v-else-if="scenario == 'group-audio-caller-calling'" class="button-group">
+			<view class="button-group-row">
+				<Microphone />
+				<HandsFree />
+				<Camera />
+			</view>
+			<view class="button-group-bottom">
+				<HangupCall :is-show-text="false" />
+			</view>
+		</view>
+
+		<!-- 群组音频通话 - 已接通 -->
+		<view v-else-if="scenario == 'group-audio-connected'" class="button-group">
+			<view class="button-group-row">
+				<Microphone />
+				<HandsFree />
+				<Camera />
+			</view>
+			<view class="button-group-bottom">
+				<HangupCall :is-show-text="false" />
+			</view>
+		</view>
+
+		<!-- 群组音频通话 - 被叫方呼叫中 -->
+		<view v-else-if="scenario == 'group-audio-callee-calling'" class="button-group-row">
+			<RejectCall />
+			<AcceptCall />
+		</view>
+
+		<!-- 群组视频通话 - 主叫方呼叫中 -->
+		<view v-else-if="scenario == 'group-video-caller-calling'" class="button-group">
+			<view class="button-group-row">
+				<Microphone />
+				<HandsFree />
+				<Camera />
+			</view>
+			<view class="button-group-row">
+				<Blur :size="35" :is-show-text="false" />
+				<HangupCall :is-show-text="false" />
+				<SwitchCamera :size="35" :is-show-text="false" />
+			</view>
+		</view>
+
+		<!-- 群组视频通话 - 已接通 -->
+		<view v-else-if="scenario == 'group-video-connected'" class="button-group">
+			<view class="button-group-row">
+				<Microphone />
+				<HandsFree />
+				<Camera />
+			</view>
+			<view class="button-group-row">
+				<Blur :size="35" :is-show-text="false" />
+				<HangupCall :is-show-text="false" />
+				<SwitchCamera :size="35" :is-show-text="false" />
+			</view>
+		</view>
+
+		<!-- 群组视频通话 - 被叫方呼叫中 -->
+		<view v-else-if="scenario == 'group-video-callee-calling'" class="button-group-row">
+			<RejectCall />
+			<AcceptCall />
+		</view>
+	</view>
+</template>
+
+<script setup lang="uts">
+	import { ref, watch, onMounted } from 'vue';
+	import Microphone from './Call/Controls/Microphone.uvue';
+	import HandsFree from './Call/Controls/HandsFree.uvue';
+	import Camera from './Call/Controls/Camera.uvue';
+	import HangupCall from './Call/Controls/HangupCall.uvue';
+	import AcceptCall from './Call/Controls/AcceptCall.uvue';
+	import RejectCall from './Call/Controls/RejectCall.uvue';
+	import SwitchCamera from './Call/Controls/switchCamera.uvue';
+	import Blur from './Call/Controls/blur.uvue';
+	import { useCallState, type UseCallStateReturn } from '@/uni_modules/tuikit-atomic-x/state/CallState.uts';
+	import { AudioOutput, useDeviceState, type UseDeviceStateReturn, type SetAudioRouteOptions } from '@/uni_modules/tuikit-atomic-x/state/DeviceState.uts';
+	import { playRingtone } from '@/uni_modules/tuikit-atomic-x/server/callService.uts';
+	import { useLoginState, type UserProfileParam } from '@/uni_modules/tuikit-atomic-x/state/LoginState.uts';
+
+	// ========== 状态 & 依赖 ==========
+	const ds: UseDeviceStateReturn = useDeviceState();
+	const cs: UseCallStateReturn = useCallState();
+	const ls = useLoginState();
+
+	const scenario = ref<string>('')
+
+	// ========== 通话类型常量 ==========
+	const MEDIA_TYPE_VIDEO: number = 1
+	const STATUS_CONNECTED: number = 2
+
+	// ========== 铃声资源 ==========
+	const RINGTONE_DIALING: string = '/static/phone_dialing.mp3'
+	const RINGTONE_RINGING: string = '/static/phone_ringing.mp3'
+
+	// ========== 辅助函数 ==========
+
+	function getCurrentUserId(): string {
+		// loginUserInfo 是强类型 UserProfileParam，直接取字段，不能强转为 UTSJSONObject
+		const userInfo: UserProfileParam | null = ls.loginUserInfo.value
+		return userInfo?.userID ?? ''
+	}
+
+	/** 判断是否为视频通话 */
+	function isVideo(call: UTSJSONObject): boolean {
+		const mediaType: number = (call["mediaType"] as number | null) ?? 0
+		return mediaType == 1
+	}
+
+	/** 判断是否为群组通话 */
+	function isGroup(call: UTSJSONObject): boolean {
+		const inviteeIds = call["inviteeIds"]
+		const hasMultiInvitee: boolean = inviteeIds != null && Array.isArray(inviteeIds) && (inviteeIds as any[]).length > 1
+		const chatGroupId: string = (call["chatGroupId"] as string | null) ?? ''
+		return hasMultiInvitee || chatGroupId.length > 0
+	}
+
+	/** 判断是否为主叫方 */
+	function isCaller(call: UTSJSONObject): boolean {
+		const inviterId: string = (call["inviterId"] as string | null) ?? ''
+		return inviterId == getCurrentUserId()
+	}
+
+	/** 判断是否为被叫方 */
+	function isCallee(call: UTSJSONObject): boolean {
+		const inviteeIds: any[] | null = call["inviteeIds"] as any[] | null
+		if (inviteeIds == null) return false
+		const uid: string = getCurrentUserId()
+		for (let i: number = 0; i < inviteeIds.length; i++) {
+			const id: string = (inviteeIds[i] as string | null) ?? ''
+			if (id == uid) return true
+		}
+		return false
+	}
+
+	/** 构建场景字符串 */
+	function buildScenario(call: UTSJSONObject, role: string): string {
+		const scope: string = isGroup(call) ? 'group' : 'single'
+		const media: string = isVideo(call) ? 'video' : 'audio'
+		if (role == 'connected') {
+			return scope + '-' + media + '-connected'
+		}
+		return scope + '-' + media + '-' + role + '-calling'
+	}
+
+	/** 获取音频路由 */
+	function getAudioRoute(call: UTSJSONObject): AudioOutput {
+		return isVideo(call) ? AudioOutput.SPEAKERPHONE : AudioOutput.EARPIECE
+	}
+
+	/** 设置主叫方场景 */
+	function setupCallerScenario(call: UTSJSONObject): void {
+		scenario.value = buildScenario(call, 'caller')
+		// 开麦（主叫阶段需要展示麦克风图标状态）
+		ds.openLocalMicrophone(null)
+		const opts: SetAudioRouteOptions = { audioRoute: getAudioRoute(call) }
+		ds.setAudioRoute(opts)
+		// 播铃声：iOS 走 TRTC 音效混音器，与麦克风共用音频会话，开麦后仍可正常发声
+		playRingtone(RINGTONE_DIALING)
+	}
+
+	/** 设置被叫方场景 */
+	function setupCalleeScenario(call: UTSJSONObject): void {
+		scenario.value = buildScenario(call, 'callee')
+		cs.startVibrate()
+		playRingtone(RINGTONE_RINGING)
+		const opts: SetAudioRouteOptions = { audioRoute: getAudioRoute(call) }
+		ds.setAudioRoute(opts)
+	}
+
+	// ========== 核心 Watch ==========
+
+	/** 监听 selfInfo：接通时场景从 calling → connected */
+	watch((): any | null => { return cs.selfInfo.value }, (newVal: any | null, _oldVal: any | null) => {
+		if (newVal == null) return
+		const status: number = ((newVal as UTSJSONObject)["status"] as number | null) ?? 0
+		if (status == 2 && scenario.value.indexOf('-calling') != -1) {
+			// 替换 xxx-caller-calling 或 xxx-callee-calling → xxx-connected
+			let s: string = scenario.value
+			if (s.indexOf('-caller-calling') != -1) {
+				s = s.replace('-caller-calling', '-connected')
+			} else if (s.indexOf('-callee-calling') != -1) {
+				s = s.replace('-callee-calling', '-connected')
+			}
+			scenario.value = s
+		}
+	}, { immediate: true, deep: true });
+
+	/** 根据 activeCall 确定场景（提取为独立函数，供多处调用） */
+	function resolveScenario(call: UTSJSONObject): void {
+		const duration: number = (call["duration"] as number | null) ?? 0
+		if (duration > 0) {
+			scenario.value = buildScenario(call, 'connected')
+			return
+		}
+		// 已经进入呼叫中场景则不重复 setup（避免 deep watch 反复触发导致铃声叠加播放）
+		if (scenario.value.indexOf('-calling') != -1) {
+			return
+		}
+		if (isCaller(call)) {
+			setupCallerScenario(call)
+		} else if (isCallee(call)) {
+			setupCalleeScenario(call)
+		}
+	}
+
+	/** 监听 activeCall：确定场景 */
+	watch((): any | null => { return cs.activeCall.value }, (newVal: any | null, oldVal: any | null) => {
+		if (newVal == null) return
+		const newObj: UTSJSONObject = newVal as UTSJSONObject
+		const newCallId: string = (newObj["callId"] as string | null) ?? ''
+
+		// 同一通话不重复处理（callId 为空时不做去重，允许继续处理）
+		if (oldVal != null && newCallId.length > 0) {
+			const oldObj: UTSJSONObject = oldVal as UTSJSONObject
+			const oldCallId: string = (oldObj["callId"] as string | null) ?? ''
+			if (newCallId == oldCallId) return
+		}
+
+		resolveScenario(newObj)
+	}, { immediate: true, deep: true });
+
+	/** 监听 loginUserInfo：登录信息到位后，若 scenario 仍为空且已有 activeCall，则重新计算 */
+	watch((): UserProfileParam | null => { return ls.loginUserInfo.value }, (newVal: UserProfileParam | null) => {
+		if (newVal == null) return
+		if (scenario.value.length > 0) return
+		const call: any | null = cs.activeCall.value
+		if (call == null) return
+		resolveScenario(call as UTSJSONObject)
+	}, { immediate: true });
+</script>
+
+<style scoped>
+	.call-bottom-button {
+		min-height: 400rpx;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		flex: 1;
+	}
+
+	.button-group-row {
+		flex: 1;
+		display: flex;
+		flex-direction: row;
+		justify-content: space-around;
+		align-items: center;
+	}
+
+	.button-group-bottom {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+	}
+
+	.button-group {
+		display: flex;
+		flex-direction: column;
+		justify-content: center;
+		flex-wrap: wrap;
+	}
+
+	.waiting-text {
+		font-size: 30rpx;
+		color: white;
+		font-weight: 400;
+		margin-bottom: 10rpx;
+	}
+</style>

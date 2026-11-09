@@ -1,0 +1,194 @@
+<template>
+  <view class="operate-buttons">
+    <view
+      class="btn-bg co-mic-btn"
+      :class="{ 'disabled': micDisabled }"
+      :ref="(el: any) => { if (el) buttonRefs['coMic'] = el; }"
+      v-if="micEnabled && !micConnected"
+      @touchstart="startPress('coMic')"
+      @touchend="handleTouchEndWithAction('coMic', () => emit('coGuestTap'))"
+      @touchcancel="endPress('coMic')"
+    >
+      <image class="btn-icon co-mic-icon" src="/static/images/live/icon/co-guest-manage.png" mode="aspectFit" />
+    </view>
+    <view
+      class="btn-bg co-mic-connected-btn"
+      :ref="(el: any) => { if (el) buttonRefs['coMicConnected'] = el; }"
+      v-if="micEnabled && micConnected"
+      @touchstart="startPress('coMicConnected')"
+      @touchend="handleTouchEndWithAction('coMicConnected', () => emit('micConnectedTap'))"
+      @touchcancel="endPress('coMicConnected')"
+    >
+      <view class="co-mic-wave">
+        <view
+          v-for="(bar, i) in waveBars"
+          :key="i"
+          class="co-mic-wave-slot"
+          :style="{ left: bar.left + 'rpx' }"
+        >
+          <view
+            class="co-mic-wave-bar"
+            :style="{ height: bar.maxH + 'rpx' }"
+            :ref="(el: any) => { if (el) waveBarRefs[i] = el; }"
+          />
+        </view>
+      </view>
+    </view>
+    <view
+      class="btn-bg gift-btn"
+      :ref="(el: any) => { if (el) buttonRefs['gift'] = el; }"
+      @touchstart="startPress('gift')"
+      @touchend="handleTouchEndWithAction('gift', () => emit('giftTap'))"
+      @touchcancel="endPress('gift')"
+    >
+      <image class="btn-icon" src="/static/images/live/icon/gift.png" mode="aspectFit" />
+    </view>
+    <Like />
+  </view>
+</template>
+
+<script setup lang="ts">
+  import { watch, onUnmounted } from 'vue';
+  import Like from '@/uni_modules/tuikit-atomic-x/components/Like.nvue';
+
+  const props = defineProps<{
+    micEnabled: boolean;
+    micConnected: boolean;
+    micDisabled: boolean;
+  }>();
+  const emit = defineEmits(['coGuestTap', 'micConnectedTap', 'giftTap']);
+  const animation = uni.requireNativePlugin('animation');
+
+  let lastActionAt = 0;
+  const buttonRefs: Record<string, any> = {};
+  const PRESS_ANIM_DURATION = 120;
+  const PRESS_ANIM_TIMING = 'ease';
+  const PRESS_ANIM_SCALE = 0.92;
+  const MIN_PRESS_VISIBLE_MS = 120;
+  const ACTION_LOCK_MS = 400;
+  const pressStartAt: Record<string, number> = {};
+  const releaseDelayTimer: Record<string, any> = {};
+
+  const animateScale = (id: string, pressed: boolean) => {
+    const el = buttonRefs[id];
+    if (!el) return;
+    animation.transition(el, {
+      styles: {
+        transform: pressed ? `scale(${PRESS_ANIM_SCALE})` : 'scale(1)'
+      },
+      duration: PRESS_ANIM_DURATION,
+      timingFunction: PRESS_ANIM_TIMING
+    });
+  };
+
+  const startPress = (id: string) => {
+    if (releaseDelayTimer[id] != null) {
+      clearTimeout(releaseDelayTimer[id]);
+      releaseDelayTimer[id] = null;
+    }
+    pressStartAt[id] = Date.now();
+    animateScale(id, true);
+  };
+
+  const endPress = (id: string) => {
+    const elapsed = Date.now() - (pressStartAt[id] || 0);
+    const delay = Math.max(0, MIN_PRESS_VISIBLE_MS - elapsed);
+    if (releaseDelayTimer[id] != null) {
+      clearTimeout(releaseDelayTimer[id]);
+      releaseDelayTimer[id] = null;
+    }
+    if (delay === 0) {
+      animateScale(id, false);
+      return;
+    }
+    releaseDelayTimer[id] = setTimeout(() => {
+      animateScale(id, false);
+      releaseDelayTimer[id] = null;
+    }, delay);
+  };
+
+  const handleTouchEndWithAction = (id: string, cb: () => void) => {
+    endPress(id);
+    const now = Date.now();
+    if (now - lastActionAt < ACTION_LOCK_MS) return;
+    lastActionAt = now;
+    cb();
+  };
+
+  const waveBars = [
+    { left: 18.4, maxH: 12, scales: [0.6, 0.8] },
+    { left: 28, maxH: 30, scales: [0.56, 0.83] },
+    { left: 37.6, maxH: 36.8, scales: [0.61, 0.85] },
+    { left: 47.2, maxH: 18, scales: [0.5, 0.8] },
+  ];
+  const waveBarRefs: any[] = [];
+  const WAVE_START_DELAY_MS = [850, 600, 300, 0];
+  const WAVE_SEGMENT_MS = [560, 560, 480];
+
+  let waveActive = false;
+  let waveStartTimers: any[] = [];
+  const waveBarTimers: any[] = [null, null, null, null];
+
+  const runWaveBar = (index: number) => {
+    if (!waveActive) return;
+    const el = waveBarRefs[index];
+    const bar = waveBars[index];
+    if (!el || !bar) return;
+    const targets = [bar.scales[0], bar.scales[1], 1];
+    const applySegment = (seg: number) => {
+      if (!waveActive) return;
+      animation.transition(el, {
+        styles: { transform: `scaleY(${targets[seg]})` },
+        duration: WAVE_SEGMENT_MS[seg],
+        timingFunction: 'ease-in-out',
+      });
+      if (waveBarTimers[index]) clearTimeout(waveBarTimers[index]);
+      waveBarTimers[index] = setTimeout(() => {
+        applySegment((seg + 1) % 3);
+      }, WAVE_SEGMENT_MS[seg]);
+    };
+    applySegment(0);
+  };
+
+  const stopWave = () => {
+    waveActive = false;
+    waveStartTimers.forEach(clearTimeout);
+    waveStartTimers = [];
+    for (let i = 0; i < waveBarTimers.length; i++) {
+      if (waveBarTimers[i]) {
+        clearTimeout(waveBarTimers[i]);
+        waveBarTimers[i] = null;
+      }
+    }
+    for (let i = 0; i < waveBars.length; i++) {
+      const el = waveBarRefs[i];
+      if (el) {
+        animation.transition(el, { styles: { transform: 'scaleY(1)' }, duration: 0 });
+      }
+    }
+  };
+
+  const startWave = () => {
+    stopWave();
+    waveActive = true;
+    for (let i = 0; i < waveBars.length; i++) {
+      waveStartTimers.push(setTimeout(() => runWaveBar(i), WAVE_START_DELAY_MS[i]));
+    }
+  };
+
+  watch(() => props.micConnected, (connected) => {
+    if (connected) {
+      startWave();
+    } else {
+      stopWave();
+    }
+  }, { immediate: true, flush: 'post' });
+
+  onUnmounted(() => {
+    stopWave();
+  });
+</script>
+
+<style lang="scss">
+  @import './BottomToolbar.scss';
+</style>
